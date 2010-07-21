@@ -56,12 +56,10 @@ static void function_new(lua_State* L, GIFunctionInfo* info)
 
   /* Get address of the function. */
   name = g_function_info_get_symbol(info);
-  if (!g_typelib_symbol(g_base_info_get_typelib((GIBaseInfo*)info),
-                        name, &addr))
+  if (!g_typelib_symbol(g_base_info_get_typelib(info), name, &addr))
     luaL_error(L, "can't load function %s.%s(%s)",
-                      g_base_info_get_namespace((GIBaseInfo*)info),
-                      g_base_info_get_name((GIBaseInfo*)info),
-                      name);
+                      g_base_info_get_namespace(info),
+                      g_base_info_get_name(info), name);
 
   /* Create new userdata value. */
   function = lua_newuserdata(L, sizeof(struct ud_function));
@@ -104,7 +102,7 @@ union typebox
 };
 
 static void function_arg_in(lua_State* L, int argi, GITypeInfo* info,
-                            void** arg_ptr, union typebox* arg_val)
+                            const void** arg_ptr, union typebox* arg_val)
 {
   switch (g_type_info_get_tag(info))
     {
@@ -137,7 +135,7 @@ static void function_arg_in(lua_State* L, int argi, GITypeInfo* info,
 
     case GI_TYPE_TAG_UTF8:
     case GI_TYPE_TAG_FILENAME:
-      *arg_ptr = (void*)luaL_checkstring(L, argi);
+      *arg_ptr = luaL_checkstring(L, argi);
       break;
 
     default:
@@ -149,7 +147,7 @@ static void function_arg_in(lua_State* L, int argi, GITypeInfo* info,
 static int function_call(lua_State* L)
 {
   gint argc, flags, has_self, throws, argi, lua_argi, ti_argi;
-  void** args_ptr;
+  const void** args_ptr;
   union typebox* args_val;
   struct ud_function* function = luaL_checkudata(L, 1, UD_FUNCTION);
   GError* err = NULL;
@@ -163,9 +161,10 @@ static int function_call(lua_State* L)
   argc = g_callable_info_get_n_args(function->info) + has_self + throws;
 
   /* Allocate array for arguments. */
-  args_ptr = g_newa(void*, argc);
+  args_ptr = g_newa(const void*, argc);
   args_val = g_newa(union typebox, argc);
   lua_argi = 1;
+  ti_argi = 0;
   for (argi = 0; argi < argc; argi++)
     {
       if (argi == 0 && has_self)
@@ -181,15 +180,14 @@ static int function_call(lua_State* L)
       else
         {
           /* Handle ordinary parameter. */
-          GIArgInfo* ai = g_callable_info_get_arg((GICallableInfo*)
-                                                  function->info, ti_argi++);
+          GIArgInfo* ai = g_callable_info_get_arg(function->info, ti_argi++);
           GIDirection dir = g_arg_info_get_direction(ai);
           ti = g_arg_info_get_type(ai);
           args_ptr[argi] = &args_val[argi];
           if (dir == GI_DIRECTION_IN || dir == GI_DIRECTION_INOUT)
             function_arg_in(L, lua_argi++, ti,
                             &args_ptr[argi], &args_val[argi]);
-          g_base_info_unref((GIBaseInfo*)ai); 
+          g_base_info_unref(ai); 
         }
     }
 
