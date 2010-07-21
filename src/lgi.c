@@ -6,6 +6,8 @@
  * License: MIT.
  */
 
+#define G_LOG_DOMAIN "Lgi"
+
 #include <lua.h>
 #include <lauxlib.h>
 
@@ -49,20 +51,10 @@ struct ud_function
 
 static void function_new(lua_State* L, GIFunctionInfo* info)
 {
-  struct ud_function* function;
-  const gchar* name;
-  gpointer addr;
   GError* err = NULL;
-
-  /* Get address of the function. */
-  name = g_function_info_get_symbol(info);
-  if (!g_typelib_symbol(g_base_info_get_typelib(info), name, &addr))
-    luaL_error(L, "can't load function %s.%s(%s)",
-                      g_base_info_get_namespace(info),
-                      g_base_info_get_name(info), name);
-
-  /* Create new userdata value. */
-  function = lua_newuserdata(L, sizeof(struct ud_function));
+  struct ud_function* function = lua_newuserdata(L, sizeof(struct ud_function));
+  luaL_getmetatable(L, UD_FUNCTION);
+  lua_setmetatable(L, -2);
   function->info = info;
   if (!g_function_info_prep_invoker(info, &function->invoker, &err))
     lgi_throw(L, err);
@@ -102,7 +94,7 @@ union typebox
 };
 
 static void function_arg_in(lua_State* L, int argi, GITypeInfo* info,
-                            const void** arg_ptr, union typebox* arg_val)
+                            gpointer* arg_ptr, union typebox* arg_val)
 {
   switch (g_type_info_get_tag(info))
     {
@@ -135,7 +127,7 @@ static void function_arg_in(lua_State* L, int argi, GITypeInfo* info,
 
     case GI_TYPE_TAG_UTF8:
     case GI_TYPE_TAG_FILENAME:
-      *arg_ptr = luaL_checkstring(L, argi);
+      *arg_ptr = (gpointer)luaL_checkstring(L, argi);
       break;
 
     default:
@@ -147,7 +139,7 @@ static void function_arg_in(lua_State* L, int argi, GITypeInfo* info,
 static int function_call(lua_State* L)
 {
   gint argc, flags, has_self, throws, argi, lua_argi, ti_argi;
-  const void** args_ptr;
+  gpointer* args_ptr;
   union typebox* args_val;
   struct ud_function* function = luaL_checkudata(L, 1, UD_FUNCTION);
   GError* err = NULL;
@@ -161,9 +153,9 @@ static int function_call(lua_State* L)
   argc = g_callable_info_get_n_args(function->info) + has_self + throws;
 
   /* Allocate array for arguments. */
-  args_ptr = g_newa(const void*, argc);
+  args_ptr = g_newa(gpointer, argc);
   args_val = g_newa(union typebox, argc);
-  lua_argi = 1;
+  lua_argi = 2;
   ti_argi = 0;
   for (argi = 0; argi < argc; argi++)
     {
@@ -187,9 +179,15 @@ static int function_call(lua_State* L)
           if (dir == GI_DIRECTION_IN || dir == GI_DIRECTION_INOUT)
             function_arg_in(L, lua_argi++, ti,
                             &args_ptr[argi], &args_val[argi]);
-          g_base_info_unref(ai); 
+          g_base_info_unref(ai);
         }
     }
+
+  /* Perform the call. */
+  ffi_call(&function->invoker.cif, function->invoker.native_address,
+           NULL, args_ptr);
+
+  /* Unmarshall the results. */
 
   return 0;
 }
@@ -200,20 +198,10 @@ static const struct luaL_reg function_reg[] = {
   { NULL, NULL }
 };
 
-static int prepare_function(lua_State* L, GIFunctionInfo* info)
-{
-  lua_pushstring(L, "function");
-  lua_pushstring(L, "info");
-  return 2;
-}
-
 /*
-   lgi._prepare(namespace, symbolname)
-
-   Prepares symbol from given namespace.  Returns type of the symbol and
-   additional symbol data, depending on symbol type.
+   lgi._get(namespace, symbolname)
 */
-static int lgi_prepare(lua_State* L)
+static int lgi_get(lua_State* L)
 {
   GError* err = NULL;
   const gchar* namespace_ = luaL_checkstring(L, 1);
@@ -235,10 +223,12 @@ static int lgi_prepare(lua_State* L)
       switch (type)
         {
         case GI_INFO_TYPE_FUNCTION:
-          return prepare_function(L, info);
+          function_new(L, (GIFunctionInfo*) info);
+          return 1;
 
         default:
-          break;
+          lua_pushinteger(L, type);
+          return 1;
         }
     }
 
@@ -248,20 +238,8 @@ static int lgi_prepare(lua_State* L)
   return 1;
 }
 
-/*
-  lgi._call(funcdata, ...)
-
-  Calls function, previously prepared by lgi._prepare call.  funcdata is
-  additional data returned by lgi._prepare.
-*/
-static int lgi_call(lua_State* L)
-{
-  return 0;
-}
-
 static const struct luaL_reg lgi_reg[] = {
-  { "_prepare", lgi_prepare },
-  { "_call", lgi_call },
+  { "_get", lgi_get },
   { NULL, NULL }
 };
 
@@ -272,5 +250,6 @@ int luaopen_lgi(lua_State* L)
   luaL_register(L, NULL, function_reg);
   lua_pop(L, 1);
   luaL_register(L, "lgi", lgi_reg);
+  lua_gettop(L);
   return 1;
 }
