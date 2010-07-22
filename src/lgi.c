@@ -139,25 +139,19 @@ function_arg_in(lua_State* L, int* argi, GITypeInfo* info, GIDirection dir,
 
     case GI_TYPE_TAG_UTF8:
     case GI_TYPE_TAG_FILENAME:
-      {
-        gpointer str;
-        if (dir == GI_DIRECTION_IN || dir == GI_DIRECTION_INOUT)
-          {
-            str = (gpointer)luaL_checkstring(L, *argi);
-            argi_advance = 1;
-          }
-
-        if (dir == GI_DIRECTION_IN)
-          *arg_ptr = str;
-        else if (dir == GI_DIRECTION_INOUT)
-          arg_val->gpointer_ = str;
-      }
+      if (dir == GI_DIRECTION_IN || dir == GI_DIRECTION_INOUT)
+        {
+          arg_val->gpointer_ = (gpointer)luaL_checkstring(L, *argi);
+          argi_advance = 1;
+        }
       break;
 
     default:
       /* TODO: Handle the complex ones. */
       break;
     }
+
+  *argi += argi_advance;
 }
 
 static int
@@ -180,16 +174,14 @@ function_call(lua_State* L)
   /* Allocate array for arguments. */
   args_ptr = g_newa(gpointer, argc + 1 + has_self + throws);
   args_val = g_newa(union typebox, argc + 1 + has_self + throws);
-
   lua_argi = 2;
-  ffi_argi = 0;
-  ti_argi = 0;
 
   /* Handle return value. */
   ti = g_callable_info_get_return_type(function->info);
   function_arg_in(L, &lua_argi, ti, GI_DIRECTION_OUT,
                   &args_ptr[0], &args_val[0]);
   g_base_info_unref(ti);
+  ffi_argi = 1;
 
   /* Handle 'self', if the function has it. */
   if (has_self)
@@ -202,6 +194,7 @@ function_call(lua_State* L)
     }
 
   /* Handle ordinary parameters. */
+  ti_argi = 0;
   for (argi = 0; argi < argc; argi++)
     {
       GIArgInfo* ai = g_callable_info_get_arg(function->info, ti_argi++);
