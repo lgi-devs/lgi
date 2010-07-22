@@ -100,20 +100,20 @@ union typebox
 
 static void
 function_arg_in(lua_State* L, int* argi, GITypeInfo* info, GIDirection dir,
-                gpointer* arg_ptr, union typebox* arg_val)
+		gpointer* arg_ptr, union typebox* arg_val)
 {
   int argi_advance = 0;
   *arg_ptr = arg_val;
   switch (g_type_info_get_tag(info))
     {
-#define TYPE_CASE(tag, type, expr)                                      \
-      case GI_TYPE_TAG_ ## tag :                                        \
-        if (dir == GI_DIRECTION_IN || dir == GI_DIRECTION_INOUT)        \
-          {                                                             \
-            arg_val->type ## _ = (type) expr;                           \
-            argi_advance = 1;                                           \
-          }                                                             \
-        break
+#define TYPE_CASE(tag, type, expr)					\
+      case GI_TYPE_TAG_ ## tag :					\
+	if (dir == GI_DIRECTION_IN || dir == GI_DIRECTION_INOUT)	\
+	  {								\
+	    arg_val->type ## _ = (type) expr;				\
+	    argi_advance = 1;						\
+	  }								\
+	break
 
       TYPE_CASE(BOOLEAN, gboolean, lua_toboolean(L, *argi));
       TYPE_CASE(INT8, gint8, luaL_checkinteger(L, *argi));
@@ -137,13 +137,16 @@ function_arg_in(lua_State* L, int* argi, GITypeInfo* info, GIDirection dir,
 
 #undef TYPE_CASE
 
+    case GI_TYPE_TAG_VOID:
+      break;
+
     case GI_TYPE_TAG_UTF8:
     case GI_TYPE_TAG_FILENAME:
       if (dir == GI_DIRECTION_IN || dir == GI_DIRECTION_INOUT)
-        {
-          arg_val->gpointer_ = (gpointer)luaL_checkstring(L, *argi);
-          argi_advance = 1;
-        }
+	{
+	  arg_val->gpointer_ = (gpointer)luaL_checkstring(L, *argi);
+	  argi_advance = 1;
+	}
       break;
 
     default:
@@ -179,7 +182,7 @@ function_call(lua_State* L)
   /* Handle return value. */
   ti = g_callable_info_get_return_type(function->info);
   function_arg_in(L, &lua_argi, ti, GI_DIRECTION_OUT,
-                  &args_ptr[0], &args_val[0]);
+		  &args_ptr[0], &args_val[0]);
   g_base_info_unref(ti);
   ffi_argi = 1;
 
@@ -188,7 +191,7 @@ function_call(lua_State* L)
     {
       ti = g_base_info_get_container(function->info);
       function_arg_in(L, &lua_argi, ti, GI_DIRECTION_IN,
-                      &args_ptr[1], &args_val[1]);
+		      &args_ptr[1], &args_val[1]);
       g_base_info_unref(ti);
       ffi_argi++;
     }
@@ -200,7 +203,7 @@ function_call(lua_State* L)
       GIArgInfo* ai = g_callable_info_get_arg(function->info, ti_argi++);
       ti = g_arg_info_get_type(ai);
       function_arg_in(L, &lua_argi, ti, g_arg_info_get_direction(ai),
-                      &args_ptr[ffi_argi], &args_val[ffi_argi]);
+		      &args_ptr[ffi_argi], &args_val[ffi_argi]);
       ffi_argi++;
       g_base_info_unref(ti);
       g_base_info_unref(ai);
@@ -212,7 +215,7 @@ function_call(lua_State* L)
 
   /* Perform the call. */
   ffi_call(&function->invoker.cif, function->invoker.native_address,
-           args_ptr[0], &args_ptr[1]);
+	   args_ptr[0], &args_ptr[1]);
 
   /* Check, whether an error happened. */
   if (throws && err != 0)
@@ -245,26 +248,27 @@ lgi_get(lua_State* L)
 
   /* Get information about the symbol. */
   info = g_irepository_find_by_name(NULL, namespace_, symbol);
-
-  /* Check the type of the symbol. */
-  if (info != NULL)
+  if (info == NULL)
     {
-      type = g_base_info_get_type(info);
-      switch (type)
-        {
-        case GI_INFO_TYPE_FUNCTION:
-          function_new(L, (GIFunctionInfo*) info);
-          return 1;
-
-        default:
-          lua_pushinteger(L, type);
-          return 1;
-        }
+      lua_pushboolean(L, 0);
+      lua_pushfstring(L, "symbol %s.%s not found", namespace_, name_);
+      return 2;
     }
 
-  /* If the symbol was not handled inside the switch above, it does not
-     exist. */
-  lua_pushnil(L);
+  /* Check the type of the symbol. */
+  type = g_base_info_get_type(info);
+  switch (type)
+    {
+    case GI_INFO_TYPE_FUNCTION:
+      function_new(L, (GIFunctionInfo*)info);
+      break;
+
+    default:
+      lua_pushinteger(L, type);
+      break;
+    }
+
+  g_base_info_unref(info);
   return 1;
 }
 
