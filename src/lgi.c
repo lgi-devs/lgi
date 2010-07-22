@@ -11,8 +11,30 @@
 #include <lua.h>
 #include <lauxlib.h>
 
+#include <glib.h>
 #include <girepository.h>
 #include <girffi.h>
+
+static int function_new(lua_State* L, GIFunctionInfo* info);
+static int struct_new(lua_State* L, GIStructInfo* info, gpointer addr,
+		      gboolean owns);
+
+/* 'struct' userdata: wraps structure with its typeinfo. */
+struct ud_struct
+{
+  GIStructInfo* info;
+  gpointer addr;
+  gboolean owns;
+};
+#define UD_STRUCT "lgi.struct"
+
+/* 'function' userdata: wraps function prepared to be called through ffi. */
+struct ud_function
+{
+  GIFunctionInvoker invoker;
+  GIFunctionInfo* info;
+};
+#define UD_FUNCTION "lgi.function"
 
 static int
 lgi_error(lua_State* L, GError* err)
@@ -44,7 +66,7 @@ lgi_throw(lua_State* L, GError* err)
 }
 
 static int
-lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GArgument* val)
+lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GArgument* val, gboolean owned)
 {
   int pushed = 1;
   switch (g_type_info_get_tag(ti))
@@ -52,7 +74,7 @@ lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GArgument* val)
       /* Simple (native) types. */
 #define TYPE_CASE(tag, type, member, push)      \
       case GI_TYPE_TAG_ ## tag:                 \
-        push(L, val->member);                   \
+	push(L, val->member);                   \
 	break
 
       TYPE_CASE(BOOLEAN, gboolean, v_boolean, lua_pushboolean);
@@ -80,11 +102,26 @@ lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GArgument* val)
 
 #undef TYPE_CASE
 
-      /* TODO: Handle the complex ones. */
+    case GI_TYPE_TAG_INTERFACE:
+      /* Interface types.  Get the interface type and switch according
+	 to the real type. */
+      {
+	GIBaseInfo* ii = g_type_info_get_interface(ti);
+	switch (g_base_info_get_type(ii))
+	  {
+	  case GI_INFO_TYPE_STRUCT:
+	    struct_new(L, ii, val->v_pointer, owned);
+	    break;
+
+	  default:
+	    pushed = 0;
+	  }
+	g_base_info_unref(ii);
+      }
+      break;
 
     default:
       pushed = 0;
-      break;
     }
 
   return pushed;
@@ -98,7 +135,7 @@ lgi_val_from_lua(lua_State* L, int index, GITypeInfo* ti, GArgument* val)
     {
 #define TYPE_CASE(tag, type, member, expr)      \
       case GI_TYPE_TAG_ ## tag :                \
-        val->member = (type)expr;               \
+	val->member = (type)expr;               \
 	break
 
       TYPE_CASE(BOOLEAN, gboolean, v_boolean, lua_toboolean(L, index));
@@ -126,7 +163,30 @@ lgi_val_from_lua(lua_State* L, int index, GITypeInfo* ti, GArgument* val)
 
 #undef TYPE_CASE
 
-      /* TODO: Handle the complex ones. */
+    case GI_TYPE_TAG_INTERFACE:
+      /* Interface types.  Get the interface type and switch according
+	 to the real type. */
+      {
+	GIBaseInfo* ii = g_type_info_get_interface(ti);
+	switch (g_base_info_get_type(ii))
+	  {
+	  case GI_INFO_TYPE_STRUCT:
+	    if (lua_isnoneornil(L, index))
+	      val->v_pointer = 0;
+	    else
+	      {
+		struct ud_struct* struct_ = 
+		  luaL_checkudata(L, index, UD_STRUCT);
+		val->v_pointer = struct_->addr;
+	      }
+	    break;
+
+	  default:
+	    received = 0;
+	  }
+	g_base_info_unref(ii);
+      }
+      break;
 
     default:
       received = 0;
@@ -136,25 +196,42 @@ lgi_val_from_lua(lua_State* L, int index, GITypeInfo* ti, GArgument* val)
   return received;
 }
 
-/* 'struct' userdata: wraps structure with its typeinfo. */
-struct ud_struct
+/* Allocates/initializes specified object (if applicable), stores it
+   on the stack. */
+static int
+lgi_type_new(lua_State* L, GIBaseInfo* ii, GArgument* val)
 {
-    GIStructInfo* info;
-    gpointer addr;
-};
-#define UD_STRUCT "lgi.struct"
+  int vals = 0;
+  switch (g_base_info_get_type(ii))
+    {
+    case GI_INFO_TYPE_FUNCTION:
+      vals = function_new(L, ii);
+      break;
+
+    case GI_INFO_TYPE_STRUCT:
+      val->v_pointer = g_malloc0(g_struct_info_get_size(ii));
+      vals = struct_new(L, ii, val->v_pointer, TRUE);
+      break;
+
+    default:
+      break;
+    }
+
+  return vals;
+}
 
 static int
-struct_new(lua_State* L, GIStructInfo* info, gpointer addr)
+struct_new(lua_State* L, GIStructInfo* info, gpointer addr, gboolean owns)
 {
     if (addr != NULL)
       {
-        struct ud_struct* struct_ =
-          lua_newuserdata(L, sizeof(struct ud_struct));
-        luaL_getmetatable(L, UD_STRUCT);
-        lua_setmetatable(L, -2);
-        struct_->info = g_base_info_ref(info);
-        struct_->addr = addr;
+	struct ud_struct* struct_ =
+	  lua_newuserdata(L, sizeof(struct ud_struct));
+	luaL_getmetatable(L, UD_STRUCT);
+	lua_setmetatable(L, -2);
+	struct_->info = g_base_info_ref(info);
+	struct_->addr = addr;
+	struct_->owns = owns;
       }
     else
       lua_pushnil(L);
@@ -167,6 +244,8 @@ struct_gc(lua_State* L)
 {
   struct ud_struct* struct_ = luaL_checkudata(L, 1, UD_STRUCT);
   g_base_info_unref(struct_->info);
+  if (struct_->owns)
+    g_free(struct_->addr);
   return 0;
 }
 
@@ -175,21 +254,98 @@ struct_tostring(lua_State* L)
 {
   struct ud_struct* struct_ = luaL_checkudata(L, 1, UD_STRUCT);
   lua_pushfstring(L, "lgistruct: %s.%s %p",
-                  g_base_info_get_namespace(struct_->info),
-                  g_base_info_get_name(struct_->info), struct_);
+		  g_base_info_get_namespace(struct_->info),
+		  g_base_info_get_name(struct_->info), struct_);
   return 1;
+}
+
+static GIFieldInfo*
+struct_find_field(lua_State* L, GIStructInfo* si, const gchar* name)
+{
+  GIFieldInfo* fi = NULL;
+  int i;
+  for (i = 0; i < g_struct_info_get_n_fields(si); i++)
+    {
+      fi = g_struct_info_get_field(si, i);
+      g_assert(fi != NULL);
+      if (g_strcmp0(g_base_info_get_name(fi), name) == 0)
+	break;
+
+      g_base_info_unref(fi);
+      fi = NULL;
+    }
+
+  return fi;
 }
 
 static int
 struct_index(lua_State* L)
 {
-  return 0;
+  struct ud_struct* struct_ = luaL_checkudata(L, 1, UD_STRUCT);
+  const gchar* name = luaL_checkstring(L, 2);
+  int vals;
+  GIFieldInfo* fi;
+  GITypeInfo* ti;
+  GArgument* val;
+
+  /* Find the field. */
+  fi = struct_find_field(L, struct_->info, name);
+  if (fi == NULL)
+    return luaL_error(L, "struct %s.%s: no '%s'",
+		      g_base_info_get_namespace(struct_->info),
+		      g_base_info_get_name(struct_->info), name);
+
+  /* Check, whether the field is readable. */
+  if ((g_field_info_get_flags(fi) & GI_FIELD_IS_READABLE) == 0)
+    {
+      g_base_info_unref(fi);
+      return luaL_error(L, "struct %s.%s: '%s' not readable",
+			g_base_info_get_namespace(struct_->info),
+			g_base_info_get_name(struct_->info), name);
+    }
+
+  /* Read the field. */
+  val = G_STRUCT_MEMBER_P(struct_->addr, g_field_info_get_offset(fi));
+  ti = g_field_info_get_type(fi);
+  vals = lgi_val_to_lua(L, ti, val, FALSE);
+  g_base_info_unref(ti);
+  g_base_info_unref(fi);
+  return vals;
 }
 
 static int
 struct_newindex(lua_State* L)
 {
-  return 0;
+  struct ud_struct* struct_ = luaL_checkudata(L, 1, UD_STRUCT);
+  const gchar* name = luaL_checkstring(L, 2);
+  int vals;
+  GIFieldInfo* fi;
+  GITypeInfo* ti;
+  GArgument* val;
+
+  /* Find the field. */
+  fi = struct_find_field(L, struct_->info, name);
+  if (fi == NULL)
+    return luaL_error(L, "struct %s.%s: no '%s'",
+		      g_base_info_get_namespace(struct_->info),
+		      g_base_info_get_name(struct_->info), name);
+
+  /* Check, whether the field is readable. */
+  if ((g_field_info_get_flags(fi) & GI_FIELD_IS_WRITABLE) == 0)
+    {
+      g_base_info_unref(fi);
+      return luaL_error(L, "struct %s.%s: '%s' not writable",
+			g_base_info_get_namespace(struct_->info),
+			g_base_info_get_name(struct_->info), name);
+    }
+
+  /* Write the field. */
+  val = G_STRUCT_MEMBER_P(struct_->addr, g_field_info_get_offset(fi));
+  ti = g_field_info_get_type(fi);
+  vals = lgi_val_from_lua(L, 3, ti, val);
+  g_base_info_unref(ti);
+  g_base_info_unref(fi);
+  return vals;
 }
 
 static const struct luaL_reg struct_reg[] = {
@@ -200,15 +356,7 @@ static const struct luaL_reg struct_reg[] = {
   { NULL, NULL }
 };
 
-/* 'function' userdata: wraps function prepared to be called through ffi. */
-struct ud_function
-{
-  GIFunctionInvoker invoker;
-  GIFunctionInfo* info;
-};
-#define UD_FUNCTION "lgi.function"
-
-static void
+static int
 function_new(lua_State* L, GIFunctionInfo* info)
 {
   GError* err = NULL;
@@ -218,6 +366,7 @@ function_new(lua_State* L, GIFunctionInfo* info)
   function->info = g_base_info_ref(info);
   if (!g_function_info_prep_invoker(info, &function->invoker, &err))
     lgi_throw(L, err);
+  return 1;
 }
 
 static int
@@ -234,48 +383,59 @@ function_tostring(lua_State* L)
 {
   struct ud_function* function = luaL_checkudata(L, 1, UD_FUNCTION);
   lua_pushfstring(L, "lgifun: %s.%s %p",
-                  g_base_info_get_namespace(function->info),
-                  g_base_info_get_name(function->info), function);
+		  g_base_info_get_namespace(function->info),
+		  g_base_info_get_name(function->info), function);
   return 1;
 }
 
 typedef void
-(*function_arg)(lua_State* L, int* argi, GITypeInfo* info,
-                GIDirection dir, GArgument*);
+(*function_arg)(lua_State*, int*, GITypeInfo*, GIDirection, GIScopeType, 
+		GITransfer, gboolean, GArgument*);
 
 static void
-function_arg_in(lua_State* L, int* argi, GITypeInfo* info, GIDirection dir,
-		GArgument* arg)
+function_arg_in(lua_State* L, int* argi, GITypeInfo* ti, GIDirection dir,
+		GIScopeType scope, GITransfer transfer, 
+		gboolean caller_allocates, GArgument* val)
 {
   if (dir == GI_DIRECTION_IN || dir == GI_DIRECTION_INOUT)
-    *argi += lgi_val_from_lua(L, *argi, info, arg);
+    *argi += lgi_val_from_lua(L, *argi, ti, val);
+  else if (caller_allocates && g_type_info_get_tag(ti) == GI_TYPE_TAG_INTERFACE)
+    {
+      /* Allocate target space. */
+      GIBaseInfo* ii = g_type_info_get_interface(ti);
+      lgi_type_new(L, ii, val);
+      g_base_info_unref(ii);
+    }
 }
 
 static void
-function_arg_out(lua_State* L, int* argi, GITypeInfo* info, GIDirection dir,
-                 GArgument* arg)
+function_arg_out(lua_State* L, int* argi, GITypeInfo* ti, GIDirection dir,
+		 GIScopeType scope, GITransfer transfer, 
+		 gboolean caller_allocates, GArgument* val)
 {
   if (dir == GI_DIRECTION_OUT || dir == GI_DIRECTION_INOUT)
-    *argi += lgi_val_to_lua(L, info, arg);
+    *argi += lgi_val_to_lua(L, ti, val, caller_allocates);
 }
 
 static int
 function_handle_args(lua_State* L, function_arg do_arg, GICallableInfo* fi,
-                     int has_self, int throws, int argc, GArgument* args)
+		     int has_self, int throws, int argc, GArgument* args)
 {
   gint argi, lua_argi = 2, ti_argi = 0, ffi_argi = 1;
   GITypeInfo* ti;
 
   /* Handle return value. */
   ti = g_callable_info_get_return_type(fi);
-  do_arg(L, &lua_argi, ti, GI_DIRECTION_OUT, &args[0]);
+  do_arg(L, &lua_argi, ti, GI_DIRECTION_OUT, GI_SCOPE_TYPE_INVALID,
+	 g_callable_info_get_caller_owns(fi), FALSE, &args[0]);
   g_base_info_unref(ti);
 
   /* Handle 'self', if the function has it. */
   if (has_self)
     {
       ti = g_base_info_get_container(fi);
-      do_arg(L, &lua_argi, ti, GI_DIRECTION_IN, &args[1]);
+      do_arg(L, &lua_argi, ti, GI_DIRECTION_IN, GI_SCOPE_TYPE_INVALID,
+	     GI_TRANSFER_NOTHING, FALSE, &args[1]);
       g_base_info_unref(ti);
       ffi_argi++;
     }
@@ -286,7 +446,9 @@ function_handle_args(lua_State* L, function_arg do_arg, GICallableInfo* fi,
     {
       GIArgInfo* ai = g_callable_info_get_arg(fi, ti_argi++);
       ti = g_arg_info_get_type(ai);
-      do_arg(L, &lua_argi, ti, g_arg_info_get_direction(ai), &args[ffi_argi++]);
+      do_arg(L, &lua_argi, ti, g_arg_info_get_direction(ai), 
+	     g_arg_info_get_scope(ai), g_arg_info_get_ownership_transfer(ai),
+	     g_arg_info_is_caller_allocates(ai), &args[ffi_argi++]);
       g_base_info_unref(ti);
       g_base_info_unref(ai);
     }
@@ -319,7 +481,7 @@ function_call(lua_State* L)
 
   /* Process parameters for input. */
   function_handle_args(L, function_arg_in, function->info, has_self, throws,
-                       argc, args_val);
+		       argc, args_val);
 
   /* Handle 'throws' parameter, if function does it. */
   if (throws)
@@ -335,7 +497,7 @@ function_call(lua_State* L)
 
   /* Process parameters for output. */
   return function_handle_args(L, function_arg_out, function->info, has_self,
-                              throws, argc, args_val);
+			      throws, argc, args_val);
 }
 
 static const struct luaL_reg function_reg[] = {
@@ -355,7 +517,8 @@ lgi_get(lua_State* L)
   const gchar* namespace_ = luaL_checkstring(L, 1);
   const gchar* symbol = luaL_checkstring(L, 2);
   GIBaseInfo* info;
-  GIInfoType type;
+  GArgument unused;
+  int vals = 0;
 
   /* Make sure that the repository is loaded. */
   if (g_irepository_require(NULL, namespace_, NULL, 0, &err) == NULL)
@@ -370,25 +533,14 @@ lgi_get(lua_State* L)
       return 2;
     }
 
-  /* Check the type of the symbol. */
-  type = g_base_info_get_type(info);
-  switch (type)
-    {
-    case GI_INFO_TYPE_FUNCTION:
-      function_new(L, (GIFunctionInfo*)info);
-      break;
-
-    default:
-      lua_pushinteger(L, type);
-      break;
-    }
-
+  /* Create new instance of the specified type. */
+  vals = lgi_type_new(L, info, &unused);
   g_base_info_unref(info);
   return 1;
 }
 
 static const struct luaL_reg lgi_reg[] = {
-  { "_get", lgi_get },
+  { "get", lgi_get },
   { NULL, NULL }
 };
 
@@ -401,11 +553,11 @@ lgi_reg_udata(lua_State* L, const struct luaL_reg* reg, const char* meta)
 }
 
 int
-luaopen_lgi(lua_State* L)
+luaopen_lgi__core(lua_State* L)
 {
   g_type_init();
   lgi_reg_udata(L, struct_reg, UD_STRUCT);
   lgi_reg_udata(L, function_reg, UD_FUNCTION);
-  luaL_register(L, "lgi", lgi_reg);
+  luaL_register(L, "lgi._core", lgi_reg);
   return 1;
 }
