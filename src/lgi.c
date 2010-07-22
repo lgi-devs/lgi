@@ -43,6 +43,163 @@ lgi_throw(lua_State* L, GError* err)
   return lua_error(L);
 }
 
+static int
+lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GArgument* val)
+{
+  int pushed = 1;
+  switch (g_type_info_get_tag(ti))
+    {
+      /* Simple (native) types. */
+#define TYPE_CASE(tag, type, member, push)      \
+      case GI_TYPE_TAG_ ## tag:                 \
+        push(L, val->member);                   \
+	break
+
+      TYPE_CASE(BOOLEAN, gboolean, v_boolean, lua_pushboolean);
+      TYPE_CASE(INT8, gint8, v_int8, lua_pushinteger);
+      TYPE_CASE(UINT8, guint8, v_uint8, lua_pushinteger);
+      TYPE_CASE(INT16, gint16, v_int16, lua_pushinteger);
+      TYPE_CASE(UINT16, guint16, v_uint16, lua_pushinteger);
+      TYPE_CASE(INT32, gint32, v_int32, lua_pushinteger);
+      TYPE_CASE(UINT32, guint32, v_uint32, lua_pushinteger);
+      TYPE_CASE(INT64, gint64, v_int64, lua_pushnumber);
+      TYPE_CASE(UINT64, guint64, v_uint64, lua_pushnumber);
+      TYPE_CASE(FLOAT, gfloat, v_float, lua_pushinteger);
+      TYPE_CASE(DOUBLE, gdouble, v_double, lua_pushinteger);
+      TYPE_CASE(SHORT, gshort, v_short, lua_pushinteger);
+      TYPE_CASE(USHORT, gushort, v_ushort, lua_pushinteger);
+      TYPE_CASE(INT, gint, v_int, lua_pushinteger);
+      TYPE_CASE(UINT, guint, v_uint, lua_pushinteger);
+      TYPE_CASE(LONG, glong, v_long, lua_pushinteger);
+      TYPE_CASE(ULONG, gulong, v_ulong, lua_pushinteger);
+      TYPE_CASE(SSIZE, gssize, v_ssize, lua_pushinteger);
+      TYPE_CASE(SIZE, gsize, v_size, lua_pushinteger);
+      TYPE_CASE(GTYPE, GType, v_long, lua_pushinteger);
+      TYPE_CASE(UTF8, gpointer, v_pointer, lua_pushstring);
+      TYPE_CASE(FILENAME, gpointer, v_pointer, lua_pushstring);
+
+#undef TYPE_CASE
+
+      /* TODO: Handle the complex ones. */
+
+    default:
+      pushed = 0;
+      break;
+    }
+
+  return pushed;
+}
+
+static int
+lgi_val_from_lua(lua_State* L, int index, GITypeInfo* ti, GArgument* val)
+{
+  int received = 1;
+  switch (g_type_info_get_tag(ti))
+    {
+#define TYPE_CASE(tag, type, member, expr)      \
+      case GI_TYPE_TAG_ ## tag :                \
+        val->member = (type)expr;               \
+	break
+
+      TYPE_CASE(BOOLEAN, gboolean, v_boolean, lua_toboolean(L, index));
+      TYPE_CASE(INT8, gint8, v_int8, luaL_checkinteger(L, index));
+      TYPE_CASE(UINT8, guint8, v_uint8, luaL_checkinteger(L, index));
+      TYPE_CASE(INT16, gint16, v_int16, luaL_checkinteger(L, index));
+      TYPE_CASE(UINT16, guint16, v_uint16, luaL_checkinteger(L, index));
+      TYPE_CASE(INT32, gint32, v_int32, luaL_checkinteger(L, index));
+      TYPE_CASE(UINT32, guint32, v_uint32, luaL_checkinteger(L, index));
+      TYPE_CASE(INT64, gint64, v_int64, luaL_checknumber(L, index));
+      TYPE_CASE(UINT64, guint64, v_uint64, luaL_checknumber(L, index));
+      TYPE_CASE(FLOAT, gfloat, v_float, luaL_checkinteger(L, index));
+      TYPE_CASE(DOUBLE, gdouble, v_double, luaL_checkinteger(L, index));
+      TYPE_CASE(SHORT, gshort, v_short, luaL_checkinteger(L, index));
+      TYPE_CASE(USHORT, gushort, v_ushort, luaL_checkinteger(L, index));
+      TYPE_CASE(INT, gint, v_int, luaL_checkinteger(L, index));
+      TYPE_CASE(UINT, guint, v_uint, luaL_checkinteger(L, index));
+      TYPE_CASE(LONG, glong, v_long, luaL_checkinteger(L, index));
+      TYPE_CASE(ULONG, gulong, v_ulong, luaL_checkinteger(L, index));
+      TYPE_CASE(SSIZE, gssize, v_ssize, luaL_checkinteger(L, index));
+      TYPE_CASE(SIZE, gsize, v_size, luaL_checkinteger(L, index));
+      TYPE_CASE(GTYPE, GType, v_long, luaL_checkinteger(L, index));
+      TYPE_CASE(UTF8, gpointer, v_pointer, luaL_checkstring(L, index));
+      TYPE_CASE(FILENAME, gpointer, v_pointer, luaL_checkstring(L, index));
+
+#undef TYPE_CASE
+
+      /* TODO: Handle the complex ones. */
+
+    default:
+      received = 0;
+      break;
+    }
+
+  return received;
+}
+
+/* 'struct' userdata: wraps structure with its typeinfo. */
+struct ud_struct
+{
+    GIStructInfo* info;
+    gpointer addr;
+};
+#define UD_STRUCT "lgi.struct"
+
+static int
+struct_new(lua_State* L, GIStructInfo* info, gpointer addr)
+{
+    if (addr != NULL)
+      {
+        struct ud_struct* struct_ =
+          lua_newuserdata(L, sizeof(struct ud_struct));
+        luaL_getmetatable(L, UD_STRUCT);
+        lua_setmetatable(L, -2);
+        struct_->info = g_base_info_ref(info);
+        struct_->addr = addr;
+      }
+    else
+      lua_pushnil(L);
+
+    return 1;
+};
+
+static int
+struct_gc(lua_State* L)
+{
+  struct ud_struct* struct_ = luaL_checkudata(L, 1, UD_STRUCT);
+  g_base_info_unref(struct_->info);
+  return 0;
+}
+
+static int
+struct_tostring(lua_State* L)
+{
+  struct ud_struct* struct_ = luaL_checkudata(L, 1, UD_STRUCT);
+  lua_pushfstring(L, "lgistruct: %s.%s %p",
+                  g_base_info_get_namespace(struct_->info),
+                  g_base_info_get_name(struct_->info), struct_);
+  return 1;
+}
+
+static int
+struct_index(lua_State* L)
+{
+  return 0;
+}
+
+static int
+struct_newindex(lua_State* L)
+{
+  return 0;
+}
+
+static const struct luaL_reg struct_reg[] = {
+  { "__gc", struct_gc },
+  { "__index", struct_index },
+  { "__newindex", struct_newindex },
+  { "__tostring", struct_tostring },
+  { NULL, NULL }
+};
+
 /* 'function' userdata: wraps function prepared to be called through ffi. */
 struct ud_function
 {
@@ -82,141 +239,29 @@ function_tostring(lua_State* L)
   return 1;
 }
 
-union typebox
-{
-  gboolean gboolean_;
-  gint8 gint8_;
-  guint8 guint8_;
-  gint16 gint16_;
-  guint16 guint16_;
-  gint32 gint32_;
-  guint32 guint32_;
-  gint64 gint64_;
-  guint64 guint64_;
-  gshort gshort_;
-  gushort gushort_;
-  gint gint_;
-  guint guint_;
-  glong glong_;
-  gulong gulong_;
-  gssize gssize_;
-  gsize gsize_;
-  gfloat gfloat_;
-  gdouble gdouble_;
-  time_t time_t_;
-  GType GType_;
-  gpointer gpointer_;
-};
-
 typedef void
 (*function_arg)(lua_State* L, int* argi, GITypeInfo* info,
-                GIDirection dir, union typebox*);
+                GIDirection dir, GArgument*);
 
 static void
 function_arg_in(lua_State* L, int* argi, GITypeInfo* info, GIDirection dir,
-		union typebox* arg)
+		GArgument* arg)
 {
-  int arg_used = 0;
-  switch (g_type_info_get_tag(info))
-    {
-#define TYPE_CASE(tag, type, expr)					\
-      case GI_TYPE_TAG_ ## tag :					\
-	if (dir == GI_DIRECTION_IN || dir == GI_DIRECTION_INOUT)	\
-	  {								\
-	    arg->type ## _ = (type)expr;				\
-	    arg_used = 1;						\
-	  }								\
-	break
-
-      TYPE_CASE(BOOLEAN, gboolean, lua_toboolean(L, *argi));
-      TYPE_CASE(INT8, gint8, luaL_checkinteger(L, *argi));
-      TYPE_CASE(UINT8, guint8, luaL_checkinteger(L, *argi));
-      TYPE_CASE(INT16, gint16, luaL_checkinteger(L, *argi));
-      TYPE_CASE(UINT16, guint16, luaL_checkinteger(L, *argi));
-      TYPE_CASE(INT32, guint32, luaL_checkinteger(L, *argi));
-      TYPE_CASE(INT64, gint64, luaL_checknumber(L, *argi));
-      TYPE_CASE(UINT64, guint64, luaL_checknumber(L, *argi));
-      TYPE_CASE(SHORT, gshort, luaL_checkinteger(L, *argi));
-      TYPE_CASE(USHORT, gushort, luaL_checkinteger(L, *argi));
-      TYPE_CASE(INT, gint, luaL_checkinteger(L, *argi));
-      TYPE_CASE(UINT, guint, luaL_checkinteger(L, *argi));
-      TYPE_CASE(LONG, glong, luaL_checkinteger(L, *argi));
-      TYPE_CASE(ULONG, gulong, luaL_checkinteger(L, *argi));
-      TYPE_CASE(SSIZE, gssize, luaL_checkinteger(L, *argi));
-      TYPE_CASE(SIZE, gsize, luaL_checkinteger(L, *argi));
-      TYPE_CASE(FLOAT, gfloat, luaL_checkinteger(L, *argi));
-      TYPE_CASE(DOUBLE, gdouble, luaL_checkinteger(L, *argi));
-      TYPE_CASE(GTYPE, GType, luaL_checkinteger(L, *argi));
-      TYPE_CASE(UTF8, gpointer, luaL_checkstring(L, *argi));
-      TYPE_CASE(FILENAME, gpointer, luaL_checkstring(L, *argi));
-
-#undef TYPE_CASE
-
-    case GI_TYPE_TAG_VOID:
-      break;
-
-    default:
-      /* TODO: Handle the complex ones. */
-      break;
-    }
-
-  *argi += arg_used;
+  if (dir == GI_DIRECTION_IN || dir == GI_DIRECTION_INOUT)
+    *argi += lgi_val_from_lua(L, *argi, info, arg);
 }
 
 static void
 function_arg_out(lua_State* L, int* argi, GITypeInfo* info, GIDirection dir,
-                 union typebox* arg)
+                 GArgument* arg)
 {
-  int arg_used = 0;
-  switch (g_type_info_get_tag(info))
-    {
-#define TYPE_CASE(tag, type, push)					\
-      case GI_TYPE_TAG_ ## tag :					\
-	if (dir == GI_DIRECTION_OUT || dir == GI_DIRECTION_INOUT)	\
-	  {								\
-            push(L, arg->type ## _);                                    \
-	    arg_used = 1;						\
-	  }								\
-	break
-
-      TYPE_CASE(BOOLEAN, gboolean, lua_pushboolean);
-      TYPE_CASE(INT8, gint8, lua_pushinteger);
-      TYPE_CASE(UINT8, guint8, lua_pushinteger);
-      TYPE_CASE(INT16, gint16, lua_pushinteger);
-      TYPE_CASE(UINT16, guint16, lua_pushinteger);
-      TYPE_CASE(INT32, guint32, lua_pushinteger);
-      TYPE_CASE(INT64, gint64, lua_pushnumber);
-      TYPE_CASE(UINT64, guint64, lua_pushnumber);
-      TYPE_CASE(SHORT, gshort, lua_pushinteger);
-      TYPE_CASE(USHORT, gushort, lua_pushinteger);
-      TYPE_CASE(INT, gint, lua_pushinteger);
-      TYPE_CASE(UINT, guint, lua_pushinteger);
-      TYPE_CASE(LONG, glong, lua_pushinteger);
-      TYPE_CASE(ULONG, gulong, lua_pushinteger);
-      TYPE_CASE(SSIZE, gssize, lua_pushinteger);
-      TYPE_CASE(SIZE, gsize, lua_pushinteger);
-      TYPE_CASE(FLOAT, gfloat, lua_pushinteger);
-      TYPE_CASE(DOUBLE, gdouble, lua_pushinteger);
-      TYPE_CASE(GTYPE, GType, lua_pushinteger);
-      TYPE_CASE(UTF8, gpointer, lua_pushstring);
-      TYPE_CASE(FILENAME, gpointer, lua_pushstring);
-
-#undef TYPE_CASE
-
-    case GI_TYPE_TAG_VOID:
-      break;
-
-    default:
-      /* TODO: Handle the complex ones. */
-      break;
-    }
-
-  *argi += arg_used;
+  if (dir == GI_DIRECTION_OUT || dir == GI_DIRECTION_INOUT)
+    *argi += lgi_val_to_lua(L, info, arg);
 }
 
 static int
 function_handle_args(lua_State* L, function_arg do_arg, GICallableInfo* fi,
-                     int has_self, int throws, int argc, union typebox* args)
+                     int has_self, int throws, int argc, GArgument* args)
 {
   gint argi, lua_argi = 2, ti_argi = 0, ffi_argi = 1;
   GITypeInfo* ti;
@@ -254,7 +299,7 @@ function_call(lua_State* L)
 {
   gint i, argc, argffi, flags, has_self, throws;
   gpointer* args_ptr;
-  union typebox* args_val;
+  GArgument* args_val;
   struct ud_function* function = luaL_checkudata(L, 1, UD_FUNCTION);
   GError* err = NULL;
 
@@ -267,7 +312,7 @@ function_call(lua_State* L)
 
   /* Allocate array for arguments. */
   argffi = argc + 1 + has_self + throws;
-  args_val = g_newa(union typebox, argffi);
+  args_val = g_newa(GArgument, argffi);
   args_ptr = g_newa(gpointer, argffi);
   for (i = 0; i < argffi; ++i)
     args_ptr[i] = &args_val[i];
@@ -278,7 +323,7 @@ function_call(lua_State* L)
 
   /* Handle 'throws' parameter, if function does it. */
   if (throws)
-    args_val[argffi - 1].gpointer_ = &err;
+    args_val[argffi - 1].v_pointer = &err;
 
   /* Perform the call. */
   ffi_call(&function->invoker.cif, function->invoker.native_address,
@@ -347,14 +392,20 @@ static const struct luaL_reg lgi_reg[] = {
   { NULL, NULL }
 };
 
+static void
+lgi_reg_udata(lua_State* L, const struct luaL_reg* reg, const char* meta)
+{
+  luaL_newmetatable(L, meta);
+  luaL_register(L, NULL, reg);
+  lua_pop(L, 1);
+}
+
 int
 luaopen_lgi(lua_State* L)
 {
   g_type_init();
-  luaL_newmetatable(L, UD_FUNCTION);
-  luaL_register(L, NULL, function_reg);
-  lua_pop(L, 1);
+  lgi_reg_udata(L, struct_reg, UD_STRUCT);
+  lgi_reg_udata(L, function_reg, UD_FUNCTION);
   luaL_register(L, "lgi", lgi_reg);
-  lua_gettop(L);
   return 1;
 }
