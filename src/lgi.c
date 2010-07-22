@@ -17,6 +17,7 @@
 
 /* Key in registry, containing table with al our private data. */
 static int lgi_regkey;
+#define LGI_REG_CACHE 1
 
 static int function_new(lua_State* L, GIFunctionInfo* info);
 static int struct_new(lua_State* L, GIStructInfo* info, gpointer addr,
@@ -38,13 +39,6 @@ struct ud_function
   GIFunctionInfo* info;
 };
 #define UD_FUNCTION "lgi.function"
-
-enum lgi_cachetype
-  {
-    LGI_CACHETYPE_FUNCTION = 1,
-    LGI_CACHETYPE_STRUCT,
-    LGI_CACHETYPE_LAST
-  };
 
 static int
 lgi_error(lua_State* L, GError* err)
@@ -79,10 +73,10 @@ lgi_throw(lua_State* L, GError* err)
    the stack.  If not found in the cache, returns 0 and stores
    nothing. */
 static int
-lgi_get_cached(lua_State* L, enum lgi_cachetype cache, gpointer obj)
+lgi_get_cached(lua_State* L, gpointer obj)
 {
   lua_rawgeti(L, LUA_REGISTRYINDEX, lgi_regkey);
-  lua_rawgeti(L, -1, cache);
+  lua_rawgeti(L, -1, LGI_REG_CACHE);
   lua_pushlightuserdata(L, obj);
   lua_rawget(L, -2);
   lua_replace(L, -3);
@@ -98,10 +92,10 @@ lgi_get_cached(lua_State* L, enum lgi_cachetype cache, gpointer obj)
 
 /* Stores object into specified cache. */
 static void
-lgi_set_cached(lua_State* L, enum lgi_cachetype cache, gpointer obj)
+lgi_set_cached(lua_State* L, gpointer obj)
 {
   lua_rawgeti(L, LUA_REGISTRYINDEX, lgi_regkey);
-  lua_rawgeti(L, -1, cache);
+  lua_rawgeti(L, -1, LGI_REG_CACHE);
   lua_pushlightuserdata(L, obj);
   lua_pushvalue(L, -4);
   lua_rawset(L, -3);
@@ -269,7 +263,7 @@ struct_new(lua_State* L, GIStructInfo* info, gpointer addr, gboolean owns)
     if (addr != NULL)
       {
 	/* Check, whether struct is already in the cache. */
-	if (lgi_get_cached(L, LGI_CACHETYPE_STRUCT, addr) == 0)
+	if (lgi_get_cached(L, addr) == 0)
 	  {
 	    struct ud_struct* struct_ =
 	      lua_newuserdata(L, sizeof(struct ud_struct));
@@ -278,7 +272,7 @@ struct_new(lua_State* L, GIStructInfo* info, gpointer addr, gboolean owns)
 	    struct_->info = g_base_info_ref(info);
 	    struct_->addr = addr;
 	    struct_->owns = owns;
-	    lgi_set_cached(L, LGI_CACHETYPE_STRUCT, addr);
+	    lgi_set_cached(L, addr);
 	  }
       }
     else
@@ -417,13 +411,12 @@ function_new(lua_State* L, GIFunctionInfo* info)
 
   /* Check, whether such function is not already present in the cache.
      If it is, use the one we already have. */
-  if (lgi_get_cached(L, LGI_CACHETYPE_FUNCTION,
-		     function->invoker.native_address) == 1)
+  if (lgi_get_cached(L, function->invoker.native_address) == 1)
     /* Replace with previously created function. */
     lua_replace(L, -2);
   else
     /* Store new function into the cache. */
-    lgi_set_cached(L, LGI_CACHETYPE_FUNCTION, function->invoker.native_address);
+    lgi_set_cached(L, function->invoker.native_address);
 
   return 1;
 }
@@ -614,8 +607,6 @@ lgi_reg_udata(lua_State* L, const struct luaL_reg* reg, const char* meta)
 int
 luaopen_lgi__core(lua_State* L)
 {
-  int i;
-
   /* GLib initializations. */
   g_type_init();
 
@@ -629,18 +620,15 @@ luaopen_lgi__core(lua_State* L)
   lua_pushvalue(L, -1);
   lgi_regkey = luaL_ref(L, LUA_REGISTRYINDEX);
 
-  /* Create object caches. */
+  /* Create object cache, which has weak values. */
   lua_newtable(L);
   lua_pushstring(L, "__mode");
   lua_pushstring(L, "v");
   lua_rawset(L, -3);
-  for (i = 1; i < LGI_CACHETYPE_LAST; i++)
-    {
-      lua_newtable(L);
-      lua_pushvalue(L, -2);
-      lua_setmetatable(L, -2);
-      lua_rawseti(L, -3, i);
-    }
+  lua_newtable(L);
+  lua_pushvalue(L, -2);
+  lua_setmetatable(L, -2);
+  lua_rawseti(L, -3, LGI_REG_CACHE);
   lua_pop(L, 2);
 
   /* Register _core interface. */
