@@ -103,10 +103,10 @@ lgi_set_cached(lua_State* L, gpointer obj)
 }
 
 static int
-lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GArgument* val, gboolean owned)
+lgi_simple_val_to_lua(lua_State* L, GITypeTag tag, GArgument* val)
 {
   int pushed = 1;
-  switch (g_type_info_get_tag(ti))
+  switch (tag)
     {
       /* Simple (native) types. */
 #define TYPE_CASE(tag, type, member, push)	\
@@ -139,26 +139,51 @@ lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GArgument* val, gboolean owned)
 
 #undef TYPE_CASE
 
-    case GI_TYPE_TAG_INTERFACE:
-      /* Interface types.  Get the interface type and switch according
-	 to the real type. */
-      {
-	GIBaseInfo* ii = g_type_info_get_interface(ti);
-	switch (g_base_info_get_type(ii))
-	  {
-	  case GI_INFO_TYPE_STRUCT:
-	    struct_new(L, ii, val->v_pointer, owned);
-	    break;
-
-	  default:
-	    pushed = 0;
-	  }
-	g_base_info_unref(ii);
-      }
-      break;
-
     default:
       pushed = 0;
+    }
+
+  return pushed;
+}
+
+static int
+lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GArgument* val, gboolean owned)
+{
+  GITypeTag tag = g_type_info_get_tag(ti);
+  int pushed = lgi_simple_val_to_lua(L, tag, val);
+  if (pushed == 0)
+    {
+      switch (tag)
+        {
+        case GI_TYPE_TAG_INTERFACE:
+          /* Interface types.  Get the interface type and switch according
+             to the real type. */
+          {
+            GIBaseInfo* ii = g_type_info_get_interface(ti);
+            switch (g_base_info_get_type(ii))
+              {
+              case GI_INFO_TYPE_ENUM:
+                /* Resolve enum to the real value. */
+                pushed =
+                  lgi_simple_val_to_lua(L, g_enum_info_get_storage_type(ii),
+                                        val);
+                break;
+
+              case GI_INFO_TYPE_STRUCT:
+                /* Create/Get struct object. */
+                pushed = struct_new(L, ii, val->v_pointer, owned);
+                break;
+
+              default:
+                pushed = 0;
+              }
+            g_base_info_unref(ii);
+          }
+          break;
+
+        default:
+          pushed = 0;
+        }
     }
 
   return pushed;
