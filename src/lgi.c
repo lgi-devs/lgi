@@ -614,11 +614,11 @@ static const struct luaL_reg function_reg[] = {
    lgi._get(namespace, symbolname)
 */
 static int
-lgi_get(lua_State* L)
+lgi_get_by_name(lua_State* L)
 {
   GError* err = NULL;
   const gchar* namespace_ = luaL_checkstring(L, 1);
-  const gchar* symbol = luaL_checkstring(L, 2);\
+  const gchar* symbol = luaL_checkstring(L, 2);
   const gchar* fname = NULL;
   GIBaseInfo* info;
   GArgument unused;
@@ -652,11 +652,22 @@ lgi_get(lua_State* L)
   /* Create new instance of the specified type. */
   vals = lgi_type_new(L, info, &unused);
   g_base_info_unref(info);
-  return 1;
+  return vals;
+}
+
+static int
+lgi_get_by_info(lua_State* L)
+{
+  struct ud_struct* struct_ = luaL_checkudata(L, 1, UD_STRUCT);
+  GArgument unused;
+
+  /* TODO: Check, that structure is really GIBaseInfo-based. */
+  return lgi_type_new(L, struct_->info, &unused);
 }
 
 static const struct luaL_reg lgi_reg[] = {
-  { "get", lgi_get },
+  { "get_by_name", lgi_get_by_name },
+  { "get_by_info", lgi_get_by_info },
   { NULL, NULL }
 };
 

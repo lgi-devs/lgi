@@ -18,18 +18,19 @@ local function getface(namespace, interface, prefix, functions)
    for _, func in pairs(functions) do
       local fname = prefix .. func
       t[func] = interface and 
-	 core.get(namespace, interface, fname) or core.get(namespace, fname)
+	 core.get_by_name(namespace, interface, fname) or 
+      core.get_by_name(namespace, fname)
    end
    return t
 end
 
 -- Contains gi utilities.
 local gi = {
-   IRepository = loadface(
+   IRepository = getface(
       'GIRepository', 'IRepository', '', {
 	 'require', 'find_by_name', 'get_n_infos', 'get_info'
       }),
-   IBaseInfo = loadface(
+   IBaseInfo = getface(
       'GIRepository', nil, 'base_info_', {
 	 'unref', 'get_type', 'get_name', 'is_deprecated', 'get_container',
       }),
@@ -47,7 +48,7 @@ local function load_baseinfo(target, info)
    local type = gi.IBaseInfo.get_type(info)
    local name = gi.IBaseInfo.get_name(info)
    if type == gi.INFO_TYPE_CONSTANT or type == gi.INFO_TYPE_FUNCTION then
-      target[name] = core.get(info)
+      target[name] = core.get_by_info(info)
    end
 end
 
@@ -67,9 +68,9 @@ function core.new_namespace(name)
 
    -- Recursively populate namespace using GI.
    gi.IRepository.require(nil, name);
-   for i = 0, gi.IRepository.get_n_infos(nil) do
-      local info = gi.IRepository.get_info(nil, i)
-      load_baseinfo(ns, ns, info)
+   for i = 0, gi.IRepository.get_n_infos(nil, name) do
+      local info = gi.IRepository.get_info(nil, name, i)
+      load_baseinfo(ns, info)
       gi.IBaseInfo.unref(info)
    end
 
