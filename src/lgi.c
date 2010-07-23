@@ -190,14 +190,17 @@ lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GArgument* val, gboolean owned)
 }
 
 static int
-lgi_val_from_lua(lua_State* L, int index, GITypeInfo* ti, GArgument* val)
+lgi_val_from_lua(lua_State* L, int index, GITypeInfo* ti, GArgument* val,
+                 gboolean optional)
 {
   int received = 1;
   switch (g_type_info_get_tag(ti))
     {
-#define TYPE_CASE(tag, type, member, expr)	\
-      case GI_TYPE_TAG_ ## tag :		\
-	val->member = (type)expr;		\
+#define TYPE_CASE(tag, type, member, expr)                      \
+      case GI_TYPE_TAG_ ## tag :                                \
+        val->member = (type)((optional &&                       \
+                              lua_isnoneornil(L, index)) ?      \
+                             0 : expr);                         \
 	break
 
       TYPE_CASE(BOOLEAN, gboolean, v_boolean, lua_toboolean(L, index));
@@ -233,7 +236,7 @@ lgi_val_from_lua(lua_State* L, int index, GITypeInfo* ti, GArgument* val)
 	switch (g_base_info_get_type(ii))
 	  {
 	  case GI_INFO_TYPE_STRUCT:
-	    if (lua_isnoneornil(L, index))
+	    if (optional && lua_isnoneornil(L, index))
 	      val->v_pointer = 0;
 	    else
 	      {
@@ -445,7 +448,7 @@ struct_newindex(lua_State* L)
   /* Write the field. */
   val = G_STRUCT_MEMBER_P(struct_->addr, g_field_info_get_offset(fi));
   ti = g_field_info_get_type(fi);
-  vals = lgi_val_from_lua(L, 3, ti, val);
+  vals = lgi_val_from_lua(L, 3, ti, val, FALSE);
   g_base_info_unref(ti);
   g_base_info_unref(fi);
   return vals;
@@ -505,15 +508,16 @@ function_tostring(lua_State* L)
 
 typedef void
 (*function_arg)(lua_State*, int*, GITypeInfo*, GIDirection, GIScopeType,
-		GITransfer, gboolean, GArgument*);
+		GITransfer, gboolean, gboolean, GArgument*);
 
 static void
 function_arg_in(lua_State* L, int* argi, GITypeInfo* ti, GIDirection dir,
 		GIScopeType scope, GITransfer transfer,
-		gboolean caller_allocates, GArgument* val)
+		gboolean caller_allocates, gboolean optional,
+                GArgument* val)
 {
   if (dir == GI_DIRECTION_IN || dir == GI_DIRECTION_INOUT)
-    *argi += lgi_val_from_lua(L, *argi, ti, val);
+    *argi += lgi_val_from_lua(L, *argi, ti, val, optional);
   else if (caller_allocates && g_type_info_get_tag(ti) == GI_TYPE_TAG_INTERFACE)
     {
       /* Allocate target space. */
@@ -526,7 +530,8 @@ function_arg_in(lua_State* L, int* argi, GITypeInfo* ti, GIDirection dir,
 static void
 function_arg_out(lua_State* L, int* argi, GITypeInfo* ti, GIDirection dir,
 		 GIScopeType scope, GITransfer transfer,
-		 gboolean caller_allocates, GArgument* val)
+		 gboolean caller_allocates, gboolean optional,
+                 GArgument* val)
 {
   if (dir == GI_DIRECTION_OUT || dir == GI_DIRECTION_INOUT)
     *argi += lgi_val_to_lua(L, ti, val, caller_allocates);
@@ -542,7 +547,7 @@ function_handle_args(lua_State* L, function_arg do_arg, GICallableInfo* fi,
   /* Handle return value. */
   ti = g_callable_info_get_return_type(fi);
   do_arg(L, &lua_argi, ti, GI_DIRECTION_OUT, GI_SCOPE_TYPE_INVALID,
-	 g_callable_info_get_caller_owns(fi), FALSE, &args[0]);
+	 g_callable_info_get_caller_owns(fi), FALSE, FALSE, &args[0]);
   g_base_info_unref(ti);
 
   /* Handle 'self', if the function has it. */
@@ -550,7 +555,7 @@ function_handle_args(lua_State* L, function_arg do_arg, GICallableInfo* fi,
     {
       ti = g_base_info_get_container(fi);
       do_arg(L, &lua_argi, ti, GI_DIRECTION_IN, GI_SCOPE_TYPE_INVALID,
-	     GI_TRANSFER_NOTHING, FALSE, &args[1]);
+	     GI_TRANSFER_NOTHING, FALSE, FALSE, &args[1]);
       g_base_info_unref(ti);
       ffi_argi++;
     }
@@ -563,7 +568,9 @@ function_handle_args(lua_State* L, function_arg do_arg, GICallableInfo* fi,
       ti = g_arg_info_get_type(ai);
       do_arg(L, &lua_argi, ti, g_arg_info_get_direction(ai),
 	     g_arg_info_get_scope(ai), g_arg_info_get_ownership_transfer(ai),
-	     g_arg_info_is_caller_allocates(ai), &args[ffi_argi++]);
+	     g_arg_info_is_caller_allocates(ai),
+             g_arg_info_is_optional(ai) || g_arg_info_may_be_null(ai),
+             &args[ffi_argi++]);
       g_base_info_unref(ti);
       g_base_info_unref(ai);
     }
