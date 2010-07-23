@@ -250,6 +250,16 @@ lgi_type_new(lua_State* L, GIBaseInfo* ii, GArgument* val)
       vals = struct_new(L, ii, val->v_pointer, TRUE);
       break;
 
+    case GI_INFO_TYPE_CONSTANT:
+      {
+        GITypeInfo* ti = g_constant_info_get_type(ii);
+        GArgument val;
+        g_constant_info_get_value(ii, &val);
+        vals = lgi_val_to_lua(L, ti, &val, FALSE);
+        g_base_info_unref(ti);
+      }
+      break;
+
     default:
       break;
     }
