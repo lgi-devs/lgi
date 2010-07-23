@@ -292,6 +292,30 @@ lgi_type_new(lua_State* L, GIBaseInfo* ii, GArgument* val)
   return vals;
 }
 
+/* Puts parts of the name to the stack, to be concatenated by lua_concat.
+   Returns number of pushed elements. */
+static int
+lgi_type_get_name(lua_State* L, GIBaseInfo* info)
+{
+  GSList* list = NULL, *i;
+  int n = 1;
+  lua_pushstring(L, g_base_info_get_namespace(info));
+
+  /* Add names on the whole path, but in reverse order. */
+  for (; info != NULL; info = g_base_info_get_container(info))
+    list = g_slist_prepend(list, info);
+
+  for (i = list; i != NULL; i = g_slist_next(i))
+    {
+      lua_pushstring(L, ".");
+      lua_pushstring(L, g_base_info_get_name(i->data));
+      n += 2;
+    }
+
+  g_slist_free(list);
+  return n;
+}
+
 static int
 struct_new(lua_State* L, GIStructInfo* info, gpointer addr, gboolean owns)
 {
@@ -329,10 +353,12 @@ struct_gc(lua_State* L)
 static int
 struct_tostring(lua_State* L)
 {
+  int n;
   struct ud_struct* struct_ = luaL_checkudata(L, 1, UD_STRUCT);
-  lua_pushfstring(L, "lgistruct: %s.%s %p",
-		  g_base_info_get_namespace(struct_->info),
-		  g_base_info_get_name(struct_->info), struct_);
+  lua_pushstring(L, "lgi-struct: ");
+  n = lgi_type_get_name(L, struct_->info);
+  lua_pushfstring(L, " %p", struct_);
+  lua_concat(L, n + 2);
   return 1;
 }
 
@@ -468,10 +494,12 @@ function_gc(lua_State* L)
 static int
 function_tostring(lua_State* L)
 {
+  int n;
   struct ud_function* function = luaL_checkudata(L, 1, UD_FUNCTION);
-  lua_pushfstring(L, "lgifun: %s.%s %p",
-		  g_base_info_get_namespace(function->info),
-		  g_base_info_get_name(function->info), function);
+  lua_pushstring(L, "lgi-functn: ");
+  n = lgi_type_get_name(L, function->info);
+  lua_pushfstring(L, " %p", function);
+  lua_concat(L, n + 2);
   return 1;
 }
 
@@ -602,7 +630,8 @@ lgi_get(lua_State* L)
 {
   GError* err = NULL;
   const gchar* namespace_ = luaL_checkstring(L, 1);
-  const gchar* symbol = luaL_checkstring(L, 2);
+  const gchar* symbol = luaL_checkstring(L, 2);\
+  const gchar* fname = NULL;
   GIBaseInfo* info;
   GArgument unused;
   int vals = 0;
@@ -613,10 +642,22 @@ lgi_get(lua_State* L)
 
   /* Get information about the symbol. */
   info = g_irepository_find_by_name(NULL, namespace_, symbol);
+
+  /* In case that container was specified, look the symbol up in it. */
+  if (g_base_info_get_type(info) == GI_INFO_TYPE_OBJECT &&
+      !lua_isnoneornil(L, 3))
+    {
+      fname = luaL_checkstring(L, 3);
+      GIBaseInfo* fi = g_object_info_find_method(info, fname);
+      g_base_info_unref(info);
+      info = fi;
+    }
+
   if (info == NULL)
     {
       lua_pushboolean(L, 0);
-      lua_pushfstring(L, "symbol %s.%s not found", namespace_, symbol);
+      lua_pushfstring(L, "symbol %s.%s%s%s not found", namespace_, symbol,
+                      fname ? "." : "", fname ? fname : "");
       return 2;
     }
 
