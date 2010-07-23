@@ -154,36 +154,36 @@ lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GArgument* val, gboolean owned)
   if (pushed == 0)
     {
       switch (tag)
-        {
-        case GI_TYPE_TAG_INTERFACE:
-          /* Interface types.  Get the interface type and switch according
-             to the real type. */
-          {
-            GIBaseInfo* ii = g_type_info_get_interface(ti);
-            switch (g_base_info_get_type(ii))
-              {
-              case GI_INFO_TYPE_ENUM:
-                /* Resolve enum to the real value. */
-                pushed =
-                  lgi_simple_val_to_lua(L, g_enum_info_get_storage_type(ii),
-                                        val);
-                break;
+	{
+	case GI_TYPE_TAG_INTERFACE:
+	  /* Interface types.  Get the interface type and switch according
+	     to the real type. */
+	  {
+	    GIBaseInfo* ii = g_type_info_get_interface(ti);
+	    switch (g_base_info_get_type(ii))
+	      {
+	      case GI_INFO_TYPE_ENUM:
+		/* Resolve enum to the real value. */
+		pushed =
+		  lgi_simple_val_to_lua(L, g_enum_info_get_storage_type(ii),
+					val);
+		break;
 
-              case GI_INFO_TYPE_STRUCT:
-                /* Create/Get struct object. */
-                pushed = struct_new(L, ii, val->v_pointer, owned);
-                break;
+	      case GI_INFO_TYPE_STRUCT:
+		/* Create/Get struct object. */
+		pushed = struct_new(L, ii, val->v_pointer, owned);
+		break;
 
-              default:
-                pushed = 0;
-              }
-            g_base_info_unref(ii);
-          }
-          break;
+	      default:
+		pushed = 0;
+	      }
+	    g_base_info_unref(ii);
+	  }
+	  break;
 
-        default:
-          pushed = 0;
-        }
+	default:
+	  pushed = 0;
+	}
     }
 
   return pushed;
@@ -191,16 +191,16 @@ lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GArgument* val, gboolean owned)
 
 static int
 lgi_val_from_lua(lua_State* L, int index, GITypeInfo* ti, GArgument* val,
-                 gboolean optional)
+		 gboolean optional)
 {
   int received = 1;
   switch (g_type_info_get_tag(ti))
     {
 #define TYPE_CASE(tag, type, member, expr)                      \
       case GI_TYPE_TAG_ ## tag :                                \
-        val->member = (type)((optional &&                       \
-                              lua_isnoneornil(L, index)) ?      \
-                             0 : expr);                         \
+	val->member = (type)((optional &&                       \
+			      lua_isnoneornil(L, index)) ?      \
+			     0 : expr);                         \
 	break
 
       TYPE_CASE(BOOLEAN, gboolean, v_boolean, lua_toboolean(L, index));
@@ -280,11 +280,11 @@ lgi_type_new(lua_State* L, GIBaseInfo* ii, GArgument* val)
 
     case GI_INFO_TYPE_CONSTANT:
       {
-        GITypeInfo* ti = g_constant_info_get_type(ii);
-        GArgument val;
-        g_constant_info_get_value(ii, &val);
-        vals = lgi_val_to_lua(L, ti, &val, FALSE);
-        g_base_info_unref(ti);
+	GITypeInfo* ti = g_constant_info_get_type(ii);
+	GArgument val;
+	g_constant_info_get_value(ii, &val);
+	vals = lgi_val_to_lua(L, ti, &val, FALSE);
+	g_base_info_unref(ti);
       }
       break;
 
@@ -506,86 +506,20 @@ function_tostring(lua_State* L)
   return 1;
 }
 
-typedef void
-(*function_arg)(lua_State*, int*, GITypeInfo*, GIDirection, GIScopeType,
-		GITransfer, gboolean, gboolean, GArgument*);
-
-static void
-function_arg_in(lua_State* L, int* argi, GITypeInfo* ti, GIDirection dir,
-		GIScopeType scope, GITransfer transfer,
-		gboolean caller_allocates, gboolean optional,
-                GArgument* val)
-{
-  if (dir == GI_DIRECTION_IN || dir == GI_DIRECTION_INOUT)
-    *argi += lgi_val_from_lua(L, *argi, ti, val, optional);
-  else if (caller_allocates && g_type_info_get_tag(ti) == GI_TYPE_TAG_INTERFACE)
-    {
-      /* Allocate target space. */
-      GIBaseInfo* ii = g_type_info_get_interface(ti);
-      lgi_type_new(L, ii, val);
-      g_base_info_unref(ii);
-    }
-}
-
-static void
-function_arg_out(lua_State* L, int* argi, GITypeInfo* ti, GIDirection dir,
-		 GIScopeType scope, GITransfer transfer,
-		 gboolean caller_allocates, gboolean optional,
-                 GArgument* val)
-{
-  if (dir == GI_DIRECTION_OUT || dir == GI_DIRECTION_INOUT)
-    *argi += lgi_val_to_lua(L, ti, val, caller_allocates);
-}
-
-static int
-function_handle_args(lua_State* L, function_arg do_arg, GICallableInfo* fi,
-		     int has_self, int throws, int argc, GArgument* args)
-{
-  gint argi, lua_argi = 2, ti_argi = 0, ffi_argi = 1;
-  GITypeInfo* ti;
-
-  /* Handle return value. */
-  ti = g_callable_info_get_return_type(fi);
-  do_arg(L, &lua_argi, ti, GI_DIRECTION_OUT, GI_SCOPE_TYPE_INVALID,
-	 g_callable_info_get_caller_owns(fi), FALSE, FALSE, &args[0]);
-  g_base_info_unref(ti);
-
-  /* Handle 'self', if the function has it. */
-  if (has_self)
-    {
-      ti = g_base_info_get_container(fi);
-      do_arg(L, &lua_argi, ti, GI_DIRECTION_IN, GI_SCOPE_TYPE_INVALID,
-	     GI_TRANSFER_NOTHING, FALSE, FALSE, &args[1]);
-      g_base_info_unref(ti);
-      ffi_argi++;
-    }
-
-  /* Handle ordinary parameters. */
-  ti_argi = 0;
-  for (argi = 0; argi < argc; argi++)
-    {
-      GIArgInfo* ai = g_callable_info_get_arg(fi, ti_argi++);
-      ti = g_arg_info_get_type(ai);
-      do_arg(L, &lua_argi, ti, g_arg_info_get_direction(ai),
-	     g_arg_info_get_scope(ai), g_arg_info_get_ownership_transfer(ai),
-	     g_arg_info_is_caller_allocates(ai),
-             g_arg_info_is_optional(ai) || g_arg_info_may_be_null(ai),
-             &args[ffi_argi++]);
-      g_base_info_unref(ti);
-      g_base_info_unref(ai);
-    }
-
-  return lua_argi - 2;
-}
-
 static int
 function_call(lua_State* L)
 {
-  gint i, argc, argffi, flags, has_self, throws;
+  gint i, argc, argffi, flags, has_self, throws, lua_argi, ti_argi, ffi_argi;
   gpointer* args_ptr;
-  GArgument* args_val;
-  struct ud_function* function = luaL_checkudata(L, 1, UD_FUNCTION);
   GError* err = NULL;
+  struct ud_function* function = luaL_checkudata(L, 1, UD_FUNCTION);
+  struct arginfo
+  {
+    GArgument arg;
+    GIArgInfo ai;
+    GITypeInfo ti;
+    GIDirection dir;
+  } *args;
 
   /* Check general function characteristics. */
   flags = g_function_info_get_flags(function->info);
@@ -596,18 +530,48 @@ function_call(lua_State* L)
 
   /* Allocate array for arguments. */
   argffi = argc + 1 + has_self + throws;
-  args_val = g_newa(GArgument, argffi);
+  args = g_newa(struct arginfo, argffi);
   args_ptr = g_newa(gpointer, argffi);
   for (i = 0; i < argffi; ++i)
-    args_ptr[i] = &args_val[i];
+    args_ptr[i] = &args[i].arg;
 
   /* Process parameters for input. */
-  function_handle_args(L, function_arg_in, function->info, has_self, throws,
-		       argc, args_val);
+  lua_argi = 2;
+  ffi_argi = 1;
+  ti_argi = 0;
+  if (has_self)
+    {
+      /* TODO: 'self' handling: check for object type and marshall it
+	 in from lua. */
+      lua_argi++;
+      args[1].arg.v_pointer = NULL;
+      ffi_argi++;
+    }
+
+  /* Handle parameters. */
+  for (i = 0; i < argc; i++, ffi_argi++)
+    {
+      g_callable_info_load_arg(function->info, ti_argi++, &args[ffi_argi].ai);
+      g_arg_info_load_type(&args[ffi_argi].ai, &args[ffi_argi].ti);
+      args[ffi_argi].dir = g_arg_info_get_direction(&args[ffi_argi].ai);
+      if (args[ffi_argi].dir == GI_DIRECTION_IN ||
+	  args[ffi_argi].dir == GI_DIRECTION_INOUT)
+	lua_argi +=
+	  lgi_val_from_lua(L, lua_argi, &args[ffi_argi].ti, &args[ffi_argi].arg,
+			   g_arg_info_is_optional(&args[ffi_argi].ai) ||
+			   g_arg_info_may_be_null(&args[ffi_argi].ai));
+      else if (g_arg_info_is_caller_allocates(&args[ffi_argi].ai))
+	{
+	  /* Allocate target space. */
+	  GIBaseInfo* ii = g_type_info_get_interface(&args[ffi_argi].ti);
+	  lgi_type_new(L, ii, &args[ffi_argi].arg);
+	  g_base_info_unref(ii);
+	}
+    }
 
   /* Handle 'throws' parameter, if function does it. */
   if (throws)
-    args_val[argffi - 1].v_pointer = &err;
+    args[ffi_argi].arg.v_pointer = &err;
 
   /* Perform the call. */
   ffi_call(&function->invoker.cif, function->invoker.native_address,
@@ -618,8 +582,25 @@ function_call(lua_State* L)
     return lgi_error(L, err);
 
   /* Process parameters for output. */
-  return function_handle_args(L, function_arg_out, function->info, has_self,
-			      throws, argc, args_val);
+  lua_argi = 0;
+  ffi_argi = 0;
+  ti_argi = 0;
+
+  /* Handle return value. */
+  g_callable_info_load_return_type(function->info, &args[0].ti);
+  lua_argi += lgi_val_to_lua(L, &args[0].ti, &args[0].arg, FALSE);
+
+  /* Handle parameters. */
+  for (i = 0; i < argc; i++, ffi_argi++)
+    {
+      if (args[ffi_argi].dir == GI_DIRECTION_OUT ||
+	  args[ffi_argi].dir == GI_DIRECTION_INOUT)
+	lua_argi +=
+	  lgi_val_to_lua(L, &args[ffi_argi].ti, &args[ffi_argi].arg,
+			 g_arg_info_is_caller_allocates(&args[ffi_argi].ai));
+    }
+
+  return lua_argi;
 }
 
 static const struct luaL_reg function_reg[] = {
@@ -664,7 +645,7 @@ lgi_get(lua_State* L)
     {
       lua_pushboolean(L, 0);
       lua_pushfstring(L, "symbol %s.%s%s%s not found", namespace_, symbol,
-                      fname ? "." : "", fname ? fname : "");
+		      fname ? "." : "", fname ? fname : "");
       return 2;
     }
 
