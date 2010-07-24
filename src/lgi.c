@@ -663,9 +663,17 @@ lgi_get_by_info(lua_State* L)
 {
   struct ud_struct* struct_ = luaL_checkudata(L, 1, UD_STRUCT);
   GArgument unused;
+  int vals = 1;
 
-  /* TODO: Check, that structure is really GIBaseInfo-based. */
-  return lgi_type_new(L, struct_->info, &unused);
+  /* Check, that structure is really some usable GIBaseInfo-based. */
+  if (g_strcmp0(g_base_info_get_namespace(struct_->info),
+		"GIRepository") == 0 &&
+      g_strcmp0(g_base_info_get_name(struct_->info), "IBaseInfo") == 0)
+    vals = lgi_type_new(L, struct_->addr, &unused);
+  else
+    lua_pushnil(L);
+
+  return vals;
 }
 
 static const struct luaL_reg lgi_reg[] = {
