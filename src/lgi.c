@@ -196,11 +196,11 @@ lgi_val_from_lua(lua_State* L, int index, GITypeInfo* ti, GArgument* val,
   int received = 1;
   switch (g_type_info_get_tag(ti))
     {
-#define TYPE_CASE(tag, type, member, expr)                      \
-      case GI_TYPE_TAG_ ## tag :                                \
-	val->member = (type)((optional &&                       \
-			      lua_isnoneornil(L, index)) ?      \
-			     0 : expr);                         \
+#define TYPE_CASE(tag, type, member, expr)			\
+      case GI_TYPE_TAG_ ## tag :				\
+	val->member = (type)((optional &&			\
+			      lua_isnoneornil(L, index)) ?	\
+			     0 : expr);				\
 	break
 
       TYPE_CASE(BOOLEAN, gboolean, v_boolean, lua_toboolean(L, index));
