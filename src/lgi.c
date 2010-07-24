@@ -674,9 +674,24 @@ lgi_get(lua_State* L)
   return vals;
 }
 
+static int
+lgi_unref(lua_State* L)
+{
+  struct ud_struct* struct_ = luaL_checkudata(L, 1, UD_STRUCT);
+
+  /* Check, that structure is really some usable GIBaseInfo-based. */
+  if (g_strcmp0(g_base_info_get_namespace(struct_->info),
+		"GIRepository") == 0 &&
+      g_strcmp0(g_base_info_get_name(struct_->info), "IBaseInfo") == 0)
+    g_base_info_unref(struct_->addr);
+
+  return 0;
+}
+
 static const struct luaL_reg lgi_reg[] = {
   { "find", lgi_find },
   { "get", lgi_get },
+  { "unref", lgi_unref },
   { NULL, NULL }
 };
 
