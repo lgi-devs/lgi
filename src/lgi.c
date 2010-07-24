@@ -519,6 +519,7 @@ function_call(lua_State* L)
     GIArgInfo ai;
     GITypeInfo ti;
     GIDirection dir;
+    gboolean caller_allocates;
   } *args;
 
   /* Check general function characteristics. */
@@ -554,13 +555,15 @@ function_call(lua_State* L)
       g_callable_info_load_arg(function->info, ti_argi++, &args[ffi_argi].ai);
       g_arg_info_load_type(&args[ffi_argi].ai, &args[ffi_argi].ti);
       args[ffi_argi].dir = g_arg_info_get_direction(&args[ffi_argi].ai);
+      args[ffi_argi].caller_allocates =
+	g_arg_info_is_caller_allocates(&args[ffi_argi].ai);
       if (args[ffi_argi].dir == GI_DIRECTION_IN ||
 	  args[ffi_argi].dir == GI_DIRECTION_INOUT)
 	lua_argi +=
 	  lgi_val_from_lua(L, lua_argi, &args[ffi_argi].ti, &args[ffi_argi].arg,
 			   g_arg_info_is_optional(&args[ffi_argi].ai) ||
 			   g_arg_info_may_be_null(&args[ffi_argi].ai));
-      else if (g_arg_info_is_caller_allocates(&args[ffi_argi].ai))
+      else if (args[ffi_argi].caller_allocates)
 	{
 	  /* Allocate target space. */
 	  GIBaseInfo* ii = g_type_info_get_interface(&args[ffi_argi].ti);
@@ -597,7 +600,7 @@ function_call(lua_State* L)
 	  args[ffi_argi].dir == GI_DIRECTION_INOUT)
 	lua_argi +=
 	  lgi_val_to_lua(L, &args[ffi_argi].ti, &args[ffi_argi].arg,
-			 g_arg_info_is_caller_allocates(&args[ffi_argi].ai));
+			 args[ffi_argi].caller_allocates);
     }
 
   return lua_argi;
