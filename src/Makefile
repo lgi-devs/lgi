@@ -1,5 +1,5 @@
 PKG_PACKAGES = gobject-introspection-1.0 lua
-OUTPUT = lgi.so
+OUTPUT = lgi.dll
 
 CFLAGS = -c -pipe -Wall `pkg-config --cflags $(PKG_PACKAGES)`
 LDFLAGS = -shared `pkg-config --libs $(PKG_PACKAGES)`
