@@ -365,14 +365,16 @@ struct_tostring(lua_State* L)
   return 1;
 }
 
-static GIFieldInfo*
-struct_find_field(lua_State* L, GIStructInfo* si, const gchar* name)
+static GITypeInfo*
+struct_load_field(lua_State* L, struct ud_struct* struct_, const gchar* name,
+		  gint reqflag, GArgument** val)
 {
   GIFieldInfo* fi = NULL;
+  GITypeInfo* ti;
   int i;
-  for (i = 0; i < g_struct_info_get_n_fields(si); i++)
+  for (i = 0; i < g_struct_info_get_n_fields(struct_->info); i++)
     {
-      fi = g_struct_info_get_field(si, i);
+      fi = g_struct_info_get_field(struct_->info, i);
       g_assert(fi != NULL);
       if (g_strcmp0(g_base_info_get_name(fi), name) == 0)
 	break;
@@ -381,7 +383,25 @@ struct_find_field(lua_State* L, GIStructInfo* si, const gchar* name)
       fi = NULL;
     }
 
-  return fi;
+  if (fi == NULL)
+    {
+      lua_concat(L, lgi_type_get_name(L, struct_->info));
+      luaL_error(L, "struct %s: no '%s'", lua_tostring(L, -1), name);
+    }
+
+  if ((g_field_info_get_flags(fi) & reqflag) == 0)
+    {
+      g_base_info_unref(fi);
+      lua_concat(L, lgi_type_get_name(L, struct_->info));
+      luaL_error(L, "struct %s: '%s' not %s", lua_tostring(L, -1),
+		 name, reqflag == GI_FIELD_IS_READABLE ?
+		 "readable" : "writable");
+    }
+
+  val = G_STRUCT_MEMBER_P(struct_->addr, g_field_info_get_offset(fi));
+  ti = g_field_info_get_type(fi);
+  g_base_info_unref(fi);
+  return ti;
 }
 
 static int
@@ -390,32 +410,12 @@ struct_index(lua_State* L)
   struct ud_struct* struct_ = luaL_checkudata(L, 1, UD_STRUCT);
   const gchar* name = luaL_checkstring(L, 2);
   int vals;
-  GIFieldInfo* fi;
   GITypeInfo* ti;
   GArgument* val;
 
-  /* Find the field. */
-  fi = struct_find_field(L, struct_->info, name);
-  if (fi == NULL)
-    return luaL_error(L, "struct %s.%s: no '%s'",
-		      g_base_info_get_namespace(struct_->info),
-		      g_base_info_get_name(struct_->info), name);
-
-  /* Check, whether the field is readable. */
-  if ((g_field_info_get_flags(fi) & GI_FIELD_IS_READABLE) == 0)
-    {
-      g_base_info_unref(fi);
-      return luaL_error(L, "struct %s.%s: '%s' not readable",
-			g_base_info_get_namespace(struct_->info),
-			g_base_info_get_name(struct_->info), name);
-    }
-
-  /* Read the field. */
-  val = G_STRUCT_MEMBER_P(struct_->addr, g_field_info_get_offset(fi));
-  ti = g_field_info_get_type(fi);
+  ti = struct_load_field(L, struct_, name, GI_FIELD_IS_READABLE, &val);
   vals = lgi_val_to_lua(L, ti, val, FALSE);
   g_base_info_unref(ti);
-  g_base_info_unref(fi);
   return vals;
 }
 
@@ -425,40 +425,21 @@ struct_newindex(lua_State* L)
   struct ud_struct* struct_ = luaL_checkudata(L, 1, UD_STRUCT);
   const gchar* name = luaL_checkstring(L, 2);
   int vals;
-  GIFieldInfo* fi;
   GITypeInfo* ti;
   GArgument* val;
 
   /* Find the field. */
-  fi = struct_find_field(L, struct_->info, name);
-  if (fi == NULL)
-    return luaL_error(L, "struct %s.%s: no '%s'",
-		      g_base_info_get_namespace(struct_->info),
-		      g_base_info_get_name(struct_->info), name);
-
-  /* Check, whether the field is readable. */
-  if ((g_field_info_get_flags(fi) & GI_FIELD_IS_WRITABLE) == 0)
-    {
-      g_base_info_unref(fi);
-      return luaL_error(L, "struct %s.%s: '%s' not writable",
-			g_base_info_get_namespace(struct_->info),
-			g_base_info_get_name(struct_->info), name);
-    }
-
-  /* Write the field. */
-  val = G_STRUCT_MEMBER_P(struct_->addr, g_field_info_get_offset(fi));
-  ti = g_field_info_get_type(fi);
+  ti = struct_load_field(L, struct_, name, GI_FIELD_IS_WRITABLE, &val);
   vals = lgi_val_from_lua(L, 3, ti, val, FALSE);
   g_base_info_unref(ti);
-  g_base_info_unref(fi);
   return vals;
 }
 
 static const struct luaL_reg struct_reg[] = {
   { "__gc", struct_gc },
+  { "__tostring", struct_tostring },
   { "__index", struct_index },
   { "__newindex", struct_newindex },
-  { "__tostring", struct_tostring },
   { NULL, NULL }
 };
 
