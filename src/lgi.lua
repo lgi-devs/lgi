@@ -7,7 +7,8 @@
 
 --]]--
 
-local assert, setmetatable, pairs, string = assert, setmetatable, pairs, string
+local assert, setmetatable, getmetatable, pairs, pcall, string = 
+   assert, setmetatable, getmetatable, pairs, pcall, string
 local core = require 'lgi._core'
 
 module 'lgi'
@@ -88,11 +89,30 @@ function package_mt.__index(package, name)
    return value
 end
 
+-- Forces loading the whole namespace (which is otherwise loaded
+-- lazily).  Useful when one wants to inspect the contents of the
+-- whole namespace (i.e. iterate through it).
+local function loadnamespace(namespace)
+   -- Iterate through all items in the namespace.
+   for i = 0, gi.IRepository.get_n_infos(nil, namespace._namespace) -1 do
+      local info = gi.IRepository.get_info(nil, namespace._namespace, i)
+      pcall(getmetatable(namespace).__index, namespace, 
+	    gi.IBaseInfo.get_name(info))
+      gi.IBaseInfo.unref(info)
+   end
+end
+
 function core.require(namespace, version)
    local ns = { _namespace = namespace }
 
    -- Load the repository.
    ns._typelib = assert(gi.IRepository.require(nil, namespace, version))
+
+   -- Install 'force' closure, which forces loading this namespace.
+   ns._force = function() 
+		  loadnamespace(ns) 
+		  return ns 
+	       end
 
    -- Set proper lazy metatable.
    return setmetatable(ns, package_mt)
