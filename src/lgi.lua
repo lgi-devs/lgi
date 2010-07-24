@@ -7,7 +7,7 @@
 
 --]]--
 
-local pairs, table = pairs, table
+local setmetatable, pairs, table = setmetatable, pairs, table
 local core = require 'lgi._core'
 
 module 'lgi'
@@ -68,7 +68,7 @@ function core.new_namespace(name)
 
    -- Recursively populate namespace using GI.
    gi.IRepository.require(nil, name);
-   for i = 0, gi.IRepository.get_n_infos(nil, name) do
+   for i = 0, gi.IRepository.get_n_infos(nil, name) - 1 do
       local info = gi.IRepository.get_info(nil, name, i)
       load_baseinfo(ns, info)
       gi.IBaseInfo.unref(info)
