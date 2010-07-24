@@ -7,24 +7,22 @@
 
 --]]--
 
-local setmetatable, pairs, table = setmetatable, pairs, table
+local assert, setmetatable, pairs, table = assert, setmetatable, pairs, table
 local core = require 'lgi._core'
 
 module 'lgi'
 
--- Helper for loading gi methods used only during bootstrapping.
-local function getface(namespace, interface, prefix, functions)
+local function getface(namespace, object, prefix, funs)
    local t = {}
-   for _, func in pairs(functions) do
-      local fname = prefix .. func
-      t[func] = interface and 
-	 core.get_by_name(namespace, interface, fname) or 
-      core.get_by_name(namespace, fname)
+   for _, fun in pairs(funs) do
+      local info = assert(core.find(namespace, object, prefix .. fun))
+      t[fun] = core.get(info)
+      core.unref(info)
    end
    return t
 end
 
--- Contains gi utilities.
+-- Contains gi utilities, used only locally during bootstrap.
 local gi = {
    IRepository = getface(
       'GIRepository', 'IRepository', '', {
@@ -43,37 +41,34 @@ local gi = {
    INFO_TYPE_CONSTANT = 9,
 }
 
-local function load_baseinfo(target, info)
-   -- Decide according to type.
+-- Package uses lazy namespace access, so __index method loads field
+-- on-demand (but stores them back, so it is actually caching).
+local package_mt = {}
+function package_mt.__index(package, name)
+   -- Lookup baseinfo of requested symbol in the repo.
+   local info = gi.IRepository.find_by_name(nil, package._namespace, name)
+   if not info then return nil end
+
+   -- Decide according to symbol type what to do.
+   local value
    local type = gi.IBaseInfo.get_type(info)
-   local name = gi.IBaseInfo.get_name(info)
-   if type == gi.INFO_TYPE_CONSTANT or type == gi.INFO_TYPE_FUNCTION then
-      target[name] = core.get_by_info(info)
+   if type == gi.INFO_TYPE_FUNCTION or type == gi.INFO_TYPE_CONSTANT then
+      value = core.get(info)
    end
+
+   gi.IBaseInfo.unref(info)
+   
+   -- Cache the result.
+   package[name] = value
+   return value
 end
 
-local ns_mt = {
-   -- Tries to lookup symbol in all _enums in the namespace table.
-   __index = function(ns, symbol)
-		for _, enum in ns._enums do
-		   local value = enum[symbol]
-		   if value then return value end
-		end
-	     end,
-}
+function core.require(namespace, version)
+   local ns = { _namespace = namespace }
 
--- Creates namespace table bound to specified glib namespace.
-function core.new_namespace(name)
-   local ns = { _enums = {}, _name = name }
+   -- Load the repository.
+   ns._typelib = assert(gi.IRepository.require(nil, namespace, version))
 
-   -- Recursively populate namespace using GI.
-   gi.IRepository.require(nil, name);
-   for i = 0, gi.IRepository.get_n_infos(nil, name) - 1 do
-      local info = gi.IRepository.get_info(nil, name, i)
-      load_baseinfo(ns, info)
-      gi.IBaseInfo.unref(info)
-   end
-
-   -- Make sure that namespace table properly resolves unions.
-   return setmetatable(ns, ns_mt)
+   -- Set proper lazy metatable.
+   return setmetatable(ns, package_mt)
 end
