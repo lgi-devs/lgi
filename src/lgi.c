@@ -594,18 +594,14 @@ static const struct luaL_reg function_reg[] = {
   { NULL, NULL }
 };
 
-/*
-   lgi._get(namespace, symbolname)
-*/
 static int
-lgi_get_by_name(lua_State* L)
+lgi_find(lua_State* L)
 {
   GError* err = NULL;
   const gchar* namespace_ = luaL_checkstring(L, 1);
-  const gchar* symbol = luaL_checkstring(L, 2);
-  const gchar* fname = NULL;
-  GIBaseInfo* info;
-  GArgument unused;
+  const gchar* object = luaL_optstring(L, 2, NULL);
+  const gchar* symbol = luaL_checkstring(L, 3);
+  GIBaseInfo *info, *fi, *baseinfo_info;
   int vals = 0;
 
   /* Make sure that the repository is loaded. */
@@ -613,14 +609,25 @@ lgi_get_by_name(lua_State* L)
     return lgi_error(L, err);
 
   /* Get information about the symbol. */
-  info = g_irepository_find_by_name(NULL, namespace_, symbol);
+  info = g_irepository_find_by_name(NULL, namespace_, object ? object : symbol);
 
   /* In case that container was specified, look the symbol up in it. */
-  if (g_base_info_get_type(info) == GI_INFO_TYPE_OBJECT &&
-      !lua_isnoneornil(L, 3))
+  if (object != NULL)
     {
-      fname = luaL_checkstring(L, 3);
-      GIBaseInfo* fi = g_object_info_find_method(info, fname);
+      switch (g_base_info_get_type(info))
+	{
+	case GI_INFO_TYPE_OBJECT:
+	  fi = g_object_info_find_method(info, symbol);
+	  break;
+
+	case GI_INFO_TYPE_STRUCT:
+	  fi = g_struct_info_find_method(info, symbol);
+	  break;
+
+	default:
+	  fi = NULL;
+	}
+
       g_base_info_unref(info);
       info = fi;
     }
@@ -628,19 +635,29 @@ lgi_get_by_name(lua_State* L)
   if (info == NULL)
     {
       lua_pushboolean(L, 0);
-      lua_pushfstring(L, "symbol %s.%s%s%s not found", namespace_, symbol,
-		      fname ? "." : "", fname ? fname : "");
+      lua_pushfstring(L, "symbol %s.%s%s%s not found", namespace_,
+		      object ? object : "", object ? "." : "", symbol);
       return 2;
     }
 
-  /* Create new instance of the specified type. */
-  vals = lgi_type_new(L, info, &unused);
-  g_base_info_unref(info);
+  /* Find IBaseInfo for 'info' instance. */
+  baseinfo_info = g_irepository_find_by_name(NULL, "GIRepository", "IBaseInfo");
+  if (baseinfo_info == NULL)
+    {
+      g_base_info_unref(info);
+      lua_pushboolean(L, 0);
+      lua_pushstring(L, "unable to resolve GIRepository.IBaseInfo");
+      return 2;
+    }
+
+  /* Create new IBaseInfo structure and return it. */
+  vals = struct_new(L, baseinfo_info, info, FALSE);
+  g_base_info_unref(baseinfo_info);
   return vals;
 }
 
 static int
-lgi_get_by_info(lua_State* L)
+lgi_get(lua_State* L)
 {
   struct ud_struct* struct_ = luaL_checkudata(L, 1, UD_STRUCT);
   GArgument unused;
@@ -658,8 +675,8 @@ lgi_get_by_info(lua_State* L)
 }
 
 static const struct luaL_reg lgi_reg[] = {
-  { "get_by_name", lgi_get_by_name },
-  { "get_by_info", lgi_get_by_info },
+  { "find", lgi_find },
+  { "get", lgi_get },
   { NULL, NULL }
 };
 
@@ -674,8 +691,13 @@ lgi_reg_udata(lua_State* L, const struct luaL_reg* reg, const char* meta)
 int
 luaopen_lgi__core(lua_State* L)
 {
+  GError* err = NULL;
+
   /* GLib initializations. */
   g_type_init();
+  g_irepository_require(NULL, "GIRepository", NULL, 0, &err);
+  if (err != NULL)
+    lgi_throw(L, err);
 
   /* Register userdata types. */
   lgi_reg_udata(L, struct_reg, UD_STRUCT);
