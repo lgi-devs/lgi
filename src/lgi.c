@@ -19,16 +19,26 @@
 static int lgi_regkey;
 #define LGI_REG_CACHE 1
 
-static int function_new(lua_State* L, GIFunctionInfo* info);
+/* Creates new userdata representing instance of struct described by
+   'info'. if *newaddr is not NULL, the space for the structure is
+   allocated automatically and filled into *newaddr (addr is ignored
+   in this case).  In any case, returns number of items pushed to the
+   stack.*/
 static int struct_new(lua_State* L, GIStructInfo* info, gpointer addr,
-		      gboolean owns);
+		      gpointer* newaddr);
+
+/* Creates new userdata representing instance of function described by
+   'info'. Parses function signature and might report an error if the
+   function cannot be wrapped by lgi.  In any case, returns number of
+   items pushed to the stack.*/
+static int function_new(lua_State* L, GIFunctionInfo* info);
 
 /* 'struct' userdata: wraps structure with its typeinfo. */
 struct ud_struct
 {
   GIStructInfo* info;
   gpointer addr;
-  gboolean owns;
+  gchar data[1];
 };
 #define UD_STRUCT "lgi.struct"
 
@@ -147,7 +157,7 @@ lgi_simple_val_to_lua(lua_State* L, GITypeTag tag, GArgument* val)
 }
 
 static int
-lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GArgument* val, gboolean owned)
+lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GArgument* val)
 {
   GITypeTag tag = g_type_info_get_tag(ti);
   int pushed = lgi_simple_val_to_lua(L, tag, val);
@@ -171,7 +181,7 @@ lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GArgument* val, gboolean owned)
 
 	      case GI_INFO_TYPE_STRUCT:
 		/* Create/Get struct object. */
-		pushed = struct_new(L, ii, val->v_pointer, owned);
+		pushed = struct_new(L, ii, val->v_pointer, NULL);
 		break;
 
 	      default:
@@ -274,8 +284,7 @@ lgi_type_new(lua_State* L, GIBaseInfo* ii, GArgument* val)
       break;
 
     case GI_INFO_TYPE_STRUCT:
-      val->v_pointer = g_malloc0(g_struct_info_get_size(ii));
-      vals = struct_new(L, ii, val->v_pointer, TRUE);
+      vals = struct_new(L, ii, NULL, &val->v_pointer);
       break;
 
     case GI_INFO_TYPE_CONSTANT:
@@ -283,7 +292,7 @@ lgi_type_new(lua_State* L, GIBaseInfo* ii, GArgument* val)
 	GITypeInfo* ti = g_constant_info_get_type(ii);
 	GArgument val;
 	g_constant_info_get_value(ii, &val);
-	vals = lgi_val_to_lua(L, ti, &val, FALSE);
+	vals = lgi_val_to_lua(L, ti, &val);
 	g_base_info_unref(ti);
       }
       break;
@@ -320,27 +329,45 @@ lgi_type_get_name(lua_State* L, GIBaseInfo* info)
 }
 
 static int
-struct_new(lua_State* L, GIStructInfo* info, gpointer addr, gboolean owns)
+struct_new(lua_State* L, GIStructInfo* info, gpointer addr, gpointer* newaddr)
 {
-    if (addr != NULL)
-      {
-	/* Check, whether struct is already in the cache. */
-	if (lgi_get_cached(L, addr) == 0)
-	  {
-	    struct ud_struct* struct_ =
-	      lua_newuserdata(L, sizeof(struct ud_struct));
-	    luaL_getmetatable(L, UD_STRUCT);
-	    lua_setmetatable(L, -2);
-	    struct_->info = g_base_info_ref(info);
-	    struct_->addr = addr;
-	    struct_->owns = owns;
-	    lgi_set_cached(L, addr);
-	  }
-      }
-    else
-      lua_pushnil(L);
+  int vals;
 
-    return 1;
+  /* NULL pointer results in 'nil' struct. */
+  if (newaddr == NULL && addr == NULL)
+    {
+      lua_pushnil(L);
+      vals = 1;
+    }
+  /* Check, whether struct is already in the cache. */
+  else
+    vals = lgi_get_cached(L, addr);
+
+  if (vals == 0)
+    {
+      /* Not in the cache, create new struct.  Find out how big data
+	 should be allocated. */
+      struct ud_struct* struct_;
+      size_t size = G_STRUCT_OFFSET(struct ud_struct, data);
+      if (newaddr != NULL)
+	size += g_struct_info_get_size(info);
+
+      /* Create and initialize new userdata instance. */
+      struct_ = lua_newuserdata(L, size);
+      luaL_getmetatable(L, UD_STRUCT);
+      lua_setmetatable(L, -2);
+      struct_->info = g_base_info_ref(info);
+      if (newaddr == NULL)
+	struct_->addr = addr;
+      else
+	{
+	  *newaddr = struct_->data;
+	  struct_->addr = *newaddr;
+	}
+      vals = 1;
+    }
+
+  return vals;
 };
 
 static int
@@ -348,8 +375,6 @@ struct_gc(lua_State* L)
 {
   struct ud_struct* struct_ = luaL_checkudata(L, 1, UD_STRUCT);
   g_base_info_unref(struct_->info);
-  if (struct_->owns)
-    g_free(struct_->addr);
   return 0;
 }
 
@@ -414,7 +439,7 @@ struct_index(lua_State* L)
   GArgument* val;
 
   ti = struct_load_field(L, struct_, name, GI_FIELD_IS_READABLE, &val);
-  vals = lgi_val_to_lua(L, ti, val, FALSE);
+  vals = lgi_val_to_lua(L, ti, val);
   g_base_info_unref(ti);
   return vals;
 }
@@ -500,7 +525,6 @@ function_call(lua_State* L)
     GIArgInfo ai;
     GITypeInfo ti;
     GIDirection dir;
-    gboolean caller_allocates;
   } *args;
 
   /* Check general function characteristics. */
@@ -536,15 +560,13 @@ function_call(lua_State* L)
       g_callable_info_load_arg(function->info, ti_argi++, &args[ffi_argi].ai);
       g_arg_info_load_type(&args[ffi_argi].ai, &args[ffi_argi].ti);
       args[ffi_argi].dir = g_arg_info_get_direction(&args[ffi_argi].ai);
-      args[ffi_argi].caller_allocates =
-	g_arg_info_is_caller_allocates(&args[ffi_argi].ai);
       if (args[ffi_argi].dir == GI_DIRECTION_IN ||
 	  args[ffi_argi].dir == GI_DIRECTION_INOUT)
 	lua_argi +=
 	  lgi_val_from_lua(L, lua_argi, &args[ffi_argi].ti, &args[ffi_argi].arg,
 			   g_arg_info_is_optional(&args[ffi_argi].ai) ||
 			   g_arg_info_may_be_null(&args[ffi_argi].ai));
-      else if (args[ffi_argi].caller_allocates)
+      else if (g_arg_info_is_caller_allocates(&args[ffi_argi].ai))
 	{
 	  /* Allocate target space. */
 	  GIBaseInfo* ii = g_type_info_get_interface(&args[ffi_argi].ti);
@@ -572,7 +594,7 @@ function_call(lua_State* L)
 
   /* Handle return value. */
   g_callable_info_load_return_type(function->info, &args[0].ti);
-  lua_argi += lgi_val_to_lua(L, &args[0].ti, &args[0].arg, FALSE);
+  lua_argi += lgi_val_to_lua(L, &args[0].ti, &args[0].arg);
 
   /* Handle parameters. */
   for (i = 0; i < argc; i++, ffi_argi++)
@@ -580,8 +602,7 @@ function_call(lua_State* L)
       if (args[ffi_argi].dir == GI_DIRECTION_OUT ||
 	  args[ffi_argi].dir == GI_DIRECTION_INOUT)
 	lua_argi +=
-	  lgi_val_to_lua(L, &args[ffi_argi].ti, &args[ffi_argi].arg,
-			 args[ffi_argi].caller_allocates);
+	  lgi_val_to_lua(L, &args[ffi_argi].ti, &args[ffi_argi].arg);
     }
 
   return lua_argi;
@@ -651,7 +672,7 @@ lgi_find(lua_State* L)
     }
 
   /* Create new IBaseInfo structure and return it. */
-  vals = struct_new(L, baseinfo_info, info, FALSE);
+  vals = struct_new(L, baseinfo_info, info, NULL);
   g_base_info_unref(baseinfo_info);
   return vals;
 }
