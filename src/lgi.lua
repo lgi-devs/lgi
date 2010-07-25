@@ -44,12 +44,34 @@ local gi = {
 	 'get_value',
       }),
 
-   INFO_TYPE_FUNCTION = 1,
-   INFO_TYPE_STRUCT = 3,
-   INFO_TYPE_ENUM = 5,
-   INFO_TYPE_OBJECT = 7,
-   INFO_TYPE_INTERFACE = 8,
-   INFO_TYPE_CONSTANT = 9,
+   IStructInfo = getface(
+      'GIRepository', nil, 'struct_info_', {
+	 'get_n_methods', 'get_method', 'is_gtype_struct',
+      }),
+
+   IFunctionInfo = getface(
+      'GIRepository', nil, 'function_info_', {
+	 'get_flags',
+      }),
+
+   IInfoType = {
+      FUNCTION = 1,
+      STRUCT = 3,
+      ENUM = 5,
+      FLAGS = 6,
+      OBJECT = 7,
+      INTERFACE = 8,
+      CONSTANT = 9,
+   },
+
+   IFunctionInfoFlags = {
+      IS_METHOD = 1,
+      IS_CONSTRUCTOR = 2,
+      IS_GETTER = 4,
+      IS_SETTER = 8,
+      WRAPS_VFUNC = 16,
+      THROWS = 32,
+   },
 }
 
 -- Package uses lazy namespace access, so __index method loads field
@@ -64,19 +86,34 @@ function package_mt.__index(package, name)
    local value
    if not gi.IBaseInfo.is_deprecated(info) then
       local type = gi.IBaseInfo.get_type(info)
-      if type == gi.INFO_TYPE_FUNCTION or type == gi.INFO_TYPE_CONSTANT then
+      if type == gi.IInfoType.FUNCTION or type == gi.IInfoType.CONSTANT then
 	 value = core.get(info)
-      elseif type == gi.INFO_TYPE_STRUCT then
-	 gi.IBaseInfo.ref(info)
-	 value = { new = function() return core.get(info) end }
-      elseif type == gi.INFO_TYPE_ENUM then
+      elseif type == gi.IInfoType.STRUCT then
+	 if not gi.IStructInfo.is_gtype_struct(info) then
+	    value = {}
+	    -- Create table with all constructors for the structure.
+	    for i = 0, gi.IStructInfo.get_n_methods(info) - 1 do
+	       local fi = gi.IStructInfo.get_method(info, i)
+	       if gi.IFunctionInfo.get_flags(fi) == gi.IFunctionInfoFlags.IS_CONSTRUCTOR then
+		  value[gi.IBaseInfo.get_name(fi)] = core.get(fi)
+	       end
+	       gi.IBaseInfo.unref(fi)
+	    end
+	 end
+      elseif type == gi.IInfoType.ENUM or type == gi.IInfoType.FLAGS then
 	 value = {}
 	 for i = 0, gi.IEnumInfo.get_n_values(info) - 1 do
 	    local val = gi.IEnumInfo.get_value(info, i)
 	    local n = string.upper(gi.IBaseInfo.get_name(val))
 	    local v = gi.IValueInfo.get_value(val)
-	    value[n] = v
 	    value[v] = n
+	    if type == gi.IInfoType.ENUM then
+	       value[n] = v
+	    else
+	       -- TODO: For case of FLAGS, add metatable.__index which
+	       -- resolves any arbitrary number to table with bitfield
+	       -- names.
+	    end
 	    gi.IBaseInfo.unref(val)
 	 end
       end
