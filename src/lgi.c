@@ -173,6 +173,7 @@ lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GArgument* val)
 	    switch (g_base_info_get_type(ii))
 	      {
 	      case GI_INFO_TYPE_ENUM:
+	      case GI_INFO_TYPE_FLAGS:
 		/* Resolve enum to the real value. */
 		pushed =
 		  lgi_simple_val_to_lua(L, g_enum_info_get_storage_type(ii),
