@@ -634,7 +634,7 @@ lgi_find(lua_State* L)
   info = g_irepository_find_by_name(NULL, namespace_, object ? object : symbol);
 
   /* In case that container was specified, look the symbol up in it. */
-  if (object != NULL)
+  if (object != NULL && info != NULL)
     {
       switch (g_base_info_get_type(info))
 	{
