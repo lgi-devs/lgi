@@ -7,9 +7,10 @@
 
 --]]--
 
-local assert, setmetatable, getmetatable, pairs, pcall, string = 
-   assert, setmetatable, getmetatable, pairs, pcall, string
+local assert, setmetatable, getmetatable, type, pairs, pcall, string, table = 
+   assert, setmetatable, getmetatable, type, pairs, pcall, string, table
 local core = require 'lgi._core'
+local bit = require 'bit'
 
 module 'lgi'
 
@@ -74,6 +75,27 @@ local gi = {
    },
 }
 
+-- Metatable for bitfield tables, resolving arbitraru number to the
+-- table containing symbolic names of contained bits.
+local bitfield_mt = {}
+function bitfield_mt.__index(bitfield, value)
+   local t = {}
+   for name, flag in pairs(bitfield) do
+      if type(flag) == 'number' and bit.band(flag, value) == flag then
+	 table.insert(t, name)
+      end
+   end
+   return t
+end
+
+-- Similar metatable for enum tables.
+local enum_mt = {}
+function enum_mt.__index(enum, value)
+   for name, val in pairs(enum) do
+      if val == value then return name end
+   end
+end
+
 -- Package uses lazy namespace access, so __index method loads field
 -- on-demand (but stores them back, so it is actually caching).
 local package_mt = {}
@@ -94,7 +116,8 @@ function package_mt.__index(package, name)
 	    -- Create table with all constructors for the structure.
 	    for i = 0, gi.IStructInfo.get_n_methods(info) - 1 do
 	       local fi = gi.IStructInfo.get_method(info, i)
-	       if gi.IFunctionInfo.get_flags(fi) == gi.IFunctionInfoFlags.IS_CONSTRUCTOR then
+	       if bit.band(gi.IFunctionInfo.get_flags(fi),
+			   gi.IFunctionInfoFlags.IS_CONSTRUCTOR) ~= 0 then
 		  value[gi.IBaseInfo.get_name(fi)] = core.get(fi)
 	       end
 	       gi.IBaseInfo.unref(fi)
@@ -106,13 +129,14 @@ function package_mt.__index(package, name)
 	    local val = gi.IEnumInfo.get_value(info, i)
 	    local n = string.upper(gi.IBaseInfo.get_name(val))
 	    local v = gi.IValueInfo.get_value(val)
-	    value[v] = n
+	    value[n] = v
+
+	    -- Install metatable providing reverse lookup (i.e name(s)
+	    -- by value).
 	    if type == gi.IInfoType.ENUM then
-	       value[n] = v
+	       setmetatable(value, enum_mt)
 	    else
-	       -- TODO: For case of FLAGS, add metatable.__index which
-	       -- resolves any arbitrary number to table with bitfield
-	       -- names.
+	       setmetatable(value, bitfield_mt)
 	    end
 	    gi.IBaseInfo.unref(val)
 	 end
