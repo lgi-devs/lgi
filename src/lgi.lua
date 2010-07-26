@@ -50,11 +50,6 @@ local gi = {
 	 'get_n_methods', 'get_method', 'is_gtype_struct',
       }),
 
-   IFunctionInfo = getface(
-      'GIRepository', nil, 'function_info_', {
-	 'get_flags',
-      }),
-
    IInfoType = {
       FUNCTION = 1,
       STRUCT = 3,
@@ -63,15 +58,6 @@ local gi = {
       OBJECT = 7,
       INTERFACE = 8,
       CONSTANT = 9,
-   },
-
-   IFunctionInfoFlags = {
-      IS_METHOD = 1,
-      IS_CONSTRUCTOR = 2,
-      IS_GETTER = 4,
-      IS_SETTER = 8,
-      WRAPS_VFUNC = 16,
-      THROWS = 32,
    },
 }
 
@@ -113,13 +99,10 @@ function package_mt.__index(package, name)
       elseif type == gi.IInfoType.STRUCT then
 	 if not gi.IStructInfo.is_gtype_struct(info) then
 	    value = {}
-	    -- Create table with all constructors for the structure.
+	    -- Create table with all methods of the structure.
 	    for i = 0, gi.IStructInfo.get_n_methods(info) - 1 do
 	       local fi = gi.IStructInfo.get_method(info, i)
-	       if bit.band(gi.IFunctionInfo.get_flags(fi),
-			   gi.IFunctionInfoFlags.IS_CONSTRUCTOR) ~= 0 then
-		  value[gi.IBaseInfo.get_name(fi)] = core.get(fi)
-	       end
+	       value[gi.IBaseInfo.get_name(fi)] = core.get(fi)
 	       gi.IBaseInfo.unref(fi)
 	    end
 	 end
