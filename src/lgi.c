@@ -68,15 +68,10 @@ lgi_error(lua_State* L, GError* err)
 static int
 lgi_throw(lua_State* L, GError* err)
 {
-  if (err != NULL)
-    {
-      lua_pushfstring(L, "%s (%d)", err->message, err->code);
-      g_error_free(err);
-    }
-  else
-    lua_pushstring(L, "unspecified GError-NULL");
-
-  return lua_error(L);
+  g_assert(err != NULL);
+  lua_pushfstring(L, "%s (%d)", err->message, err->code);
+  g_error_free(err);
+  return luaL_error(L, "%s", lua_tostring(L, -1));
 }
 
 /* Stores object represented by specified gpointer from the cache to
@@ -327,6 +322,20 @@ lgi_type_get_name(lua_State* L, GIBaseInfo* info)
 
   g_slist_free(list);
   return n;
+}
+
+/* Throws error with specified format, prepended with name of
+   specified type. */
+static int
+lgi_type_error(lua_State* L, GIBaseInfo* info, const char* fmt, ...)
+{
+  va_list vl;
+  int n = lgi_type_get_name(L, info);
+  va_start(vl, fmt);
+  lua_pushstring(L, ": ");
+  lua_pushvfstring(L, fmt, vl);
+  lua_concat(L, n + 2);
+  return luaL_error(L, "%s", lua_tostring(L, -1));
 }
 
 static int
