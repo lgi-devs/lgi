@@ -579,7 +579,7 @@ function_call(lua_State* L)
 	    {
 	    case GI_INFO_TYPE_STRUCT:
 	      {
-		struct ud_struct* struct_ = 
+		struct ud_struct* struct_ =
 		  luaL_checkudata(L, lua_argi, UD_STRUCT);
 		args[1].arg.v_pointer = struct_->addr;
 	      }
@@ -726,14 +726,19 @@ lgi_get(lua_State* L)
   int vals = 1;
 
   /* Check, that structure is really some usable GIBaseInfo-based. */
+  const gchar* name = g_base_info_get_name(struct_->info);
   if (g_strcmp0(g_base_info_get_namespace(struct_->info),
-		"GIRepository") == 0 &&
-      g_strcmp0(g_base_info_get_name(struct_->info), "IBaseInfo") == 0)
-    vals = lgi_type_new(L, struct_->addr, &unused);
-  else
-    lua_pushnil(L);
+		"GIRepository") != 0 ||
+      (g_strcmp0(name, "IBaseInfo") != 0 &&
+       g_strcmp0(name, "IFunctionInfo") != 0 &&
+       g_strcmp0(name, "IConstantInfo") != 0 &&
+       g_strcmp0(name, "IStructInfo") != 0))
+    {
+      lua_concat(L, lgi_type_get_name(L, struct_->info));
+      return luaL_argerror(L, 1, lua_tostring(L, -1));
+    }
 
-  return vals;
+  return vals = lgi_type_new(L, struct_->addr, &unused);
 }
 
 static int
