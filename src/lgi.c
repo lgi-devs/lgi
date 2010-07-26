@@ -567,10 +567,31 @@ function_call(lua_State* L)
   ti_argi = 0;
   if (has_self)
     {
-      /* TODO: 'self' handling: check for object type and marshall it
-	 in from lua. */
+      /* 'self' handling: check for object type and marshall it in
+	 from lua. */
+      if (lua_isnil(L, lua_argi))
+	/* nil represents NULL pointer no matter for which type. */
+	args[1].arg.v_pointer = NULL;
+      else
+	{
+	  GIBaseInfo* selfi = g_base_info_get_container(function->info);
+	  switch (g_base_info_get_type(selfi))
+	    {
+	    case GI_INFO_TYPE_STRUCT:
+	      {
+		struct ud_struct* struct_ = 
+		  luaL_checkudata(L, lua_argi, UD_STRUCT);
+		args[1].arg.v_pointer = struct_->addr;
+	      }
+	      break;
+
+	    default:
+	      lgi_type_error(L, function->info, "unsupported 'self' type");
+	    }
+	}
+
+      /* Advance to the next argument. */
       lua_argi++;
-      args[1].arg.v_pointer = NULL;
       ffi_argi++;
     }
 
