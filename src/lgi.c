@@ -421,19 +421,18 @@ struct_load_field(lua_State* L, struct ud_struct* struct_, const gchar* name,
   if (fi == NULL)
     {
       lua_concat(L, lgi_type_get_name(L, struct_->info));
-      luaL_error(L, "struct %s: no '%s'", lua_tostring(L, -1), name);
+      lgi_type_error(L, struct_->info, "no '%s'", name);
     }
 
   if ((g_field_info_get_flags(fi) & reqflag) == 0)
     {
       g_base_info_unref(fi);
-      lua_concat(L, lgi_type_get_name(L, struct_->info));
-      luaL_error(L, "struct %s: '%s' not %s", lua_tostring(L, -1),
-		 name, reqflag == GI_FIELD_IS_READABLE ?
-		 "readable" : "writable");
+      lgi_type_error(L, struct_->info, "'%s' not %s",
+		     name, reqflag == GI_FIELD_IS_READABLE ?
+		     "readable" : "writable");
     }
 
-  val = G_STRUCT_MEMBER_P(struct_->addr, g_field_info_get_offset(fi));
+  *val = G_STRUCT_MEMBER_P(struct_->addr, g_field_info_get_offset(fi));
   ti = g_field_info_get_type(fi);
   g_base_info_unref(fi);
   return ti;
@@ -445,12 +444,23 @@ struct_index(lua_State* L)
   struct ud_struct* struct_ = luaL_checkudata(L, 1, UD_STRUCT);
   const gchar* name = luaL_checkstring(L, 2);
   int vals;
-  GITypeInfo* ti;
-  GArgument* val;
 
-  ti = struct_load_field(L, struct_, name, GI_FIELD_IS_READABLE, &val);
-  vals = lgi_val_to_lua(L, ti, val);
-  g_base_info_unref(ti);
+  /* Check, whether there is apropriate method. */
+  GIFunctionInfo* fi = g_struct_info_find_method(struct_->info, name);
+  if (fi != NULL)
+    {
+      vals = function_new(L, fi);
+      g_base_info_unref(fi);
+    }
+  else
+    {
+      GArgument* val;
+      GITypeInfo* ti = struct_load_field(L, struct_, name,
+					 GI_FIELD_IS_READABLE, &val);
+      vals = lgi_val_to_lua(L, ti, val);
+      g_base_info_unref(ti);
+    }
+
   return vals;
 }
 
