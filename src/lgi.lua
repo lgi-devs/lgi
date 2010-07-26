@@ -94,6 +94,15 @@ typeloader[gi.IInfoType.FUNCTION] =
 
 typeloader[gi.IInfoType.CONSTANT] = typeloader[gi.IInfoType.FUNCTION]
 
+local function load_n(t, info, get_n_items, get_item, item_value, transform)
+   for i = 0, get_n_items(info) - 1 do
+      local mi = get_item(info, i)
+      transform = transform or function(val) return val end
+      t[transform(gi.IBaseInfo.get_name(mi))] = item_value(mi)
+      gi.IBaseInfo.unref(mi)
+   end
+end
+
 typeloader[gi.IInfoType.STRUCT] =
    function(info)
       local value
@@ -101,29 +110,24 @@ typeloader[gi.IInfoType.STRUCT] =
       -- Avoid exposing internal structs created for object implementations.
       if not gi.IStructInfo.is_gtype_struct(info) then
 	 value = {}
+
 	 -- Create table with all methods of the structure.
-	 for i = 0, gi.IStructInfo.get_n_methods(info) - 1 do
-	    local fi = gi.IStructInfo.get_method(info, i)
-	    value[gi.IBaseInfo.get_name(fi)] = core.get(fi)
-	    gi.IBaseInfo.unref(fi)
-	 end
+	 load_n(value, info, gi.IStructInfo.get_n_methods,
+		gi.IStructInfo.get_method, core.get)
       end
       return value
    end
 
 function typeloader.enum(info, meta)
    local value = {}
-   for i = 0, gi.IEnumInfo.get_n_values(info) - 1 do
-      local val = gi.IEnumInfo.get_value(info, i)
-      local n = string.upper(gi.IBaseInfo.get_name(val))
-      local v = gi.IValueInfo.get_value(val)
-      value[n] = v
 
-      -- Install metatable providing reverse lookup (i.e name(s) by
-      -- value).
-      setmetatable(value, meta)
-      gi.IBaseInfo.unref(val)
-   end
+   -- Load all enum values.
+   load_n(value, info, gi.IEnumInfo.get_n_values, gi.IEnumInfo.get_value,
+	  gi.IValueInfo.get_value, string.upper)
+
+   -- Install metatable providing reverse lookup (i.e name(s) by
+   -- value).
+   setmetatable(value, meta)
    return value
 end
 
