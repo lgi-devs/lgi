@@ -50,6 +50,18 @@ local gi = {
 	 'get_n_methods', 'get_method', 'is_gtype_struct',
       }),
 
+   IInterfaceInfo = getface(
+      'GIRepository', nil, 'interface_info_', {
+	 'get_n_prerequisites', 'get_prerequisite',
+	 'get_n_methods', 'get_method', 'get_n_constants', 'get_constant',
+      }),
+
+   IObjectInfo = getface(
+      'GIRepository', nil, 'object_info_', {
+	 'get_parent', 'get_n_interfaces', 'get_interface',
+	 'get_n_methods', 'get_method', 'get_n_constants', 'get_constant',
+      }),
+
    IInfoType = {
       FUNCTION = 1,
       STRUCT = 3,
@@ -85,10 +97,34 @@ function enum_mt.__index(enum, value)
    end
 end
 
--- Table containing loaders for various GI types.
+-- Table containing loaders for various GI types, indexed by
+-- gi.IInfoType constants.
 local typeloader = {}
+
+-- Loads symbol into the specified package.
+local function loadsymbol(package, symbol)
+   -- Lookup baseinfo of requested symbol in the repo.
+   local info = gi.IRepository.find_by_name(nil, package._namespace, symbol)
+   local value
+
+   -- Decide according to symbol type what to do.
+   if info then
+      if not gi.IBaseInfo.is_deprecated(info) then
+	 local type = gi.IBaseInfo.get_type(info)
+	 if typeloader[type] then
+	    value = typeloader[type](info, package)
+	 end
+      end
+      gi.IBaseInfo.unref(info)
+   end
+
+   -- Cache the result.
+   package[symbol] = value
+   return value
+end
+
 typeloader[gi.IInfoType.FUNCTION] =
-   function(info)
+   function(info, package)
       return core.get(info)
    end
 
@@ -104,7 +140,7 @@ local function load_n(t, info, get_n_items, get_item, item_value, transform)
 end
 
 typeloader[gi.IInfoType.STRUCT] =
-   function(info)
+   function(info, package)
       local value
 
       -- Avoid exposing internal structs created for object implementations.
@@ -132,36 +168,58 @@ function typeloader.enum(info, meta)
 end
 
 typeloader[gi.IInfoType.ENUM] =
-   function(info)
+   function(info, package)
       return typeloader.enum(info, enum_mt)
    end
 
 typeloader[gi.IInfoType.FLAGS] =
-   function(info)
+   function(info, package)
       return typeloader.enum(info, bitfield_mt)
    end
 
--- Loads symbol into the specified package.
-local function loadsymbol(package, name)
-   -- Lookup baseinfo of requested symbol in the repo.
-   local info = gi.IRepository.find_by_name(nil, package._namespace, name)
-   if not info then return nil end
+typeloader[gi.IInfoType.INTERFACE] =
+   function(info, package)
+      -- Load all interface methods.
+      local value = {}
+      load_n(value, info, gi.IInterfaceInfo.get_n_methods,
+	     gi.IInterfaceInfo.get_method, core.get)
 
-   -- Decide according to symbol type what to do.
-   local value
-   if not gi.IBaseInfo.is_deprecated(info) then
-      local type = gi.IBaseInfo.get_type(info)
-      if typeloader[type] then
-	 value = typeloader[type](info)
-      end
+      -- Load all prerequisites (i.e. inherited interfaces).
+      value._inherits = {}
+      load_n(value._inherits, info, gi.IInterfaceInfo.get_n_prerequisites,
+	     gi.IInterfaceInfo.get_prerequisite,
+	     function(pi)
+		return loadsymbol(package, gi.IBaseInfo.get_name(pi))
+	     end)
+
+      return value
    end
 
-   gi.IBaseInfo.unref(info)
+typeloader[gi.IInfoType.OBJECT] =
+   function(info, package)
+      local value = {}
+      -- Load all object methods.
+      load_n(value, info, gi.IObjectInfo.get_n_methods,
+	     gi.IObjectInfo.get_method, core.get)
 
-   -- Cache the result.
-   package[name] = value
-   return value
-end
+      -- Load all constants.
+      load_n(value, info, gi.IObjectInfo.get_n_constants,
+	     gi.IObjectInfo.get_constant, core.get)
+
+      -- Load parent object.
+      value._inherits = {}
+--      local pi = gi.IObjectInfo.get_parent(info)
+--      value._inherits._parent = loadsymbol(package, gi.IBaseInfo.get_name(pi))
+--      gi.IBaseInfo.unref(pi)
+
+      -- Load implemented interfaces.
+      load_n(value._inherits, info, gi.IObjectInfo.get_n_interfaces,
+	     gi.IObjectInfo.get_interface,
+	     function(pi)
+		return loadsymbol(package, gi.IBaseInfo.get_name(pi))
+	     end)
+      return value
+   end
 
 -- Package uses lazy namespace access, so __index method loads field
 -- on-demand (but stores them back, so it is actually caching).
