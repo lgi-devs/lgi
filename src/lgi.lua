@@ -7,7 +7,7 @@
 
 --]]--
 
-local assert, setmetatable, getmetatable, type, pairs, pcall, string, table = 
+local assert, setmetatable, getmetatable, type, pairs, pcall, string, table =
    assert, setmetatable, getmetatable, type, pairs, pcall, string, table
 local core = require 'lgi._core'
 local bit = require 'bit'
@@ -61,6 +61,9 @@ local gi = {
    },
 }
 
+-- Expose 'gi' utility in core namespace.
+core.gi = gi
+
 -- Metatable for bitfield tables, resolving arbitraru number to the
 -- table containing symbolic names of contained bits.
 local bitfield_mt = {}
@@ -82,10 +85,60 @@ function enum_mt.__index(enum, value)
    end
 end
 
--- Package uses lazy namespace access, so __index method loads field
--- on-demand (but stores them back, so it is actually caching).
-local package_mt = {}
-function package_mt.__index(package, name)
+-- Table containing loaders for various GI types.
+local typeloader = {}
+typeloader[gi.IInfoType.FUNCTION] =
+   function(info)
+      return core.get(info)
+   end
+
+typeloader[gi.IInfoType.CONSTANT] = typeloader[gi.IInfoType.FUNCTION]
+
+typeloader[gi.IInfoType.STRUCT] =
+   function(info)
+      local value
+
+      -- Avoid exposing internal structs created for object implementations.
+      if not gi.IStructInfo.is_gtype_struct(info) then
+	 value = {}
+	 -- Create table with all methods of the structure.
+	 for i = 0, gi.IStructInfo.get_n_methods(info) - 1 do
+	    local fi = gi.IStructInfo.get_method(info, i)
+	    value[gi.IBaseInfo.get_name(fi)] = core.get(fi)
+	    gi.IBaseInfo.unref(fi)
+	 end
+      end
+      return value
+   end
+
+function typeloader.enum(info, meta)
+   local value = {}
+   for i = 0, gi.IEnumInfo.get_n_values(info) - 1 do
+      local val = gi.IEnumInfo.get_value(info, i)
+      local n = string.upper(gi.IBaseInfo.get_name(val))
+      local v = gi.IValueInfo.get_value(val)
+      value[n] = v
+
+      -- Install metatable providing reverse lookup (i.e name(s) by
+      -- value).
+      setmetatable(value, meta)
+      gi.IBaseInfo.unref(val)
+   end
+   return value
+end
+
+typeloader[gi.IInfoType.ENUM] =
+   function(info)
+      return typeloader.enum(info, enum_mt)
+   end
+
+typeloader[gi.IInfoType.FLAGS] =
+   function(info)
+      return typeloader.enum(info, bitfield_mt)
+   end
+
+-- Loads symbol into the specified package.
+local function loadsymbol(package, name)
    -- Lookup baseinfo of requested symbol in the repo.
    local info = gi.IRepository.find_by_name(nil, package._namespace, name)
    if not info then return nil end
@@ -94,35 +147,8 @@ function package_mt.__index(package, name)
    local value
    if not gi.IBaseInfo.is_deprecated(info) then
       local type = gi.IBaseInfo.get_type(info)
-      if type == gi.IInfoType.FUNCTION or type == gi.IInfoType.CONSTANT then
-	 value = core.get(info)
-      elseif type == gi.IInfoType.STRUCT then
-	 if not gi.IStructInfo.is_gtype_struct(info) then
-	    value = {}
-	    -- Create table with all methods of the structure.
-	    for i = 0, gi.IStructInfo.get_n_methods(info) - 1 do
-	       local fi = gi.IStructInfo.get_method(info, i)
-	       value[gi.IBaseInfo.get_name(fi)] = core.get(fi)
-	       gi.IBaseInfo.unref(fi)
-	    end
-	 end
-      elseif type == gi.IInfoType.ENUM or type == gi.IInfoType.FLAGS then
-	 value = {}
-	 for i = 0, gi.IEnumInfo.get_n_values(info) - 1 do
-	    local val = gi.IEnumInfo.get_value(info, i)
-	    local n = string.upper(gi.IBaseInfo.get_name(val))
-	    local v = gi.IValueInfo.get_value(val)
-	    value[n] = v
-
-	    -- Install metatable providing reverse lookup (i.e name(s)
-	    -- by value).
-	    if type == gi.IInfoType.ENUM then
-	       setmetatable(value, enum_mt)
-	    else
-	       setmetatable(value, bitfield_mt)
-	    end
-	    gi.IBaseInfo.unref(val)
-	 end
+      if typeloader[type] then
+	 value = typeloader[type](info)
       end
    end
 
@@ -133,6 +159,10 @@ function package_mt.__index(package, name)
    return value
 end
 
+-- Package uses lazy namespace access, so __index method loads field
+-- on-demand (but stores them back, so it is actually caching).
+local package_mt = { __index = loadsymbol }
+
 -- Forces loading the whole namespace (which is otherwise loaded
 -- lazily).  Useful when one wants to inspect the contents of the
 -- whole namespace (i.e. iterate through it).
@@ -140,8 +170,7 @@ local function loadnamespace(namespace)
    -- Iterate through all items in the namespace.
    for i = 0, gi.IRepository.get_n_infos(nil, namespace._namespace) -1 do
       local info = gi.IRepository.get_info(nil, namespace._namespace, i)
-      pcall(getmetatable(namespace).__index, namespace, 
-	    gi.IBaseInfo.get_name(info))
+      pcall(loadsymbol, namespace, gi.IBaseInfo.get_name(info))
       gi.IBaseInfo.unref(info)
    end
 end
@@ -153,9 +182,9 @@ function core.require(namespace, version)
    ns._typelib = assert(gi.IRepository.require(nil, namespace, version))
 
    -- Install 'force' closure, which forces loading this namespace.
-   ns._force = function() 
-		  loadnamespace(ns) 
-		  return ns 
+   ns._force = function()
+		  loadnamespace(ns)
+		  return ns
 	       end
 
    -- Set proper lazy metatable.
