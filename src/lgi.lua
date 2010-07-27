@@ -7,8 +7,10 @@
 
 --]]--
 
-local assert, setmetatable, getmetatable, type, pairs, pcall, string, table =
-   assert, setmetatable, getmetatable, type, pairs, pcall, string, table
+local assert, setmetatable, getmetatable, type, pairs, pcall, string, table,
+   rawget =
+      assert, setmetatable, getmetatable, type, pairs, pcall, string, table,
+      rawget
 local core = require 'lgi._core'
 local bit = require 'bit'
 
@@ -29,11 +31,12 @@ local gi = {
    IRepository = getface(
       'GIRepository', 'IRepository', '', {
 	 'require', 'find_by_name', 'get_n_infos', 'get_info',
-	 'get_dependencies'
+	 'get_dependencies', 'get_version',
       }),
    IBaseInfo = getface(
       'GIRepository', nil, 'base_info_', {
 	 'ref', 'unref', 'get_type', 'is_deprecated', 'get_name',
+	 'get_namespace',
       }),
 
    IEnumInfo = getface(
@@ -74,19 +77,16 @@ local gi = {
    },
 }
 
--- Expose 'gi' utility in core namespace.
-core.gi = gi
-
 -- Table with all loaded packages.  Its metatable takes care of loading
 -- on-demand.
-core.packages = {}
+local packages = {}
 
--- Metatable for bitfield tables, resolving arbitrary number to the
+-- Metatable for bitflags tables, resolving arbitrary number to the
 -- table containing symbolic names of contained bits.
-local bitfield_mt = {}
-function bitfield_mt.__index(bitfield, value)
+local bitflags_mt = {}
+function bitflags_mt.__index(bitflags, value)
    local t = {}
-   for name, flag in pairs(bitfield) do
+   for name, flag in pairs(bitflags) do
       if type(flag) == 'number' and bit.band(flag, value) == flag then
 	 table.insert(t, name)
       end
@@ -117,7 +117,7 @@ local function load_symbol(package, symbol)
       if not gi.IBaseInfo.is_deprecated(info) then
 	 local type = gi.IBaseInfo.get_type(info)
 	 if typeloader[type] then
-	    value = typeloader[type](info, package)
+	    value = typeloader[type](package, info)
 	 end
       end
       gi.IBaseInfo.unref(info)
@@ -130,12 +130,14 @@ local function load_symbol(package, symbol)
 end
 
 typeloader[gi.IInfoType.FUNCTION] =
-   function(info, package)
+   function(package, info)
       return core.get(info)
    end
 
 typeloader[gi.IInfoType.CONSTANT] = typeloader[gi.IInfoType.FUNCTION]
 
+-- Helper for iterating GIRepository-style get_n_items/get_item
+-- containers.
 local function load_n(t, info, get_n_items, get_item, item_value, transform)
    for i = 0, get_n_items(info) - 1 do
       local mi = get_item(info, i)
@@ -146,7 +148,7 @@ local function load_n(t, info, get_n_items, get_item, item_value, transform)
 end
 
 typeloader[gi.IInfoType.STRUCT] =
-   function(info, package)
+   function(package, info)
       local value
 
       -- Avoid exposing internal structs created for object implementations.
@@ -160,7 +162,7 @@ typeloader[gi.IInfoType.STRUCT] =
       return value
    end
 
-function typeloader.enum(info, meta)
+local function load_enum(info, meta)
    local value = {}
 
    -- Load all enum values.
@@ -174,17 +176,31 @@ function typeloader.enum(info, meta)
 end
 
 typeloader[gi.IInfoType.ENUM] =
-   function(info, package)
-      return typeloader.enum(info, enum_mt)
+   function(package, info)
+      return load_enum(info, enum_mt)
    end
 
 typeloader[gi.IInfoType.FLAGS] =
-   function(info, package)
-      return typeloader.enum(info, bitfield_mt)
+   function(package, info)
+      return load_enum(info, bitflags_mt)
    end
 
+local function load_by_info(into, package, info)
+   local name = gi.IBaseInfo.get_name(info)
+   local namespace = gi.IBaseInfo.get_namespace(info)
+   local target_name, value
+   if namespace == package._info.namespace then
+      target_name = name
+      value = package[name]
+   else
+      target_name = namespace .. '.' .. name
+      value = packages[namespace][name]
+   end
+   into[target_name] = value
+end
+
 typeloader[gi.IInfoType.INTERFACE] =
-   function(info, package)
+   function(package, info)
       -- Load all interface methods.
       local value = {}
       load_n(value, info, gi.IInterfaceInfo.get_n_methods,
@@ -192,17 +208,17 @@ typeloader[gi.IInfoType.INTERFACE] =
 
       -- Load all prerequisites (i.e. inherited interfaces).
       value._inherits = {}
-      load_n(value._inherits, info, gi.IInterfaceInfo.get_n_prerequisites,
-	     gi.IInterfaceInfo.get_prerequisite,
-	     function(pi)
-		return load_symbol(package, gi.IBaseInfo.get_name(pi))
-	     end)
+      for i = 0, gi.IInterfaceInfo.get_n_prerequisites(info) - 1 do
+	 local pi = gi.IInterfaceInfo.get_prerequisite(info, i)
+	 load_by_info(value._inherits, package, pi)
+	 gi.IBaseInfo.unref(pi)
+      end
 
       return value
    end
 
 typeloader[gi.IInfoType.OBJECT] =
-   function(info, package)
+   function(package, info)
       local value = {}
       -- Load all object methods.
       load_n(value, info, gi.IObjectInfo.get_n_methods,
@@ -214,40 +230,50 @@ typeloader[gi.IInfoType.OBJECT] =
 
       -- Load parent object.
       value._inherits = {}
---      local pi = gi.IObjectInfo.get_parent(info)
---      value._inherits._parent = load_symbol(package, gi.IBaseInfo.get_name(pi))
---      gi.IBaseInfo.unref(pi)
+      local pi = gi.IObjectInfo.get_parent(info)
+      if pi then
+	 load_by_info(value._inherits, package, pi)
+	 gi.IBaseInfo.unref(pi)
+      end
 
       -- Load implemented interfaces.
-      load_n(value._inherits, info, gi.IObjectInfo.get_n_interfaces,
-	     gi.IObjectInfo.get_interface,
-	     function(pi)
-		return load_symbol(package, gi.IBaseInfo.get_name(pi))
-	     end)
+      for i = 0, gi.IObjectInfo.get_n_interfaces(info) - 1 do
+	 local ii = gi.IObjectInfo.get_interface(info, i)
+	 load_by_info(value._inherits, package, ii)
+	 gi.IBaseInfo.unref(ii)
+      end
       return value
    end
 
 -- Loads package, optionally with specified version and returns table which
 -- represents it (usable as package table for Lua package loader).
-local function load_package(namespace, version)
+local function load_package(packages, namespace, version)
+
+   -- If the package is already loaded, just use it.
+   local package = rawget(packages, namespace)
+   if package then return package end
 
    -- Create package table with _info table containing auxiliary information
    -- and data for the package.
-   local package = { _info = { namespace = namespace, version = version,
-			       dependencies = {} } }
+   package = { _info = { namespace = namespace, dependencies = {} } }
+   packages[namespace] = package
 
    -- Load the typelibrary for the namespace.
    package._info.typelib = assert(gi.IRepository.require(
 				     nil, namespace, version))
+   package._info.version = version or 
+      gi.IRepository.get_version(nil, namespace)
 
    -- Load all package dependencies.
    for _, dep in pairs(gi.IRepository.get_dependencies(nil, namespace)) do
-      local name, ver = string.match(dep, '(.+)-(.+)')
-      package._info.dependencies[name] = ver
+      local name, version  = string.match(dep, '(.+)-(.+)')
+      package._info.dependencies[name] = load_package(packages, name, version)
    end
 
-   -- Install 'force' closure, which forces loading this namespace.
-   package._info.load = 
+   -- Install 'resolve' closure, which forces loading this namespace.
+   -- Useful when someone wants to inspect what's inside (e.g. some
+   -- kind of source browser or smart editor).
+   package._info.resolve = 
       function()
 	 -- Iterate through all items in the namespace and dereference them,
 	 -- which causes them to be loaded in and cached inside the package
@@ -265,8 +291,9 @@ local function load_package(namespace, version)
 end
 
 -- Install metatable into packages table, so that on-demand loading works.
-setmetatable(core.packages, { __index = function(packages, name)
-					   local package = load_package(name)
-					   packages[name] = package
-					   return package
-					end })
+setmetatable(packages, { __index = load_package })
+
+-- Expose 'gi' utility and 'packages' table in core namespace, mostly
+-- for debugging purposes.
+core.gi = gi
+core.packages = packages
