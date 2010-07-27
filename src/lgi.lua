@@ -77,6 +77,10 @@ local gi = {
 -- Expose 'gi' utility in core namespace.
 core.gi = gi
 
+-- Table with all loaded packages.  Its metatable takes care of loading
+-- on-demand.
+core.packages = {}
+
 -- Metatable for bitfield tables, resolving arbitrary number to the
 -- table containing symbolic names of contained bits.
 local bitfield_mt = {}
@@ -103,7 +107,7 @@ end
 local typeloader = {}
 
 -- Loads symbol into the specified package.
-local function loadsymbol(package, symbol)
+local function load_symbol(package, symbol)
    -- Lookup baseinfo of requested symbol in the repo.
    local info = gi.IRepository.find_by_name(nil, package._info.namespace, 
 					    symbol)
@@ -191,7 +195,7 @@ typeloader[gi.IInfoType.INTERFACE] =
       load_n(value._inherits, info, gi.IInterfaceInfo.get_n_prerequisites,
 	     gi.IInterfaceInfo.get_prerequisite,
 	     function(pi)
-		return loadsymbol(package, gi.IBaseInfo.get_name(pi))
+		return load_symbol(package, gi.IBaseInfo.get_name(pi))
 	     end)
 
       return value
@@ -211,21 +215,21 @@ typeloader[gi.IInfoType.OBJECT] =
       -- Load parent object.
       value._inherits = {}
 --      local pi = gi.IObjectInfo.get_parent(info)
---      value._inherits._parent = loadsymbol(package, gi.IBaseInfo.get_name(pi))
+--      value._inherits._parent = load_symbol(package, gi.IBaseInfo.get_name(pi))
 --      gi.IBaseInfo.unref(pi)
 
       -- Load implemented interfaces.
       load_n(value._inherits, info, gi.IObjectInfo.get_n_interfaces,
 	     gi.IObjectInfo.get_interface,
 	     function(pi)
-		return loadsymbol(package, gi.IBaseInfo.get_name(pi))
+		return load_symbol(package, gi.IBaseInfo.get_name(pi))
 	     end)
       return value
    end
 
 -- Loads package, optionally with specified version and returns table which
 -- represents it (usable as package table for Lua package loader).
-function core.load_package(namespace, version)
+local function load_package(namespace, version)
 
    -- Create package table with _info table containing auxiliary information
    -- and data for the package.
@@ -250,12 +254,19 @@ function core.load_package(namespace, version)
 	 -- table.
 	 for i = 0, gi.IRepository.get_n_infos(nil, namespace) -1 do
 	    local info = gi.IRepository.get_info(nil, namespace, i)
-	    pcall(loadsymbol, package, gi.IBaseInfo.get_name(info))
+	    pcall(load_symbol, package, gi.IBaseInfo.get_name(info))
 	    gi.IBaseInfo.unref(info)
 	 end
       end
 
    -- _info table serves also as a metatable for the package.
-   package._info.__index = loadsymbol
+   package._info.__index = load_symbol
    return setmetatable(package, package._info)
 end
+
+-- Install metatable into packages table, so that on-demand loading works.
+setmetatable(core.packages, { __index = function(packages, name)
+					   local package = load_package(name)
+					   packages[name] = package
+					   return package
+					end })
