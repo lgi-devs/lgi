@@ -109,7 +109,7 @@ local typeloader = {}
 -- Loads symbol into the specified package.
 local function load_symbol(package, symbol)
    -- Lookup baseinfo of requested symbol in the repo.
-   local info = gi.IRepository.find_by_name(nil, package._info.namespace, 
+   local info = gi.IRepository.find_by_name(nil, package._info.namespace,
 					    symbol)
    -- Decide according to symbol type what to do.
    local value
@@ -134,18 +134,10 @@ typeloader[gi.IInfoType.FUNCTION] =
       return core.get(info)
    end
 
-typeloader[gi.IInfoType.CONSTANT] = typeloader[gi.IInfoType.FUNCTION]
-
--- Helper for iterating GIRepository-style get_n_items/get_item
--- containers.
-local function load_n(t, info, get_n_items, get_item, item_value, transform)
-   for i = 0, get_n_items(info) - 1 do
-      local mi = get_item(info, i)
-      transform = transform or function(val) return val end
-      t[transform(gi.IBaseInfo.get_name(mi))] = item_value(mi)
-      gi.IBaseInfo.unref(mi)
+typeloader[gi.IInfoType.CONSTANT] =
+   function(package, info)
+      return core.get(info)
    end
-end
 
 typeloader[gi.IInfoType.STRUCT] =
    function(package, info)
@@ -156,8 +148,11 @@ typeloader[gi.IInfoType.STRUCT] =
 	 value = {}
 
 	 -- Create table with all methods of the structure.
-	 load_n(value, info, gi.IStructInfo.get_n_methods,
-		gi.IStructInfo.get_method, core.get)
+	 for i = 0, gi.IStructInfo.get_n_methods(info) - 1 do
+	    local mi = gi.IStructInfo.get_method(info, i)
+	    value[gi.IBaseInfo.get_name(mi)] = core.get(mi)
+	    gi.IBaseInfo.unref(mi)
+	 end
       end
       return value
    end
@@ -166,8 +161,12 @@ local function load_enum(info, meta)
    local value = {}
 
    -- Load all enum values.
-   load_n(value, info, gi.IEnumInfo.get_n_values, gi.IEnumInfo.get_value,
-	  gi.IValueInfo.get_value, string.upper)
+   for i = 0, gi.IEnumInfo.get_n_values(info) - 1 do
+	    local mi = gi.IEnumInfo.get_value(info, i)
+	    value[string.upper(gi.IBaseInfo.get_name(mi))] =
+	    gi.IValueInfo.get_value(mi)
+	    gi.IBaseInfo.unref(mi)
+	 end
 
    -- Install metatable providing reverse lookup (i.e name(s) by
    -- value).
@@ -203,8 +202,11 @@ typeloader[gi.IInfoType.INTERFACE] =
    function(package, info)
       -- Load all interface methods.
       local value = {}
-      load_n(value, info, gi.IInterfaceInfo.get_n_methods,
-	     gi.IInterfaceInfo.get_method, core.get)
+      for i = 0, gi.IInterfaceInfo.get_n_methods(info) - 1 do
+	 local mi = gi.IInterfaceInfo.get_method(info, i)
+	 value[gi.IBaseInfo.get_name(mi)] = core.get(mi)
+	 gi.IBaseInfo.unref(mi)
+      end
 
       -- Load all prerequisites (i.e. inherited interfaces).
       value._inherits = {}
@@ -221,12 +223,18 @@ typeloader[gi.IInfoType.OBJECT] =
    function(package, info)
       local value = {}
       -- Load all object methods.
-      load_n(value, info, gi.IObjectInfo.get_n_methods,
-	     gi.IObjectInfo.get_method, core.get)
+      for i = 0, gi.IObjectInfo.get_n_methods(info) - 1 do
+	 local mi = gi.IObjectInfo.get_method(info, i)
+	 value[gi.IBaseInfo.get_name(mi)] = core.get(mi)
+	 gi.IBaseInfo.unref(mi)
+      end
 
       -- Load all constants.
-      load_n(value, info, gi.IObjectInfo.get_n_constants,
-	     gi.IObjectInfo.get_constant, core.get)
+      for i = 0, gi.IObjectInfo.get_n_constants(info) - 1 do
+	 local mi = gi.IObjectInfo.get_constant(info, i)
+	 value[gi.IBaseInfo.get_name(mi)] = core.get(mi)
+	 gi.IBaseInfo.unref(mi)
+      end
 
       -- Load parent object.
       value._inherits = {}
@@ -261,11 +269,11 @@ local function load_package(packages, namespace, version)
    -- Load the typelibrary for the namespace.
    package._info.typelib = assert(gi.IRepository.require(
 				     nil, namespace, version))
-   package._info.version = version or 
+   package._info.version = version or
       gi.IRepository.get_version(nil, namespace)
 
    -- Load all package dependencies.
-   for _, dep in pairs(gi.IRepository.get_dependencies(nil, namespace)) do
+   for _, dep in pairs(gi.IRepository.get_dependencies(nil, namespace) or {}) do
       local name, version  = string.match(dep, '(.+)-(.+)')
       package._info.dependencies[name] = load_package(packages, name, version)
    end
@@ -273,7 +281,7 @@ local function load_package(packages, namespace, version)
    -- Install 'resolve' closure, which forces loading this namespace.
    -- Useful when someone wants to inspect what's inside (e.g. some
    -- kind of source browser or smart editor).
-   package._info.resolve = 
+   package._info.resolve =
       function()
 	 -- Iterate through all items in the namespace and dereference them,
 	 -- which causes them to be loaded in and cached inside the package
