@@ -735,7 +735,7 @@ function_call(lua_State* L)
 
   /* Process parameters for output. */
   lua_argi = 0;
-  ffi_argi = 0;
+  ffi_argi = 1;
   ti_argi = 0;
 
   /* Handle return value. */
