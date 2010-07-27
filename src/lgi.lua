@@ -7,10 +7,8 @@
 
 --]]--
 
-local assert, setmetatable, getmetatable, type, pairs, pcall, string, table,
-   rawget =
-      assert, setmetatable, getmetatable, type, pairs, pcall, string, table,
-      rawget
+local assert, setmetatable, getmetatable, type, pairs, pcall, string, rawget =
+      assert, setmetatable, getmetatable, type, pairs, pcall, string, rawget
 local core = require 'lgi._core'
 local bit = require 'bit'
 
@@ -88,7 +86,7 @@ function bitflags_mt.__index(bitflags, value)
    local t = {}
    for name, flag in pairs(bitflags) do
       if type(flag) == 'number' and bit.band(flag, value) == flag then
-	 table.insert(t, name)
+	 t[flag] = name
       end
    end
    return t
