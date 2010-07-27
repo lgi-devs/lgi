@@ -107,6 +107,49 @@ lgi_set_cached(lua_State* L, gpointer obj)
   lua_pop(L, 2);
 }
 
+/* Returns size in bytes of given type/value. */
+static gsize
+lgi_type_get_size(GITypeTag tag)
+{
+  gsize size;
+  switch (tag)
+    {
+#define TYPE_CASE(tag, type)			\
+      case GI_TYPE_TAG_ ## tag:			\
+	size = sizeof (type);			\
+	break;
+
+      TYPE_CASE(BOOLEAN, gboolean);
+      TYPE_CASE(INT8, gint8);
+      TYPE_CASE(UINT8, guint8);
+      TYPE_CASE(INT16, gint16);
+      TYPE_CASE(UINT16, guint16);
+      TYPE_CASE(INT32, gint32);
+      TYPE_CASE(UINT32, guint32);
+      TYPE_CASE(INT64, gint64);
+      TYPE_CASE(UINT64, guint64);
+      TYPE_CASE(FLOAT, gfloat);
+      TYPE_CASE(DOUBLE, gdouble);
+      TYPE_CASE(SHORT, gshort);
+      TYPE_CASE(USHORT, gushort);
+      TYPE_CASE(INT, gint);
+      TYPE_CASE(UINT, guint);
+      TYPE_CASE(LONG, glong);
+      TYPE_CASE(ULONG, gulong);
+      TYPE_CASE(SSIZE, gssize);
+      TYPE_CASE(SIZE, gsize);
+      TYPE_CASE(GTYPE, GType);
+      TYPE_CASE(UTF8, gpointer);
+      TYPE_CASE(FILENAME, gpointer);
+
+#undef TYPE_CASE
+    default:
+      size = 0;
+    }
+
+  return size;
+}
+
 static int
 lgi_simple_val_to_lua(lua_State* L, GITypeTag tag, GArgument* val)
 {
@@ -184,6 +227,55 @@ lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GArgument* val)
 		pushed = 0;
 	      }
 	    g_base_info_unref(ii);
+	  }
+	  break;
+
+	case GI_TYPE_TAG_ARRAY:
+	  {
+	    /* Find out the array length and element size. TODO: Handle
+	       'length' variant.*/
+	    gint index, len = g_type_info_get_array_fixed_size(ti);
+	    GIArrayType atype = g_type_info_get_array_type(ti);
+	    GITypeInfo* eti = g_type_info_get_param_type(ti, 0);
+	    GITypeTag etag = g_type_info_get_tag(eti);
+	    gsize size = lgi_type_get_size(etag);
+	    gboolean zero_terminated = g_type_info_is_zero_terminated(ti);
+	    if (atype == GI_ARRAY_TYPE_ARRAY)
+	      len = ((GArray*)val->v_pointer)->len;
+	    if ((len == -1 && !zero_terminated) ||
+		(atype != GI_ARRAY_TYPE_C && atype != GI_ARRAY_TYPE_ARRAY) ||
+		size == 0)
+	      /* Unsupported kinds of arrays. */
+	      pushed = 0;
+	    else
+	      {
+		/* Create Lua table which will hold the array. */
+		lua_createtable(L, len > 0 ? len : 0, 0);
+                pushed = 1;
+
+		/* Iterate through array elements. */
+		for (index = 0; len < 0 || index < len; index++)
+		  {
+		    /* Get value from specified index. */
+		    GArgument* eval;
+                    gint offset = index * size;
+		    if (atype == GI_ARRAY_TYPE_C)
+		      eval = (GArgument*)((gchar*)val->v_pointer + offset);
+		    else if (atype == GI_ARRAY_TYPE_ARRAY)
+		      eval = (GArgument*)(((GArray*)val->v_pointer)->data +
+                                          offset);
+
+                    /* If the array is zero-terminated, terminate now and don't
+                       include NULL entry. */
+                    if (zero_terminated && eval->v_pointer == NULL)
+		      break;
+
+                    /* Store value into the table. */
+                    if (lgi_val_to_lua(L, eti, eval) == 1)
+		      lua_rawseti(L, -2, index + 1);
+		  }
+	      }
+	    g_base_info_unref(eti);
 	  }
 	  break;
 
