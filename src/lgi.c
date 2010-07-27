@@ -195,6 +195,63 @@ lgi_simple_val_to_lua(lua_State* L, GITypeTag tag, GITransfer transfer,
   return pushed;
 }
 
+static int lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GITransfer transfer,
+                          GArgument* val);
+
+static int
+lgi_array_to_lua(lua_State* L, GITypeInfo* ti, GITransfer transfer,
+                 GArgument* val)
+{
+  /* Find out the array length and element size. TODO: Handle 'length'
+     variant.*/
+  int pushed;
+  gint index, len = g_type_info_get_array_fixed_size(ti);
+  GIArrayType atype = g_type_info_get_array_type(ti);
+  GITypeInfo* eti = g_type_info_get_param_type(ti, 0);
+  GITypeTag etag = g_type_info_get_tag(eti);
+  gsize size = lgi_type_get_size(etag);
+  gboolean zero_terminated = g_type_info_is_zero_terminated(ti);
+  if (atype == GI_ARRAY_TYPE_ARRAY)
+    len = ((GArray*)val->v_pointer)->len;
+
+  /* Create Lua table which will hold the array. */
+  lua_createtable(L, len > 0 ? len : 0, 0);
+  pushed = 1;
+
+  /* Iterate through array elements. */
+  for (index = 0; len < 0 || index < len; index++)
+    {
+      /* Get value from specified index. */
+      GArgument* eval;
+      gint offset = index * size;
+      if (atype == GI_ARRAY_TYPE_C)
+        eval = (GArgument*)((gchar*)val->v_pointer + offset);
+      else if (atype == GI_ARRAY_TYPE_ARRAY)
+        eval = (GArgument*)(((GArray*)val->v_pointer)->data + offset);
+
+      /* If the array is zero-terminated, terminate now and don't
+         include NULL entry. */
+      if (zero_terminated && eval->v_pointer == NULL)
+        break;
+
+      /* Store value into the table. */
+      if (lgi_val_to_lua(L, eti, transfer, eval) == 1)
+        lua_rawseti(L, -2, index + 1);
+    }
+
+  /* If needed, free the array. */
+  if (transfer != GI_TRANSFER_NOTHING)
+    {
+      if (atype == GI_ARRAY_TYPE_C)
+        g_free(val->v_pointer);
+      else if (atype == GI_ARRAY_TYPE_ARRAY)
+        g_array_unref((GArray*)val->v_pointer);
+    }
+
+  g_base_info_unref(eti);
+  return pushed;
+}
+
 static int
 lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GITransfer transfer,
                GArgument* val)
@@ -233,61 +290,7 @@ lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GITransfer transfer,
 	  break;
 
 	case GI_TYPE_TAG_ARRAY:
-	  {
-	    /* Find out the array length and element size. TODO: Handle
-	       'length' variant.*/
-	    gint index, len = g_type_info_get_array_fixed_size(ti);
-	    GIArrayType atype = g_type_info_get_array_type(ti);
-	    GITypeInfo* eti = g_type_info_get_param_type(ti, 0);
-	    GITypeTag etag = g_type_info_get_tag(eti);
-	    gsize size = lgi_type_get_size(etag);
-	    gboolean zero_terminated = g_type_info_is_zero_terminated(ti);
-	    if (atype == GI_ARRAY_TYPE_ARRAY)
-	      len = ((GArray*)val->v_pointer)->len;
-	    if ((len == -1 && !zero_terminated) ||
-		(atype != GI_ARRAY_TYPE_C && atype != GI_ARRAY_TYPE_ARRAY) ||
-		size == 0)
-	      /* Unsupported kinds of arrays. */
-	      pushed = 0;
-	    else
-	      {
-		/* Create Lua table which will hold the array. */
-		lua_createtable(L, len > 0 ? len : 0, 0);
-                pushed = 1;
-
-		/* Iterate through array elements. */
-		for (index = 0; len < 0 || index < len; index++)
-		  {
-		    /* Get value from specified index. */
-		    GArgument* eval;
-                    gint offset = index * size;
-		    if (atype == GI_ARRAY_TYPE_C)
-		      eval = (GArgument*)((gchar*)val->v_pointer + offset);
-		    else if (atype == GI_ARRAY_TYPE_ARRAY)
-		      eval = (GArgument*)(((GArray*)val->v_pointer)->data +
-                                          offset);
-
-                    /* If the array is zero-terminated, terminate now and don't
-                       include NULL entry. */
-                    if (zero_terminated && eval->v_pointer == NULL)
-		      break;
-
-                    /* Store value into the table. */
-                    if (lgi_val_to_lua(L, eti, transfer, eval) == 1)
-		      lua_rawseti(L, -2, index + 1);
-		  }
-
-                /* If needed, free the array. */
-                if (transfer != GI_TRANSFER_NOTHING)
-                  {
-                    if (atype == GI_ARRAY_TYPE_C)
-                      g_free(val->v_pointer);
-                    else if (atype == GI_ARRAY_TYPE_ARRAY)
-                      g_array_unref((GArray*)val->v_pointer);
-                  }
-	      }
-	    g_base_info_unref(eti);
-	  }
+          pushed = lgi_array_to_lua(L, ti, transfer, val);
 	  break;
 
 	default:
