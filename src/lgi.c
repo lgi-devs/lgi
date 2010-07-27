@@ -140,7 +140,6 @@ lgi_type_get_size(GITypeTag tag)
       TYPE_CASE(SIZE, gsize);
       TYPE_CASE(GTYPE, GType);
       TYPE_CASE(UTF8, gpointer);
-      TYPE_CASE(FILENAME, gpointer);
 
 #undef TYPE_CASE
     default:
@@ -151,42 +150,44 @@ lgi_type_get_size(GITypeTag tag)
 }
 
 static int
-lgi_simple_val_to_lua(lua_State* L, GITypeTag tag, GArgument* val)
+lgi_simple_val_to_lua(lua_State* L, GITypeTag tag, GITransfer transfer,
+                      GArgument* val)
 {
   int pushed = 1;
   switch (tag)
     {
       /* Simple (native) types. */
-#define TYPE_CASE(tag, type, member, push)	\
-      case GI_TYPE_TAG_ ## tag:			\
-	push(L, val->member);			\
+#define TYPE_CASE(tag, type, member, push, free)	\
+      case GI_TYPE_TAG_ ## tag:                         \
+	push(L, val->member);                           \
+        if (transfer != GI_TRANSFER_NOTHING)            \
+          free;                                         \
 	break
 
-      TYPE_CASE(BOOLEAN, gboolean, v_boolean, lua_pushboolean);
-      TYPE_CASE(INT8, gint8, v_int8, lua_pushinteger);
-      TYPE_CASE(UINT8, guint8, v_uint8, lua_pushinteger);
-      TYPE_CASE(INT16, gint16, v_int16, lua_pushinteger);
-      TYPE_CASE(UINT16, guint16, v_uint16, lua_pushinteger);
-      TYPE_CASE(INT32, gint32, v_int32, lua_pushinteger);
-      TYPE_CASE(UINT32, guint32, v_uint32, lua_pushinteger);
-      TYPE_CASE(INT64, gint64, v_int64, lua_pushnumber);
-      TYPE_CASE(UINT64, guint64, v_uint64, lua_pushnumber);
-      TYPE_CASE(FLOAT, gfloat, v_float, lua_pushinteger);
-      TYPE_CASE(DOUBLE, gdouble, v_double, lua_pushinteger);
-      TYPE_CASE(SHORT, gshort, v_short, lua_pushinteger);
-      TYPE_CASE(USHORT, gushort, v_ushort, lua_pushinteger);
-      TYPE_CASE(INT, gint, v_int, lua_pushinteger);
-      TYPE_CASE(UINT, guint, v_uint, lua_pushinteger);
-      TYPE_CASE(LONG, glong, v_long, lua_pushinteger);
-      TYPE_CASE(ULONG, gulong, v_ulong, lua_pushinteger);
-      TYPE_CASE(SSIZE, gssize, v_ssize, lua_pushinteger);
-      TYPE_CASE(SIZE, gsize, v_size, lua_pushinteger);
-      TYPE_CASE(GTYPE, GType, v_long, lua_pushinteger);
-      TYPE_CASE(UTF8, gpointer, v_pointer, lua_pushstring);
-      TYPE_CASE(FILENAME, gpointer, v_pointer, lua_pushstring);
+      TYPE_CASE(BOOLEAN, gboolean, v_boolean, lua_pushboolean, (void)0);
+      TYPE_CASE(INT8, gint8, v_int8, lua_pushinteger, (void)0);
+      TYPE_CASE(UINT8, guint8, v_uint8, lua_pushinteger, (void)0);
+      TYPE_CASE(INT16, gint16, v_int16, lua_pushinteger, (void)0);
+      TYPE_CASE(UINT16, guint16, v_uint16, lua_pushinteger, (void)0);
+      TYPE_CASE(INT32, gint32, v_int32, lua_pushinteger, (void)0);
+      TYPE_CASE(UINT32, guint32, v_uint32, lua_pushinteger, (void)0);
+      TYPE_CASE(INT64, gint64, v_int64, lua_pushnumber, (void)0);
+      TYPE_CASE(UINT64, guint64, v_uint64, lua_pushnumber, (void)0);
+      TYPE_CASE(FLOAT, gfloat, v_float, lua_pushinteger, (void)0);
+      TYPE_CASE(DOUBLE, gdouble, v_double, lua_pushinteger, (void)0);
+      TYPE_CASE(SHORT, gshort, v_short, lua_pushinteger, (void)0);
+      TYPE_CASE(USHORT, gushort, v_ushort, lua_pushinteger, (void)0);
+      TYPE_CASE(INT, gint, v_int, lua_pushinteger, (void)0);
+      TYPE_CASE(UINT, guint, v_uint, lua_pushinteger, (void)0);
+      TYPE_CASE(LONG, glong, v_long, lua_pushinteger, (void)0);
+      TYPE_CASE(ULONG, gulong, v_ulong, lua_pushinteger, (void)0);
+      TYPE_CASE(SSIZE, gssize, v_ssize, lua_pushinteger, (void)0);
+      TYPE_CASE(SIZE, gsize, v_size, lua_pushinteger, (void)0);
+      TYPE_CASE(GTYPE, GType, v_long, lua_pushinteger, (void)0);
+      TYPE_CASE(UTF8, gpointer, v_pointer, lua_pushstring,
+                g_free(val->v_pointer));
 
 #undef TYPE_CASE
-
     default:
       pushed = 0;
     }
@@ -195,10 +196,11 @@ lgi_simple_val_to_lua(lua_State* L, GITypeTag tag, GArgument* val)
 }
 
 static int
-lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GArgument* val)
+lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GITransfer transfer,
+               GArgument* val)
 {
   GITypeTag tag = g_type_info_get_tag(ti);
-  int pushed = lgi_simple_val_to_lua(L, tag, val);
+  int pushed = lgi_simple_val_to_lua(L, tag, transfer, val);
   if (pushed == 0)
     {
       switch (tag)
@@ -215,11 +217,11 @@ lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GArgument* val)
 		/* Resolve enum to the real value. */
 		pushed =
 		  lgi_simple_val_to_lua(L, g_enum_info_get_storage_type(ii),
-					val);
+					GI_TRANSFER_NOTHING, val);
 		break;
 
 	      case GI_INFO_TYPE_STRUCT:
-		/* Create/Get struct object. */
+		/* Create/Get struct object. TODO: Handle 'transfer'. */
 		pushed = struct_new(L, ii, val->v_pointer, NULL);
 		break;
 
@@ -271,9 +273,18 @@ lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GArgument* val)
 		      break;
 
                     /* Store value into the table. */
-                    if (lgi_val_to_lua(L, eti, eval) == 1)
+                    if (lgi_val_to_lua(L, eti, transfer, eval) == 1)
 		      lua_rawseti(L, -2, index + 1);
 		  }
+
+                /* If needed, free the array. */
+                if (transfer != GI_TRANSFER_NOTHING)
+                  {
+                    if (atype == GI_ARRAY_TYPE_C)
+                      g_free(val->v_pointer);
+                    else if (atype == GI_ARRAY_TYPE_ARRAY)
+                      g_array_unref((GArray*)val->v_pointer);
+                  }
 	      }
 	    g_base_info_unref(eti);
 	  }
@@ -322,7 +333,6 @@ lgi_val_from_lua(lua_State* L, int index, GITypeInfo* ti, GArgument* val,
       TYPE_CASE(SIZE, gsize, v_size, luaL_checkinteger(L, index));
       TYPE_CASE(GTYPE, GType, v_long, luaL_checkinteger(L, index));
       TYPE_CASE(UTF8, gpointer, v_pointer, luaL_checkstring(L, index));
-      TYPE_CASE(FILENAME, gpointer, v_pointer, luaL_checkstring(L, index));
 
 #undef TYPE_CASE
 
@@ -380,7 +390,7 @@ lgi_type_new(lua_State* L, GIBaseInfo* ii, GArgument* val)
 	GITypeInfo* ti = g_constant_info_get_type(ii);
 	GArgument val;
 	g_constant_info_get_value(ii, &val);
-	vals = lgi_val_to_lua(L, ti, &val);
+	vals = lgi_val_to_lua(L, ti, GI_TRANSFER_NOTHING, &val);
 	g_base_info_unref(ti);
       }
       break;
@@ -549,7 +559,7 @@ struct_index(lua_State* L)
       GArgument* val;
       GITypeInfo* ti = struct_load_field(L, struct_, name,
 					 GI_FIELD_IS_READABLE, &val);
-      vals = lgi_val_to_lua(L, ti, val);
+      vals = lgi_val_to_lua(L, ti, GI_TRANSFER_NOTHING, val);
       g_base_info_unref(ti);
     }
 
@@ -727,7 +737,9 @@ function_call(lua_State* L)
 
   /* Handle return value. */
   g_callable_info_load_return_type(function->info, &args[0].ti);
-  lua_argi += lgi_val_to_lua(L, &args[0].ti, &args[0].arg);
+  lua_argi += lgi_val_to_lua(L, &args[0].ti,
+                             g_callable_info_get_caller_owns(function->info),
+                             &args[0].arg);
 
   /* Handle parameters. */
   for (i = 0; i < argc; i++, ffi_argi++)
@@ -735,7 +747,9 @@ function_call(lua_State* L)
       if (args[ffi_argi].dir == GI_DIRECTION_OUT ||
 	  args[ffi_argi].dir == GI_DIRECTION_INOUT)
 	lua_argi +=
-	  lgi_val_to_lua(L, &args[ffi_argi].ti, &args[ffi_argi].arg);
+	  lgi_val_to_lua(L, &args[ffi_argi].ti,
+                         g_arg_info_get_ownership_transfer(&args[ffi_argi].ai),
+                         &args[ffi_argi].arg);
     }
 
   return lua_argi;
