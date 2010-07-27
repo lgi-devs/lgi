@@ -219,33 +219,36 @@ lgi_array_to_lua(lua_State* L, GITypeInfo* ti, GITransfer transfer,
   pushed = 1;
 
   /* Iterate through array elements. */
-  for (index = 0; len < 0 || index < len; index++)
+  if (val->v_pointer != NULL)
     {
-      /* Get value from specified index. */
-      GArgument* eval;
-      gint offset = index * size;
-      if (atype == GI_ARRAY_TYPE_C)
-        eval = (GArgument*)((gchar*)val->v_pointer + offset);
-      else if (atype == GI_ARRAY_TYPE_ARRAY)
-        eval = (GArgument*)(((GArray*)val->v_pointer)->data + offset);
+      for (index = 0; len < 0 || index < len; index++)
+	{
+	  /* Get value from specified index. */
+	  GArgument* eval;
+	  gint offset = index * size;
+	  if (atype == GI_ARRAY_TYPE_C)
+	    eval = (GArgument*)((gchar*)val->v_pointer + offset);
+	  else if (atype == GI_ARRAY_TYPE_ARRAY)
+	    eval = (GArgument*)(((GArray*)val->v_pointer)->data + offset);
 
-      /* If the array is zero-terminated, terminate now and don't
-         include NULL entry. */
-      if (zero_terminated && eval->v_pointer == NULL)
-        break;
+	  /* If the array is zero-terminated, terminate now and don't
+	     include NULL entry. */
+	  if (zero_terminated && eval->v_pointer == NULL)
+	    break;
 
-      /* Store value into the table. */
-      if (lgi_val_to_lua(L, eti, transfer, eval) == 1)
-        lua_rawseti(L, -2, index + 1);
-    }
+	  /* Store value into the table. */
+	  if (lgi_val_to_lua(L, eti, transfer, eval) == 1)
+	    lua_rawseti(L, -2, index + 1);
+	}
 
-  /* If needed, free the array. */
-  if (transfer != GI_TRANSFER_NOTHING)
-    {
-      if (atype == GI_ARRAY_TYPE_C)
-        g_free(val->v_pointer);
-      else if (atype == GI_ARRAY_TYPE_ARRAY)
-        g_array_unref((GArray*)val->v_pointer);
+      /* If needed, free the array. */
+      if (transfer != GI_TRANSFER_NOTHING)
+	{
+	  if (atype == GI_ARRAY_TYPE_C)
+	    g_free(val->v_pointer);
+	  else if (atype == GI_ARRAY_TYPE_ARRAY)
+	    g_array_unref((GArray*)val->v_pointer);
+	}
     }
 
   g_base_info_unref(eti);
