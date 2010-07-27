@@ -29,6 +29,7 @@ local gi = {
    IRepository = getface(
       'GIRepository', 'IRepository', '', {
 	 'require', 'find_by_name', 'get_n_infos', 'get_info',
+	 'get_dependencies'
       }),
    IBaseInfo = getface(
       'GIRepository', nil, 'base_info_', {
@@ -76,7 +77,7 @@ local gi = {
 -- Expose 'gi' utility in core namespace.
 core.gi = gi
 
--- Metatable for bitfield tables, resolving arbitraru number to the
+-- Metatable for bitfield tables, resolving arbitrary number to the
 -- table containing symbolic names of contained bits.
 local bitfield_mt = {}
 function bitfield_mt.__index(bitfield, value)
@@ -104,10 +105,10 @@ local typeloader = {}
 -- Loads symbol into the specified package.
 local function loadsymbol(package, symbol)
    -- Lookup baseinfo of requested symbol in the repo.
-   local info = gi.IRepository.find_by_name(nil, package._namespace, symbol)
-   local value
-
+   local info = gi.IRepository.find_by_name(nil, package._info.namespace, 
+					    symbol)
    -- Decide according to symbol type what to do.
+   local value
    if info then
       if not gi.IBaseInfo.is_deprecated(info) then
 	 local type = gi.IBaseInfo.get_type(info)
@@ -116,10 +117,11 @@ local function loadsymbol(package, symbol)
 	 end
       end
       gi.IBaseInfo.unref(info)
+
+      -- Cache the result.
+      package[symbol] = value
    end
 
-   -- Cache the result.
-   package[symbol] = value
    return value
 end
 
@@ -221,34 +223,39 @@ typeloader[gi.IInfoType.OBJECT] =
       return value
    end
 
--- Package uses lazy namespace access, so __index method loads field
--- on-demand (but stores them back, so it is actually caching).
-local package_mt = { __index = loadsymbol }
+-- Loads package, optionally with specified version and returns table which
+-- represents it (usable as package table for Lua package loader).
+function core.load_package(namespace, version)
 
--- Forces loading the whole namespace (which is otherwise loaded
--- lazily).  Useful when one wants to inspect the contents of the
--- whole namespace (i.e. iterate through it).
-local function loadnamespace(namespace)
-   -- Iterate through all items in the namespace.
-   for i = 0, gi.IRepository.get_n_infos(nil, namespace._namespace) -1 do
-      local info = gi.IRepository.get_info(nil, namespace._namespace, i)
-      pcall(loadsymbol, namespace, gi.IBaseInfo.get_name(info))
-      gi.IBaseInfo.unref(info)
+   -- Create package table with _info table containing auxiliary information
+   -- and data for the package.
+   local package = { _info = { namespace = namespace, version = version,
+			       dependencies = {} } }
+
+   -- Load the typelibrary for the namespace.
+   package._info.typelib = assert(gi.IRepository.require(
+				     nil, namespace, version))
+
+   -- Load all package dependencies.
+   for _, dep in pairs(gi.IRepository.get_dependencies(nil, namespace)) do
+      local name, ver = string.match(dep, '(.+)-(.+)')
+      package._info.dependencies[name] = ver
    end
-end
-
-function core.require(namespace, version)
-   local ns = { _namespace = namespace }
-
-   -- Load the repository.
-   ns._typelib = assert(gi.IRepository.require(nil, namespace, version))
 
    -- Install 'force' closure, which forces loading this namespace.
-   ns._force = function()
-		  loadnamespace(ns)
-		  return ns
-	       end
+   package._info.load = 
+      function()
+	 -- Iterate through all items in the namespace and dereference them,
+	 -- which causes them to be loaded in and cached inside the package
+	 -- table.
+	 for i = 0, gi.IRepository.get_n_infos(nil, namespace) -1 do
+	    local info = gi.IRepository.get_info(nil, namespace, i)
+	    pcall(loadsymbol, package, gi.IBaseInfo.get_name(info))
+	    gi.IBaseInfo.unref(info)
+	 end
+      end
 
-   -- Set proper lazy metatable.
-   return setmetatable(ns, package_mt)
+   -- _info table serves also as a metatable for the package.
+   package._info.__index = loadsymbol
+   return setmetatable(package, package._info)
 end
