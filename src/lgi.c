@@ -20,6 +20,7 @@ static int lgi_regkey;
 enum
 {
   LGI_REG_CACHE = 1,
+  LGI_REG_PACKAGES = 2,
   LGI_REG__LAST
 };
 
@@ -920,11 +921,22 @@ luaopen_lgi__core(lua_State* L)
   lua_rawseti(L, -3, LGI_REG_CACHE);
   lua_pop(L, 1);
 
-  /* Pop the registry table. */
+  /* Create packages table. */
+  lua_newtable(L);
+  lua_rawseti(L, -2, LGI_REG_PACKAGES);
+
+  /* Pop registry table. */
   lua_pop(L, 1);
 
   /* Register _core interface. */
   luaL_register(L, "lgi._core", lgi_reg);
+
+  /* Export 'packages' table into core namespace. */
+  lua_rawgeti(L, LUA_REGISTRYINDEX, lgi_regkey);
+  lua_pushstring(L, "packages");
+  lua_rawgeti(L, -2, LGI_REG_PACKAGES);
+  lua_rawset(L, -4);
+  lua_pop(L, 1);
 
   /* In debug version, make our private registry browsable. */
 #ifndef NDEBUG
