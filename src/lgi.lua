@@ -77,7 +77,7 @@ local gi = {
 
 -- Table with all loaded packages.  Its metatable takes care of loading
 -- on-demand.
-local packages = core.packages
+local packages = {}
 
 -- Metatable for bitflags tables, resolving arbitrary number to the
 -- table containing symbolic names of contained bits.
@@ -302,3 +302,4 @@ setmetatable(packages, { __index = load_package })
 -- Expose 'gi' utility and 'packages' table in core namespace, mostly
 -- for debugging purposes.
 core.gi = gi
+core.packages = packages

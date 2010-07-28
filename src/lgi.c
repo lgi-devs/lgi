@@ -20,17 +20,17 @@ static int lgi_regkey;
 enum
 {
   LGI_REG_CACHE = 1,
-  LGI_REG_PACKAGES = 2,
+  LGI_REG_DISPOSE = 2,
   LGI_REG__LAST
 };
 
-/* Creates new userdata representing instance of struct described by
-   'info'. if *newaddr is not NULL, the space for the structure is
-   allocated automatically and filled into *newaddr (addr is ignored
-   in this case).  In any case, returns number of items pushed to the
-   stack.*/
-static int struct_new(lua_State* L, GIStructInfo* info, gpointer addr,
-		      gpointer* newaddr);
+/* Creates new userdata representing instance of struct described by 'info'.
+   Transfer describes, whether the ownership is transferred and gc method
+   releases the object.  The special transfer value is GI_TRANSFER_CONTAINER,
+   which means that the structure is allocated and its address is put into addr
+   (i.e. addr parameter is output in this case). */
+static int struct_new(lua_State* L, GIStructInfo* info, gpointer* addr,
+		      GITransfer transfer);
 
 /* Creates new userdata representing instance of function described by
    'info'. Parses function signature and might report an error if the
@@ -41,8 +41,16 @@ static int function_new(lua_State* L, GIFunctionInfo* info);
 /* 'struct' userdata: wraps structure with its typeinfo. */
 struct ud_struct
 {
+  /* Typeinfo of the structure. */
   GIStructInfo* info;
+
+  /* Address of the structure data. */
   gpointer addr;
+
+  /* Lua reference to dispose function (free, unref, whatever). */
+  int ref_dispose;
+
+  /* If the structure is allocated 'on the stack', its data is here. */
   gchar data[1];
 };
 #define UD_STRUCT "lgi.struct"
@@ -223,6 +231,10 @@ lgi_array_to_lua(lua_State* L, GITypeInfo* ti, GITransfer transfer,
     lua_pushnil(L);
   else
     {
+      /* Transfer type used for elements. */
+      GITransfer realTransfer = (transfer == GI_TRANSFER_EVERYTHING) ?
+        GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING;
+
       /* Create Lua table which will hold the array. */
       lua_createtable(L, len > 0 ? len : 0, 0);
 
@@ -243,11 +255,11 @@ lgi_array_to_lua(lua_State* L, GITypeInfo* ti, GITransfer transfer,
 	    break;
 
 	  /* Store value into the table. */
-	  if (lgi_val_to_lua(L, eti, transfer, eval) == 1)
+	  if (lgi_val_to_lua(L, eti, realTransfer, eval) == 1)
 	    lua_rawseti(L, -2, index + 1);
 	}
 
-      /* If needed, free the array. */
+      /* If needed, free the array itself. */
       if (transfer != GI_TRANSFER_NOTHING)
 	{
 	  if (atype == GI_ARRAY_TYPE_C)
@@ -267,6 +279,7 @@ lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GITransfer transfer,
 {
   GITypeTag tag = g_type_info_get_tag(ti);
   int pushed = lgi_simple_val_to_lua(L, tag, transfer, val);
+
   if (pushed == 0)
     {
       switch (tag)
@@ -287,8 +300,8 @@ lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GITransfer transfer,
 		break;
 
 	      case GI_INFO_TYPE_STRUCT:
-		/* Create/Get struct object. TODO: Handle 'transfer'. */
-		pushed = struct_new(L, ii, val->v_pointer, NULL);
+		/* Create/Get struct object. */
+		pushed = struct_new(L, ii, &val->v_pointer, transfer);
 		break;
 
 	      default:
@@ -394,7 +407,7 @@ lgi_type_new(lua_State* L, GIBaseInfo* ii, GArgument* val)
       break;
 
     case GI_INFO_TYPE_STRUCT:
-      vals = struct_new(L, ii, NULL, &val->v_pointer);
+      vals = struct_new(L, ii, &val->v_pointer, GI_TRANSFER_CONTAINER);
       break;
 
     case GI_INFO_TYPE_CONSTANT:
@@ -453,41 +466,53 @@ lgi_type_error(lua_State* L, GIBaseInfo* info, const char* fmt, ...)
 }
 
 static int
-struct_new(lua_State* L, GIStructInfo* info, gpointer addr, gpointer* newaddr)
+struct_new(lua_State* L, GIStructInfo* info, gpointer* addr,
+           GITransfer transfer)
 {
   int vals;
+  g_assert(addr != NULL);
 
   /* NULL pointer results in 'nil' struct. */
-  if (newaddr == NULL && addr == NULL)
+  if (transfer != GI_TRANSFER_CONTAINER && *addr == NULL)
     {
       lua_pushnil(L);
       vals = 1;
     }
   /* Check, whether struct is already in the cache. */
   else
-    vals = lgi_get_cached(L, addr);
+    vals = lgi_get_cached(L, *addr);
 
   if (vals == 0)
     {
-      /* Not in the cache, create new struct.  Find out how big data
-	 should be allocated. */
+      /* Not in the cache, create new struct.  */
       struct ud_struct* struct_;
       size_t size = G_STRUCT_OFFSET(struct ud_struct, data);
-      if (newaddr != NULL)
-	size += g_struct_info_get_size(info);
+
+      /* Find out how big data should be allocated. */
+      if (transfer == GI_TRANSFER_CONTAINER)
+        size += g_struct_info_get_size(info);
 
       /* Create and initialize new userdata instance. */
       struct_ = lua_newuserdata(L, size);
       luaL_getmetatable(L, UD_STRUCT);
       lua_setmetatable(L, -2);
       struct_->info = g_base_info_ref(info);
-      if (newaddr == NULL)
-	struct_->addr = addr;
-      else
-	{
-	  *newaddr = struct_->data;
-	  struct_->addr = *newaddr;
-	}
+      if (transfer == GI_TRANSFER_CONTAINER)
+        *addr = struct_->data;
+      struct_->addr = *addr;
+
+      /* Load and remember reference to dispose function. */
+      struct_->ref_dispose = LUA_NOREF;
+      if (transfer == GI_TRANSFER_EVERYTHING)
+        {
+          lua_rawgeti(L, LUA_REGISTRYINDEX, lgi_regkey);
+          lua_rawgeti(L, -1, LGI_REG_DISPOSE);
+          lua_concat(L, lgi_type_get_name(L, info));
+          lua_rawget(L, -2);
+          struct_->ref_dispose = luaL_ref(L, -2);
+          lua_pop(L, 2);
+        }
+
       vals = 1;
     }
 
@@ -498,6 +523,20 @@ static int
 struct_gc(lua_State* L)
 {
   struct ud_struct* struct_ = luaL_checkudata(L, 1, UD_STRUCT);
+
+  /* Get dispose function of the object and call it. */
+  lua_rawgeti(L, LUA_REGISTRYINDEX, lgi_regkey);
+  lua_rawgeti(L, -1, LGI_REG_DISPOSE);
+  lua_rawgeti(L, -1, struct_->ref_dispose);
+  if (luaL_getmetafield(L, -1, "__call") == 1)
+    {
+      lua_pushvalue(L, -2);
+      lua_pushvalue(L, 1);
+      lua_pcall(L, 2, 0, 0);
+    }
+
+  /* Free other fields of struct_. */
+  luaL_unref(L, -2, struct_->ref_dispose);
   g_base_info_unref(struct_->info);
   return 0;
 }
@@ -832,8 +871,7 @@ lgi_find(lua_State* L)
     }
 
   /* Create new IBaseInfo structure and return it. */
-  vals = struct_new(L, baseinfo_info, info, NULL);
-  g_base_info_unref(baseinfo_info);
+  vals = struct_new(L, baseinfo_info, (gpointer*)&info, GI_TRANSFER_EVERYTHING);
   return vals;
 }
 
@@ -842,42 +880,24 @@ lgi_get(lua_State* L)
 {
   struct ud_struct* struct_ = luaL_checkudata(L, 1, UD_STRUCT);
   GArgument unused;
-  int vals = 1;
 
   /* Check, that structure is really some usable GIBaseInfo-based. */
-  const gchar* name = g_base_info_get_name(struct_->info);
   if (g_strcmp0(g_base_info_get_namespace(struct_->info),
 		"GIRepository") != 0 ||
-      (g_strcmp0(name, "IBaseInfo") != 0 &&
-       g_strcmp0(name, "IFunctionInfo") != 0 &&
-       g_strcmp0(name, "IConstantInfo") != 0 &&
-       g_strcmp0(name, "IStructInfo") != 0))
+      g_strcmp0(g_base_info_get_name(struct_->info), "IBaseInfo") != 0)
     {
+      /* Incorrect parameter. */
       lua_concat(L, lgi_type_get_name(L, struct_->info));
       return luaL_argerror(L, 1, lua_tostring(L, -1));
     }
 
-  return vals = lgi_type_new(L, struct_->addr, &unused);
-}
-
-static int
-lgi_unref(lua_State* L)
-{
-  struct ud_struct* struct_ = luaL_checkudata(L, 1, UD_STRUCT);
-
-  /* Check, that structure is really some usable GIBaseInfo-based. */
-  if (g_strcmp0(g_base_info_get_namespace(struct_->info),
-		"GIRepository") == 0 &&
-      g_strcmp0(g_base_info_get_name(struct_->info), "IBaseInfo") == 0)
-    g_base_info_unref(struct_->addr);
-
-  return 0;
+  /* Create new instance based on the embedded typeinfo. */
+  return lgi_type_new(L, struct_->addr, &unused);
 }
 
 static const struct luaL_reg lgi_reg[] = {
   { "find", lgi_find },
   { "get", lgi_get },
-  { "unref", lgi_unref },
   { NULL, NULL }
 };
 
@@ -893,6 +913,7 @@ int
 luaopen_lgi__core(lua_State* L)
 {
   GError* err = NULL;
+  GIBaseInfo* info;
 
   /* GLib initializations. */
   g_type_init();
@@ -912,31 +933,37 @@ luaopen_lgi__core(lua_State* L)
 
   /* Create object cache, which has weak values. */
   lua_newtable(L);
+  lua_newtable(L);
   lua_pushstring(L, "__mode");
   lua_pushstring(L, "v");
   lua_rawset(L, -3);
-  lua_newtable(L);
-  lua_pushvalue(L, -2);
   lua_setmetatable(L, -2);
-  lua_rawseti(L, -3, LGI_REG_CACHE);
-  lua_pop(L, 1);
+  lua_rawseti(L, -2, LGI_REG_CACHE);
 
-  /* Create packages table. */
+  /* Create dispose table and prepopulate it with g_base_info_unref for all
+     IBaseInfo. */
   lua_newtable(L);
-  lua_rawseti(L, -2, LGI_REG_PACKAGES);
+  info = g_irepository_find_by_name(NULL, "GIRepository", "base_info_unref");
+  if (info == NULL || function_new(L, info) != 1)
+    luaL_error(L, "unable to resolve GIRepository.base_info_unref");
+  g_base_info_unref(info);
+  info = g_irepository_find_by_name(NULL, "GIRepository", "IBaseInfo");
+  if (info == NULL)
+    luaL_error(L, "unable to resolve GIRepository.IBaseInfo");
+  lua_concat(L, lgi_type_get_name(L, info));
+  lua_pushvalue(L, -2);
+  lua_rawset(L, -4);
+  g_base_info_unref(info);
+
+  /* Pop g_base_info_unref and store dispose table. */
+  lua_pop(L, 1);
+  lua_rawseti(L, -2, LGI_REG_DISPOSE);
 
   /* Pop registry table. */
   lua_pop(L, 1);
 
   /* Register _core interface. */
   luaL_register(L, "lgi._core", lgi_reg);
-
-  /* Export 'packages' table into core namespace. */
-  lua_rawgeti(L, LUA_REGISTRYINDEX, lgi_regkey);
-  lua_pushstring(L, "packages");
-  lua_rawgeti(L, -2, LGI_REG_PACKAGES);
-  lua_rawset(L, -4);
-  lua_pop(L, 1);
 
   /* In debug version, make our private registry browsable. */
 #ifndef NDEBUG
