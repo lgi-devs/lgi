@@ -10,6 +10,7 @@
 local assert, setmetatable, getmetatable, type, pairs, pcall, string, rawget =
       assert, setmetatable, getmetatable, type, pairs, pcall, string, rawget
 local bit = require 'bit'
+local lua_package = package
 
 -- Require core lgi utilities, used during bootstrap.
 local core = require 'lgi._core'
@@ -327,3 +328,15 @@ setmetatable(packages, { __index = load_package })
 -- Expose 'packages' table in core namespace, mostly for debugging
 -- purposes.
 core.packages = packages
+
+-- Install new loader which will load packages on-demand using
+-- 'packages' table.
+lua_package.loaders[#lua_package.loaders + 1] = 
+   function(name)
+      local prefix, name = string.match(name, '(.+)%.(.+)')
+      if prefix == 'lgi' then
+	 local ok, result = pcall(load_package, packages, name)
+	 if not ok or not result then return result end
+	 return function() return result end
+      end
+   end
