@@ -107,6 +107,16 @@ function enum_mt.__index(enum, value)
    end
 end
 
+-- Metatable for objects and interfaces, looks up missing symbols in
+-- inherited tables.
+local inheriting_mt = {}
+function inheriting_mt.__index(class, symbol)
+   for _, inherited in pairs(class._inherits) do
+      local sym = inherited[symbol]
+      if sym then return sym end
+   end
+end
+
 -- Table containing loaders for various GI types, indexed by
 -- gi.IInfoType constants.
 local typeloader = {}
@@ -233,7 +243,7 @@ typeloader[gi.IInfoType.INTERFACE] =
 	 load_by_info(value._inherits, package, pi)
       end
 
-      return value
+      return setmetatable(value, inheriting_mt)
    end
 
 typeloader[gi.IInfoType.OBJECT] =
@@ -263,7 +273,8 @@ typeloader[gi.IInfoType.OBJECT] =
 	 local ii = gi.object_info_get_interface(info, i)
 	 load_by_info(value._inherits, package, ii)
       end
-      return value
+
+      return setmetatable(value, inheriting_mt)
    end
 
 -- Loads package, optionally with specified version and returns table which
