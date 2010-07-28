@@ -156,6 +156,23 @@ typeloader[gi.IInfoType.STRUCT] =
 	    local mi = gi.struct_info_get_method(info, i)
 	    value[gi.base_info_get_name(mi)] = core.get(mi)
 	 end
+
+	 -- Try to find dispose method.  Unfortunately, there seems to
+	 -- be no systematic approach in typelibs, so we go for
+	 -- heuristics; prefer 'unref', then 'free'.  If it does not
+	 -- fit, specific package has to repair setting in its
+	 -- postprocessing hook.
+	 local name = package._info.namespace .. '.' .. 
+	    gi.base_info_get_name(info)
+	 if not core.dispose[name] then
+	    local disposer = value.unref
+	    if disposer then 
+	       value.unref = nil
+	    else disposer = value.free
+	       if disposer then value.free = nil end
+	    end
+	    core.dispose[name] = disposer
+	 end
       end
       return value
    end
