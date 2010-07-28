@@ -17,7 +17,11 @@
 
 /* Key in registry, containing table with al our private data. */
 static int lgi_regkey;
-#define LGI_REG_CACHE 1
+enum
+{
+  LGI_REG_CACHE = 1,
+  LGI_REG__LAST
+};
 
 /* Creates new userdata representing instance of struct described by
    'info'. if *newaddr is not NULL, the space for the structure is
@@ -253,7 +257,7 @@ lgi_array_to_lua(lua_State* L, GITypeInfo* ti, GITransfer transfer,
     }
 
   g_base_info_unref(eti);
-  return pushed;
+  return 1;
 }
 
 static int
@@ -913,7 +917,10 @@ luaopen_lgi__core(lua_State* L)
   lua_pushvalue(L, -2);
   lua_setmetatable(L, -2);
   lua_rawseti(L, -3, LGI_REG_CACHE);
-  lua_pop(L, 2);
+  lua_pop(L, 1);
+
+  /* Pop the registry table. */
+  lua_pop(L, 1);
 
   /* Register _core interface. */
   luaL_register(L, "lgi._core", lgi_reg);
