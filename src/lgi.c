@@ -965,6 +965,13 @@ luaopen_lgi__core(lua_State* L)
   /* Register _core interface. */
   luaL_register(L, "lgi._core", lgi_reg);
 
+  /* Export dispose table into core namespace. */
+  lua_rawgeti(L, LUA_REGISTRYINDEX, lgi_regkey);
+  lua_pushstring(L, "dispose");
+  lua_rawgeti(L, -2, LGI_REG_DISPOSE);
+  lua_rawset(L, -4);
+  lua_pop(L, 1);
+
   /* In debug version, make our private registry browsable. */
 #ifndef NDEBUG
   lua_pushstring(L, "reg");
