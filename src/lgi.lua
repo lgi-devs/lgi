@@ -19,7 +19,6 @@ local function getface(namespace, object, prefix, funs)
    for _, fun in pairs(funs) do
       local info = assert(core.find(namespace, object, prefix .. fun))
       t[fun] = core.get(info)
-      core.unref(info)
    end
    return t
 end
@@ -33,8 +32,7 @@ local gi = {
       }),
    IBaseInfo = getface(
       'GIRepository', nil, 'base_info_', {
-	 'ref', 'unref', 'get_type', 'is_deprecated', 'get_name',
-	 'get_namespace',
+	 'get_type', 'is_deprecated', 'get_name', 'get_namespace',
       }),
 
    IEnumInfo = getface(
@@ -118,7 +116,6 @@ local function load_symbol(package, symbol)
 	    value = typeloader[type](package, info)
 	 end
       end
-      gi.IBaseInfo.unref(info)
 
       -- Cache the result.
       package[symbol] = value
@@ -149,7 +146,6 @@ typeloader[gi.IInfoType.STRUCT] =
 	 for i = 0, gi.IStructInfo.get_n_methods(info) - 1 do
 	    local mi = gi.IStructInfo.get_method(info, i)
 	    value[gi.IBaseInfo.get_name(mi)] = core.get(mi)
-	    gi.IBaseInfo.unref(mi)
 	 end
       end
       return value
@@ -163,7 +159,6 @@ local function load_enum(info, meta)
 	    local mi = gi.IEnumInfo.get_value(info, i)
 	    value[string.upper(gi.IBaseInfo.get_name(mi))] =
 	    gi.IValueInfo.get_value(mi)
-	    gi.IBaseInfo.unref(mi)
 	 end
 
    -- Install metatable providing reverse lookup (i.e name(s) by
@@ -203,7 +198,6 @@ typeloader[gi.IInfoType.INTERFACE] =
       for i = 0, gi.IInterfaceInfo.get_n_methods(info) - 1 do
 	 local mi = gi.IInterfaceInfo.get_method(info, i)
 	 value[gi.IBaseInfo.get_name(mi)] = core.get(mi)
-	 gi.IBaseInfo.unref(mi)
       end
 
       -- Load all prerequisites (i.e. inherited interfaces).
@@ -211,7 +205,6 @@ typeloader[gi.IInfoType.INTERFACE] =
       for i = 0, gi.IInterfaceInfo.get_n_prerequisites(info) - 1 do
 	 local pi = gi.IInterfaceInfo.get_prerequisite(info, i)
 	 load_by_info(value._inherits, package, pi)
-	 gi.IBaseInfo.unref(pi)
       end
 
       return value
@@ -224,14 +217,12 @@ typeloader[gi.IInfoType.OBJECT] =
       for i = 0, gi.IObjectInfo.get_n_methods(info) - 1 do
 	 local mi = gi.IObjectInfo.get_method(info, i)
 	 value[gi.IBaseInfo.get_name(mi)] = core.get(mi)
-	 gi.IBaseInfo.unref(mi)
       end
 
       -- Load all constants.
       for i = 0, gi.IObjectInfo.get_n_constants(info) - 1 do
 	 local mi = gi.IObjectInfo.get_constant(info, i)
 	 value[gi.IBaseInfo.get_name(mi)] = core.get(mi)
-	 gi.IBaseInfo.unref(mi)
       end
 
       -- Load parent object.
@@ -239,14 +230,12 @@ typeloader[gi.IInfoType.OBJECT] =
       local pi = gi.IObjectInfo.get_parent(info)
       if pi then
 	 load_by_info(value._inherits, package, pi)
-	 gi.IBaseInfo.unref(pi)
       end
 
       -- Load implemented interfaces.
       for i = 0, gi.IObjectInfo.get_n_interfaces(info) - 1 do
 	 local ii = gi.IObjectInfo.get_interface(info, i)
 	 load_by_info(value._inherits, package, ii)
-	 gi.IBaseInfo.unref(ii)
       end
       return value
    end
@@ -287,7 +276,6 @@ local function load_package(packages, namespace, version)
 	 for i = 0, gi.IRepository.get_n_infos(nil, namespace) -1 do
 	    local info = gi.IRepository.get_info(nil, namespace, i)
 	    pcall(load_symbol, package, gi.IBaseInfo.get_name(info))
-	    gi.IBaseInfo.unref(info)
 	 end
       end
 
