@@ -1,6 +1,6 @@
 --[[--
 
-    Base lgi bootstrapper.
+    Lgi bootstrapper.
 
     Author: Pavel Holejsovsky
     Licence: MIT
@@ -20,8 +20,7 @@ module 'lgi'
 -- for IBaseInfo records, otherwise the rest of this bootstrap code
 -- will leak them.
 do
-   local unref_info = assert(
-      core.find('GIRepository', nil, 'base_info_unref'))
+   local unref_info = assert(core.find('base_info_unref'))
    local unref = core.get(unref_info)
    core.dispose['GIRepository.IBaseInfo'] = unref;
    
@@ -35,8 +34,8 @@ do
 
    -- Make sure that Typelib structure is also properly freed when
    -- allocated (by bootstrap code).
-   core.dispose['GIRepository.Typelib'] = core.get(
-      assert(core.find('GIRepository', 'Typelib', 'free')))
+   core.dispose['GIRepository.Typelib'] = 
+      core.get(assert(core.find('free', 'Typelib')))
 end
 
 -- Pseudo-package table for GIRepository, populated with basic methods
@@ -44,16 +43,10 @@ end
 -- packages.GIRepository one.
 local gi = {}
 do
-   -- Utility function which loads given symbol from GIRepository with
-   -- given name.
-   local function get_symbol(symbol, object)
-      return core.get(assert(core.find('GIRepository', object, symbol)))
-   end
-
    -- Loads given set of symbols into table.
-   local function get_symbols(into, symbols, name)
+   local function get_symbols(into, symbols, container)
       for _, symbol in pairs(symbols) do
-	 into[symbol] = get_symbol(symbol, name)
+	 into[symbol] = core.get(assert(core.find(symbol, container)))
       end
    end
 

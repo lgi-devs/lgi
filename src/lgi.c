@@ -817,22 +817,17 @@ static const struct luaL_reg function_reg[] = {
 static int
 lgi_find(lua_State* L)
 {
-  GError* err = NULL;
-  const gchar* namespace_ = luaL_checkstring(L, 1);
-  const gchar* object = luaL_optstring(L, 2, NULL);
-  const gchar* symbol = luaL_checkstring(L, 3);
+  const gchar* symbol = luaL_checkstring(L, 1);
+  const gchar* container = luaL_optstring(L, 2, NULL);
   GIBaseInfo *info, *fi, *baseinfo_info;
   int vals = 0;
 
-  /* Make sure that the repository is loaded. */
-  if (g_irepository_require(NULL, namespace_, NULL, 0, &err) == NULL)
-    return lgi_error(L, err);
-
   /* Get information about the symbol. */
-  info = g_irepository_find_by_name(NULL, namespace_, object ? object : symbol);
+  info = g_irepository_find_by_name(NULL, "GIRepository", 
+				    container != NULL ? container : symbol);
 
   /* In case that container was specified, look the symbol up in it. */
-  if (object != NULL && info != NULL)
+  if (container != NULL && info != NULL)
     {
       switch (g_base_info_get_type(info))
 	{
@@ -853,26 +848,30 @@ lgi_find(lua_State* L)
     }
 
   if (info == NULL)
-    {
-      lua_pushboolean(L, 0);
-      lua_pushfstring(L, "symbol %s.%s%s%s not found", namespace_,
-		      object ? object : "", object ? "." : "", symbol);
-      return 2;
-    }
+    goto err;
 
   /* Find IBaseInfo for 'info' instance. */
   baseinfo_info = g_irepository_find_by_name(NULL, "GIRepository", "IBaseInfo");
   if (baseinfo_info == NULL)
     {
-      g_base_info_unref(info);
-      lua_pushboolean(L, 0);
-      lua_pushstring(L, "unable to resolve GIRepository.IBaseInfo");
-      return 2;
+      symbol = "IBaseInfo";
+      container = NULL;
+      goto err;
     }
 
   /* Create new IBaseInfo structure and return it. */
   vals = struct_new(L, baseinfo_info, (gpointer*)&info, GI_TRANSFER_EVERYTHING);
   return vals;
+
+ err:
+  if (info != NULL)
+    g_base_info_unref(info);
+  lua_pushboolean(L, 0);
+  lua_pushfstring(L, "unable to resolve GIRepository.%s%s%s",
+		  container != NULL ? container : "", 
+		  container != NULL ? ":" : "",
+		  symbol);
+  return 2;
 }
 
 static int
@@ -881,7 +880,7 @@ lgi_get(lua_State* L)
   struct ud_struct* struct_ = luaL_checkudata(L, 1, UD_STRUCT);
   GArgument unused;
 
-  /* Check, that structure is really some usable GIBaseInfo-based. */
+  /* Check, that structure is really GIRepository.IBaseInfo */
   if (g_strcmp0(g_base_info_get_namespace(struct_->info),
 		"GIRepository") != 0 ||
       g_strcmp0(g_base_info_get_name(struct_->info), "IBaseInfo") != 0)
