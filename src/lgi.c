@@ -913,7 +913,6 @@ int
 luaopen_lgi__core(lua_State* L)
 {
   GError* err = NULL;
-  GIBaseInfo* info;
 
   /* GLib initializations. */
   g_type_init();
@@ -940,23 +939,8 @@ luaopen_lgi__core(lua_State* L)
   lua_setmetatable(L, -2);
   lua_rawseti(L, -2, LGI_REG_CACHE);
 
-  /* Create dispose table and prepopulate it with g_base_info_unref for all
-     IBaseInfo. */
+  /* Create dispose table. */
   lua_newtable(L);
-  info = g_irepository_find_by_name(NULL, "GIRepository", "base_info_unref");
-  if (info == NULL || function_new(L, info) != 1)
-    luaL_error(L, "unable to resolve GIRepository.base_info_unref");
-  g_base_info_unref(info);
-  info = g_irepository_find_by_name(NULL, "GIRepository", "IBaseInfo");
-  if (info == NULL)
-    luaL_error(L, "unable to resolve GIRepository.IBaseInfo");
-  lua_concat(L, lgi_type_get_name(L, info));
-  lua_pushvalue(L, -2);
-  lua_rawset(L, -4);
-  g_base_info_unref(info);
-
-  /* Pop g_base_info_unref and store dispose table. */
-  lua_pop(L, 1);
   lua_rawseti(L, -2, LGI_REG_DISPOSE);
 
   /* Pop registry table. */
