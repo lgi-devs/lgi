@@ -648,7 +648,8 @@ function_tostring(lua_State* L)
 static int
 function_call(lua_State* L)
 {
-  gint i, argc, argffi, flags, has_self, throws, lua_argi, ti_argi, ffi_argi;
+  gint i, argc, argffi, flags, lua_argi, ti_argi, ffi_argi;
+  gboolean has_self, throws;
   gpointer* args_ptr;
   GError* err = NULL;
   struct ud_function* function = luaL_checkudata(L, 1, UD_FUNCTION);
@@ -743,7 +744,7 @@ function_call(lua_State* L)
 
   /* Process parameters for output. */
   lua_argi = 0;
-  ffi_argi = 1;
+  ffi_argi = has_self ? 2 : 1;
   ti_argi = 0;
 
   /* Handle return value. */
