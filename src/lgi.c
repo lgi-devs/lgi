@@ -25,13 +25,20 @@ enum lgi_reg
   LGI_REG__LAST
 };
 
-/* Creates new userdata representing instance of struct described by 'info'.
-   Transfer describes, whether the ownership is transferred and gc method
-   releases the object.	 The special transfer value is GI_TRANSFER_CONTAINER,
-   which means that the structure is allocated and its address is put into addr
-   (i.e. addr parameter is output in this case). */
-static int struct_new(lua_State* L, GIStructInfo* info, gpointer* addr,
-		      GITransfer transfer);
+/* Creates new userdata representing instance of struct/object described by
+   'info'.  Transfer describes, whether the ownership is transferred and gc
+   method releases the object.  The special transfer value is
+   GI_TRANSFER_CONTAINER, which means that the structure is allocated and its
+   address is put into addr (i.e. addr parameter is output in this case). */
+static int compound_new(lua_State* L, GIBaseInfo* info, gpointer* addr,
+                        GITransfer transfer);
+
+/* Retrieves compound-type parameter from given Lua-stack position, checks,
+   whether it is suitable for requested ii type.  Returns pointer to the
+   compound object, returns NULL if Lua-stack value is nil and optional is
+   TRUE. */
+static gpointer compound_from_lua(lua_State* L, int arg, GIBaseInfo* ii,
+                                  gboolean optional);
 
 /* Creates new userdata representing instance of function described by
    'info'. Parses function signature and might report an error if the
@@ -39,22 +46,21 @@ static int struct_new(lua_State* L, GIStructInfo* info, gpointer* addr,
    items pushed to the stack.*/
 static int function_new(lua_State* L, GIFunctionInfo* info);
 
-/* 'struct' userdata: wraps structure with its typeinfo. */
-struct ud_struct
+/* 'compound' userdata: wraps compound with reference to its repo table. */
+struct ud_compound
 {
-  /* Typeinfo of the structure. */
-  GIStructInfo* info;
-
   /* Address of the structure data. */
   gpointer addr;
 
-  /* Lua reference to dispose function (free, unref, whatever). */
-  int ref_dispose;
+  /* Lua reference to repo table representing this compound. */
+  int ref_repo : 31;
+  int owns : 1;
 
+  /* Flag indicating whether compound is owned. */
   /* If the structure is allocated 'on the stack', its data is here. */
   gchar data[1];
 };
-#define UD_STRUCT "lgi.struct"
+#define UD_COMPOUND "lgi.compound"
 
 /* 'function' userdata: wraps function prepared to be called through ffi. */
 struct ud_function
@@ -167,7 +173,7 @@ static int
 lgi_simple_val_to_lua(lua_State* L, GITypeTag tag, GITransfer transfer,
 		      GArgument* val)
 {
-  int pushed = 1;
+  int vals = 1;
   switch (tag)
     {
       /* Simple (native) types. */
@@ -203,10 +209,10 @@ lgi_simple_val_to_lua(lua_State* L, GITypeTag tag, GITransfer transfer,
 
 #undef TYPE_CASE
     default:
-      pushed = 0;
+      vals = 0;
     }
 
-  return pushed;
+  return vals;
 }
 
 static int lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GITransfer transfer,
@@ -279,9 +285,8 @@ lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GITransfer transfer,
 	       GArgument* val)
 {
   GITypeTag tag = g_type_info_get_tag(ti);
-  int pushed = lgi_simple_val_to_lua(L, tag, transfer, val);
-
-  if (pushed == 0)
+  int vals = lgi_simple_val_to_lua(L, tag, transfer, val);
+  if (vals == 0)
     {
       switch (tag)
 	{
@@ -295,41 +300,42 @@ lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GITransfer transfer,
 	      case GI_INFO_TYPE_ENUM:
 	      case GI_INFO_TYPE_FLAGS:
 		/* Resolve enum to the real value. */
-		pushed =
-		  lgi_simple_val_to_lua(L, g_enum_info_get_storage_type(ii),
-					GI_TRANSFER_NOTHING, val);
+		vals = lgi_simple_val_to_lua(L,
+                                             g_enum_info_get_storage_type(ii),
+                                             GI_TRANSFER_NOTHING, val);
 		break;
 
 	      case GI_INFO_TYPE_STRUCT:
-		/* Create/Get struct object. */
-		pushed = struct_new(L, ii, &val->v_pointer, transfer);
+              case GI_INFO_TYPE_OBJECT:
+		/* Create/Get compound object. */
+		vals = compound_new(L, ii, &val->v_pointer, transfer);
 		break;
 
 	      default:
-		pushed = 0;
+		vals = 0;
 	      }
 	    g_base_info_unref(ii);
 	  }
 	  break;
 
 	case GI_TYPE_TAG_ARRAY:
-	  pushed = lgi_array_to_lua(L, ti, transfer, val);
+	  vals = lgi_array_to_lua(L, ti, transfer, val);
 	  break;
 
 	default:
-	  pushed = 0;
+	  vals = 0;
 	}
     }
 
-  return pushed;
+  return vals;
 }
 
 static int
-lgi_val_from_lua(lua_State* L, int index, GITypeInfo* ti, GArgument* val,
-		 gboolean optional)
+lgi_simple_val_from_lua(lua_State* L, int index, GITypeTag tag,
+                        GArgument* val, gboolean optional)
 {
-  int received = 1;
-  switch (g_type_info_get_tag(ti))
+  int vals = 1;
+  switch (tag)
     {
 #define TYPE_CASE(tag, type, member, expr)			\
       case GI_TYPE_TAG_ ## tag :				\
@@ -362,37 +368,56 @@ lgi_val_from_lua(lua_State* L, int index, GITypeInfo* ti, GArgument* val,
 
 #undef TYPE_CASE
 
-    case GI_TYPE_TAG_INTERFACE:
-      /* Interface types.  Get the interface type and switch according
-	 to the real type. */
-      {
-	GIBaseInfo* ii = g_type_info_get_interface(ti);
-	switch (g_base_info_get_type(ii))
-	  {
-	  case GI_INFO_TYPE_STRUCT:
-	    if (optional && lua_isnoneornil(L, index))
-	      val->v_pointer = 0;
-	    else
-	      {
-		struct ud_struct* struct_ =
-		  luaL_checkudata(L, index, UD_STRUCT);
-		val->v_pointer = struct_->addr;
-	      }
-	    break;
-
-	  default:
-	    received = 0;
-	  }
-	g_base_info_unref(ii);
-      }
-      break;
-
     default:
-      received = 0;
-      break;
+      vals = 0;
     }
 
-  return received;
+  return vals;
+}
+
+static int
+lgi_val_from_lua(lua_State* L, int index, GITypeInfo* ti, GArgument* val,
+		 gboolean optional)
+{
+  GITypeTag tag = g_type_info_get_tag(ti);
+  int vals = lgi_simple_val_from_lua(L, index, tag, val, optional);
+  if (vals == 0)
+    {
+      switch (tag)
+        {
+        case GI_TYPE_TAG_INTERFACE:
+          /* Interface types.  Get the interface type and switch according to
+             the real type. */
+          {
+            GIBaseInfo* ii = g_type_info_get_interface(ti);
+            switch (g_base_info_get_type(ii))
+              {
+              case GI_INFO_TYPE_ENUM:
+              case GI_INFO_TYPE_FLAGS:
+                /* Resolve Lua-number to enum value. */
+                vals = lgi_simple_val_from_lua(L, index,
+                                               g_enum_info_get_storage_type(ii),
+                                               val, optional);
+                break;
+
+              case GI_INFO_TYPE_STRUCT:
+              case GI_INFO_TYPE_OBJECT:
+                val->v_pointer = compound_from_lua(L, index, ii, optional);
+                break;
+
+              default:
+                vals = 0;
+              }
+            g_base_info_unref(ii);
+          }
+          break;
+
+        default:
+          vals = 0;
+        }
+    }
+
+  return vals;
 }
 
 /* Allocates/initializes specified object (if applicable), stores it
@@ -408,7 +433,8 @@ lgi_type_new(lua_State* L, GIBaseInfo* ii, GArgument* val)
       break;
 
     case GI_INFO_TYPE_STRUCT:
-      vals = struct_new(L, ii, &val->v_pointer, GI_TRANSFER_CONTAINER);
+    case GI_INFO_TYPE_OBJECT:
+      vals = compound_new(L, ii, &val->v_pointer, GI_TRANSFER_CONTAINER);
       break;
 
     case GI_INFO_TYPE_CONSTANT:
@@ -466,14 +492,24 @@ lgi_type_error(lua_State* L, GIBaseInfo* info, const char* fmt, ...)
   return luaL_error(L, "%s", lua_tostring(L, -1));
 }
 
+/* Gets repo object for given compound typeinfo. Returns FALSE (and pushes nil)
+   if such object does not exist in the namespace. */
+static gboolean
+compound_find_info(lua_State* L, GIBaseInfo* info)
+{
+  lua_rawgeti(L, LUA_REGISTRYINDEX, lgi_regkey);
+  return !lua_isnil(L, -1);
+}
+
 static int
-struct_new(lua_State* L, GIStructInfo* info, gpointer* addr,
-	   GITransfer transfer)
+compound_new(lua_State* L, GIBaseInfo* info, gpointer* addr,
+             GITransfer transfer)
 {
   int vals;
+  struct ud_compound* compound_;
   g_assert(addr != NULL);
 
-  /* NULL pointer results in 'nil' struct. */
+  /* NULL pointer results in 'nil' compound. */
   if (transfer != GI_TRANSFER_CONTAINER && *addr == NULL)
     {
       lua_pushnil(L);
@@ -483,41 +519,35 @@ struct_new(lua_State* L, GIStructInfo* info, gpointer* addr,
   else
     vals = lgi_get_cached(L, *addr);
 
-  if (vals == 0)
-    {
-      /* Not in the cache, create new struct.  */
-      struct ud_struct* struct_;
-      size_t size = G_STRUCT_OFFSET(struct ud_struct, data);
+  if (vals != 1)
+    return vals;
 
-      /* Find out how big data should be allocated. */
-      if (transfer == GI_TRANSFER_CONTAINER)
-	size += g_struct_info_get_size(info);
+  /* Find out how big data should be allocated. */
+  size_t size = G_STRUCT_OFFSET(struct ud_compound, data);
+  if (transfer == GI_TRANSFER_CONTAINER)
+    size += g_struct_info_get_size(info);
 
-      /* Create and initialize new userdata instance. */
-      struct_ = lua_newuserdata(L, size);
-      luaL_getmetatable(L, UD_STRUCT);
-      lua_setmetatable(L, -2);
-      struct_->info = g_base_info_ref(info);
-      if (transfer == GI_TRANSFER_CONTAINER)
-	*addr = struct_->data;
-      struct_->addr = *addr;
+  /* Create and initialize new userdata instance. */
+  compound_ = lua_newuserdata(L, size);
+  luaL_getmetatable(L, UD_COMPOUND);
+  lua_setmetatable(L, -2);
+  if (transfer == GI_TRANSFER_CONTAINER)
+    *addr = compound_->data;
+  compound_->addr = *addr;
+  compound_->owns = (transfer == GI_TRANSFER_EVERYTHING);
 
-      /* Load and remember reference to dispose function. */
-      struct_->ref_dispose = LUA_NOREF;
-      if (transfer == GI_TRANSFER_EVERYTHING)
-	{
-	  lua_rawgeti(L, LUA_REGISTRYINDEX, lgi_regkey);
-	  lua_rawgeti(L, -1, LGI_REG_DISPOSE);
-	  lua_concat(L, lgi_type_get_name(L, info));
-	  lua_rawget(L, -2);
-	  struct_->ref_dispose = luaL_ref(L, -2);
-	  lua_pop(L, 2);
-	}
-
-      vals = 1;
-    }
-
-  return vals;
+  /* Load and remember reference to repo object. */
+  compound_->ref_repo = LUA_NOREF;
+  lua_rawgeti(L, LUA_REGISTRYINDEX, lgi_regkey);
+  lua_rawgeti(L, -1, LGI_REG_CACHE);
+  lua_rawgeti(L, -2, LGI_REG_REPO);
+  lua_pushstring(L, g_base_info_get_namespace(info));
+  lua_gettable(L, -2);
+  lua_pushstring(L, g_base_info_get_name(info));
+  lua_gettable(L, -2);
+  luaL_ref(L, -4);
+  lua_pop(L, 4);
+  return 1;
 };
 
 static int
