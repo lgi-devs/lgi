@@ -43,50 +43,27 @@ end
 -- on-demand.  Created by C-side bootstrap.
 local packages = core.packages
 
--- Package table for GIRepository, populated with basic methods
--- manually.  Later it will be converted to full-featured package.
-local gi = {}
-core.packages.GIRepository = gi
+-- Loads symbol from specified compound (object, struct or interface).
+-- Recursively looks up inherited elements.
+local function find_in_compound(compound, symbol, inherited)
+   -- Check fields of this compound.
+   for name, container in pairs(compound) do
+      if name ~= '_meta' and name ~= '_inherits' and 
+	 (not inherited or name ~= '_fields') then
+	 local val = container[symbol]
+	 if val then return val end
+      end
+   end
 
--- Loads given set of symbols into table.
-local function get_symbols(into, symbols, container)
-   for _, symbol in pairs(symbols) do
-      into[symbol] = core.get(assert(core.find(symbol, container)))
+   -- Check all inherited compounds.
+   for _, inherited in pairs(rawget(compound, '_inherits') or {}) do
+      local val = find_in_compound(inherited, symbol, true)
+      if val then return val end
    end
 end
 
-gi.IInfoType = {
-   FUNCTION = 1,
-   STRUCT = 3,
-   ENUM = 5,
-   FLAGS = 6,
-   OBJECT = 7,
-   INTERFACE = 8,
-   CONSTANT = 9,
-}
-
-gi.IRepository = {}
-get_symbols(gi.IRepository, { 'require', 'find_by_name', 'get_n_infos',
-			      'get_info', 'get_dependencies',
-			      'get_version', }, 'IRepository')
-get_symbols(
-   gi, {
-      'base_info_get_type', 'base_info_is_deprecated',
-      'base_info_get_name', 'base_info_get_namespace',
-      'enum_info_get_n_values', 'enum_info_get_value',
-      'value_info_get_value',
-      'struct_info_is_gtype_struct',
-      'struct_info_get_n_fields', 'struct_info_get_field',
-      'struct_info_get_n_methods', 'struct_info_get_method',
-      'interface_info_get_n_prerequisites', 'interface_info_get_prerequisite',
-      'interface_info_get_n_methods', 'interface_info_get_method',
-      'interface_info_get_n_constants', 'interface_info_get_constant',
-      'object_info_get_parent',
-      'object_info_get_n_interfaces', 'object_info_get_interface',
-      'object_info_get_n_fields', 'object_info_get_field',
-      'object_info_get_n_methods', 'object_info_get_method',
-      'object_info_get_n_constants', 'object_info_get_constant',
-      })
+-- Metatable for compound repo objects.
+local compound_mt = { __index = find_in_compound }
 
 -- Metatable for bitflags tables, resolving arbitrary number to the
 -- table containing symbolic names of contained bits.
@@ -109,58 +86,72 @@ function enum_mt.__index(enum, value)
    end
 end
 
--- Metatable for _inherits field of objects and interfaces, looks up
--- the symbol in all inherited elements.
-local _inherits_mt = {}
-function _inherits_mt.__index(_inherits, symbol)
-   for _, inherited in pairs(_inherits) do
-      local sym = inherited[symbol]
-      if sym then return sym end
+-- Package table for GIRepository, populated with basic methods
+-- manually.  Later it will be converted to full-featured package.
+local gi = setmetatable({}, compound_mt)
+core.packages.GIRepository = gi
+
+-- Loads given set of symbols into table.
+local function get_symbols(into, symbols, container)
+   for _, symbol in pairs(symbols) do
+      into[symbol] = core.get(assert(core.find(symbol, container)))
    end
 end
 
--- Metatable for all elements which are able to inherit from another
--- elements though _inherits field. Looks up missing symbols in
--- inherited tables.
-local inheriting_mt = {}
-function inheriting_mt.__index(inheriting, symbol)
-   return _inherits[symbol]
-end
+gi._enums = {}
+gi._enums.IInfoType = setmetatable(
+   {
+      FUNCTION = 1,
+      STRUCT = 3,
+      ENUM = 5,
+      FLAGS = 6,
+      OBJECT = 7,
+      INTERFACE = 8,
+      CONSTANT = 9,
+   }, enum_mt)
+
+gi._classes = {}
+gi._classes.IRepository = setmetatable({ _methods = {} }, compound_mt)
+get_symbols(gi._classes.IRepository._methods, 
+	    { 'require', 'find_by_name', 'get_n_infos',
+	      'get_info', 'get_dependencies',
+	      'get_version', }, 'IRepository')
+gi._methods = {}
+get_symbols(
+   gi._methods, {
+      'base_info_get_type', 'base_info_is_deprecated',
+      'base_info_get_name', 'base_info_get_namespace',
+      'enum_info_get_n_values', 'enum_info_get_value',
+      'value_info_get_value',
+      'struct_info_is_gtype_struct',
+      'struct_info_get_n_fields', 'struct_info_get_field',
+      'struct_info_get_n_methods', 'struct_info_get_method',
+      'interface_info_get_n_prerequisites', 'interface_info_get_prerequisite',
+      'interface_info_get_n_methods', 'interface_info_get_method',
+      'interface_info_get_n_constants', 'interface_info_get_constant',
+      'interface_info_get_n_properties', 'interface_info_get_property',
+      'interface_info_get_n_signals', 'interface_info_get_signal',
+      'object_info_get_parent',
+      'object_info_get_n_interfaces', 'object_info_get_interface',
+      'object_info_get_n_fields', 'object_info_get_field',
+      'object_info_get_n_methods', 'object_info_get_method',
+      'object_info_get_n_constants', 'object_info_get_constant',
+      'object_info_get_n_properties', 'object_info_get_property',
+      'object_info_get_n_signals', 'object_info_get_signal',
+      })
 
 -- Table containing loaders for various GI types, indexed by
 -- gi.IInfoType constants.
 local typeloader = {}
 
--- Loads symbol into the specified package.
-local function load_symbol(package, symbol)
-   -- Lookup baseinfo of requested symbol in the repo.
-   local info = gi.IRepository.find_by_name(nil, package._info.namespace,
-					    symbol)
-   -- Decide according to symbol type what to do.
-   local value
-   if info then
-      if not gi.base_info_is_deprecated(info) then
-	 local type = gi.base_info_get_type(info)
-	 if typeloader[type] then
-	    value = typeloader[type](package, info)
-	 end
-      end
-
-      -- Cache the result.
-      package[symbol] = value
-   end
-
-   return value
-end
-
 typeloader[gi.IInfoType.FUNCTION] =
    function(package, info)
-      return core.get(info)
+      return core.get(info), '_functions'
    end
 
 typeloader[gi.IInfoType.CONSTANT] =
    function(package, info)
-      return core.get(info)
+      return core.get(info), '_constants'
    end
 
 local function load_enum(info, meta)
@@ -181,171 +172,210 @@ end
 
 typeloader[gi.IInfoType.ENUM] =
    function(package, info)
-      return load_enum(info, enum_mt)
+      return load_enum(info, enum_mt), '_enums'
    end
 
 typeloader[gi.IInfoType.FLAGS] =
    function(package, info)
-      return load_enum(info, bitflags_mt)
+      return load_enum(info, bitflags_mt), '_enums'
    end
+
+-- Loads all fields, consts, properties, methods and interfaces of given
+-- object.
+local function load_compound(into, info, loads)
+   setmetatable(into, compound_mt)
+   for name, gets in pairs(loads) do
+      for i = 0, gets[1](info) - 1 do
+	 into[name] = into[name] or {}
+	 local mi = gets[2](info, i)
+	 local process = gets[3] or function(c, n, i) c[n] = i end
+	 process(into[name], gi.base_info_get_name(mi), mi)
+      end
+   end
+end
+
+-- Loads structure information into table representing the structure
+local function load_struct(package, into, info)
+   -- Avoid exposing internal structs created for object implementations.
+   if not gi.struct_info_is_gtype_struct(info) then
+      load_compound(
+	 into, info,
+	 {
+	    _methods = { gi.struct_info_get_n_methods, 
+			 gi.struct_info_get_method,
+			 function(c, n, i) c[n] = core.get(i) end },
+	    _fields = { gi.struct_info_get_n_fields,
+			gi.struct_info_get_field },
+	 })
+
+      -- Try to find dispose method. Unfortunately, there seems to
+      -- be no systematic approach in typelibs, so we go for
+      -- heuristics; prefer 'unref', then 'free'.  If it does not
+      -- fit, specific package has to repair setting in its
+      -- postprocessing hook.
+      local name = package._meta.name .. '.' .. gi.base_info_get_name(info)
+      local dispose = core.dispose[name] or into._methods[1]
+      if not dispose then
+	 for _, dispname in pairs { 'unref', 'free' } do
+	    dispose = into._methods[dispname]
+	    if dispose then into._methods[dispname] = nil break end
+	 end
+	 into._methods[1] = dispose
+	 core.dispose[name] = dispose
+      end
+   end
+end
 
 typeloader[gi.IInfoType.STRUCT] =
    function(package, info)
-      local value
-
-      -- Avoid exposing internal structs created for object implementations.
-      if not gi.struct_info_is_gtype_struct(info) then
-	 value = {}
-
-	 -- Create table with all methods of the structure.
-	 for i = 0, gi.struct_info_get_n_methods(info) - 1 do
-	    local mi = gi.struct_info_get_method(info, i)
-	    value[gi.base_info_get_name(mi)] = core.get(mi)
-	 end
-
-	 -- Load all fields.
-	 for i = 0, gi.struct_info_get_n_fields(info) - 1 do
-	    local mi = gi.struct_info_get_field(info, i)
-	    value[gi.base_info_get_name(mi)] = mi
-	 end
-
-	 -- Try to find dispose method.	 Unfortunately, there seems to
-	 -- be no systematic approach in typelibs, so we go for
-	 -- heuristics; prefer 'unref', then 'free'.  If it does not
-	 -- fit, specific package has to repair setting in its
-	 -- postprocessing hook.
-	 local name = package._info.namespace .. '.' ..
-	    gi.base_info_get_name(info)
-	 if not core.dispose[name] then
-	    local disposer = value.unref
-	    if disposer then
-	       value.unref = nil
-	    else disposer = value.free
-	       if disposer then value.free = nil end
-	    end
-	    core.dispose[name] = disposer
-	 end
-      end
-      return value
+      local value = {}
+      load_struct(package, value, info)
+      return value, '_structs'
    end
-
-local function load_by_info(into, package, info)
-   local name = gi.base_info_get_name(info)
-   local namespace = gi.base_info_get_namespace(info)
-   local target_name, value
-   if namespace == package._info.namespace then
-      target_name = name
-      value = package[name]
-   else
-      target_name = namespace .. '.' .. name
-      value = packages[namespace][name]
-   end
-   into[target_name] = value
-end
 
 typeloader[gi.IInfoType.INTERFACE] =
    function(package, info)
-      -- Load all interface methods.
+      -- Load all components of the interface.
       local value = {}
-      for i = 0, gi.interface_info_get_n_methods(info) - 1 do
-	 local mi = gi.interface_info_get_method(info, i)
-	 value[gi.base_info_get_name(mi)] = core.get(mi)
-      end
-
-      -- Load all fields.
-      for i = 0, gi.interface_info_get_n_fields(info) - 1 do
-	 local mi = gi.interface_info_get_field(info, i)
-	 value[gi.base_info_get_name(mi)] = mi
-      end
-
-      -- Load all prerequisites (i.e. inherited interfaces).
-      value._inherits = setmetatable({}, _inherits_mt)
-      for i = 0, gi.interface_info_get_n_prerequisites(info) - 1 do
-	 local pi = gi.interface_info_get_prerequisite(info, i)
-	 load_by_info(value._inherits, package, pi)
-      end
-
-      return setmetatable(value, inheriting_mt)
+      load_compound(
+	 value, info,
+	 {
+	    _properties = { gi.interface_info_get_n_properties,
+			    gi.interface_info_get_property,
+			    function(c, n, i) 
+			       c[string.gsub(n, '%-', '_')] = i
+			    end },
+	    _methods = { gi.interface_info_get_n_methods,
+			 gi.interface_info_get_method,
+			 function(c, n, i) c[n] = core.get(i) end },
+	    _signals = { gi.interface_info_get_n_signals,
+			 gi.interface_info_get_signal },
+	    _constants = { gi.interface_info_get_n_constants,
+			   gi.interface_info_get_constant,
+			   function(c, n, i) c[n] = core.get(i) end },
+	    _inherits = { gi.interface_info_get_n_prerequisites,
+			  gi.interface_info_get_prerequisite,
+			  function(c, n, i)
+			     local ns = gi.base_info_get_namespace(i)
+			     c[ns .. '.' .. n] = packages[ns][n]
+			  end }
+	 })
+      return value, '_interfaces'
    end
+
+-- Loads structure information into table representing the structure
+local function load_class(package, into, info)
+   -- Load components of the object.
+   load_compound(
+      into, info,
+      {
+	 _properties = { gi.object_info_get_n_properties,
+			 gi.object_info_get_property,
+			 function(c, n, i) 
+			    c[string.gsub(n, '%-', '_')] = i
+			 end },
+	 _methods = { gi.object_info_get_n_methods,
+		      gi.object_info_get_method,
+		      function(c, n, i) c[n] = core.get(i) end },
+	 _signals = { gi.object_info_get_n_signals,
+		      gi.object_info_get_signal },
+	 _constants = { gi.object_info_get_n_constants,
+			gi.object_info_get_constant,
+			function(c, n, i) c[n] = core.get(i) end },
+	 _inherits = { gi.object_info_get_n_interfaces,
+		       gi.object_info_get_interface,
+		       function(c, n, i)
+			  local ns = gi.base_info_get_namespace(i)
+			  c[ns .. '.' .. n] = packages[ns][n]
+		       end }
+      })
+
+   -- Add parent (if any) into _inherits table.
+   local parent = gi.object_info_get_parent(info)
+   if parent then
+      local ns, name = gi.base_info_get_namespace(parent), 
+      gi.base_info_get_name(parent)
+      into._inherits = into._inherits or {}
+      into._inherits[ns .. '.' .. name] = packages[ns][name]
+   end
+end
 
 typeloader[gi.IInfoType.OBJECT] =
    function(package, info)
       local value = {}
-      -- Load all object methods.
-      for i = 0, gi.object_info_get_n_methods(info) - 1 do
-	 local mi = gi.object_info_get_method(info, i)
-	 value[gi.base_info_get_name(mi)] = core.get(mi)
-      end
-
-      -- Load all constants.
-      for i = 0, gi.object_info_get_n_constants(info) - 1 do
-	 local mi = gi.object_info_get_constant(info, i)
-	 value[gi.base_info_get_name(mi)] = core.get(mi)
-      end
-
-      -- Load all fields.
-      for i = 0, gi.object_info_get_n_fields(info) - 1 do
-	 local mi = gi.object_info_get_field(info, i)
-	 value[gi.base_info_get_name(mi)] = mi
-      end
-
-      -- Load parent object.
-      value._inherits = setmetatable({}, _inherits_mt)
-      local pi = gi.object_info_get_parent(info)
-      if pi then
-	 load_by_info(value._inherits, package, pi)
-      end
-
-      -- Load implemented interfaces.
-      for i = 0, gi.object_info_get_n_interfaces(info) - 1 do
-	 local ii = gi.object_info_get_interface(info, i)
-	 load_by_info(value._inherits, package, ii)
-      end
-
-      return setmetatable(value, inheriting_mt)
+      load_class(package, value, info)
+      return value, '_classes'
    end
+
+-- Gets symbol of the specified package, if not present yet, tries to load it
+-- on-demand.
+local function get_symbol(package, symbol)
+   -- Check, whether symbol is already loaded.
+   local value = find_in_compound(package, symbol)
+   if value then return value end
+
+   -- Lookup baseinfo of requested symbol in the repo.
+   local info = gi.IRepository.find_by_name(nil, package._meta.name, symbol)
+
+   -- Decide according to symbol type what to do.
+   if info and not gi.base_info_is_deprecated(info) then
+      local infotype = gi.base_info_get_type(info)
+      local loader = typeloader[infotype]
+      if loader then
+	 local category
+	 value, category = assert(loader(package, info))
+
+	 -- Cache the symbol in specified category in the package.
+	 package[category] = package[category] or {}
+	 package[category][symbol] = value
+      end
+   end
+
+   return value
+end
 
 -- Loads package, optionally with specified version and returns table which
 -- represents it (usable as package table for Lua package loader).
 local function load_package(package, namespace, version)
-
-   -- Create package table with _info table containing auxiliary information
-   -- and data for the package.
+   -- If package does not exist yet, create and store it into packages.
    if not package then
       package = {}
       packages[namespace] = package
    end
-   package._info = { namespace = namespace, dependencies = {} }
+
+   -- Create _meta table containing auxiliary information
+   -- and data for the package.  This table also serves as metatable for the
+   -- package, providing __index method for retrieveing namespace content.
+   package._meta = { name = namespace, type = 'NAMESPACE', 
+		     dependencies = {}, __index = get_symbol }
+   setmetatable(package, package._meta)
 
    -- Load the typelibrary for the namespace.
-   package._info.typelib = assert(gi.IRepository.require(
+   package._meta.typelib = assert(gi.IRepository.require(
 				     nil, namespace, version))
-   package._info.version = version or
+   package._meta.version = version or
       gi.IRepository.get_version(nil, namespace)
 
    -- Load all package dependencies.
    for _, dep in pairs(gi.IRepository.get_dependencies(nil, namespace) or {}) do
       local name, version  = string.match(dep, '(.+)-(.+)')
-      package._info.dependencies[name] = load_package(nil, name, version)
+      package._meta.dependencies[name] = load_package(nil, name, version)
    end
 
    -- Install 'resolve' closure, which forces loading this namespace.
    -- Useful when someone wants to inspect what's inside (e.g. some
    -- kind of source browser or smart editor).
-   package._info.resolve =
+   package._meta.resolve =
       function()
 	 -- Iterate through all items in the namespace and dereference them,
 	 -- which causes them to be loaded in and cached inside the package
 	 -- table.
-	 for i = 0, gi.IRepository.get_n_infos(nil, namespace) -1 do
+	 for i = 0, gi.IRepository.get_n_infos(nil, namespace) - 1 do
 	    local info = gi.IRepository.get_info(nil, namespace, i)
-	    pcall(load_symbol, package, gi.base_info_get_name(info))
+	    pcall(get_symbol, package, gi.base_info_get_name(info))
 	 end
       end
-
-   -- _info table serves also as a metatable for the package.
-   package._info.__index = load_symbol
-   return setmetatable(package, package._info)
+   return package
 end
 
 -- Install metatable into packages table, so that on-demand loading works.
@@ -354,8 +384,9 @@ setmetatable(packages, { __index = function(packages, name)
 				   end })
 
 -- Convert our poor-man's GIRepository package into full-featured one.
-gi.IInfoType = nil
+gi._enums.IInfoType = nil
 load_package(gi, 'GIRepository')
+load_class(gi, gi._classes.IRepository, gi.IRepository.find_by_name(nil, gi._meta.name, 'IRepository'))
 
 -- Install new loader which will load packages on-demand using
 -- 'packages' table.
@@ -363,7 +394,7 @@ lua_package.loaders[#lua_package.loaders + 1] =
    function(name)
       local prefix, name = string.match(name, '(.+)%.(.+)')
       if prefix == 'lgi' then
-	 local ok, result = pcall(load_package, packages, name)
+	 local ok, result = pcall(load_package, nil, name)
 	 if not ok or not result then return result end
 	 return function() return result end
       end
