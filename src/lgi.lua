@@ -159,10 +159,15 @@ local function load_enum(info, meta)
 
    -- Load all enum values.
    for i = 0, gi.enum_info_get_n_values(info) - 1 do
-	    local mi = gi.enum_info_get_value(info, i)
-	    value[string.upper(gi.base_info_get_name(mi))] =
-	    gi.value_info_get_value(mi)
-	 end
+      local mi = gi.enum_info_get_value(info, i)
+      local name = string.upper(gi.base_info_get_name(mi))
+      value[name] = gi.value_info_get_value(mi)
+   end
+
+   -- Install _meta table.
+   value._meta = { 
+      name = gi.base_info_get_namespace(info) .. '.' ..
+      gi.base_info_get_name(info), type = gi.base_info_get_type(info) }
 
    -- Install metatable providing reverse lookup (i.e name(s) by
    -- value).
@@ -184,6 +189,9 @@ typeloader[gi.IInfoType.FLAGS] =
 -- object.
 local function load_compound(into, info, loads)
    setmetatable(into, compound_mt)
+   into._meta = { type = gi.base_info_get_type(info),
+		  name = gi.base_info_get_namespace(info) .. '.' ..
+		  gi.base_info_get_name(info) }
    for name, gets in pairs(loads) do
       for i = 0, gets[1](info) - 1 do
 	 into[name] = into[name] or {}
