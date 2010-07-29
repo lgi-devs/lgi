@@ -48,7 +48,7 @@ local repo = core.repo
 local function find_in_compound(compound, symbol, inherited)
    -- Check fields of this compound.
    for name, container in pairs(compound) do
-      if name ~= '_meta' and name ~= '_inherits' and
+      if name ~= 0 and name ~= '_inherits' and
 	 (not inherited or name ~= '_fields') then
 	 local val = container[symbol]
 	 if val then return val end
@@ -154,6 +154,14 @@ typeloader[gi.IInfoType.CONSTANT] =
       return core.get(info), '_constants'
    end
 
+-- Installs _meta table into given compound according to specified info.
+local function add_compound_meta(compound, info)
+   compound[0] = compound[0] or {}
+   compound[0].type = gi.base_info_get_type(info)
+   compound[0].name = gi.base_info_get_namespace(info) .. '.' ..
+   gi.base_info_get_name(info)
+end
+
 local function load_enum(info, meta)
    local value = {}
 
@@ -165,9 +173,7 @@ local function load_enum(info, meta)
    end
 
    -- Install _meta table.
-   value._meta = { 
-      name = gi.base_info_get_namespace(info) .. '.' ..
-      gi.base_info_get_name(info), type = gi.base_info_get_type(info) }
+   add_compound_meta(value, info)
 
    -- Install metatable providing reverse lookup (i.e name(s) by
    -- value).
@@ -189,9 +195,7 @@ typeloader[gi.IInfoType.FLAGS] =
 -- object.
 local function load_compound(into, info, loads)
    setmetatable(into, compound_mt)
-   into._meta = { type = gi.base_info_get_type(info),
-		  name = gi.base_info_get_namespace(info) .. '.' ..
-		  gi.base_info_get_name(info) }
+   add_compound_meta(into, info)
    for name, gets in pairs(loads) do
       for i = 0, gets[1](info) - 1 do
 	 into[name] = into[name] or {}
@@ -221,7 +225,7 @@ local function load_struct(namespace, into, info)
       -- heuristics; prefer 'unref', then 'free'.  If it does not
       -- fit, specific package has to repair setting in its
       -- postprocessing hook.
-      local name = namespace._meta.name .. '.' .. gi.base_info_get_name(info)
+      local name = namespace[0].name .. '.' .. gi.base_info_get_name(info)
       local dispose = core.dispose[name] or into._methods[1]
       if not dispose then
 	 for _, dispname in pairs { 'unref', 'free' } do
@@ -323,7 +327,7 @@ local function get_symbol(namespace, symbol)
    if value then return value end
 
    -- Lookup baseinfo of requested symbol in the repo.
-   local info = gi.IRepository.find_by_name(nil, namespace._meta.name, symbol)
+   local info = gi.IRepository.find_by_name(nil, namespace[0].name, symbol)
 
    -- Decide according to symbol type what to do.
    if info and not gi.base_info_is_deprecated(info) then
@@ -354,25 +358,25 @@ local function load_namespace(namespace, name, version)
    -- Create _meta table containing auxiliary information
    -- and data for the namespace.  This table also serves as metatable for the
    -- namespace, providing __index method for retrieveing namespace content.
-   namespace._meta = { name = name, type = 'NAMESPACE',
+   namespace[0] = { name = name, type = 'NAMESPACE',
 		       dependencies = {}, __index = get_symbol }
-   setmetatable(namespace, namespace._meta)
+   setmetatable(namespace, namespace[0])
 
    -- Load the typelibrary for the namespace.
-   namespace._meta.typelib = assert(gi.IRepository.require(
+   namespace[0].typelib = assert(gi.IRepository.require(
 				       nil, name, version))
-   namespace._meta.version = version or gi.IRepository.get_version(nil, name)
+   namespace[0].version = version or gi.IRepository.get_version(nil, name)
 
    -- Load all namespace dependencies.
    for _, dep in pairs(gi.IRepository.get_dependencies(nil, name) or {}) do
       local name, version  = string.match(dep, '(.+)-(.+)')
-      namespace._meta.dependencies[name] = load_namespace(nil, name, version)
+      namespace[0].dependencies[name] = load_namespace(nil, name, version)
    end
 
    -- Install 'resolve' closure, which forces loading this namespace.
    -- Useful when someone wants to inspect what's inside (e.g. some
    -- kind of source browser or smart editor).
-   namespace._meta.resolve =
+   namespace[0].resolve =
       function()
 	 -- Iterate through all items in the namespace and dereference them,
 	 -- which causes them to be loaded in and cached inside the namespace
@@ -394,7 +398,7 @@ setmetatable(repo, { __index = function(repo, name)
 gi._enums.IInfoType = nil
 load_namespace(gi, 'GIRepository')
 load_class(gi, gi._classes.IRepository,
-	   gi.IRepository.find_by_name(nil, gi._meta.name, 'IRepository'))
+	   gi.IRepository.find_by_name(nil, gi[0].name, 'IRepository'))
 
 -- Install new loader which will load lgi packages on-demand using 'repo'
 -- table.
