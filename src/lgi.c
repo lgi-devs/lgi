@@ -21,7 +21,7 @@ enum lgi_reg
 {
   LGI_REG_CACHE = 1,
   LGI_REG_DISPOSE = 2,
-  LGI_REG_PACKAGES = 3,
+  LGI_REG_REPO = 3,
   LGI_REG__LAST
 };
 
@@ -924,7 +924,7 @@ lgi_create_reg(lua_State* L, enum lgi_reg reg, const char* exportname,
       lua_replace(L, -2);
     }
 
-  /* Assign table into the packages table. */
+  /* Assign table into the exported package table. */
   if (exportname != NULL)
     {
       lua_pushstring(L, exportname);
@@ -970,8 +970,8 @@ luaopen_lgi__core(lua_State* L)
   /* Create dispose table. */
   lgi_create_reg(L, LGI_REG_DISPOSE, "dispose", FALSE);
 
-  /* Create packages table. */
-  lgi_create_reg(L, LGI_REG_PACKAGES, "packages", FALSE);
+  /* Create repo table. */
+  lgi_create_reg(L, LGI_REG_REPO, "repo", FALSE);
 
   /* In debug version, make our private registry browsable. */
 #ifndef NDEBUG

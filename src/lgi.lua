@@ -10,7 +10,7 @@
 local assert, setmetatable, getmetatable, type, pairs, pcall, string, rawget =
       assert, setmetatable, getmetatable, type, pairs, pcall, string, rawget
 local bit = require 'bit'
-local lua_package = package
+local package = package
 
 -- Require core lgi utilities, used during bootstrap.
 local core = require 'lgi._core'
@@ -39,16 +39,16 @@ do
       core.get(assert(core.find('free', 'Typelib')))
 end
 
--- Table with all loaded packages.  Its metatable takes care of loading
--- on-demand.  Created by C-side bootstrap.
-local packages = core.packages
+-- Repository, table with all loaded namespaces.  Its metatable takes care of
+-- loading on-demand.  Created by C-side bootstrap.
+local repo = core.repo
 
 -- Loads symbol from specified compound (object, struct or interface).
 -- Recursively looks up inherited elements.
 local function find_in_compound(compound, symbol, inherited)
    -- Check fields of this compound.
    for name, container in pairs(compound) do
-      if name ~= '_meta' and name ~= '_inherits' and 
+      if name ~= '_meta' and name ~= '_inherits' and
 	 (not inherited or name ~= '_fields') then
 	 local val = container[symbol]
 	 if val then return val end
@@ -86,10 +86,10 @@ function enum_mt.__index(enum, value)
    end
 end
 
--- Package table for GIRepository, populated with basic methods
--- manually.  Later it will be converted to full-featured package.
+-- Namespace table for GIRepository, populated with basic methods
+-- manually.  Later it will be converted to full-featured repo namespace.
 local gi = setmetatable({}, compound_mt)
-core.packages.GIRepository = gi
+core.repo.GIRepository = gi
 
 -- Loads given set of symbols into table.
 local function get_symbols(into, symbols, container)
@@ -112,7 +112,7 @@ gi._enums.IInfoType = setmetatable(
 
 gi._classes = {}
 gi._classes.IRepository = setmetatable({ _methods = {} }, compound_mt)
-get_symbols(gi._classes.IRepository._methods, 
+get_symbols(gi._classes.IRepository._methods,
 	    { 'require', 'find_by_name', 'get_n_infos',
 	      'get_info', 'get_dependencies',
 	      'get_version', }, 'IRepository')
@@ -145,12 +145,12 @@ get_symbols(
 local typeloader = {}
 
 typeloader[gi.IInfoType.FUNCTION] =
-   function(package, info)
+   function(namespace, info)
       return core.get(info), '_functions'
    end
 
 typeloader[gi.IInfoType.CONSTANT] =
-   function(package, info)
+   function(namespace, info)
       return core.get(info), '_constants'
    end
 
@@ -171,12 +171,12 @@ local function load_enum(info, meta)
 end
 
 typeloader[gi.IInfoType.ENUM] =
-   function(package, info)
+   function(namespace, info)
       return load_enum(info, enum_mt), '_enums'
    end
 
 typeloader[gi.IInfoType.FLAGS] =
-   function(package, info)
+   function(namespace, info)
       return load_enum(info, bitflags_mt), '_enums'
    end
 
@@ -195,13 +195,13 @@ local function load_compound(into, info, loads)
 end
 
 -- Loads structure information into table representing the structure
-local function load_struct(package, into, info)
+local function load_struct(namespace, into, info)
    -- Avoid exposing internal structs created for object implementations.
    if not gi.struct_info_is_gtype_struct(info) then
       load_compound(
 	 into, info,
 	 {
-	    _methods = { gi.struct_info_get_n_methods, 
+	    _methods = { gi.struct_info_get_n_methods,
 			 gi.struct_info_get_method,
 			 function(c, n, i) c[n] = core.get(i) end },
 	    _fields = { gi.struct_info_get_n_fields,
@@ -213,7 +213,7 @@ local function load_struct(package, into, info)
       -- heuristics; prefer 'unref', then 'free'.  If it does not
       -- fit, specific package has to repair setting in its
       -- postprocessing hook.
-      local name = package._meta.name .. '.' .. gi.base_info_get_name(info)
+      local name = namespace._meta.name .. '.' .. gi.base_info_get_name(info)
       local dispose = core.dispose[name] or into._methods[1]
       if not dispose then
 	 for _, dispname in pairs { 'unref', 'free' } do
@@ -227,14 +227,14 @@ local function load_struct(package, into, info)
 end
 
 typeloader[gi.IInfoType.STRUCT] =
-   function(package, info)
+   function(namespace, info)
       local value = {}
-      load_struct(package, value, info)
+      load_struct(namespace, value, info)
       return value, '_structs'
    end
 
 typeloader[gi.IInfoType.INTERFACE] =
-   function(package, info)
+   function(namespace, info)
       -- Load all components of the interface.
       local value = {}
       load_compound(
@@ -242,7 +242,7 @@ typeloader[gi.IInfoType.INTERFACE] =
 	 {
 	    _properties = { gi.interface_info_get_n_properties,
 			    gi.interface_info_get_property,
-			    function(c, n, i) 
+			    function(c, n, i)
 			       c[string.gsub(n, '%-', '_')] = i
 			    end },
 	    _methods = { gi.interface_info_get_n_methods,
@@ -257,21 +257,21 @@ typeloader[gi.IInfoType.INTERFACE] =
 			  gi.interface_info_get_prerequisite,
 			  function(c, n, i)
 			     local ns = gi.base_info_get_namespace(i)
-			     c[ns .. '.' .. n] = packages[ns][n]
+			     c[ns .. '.' .. n] = repo[ns][n]
 			  end }
 	 })
       return value, '_interfaces'
    end
 
 -- Loads structure information into table representing the structure
-local function load_class(package, into, info)
+local function load_class(namespace, into, info)
    -- Load components of the object.
    load_compound(
       into, info,
       {
 	 _properties = { gi.object_info_get_n_properties,
 			 gi.object_info_get_property,
-			 function(c, n, i) 
+			 function(c, n, i)
 			    c[string.gsub(n, '%-', '_')] = i
 			 end },
 	 _methods = { gi.object_info_get_n_methods,
@@ -286,36 +286,36 @@ local function load_class(package, into, info)
 		       gi.object_info_get_interface,
 		       function(c, n, i)
 			  local ns = gi.base_info_get_namespace(i)
-			  c[ns .. '.' .. n] = packages[ns][n]
+			  c[ns .. '.' .. n] = repo[ns][n]
 		       end }
       })
 
    -- Add parent (if any) into _inherits table.
    local parent = gi.object_info_get_parent(info)
    if parent then
-      local ns, name = gi.base_info_get_namespace(parent), 
+      local ns, name = gi.base_info_get_namespace(parent),
       gi.base_info_get_name(parent)
       into._inherits = into._inherits or {}
-      into._inherits[ns .. '.' .. name] = packages[ns][name]
+      into._inherits[ns .. '.' .. name] = repo[ns][name]
    end
 end
 
 typeloader[gi.IInfoType.OBJECT] =
-   function(package, info)
+   function(namespace, info)
       local value = {}
-      load_class(package, value, info)
+      load_class(namespace, value, info)
       return value, '_classes'
    end
 
--- Gets symbol of the specified package, if not present yet, tries to load it
+-- Gets symbol of the specified namespace, if not present yet, tries to load it
 -- on-demand.
-local function get_symbol(package, symbol)
+local function get_symbol(namespace, symbol)
    -- Check, whether symbol is already loaded.
-   local value = find_in_compound(package, symbol)
+   local value = find_in_compound(namespace, symbol)
    if value then return value end
 
    -- Lookup baseinfo of requested symbol in the repo.
-   local info = gi.IRepository.find_by_name(nil, package._meta.name, symbol)
+   local info = gi.IRepository.find_by_name(nil, namespace._meta.name, symbol)
 
    -- Decide according to symbol type what to do.
    if info and not gi.base_info_is_deprecated(info) then
@@ -323,78 +323,78 @@ local function get_symbol(package, symbol)
       local loader = typeloader[infotype]
       if loader then
 	 local category
-	 value, category = assert(loader(package, info))
+	 value, category = assert(loader(namespace, info))
 
-	 -- Cache the symbol in specified category in the package.
-	 package[category] = package[category] or {}
-	 package[category][symbol] = value
+	 -- Cache the symbol in specified category in the namespace.
+	 namespace[category] = namespace[category] or {}
+	 namespace[category][symbol] = value
       end
    end
 
    return value
 end
 
--- Loads package, optionally with specified version and returns table which
+-- Loads namespace, optionally with specified version and returns table which
 -- represents it (usable as package table for Lua package loader).
-local function load_package(package, namespace, version)
+local function load_namespace(namespace, name, version)
    -- If package does not exist yet, create and store it into packages.
-   if not package then
-      package = {}
-      packages[namespace] = package
+   if not namespace then
+      namespace = {}
+      repo[name] = namespace
    end
 
    -- Create _meta table containing auxiliary information
-   -- and data for the package.  This table also serves as metatable for the
-   -- package, providing __index method for retrieveing namespace content.
-   package._meta = { name = namespace, type = 'NAMESPACE', 
-		     dependencies = {}, __index = get_symbol }
-   setmetatable(package, package._meta)
+   -- and data for the namespace.  This table also serves as metatable for the
+   -- namespace, providing __index method for retrieveing namespace content.
+   namespace._meta = { name = name, type = 'NAMESPACE',
+		       dependencies = {}, __index = get_symbol }
+   setmetatable(namespace, namespace._meta)
 
    -- Load the typelibrary for the namespace.
-   package._meta.typelib = assert(gi.IRepository.require(
-				     nil, namespace, version))
-   package._meta.version = version or
-      gi.IRepository.get_version(nil, namespace)
+   namespace._meta.typelib = assert(gi.IRepository.require(
+				       nil, name, version))
+   namespace._meta.version = version or gi.IRepository.get_version(nil, name)
 
-   -- Load all package dependencies.
-   for _, dep in pairs(gi.IRepository.get_dependencies(nil, namespace) or {}) do
+   -- Load all namespace dependencies.
+   for _, dep in pairs(gi.IRepository.get_dependencies(nil, name) or {}) do
       local name, version  = string.match(dep, '(.+)-(.+)')
-      package._meta.dependencies[name] = load_package(nil, name, version)
+      namespace._meta.dependencies[name] = load_namespace(nil, name, version)
    end
 
    -- Install 'resolve' closure, which forces loading this namespace.
    -- Useful when someone wants to inspect what's inside (e.g. some
    -- kind of source browser or smart editor).
-   package._meta.resolve =
+   namespace._meta.resolve =
       function()
 	 -- Iterate through all items in the namespace and dereference them,
-	 -- which causes them to be loaded in and cached inside the package
+	 -- which causes them to be loaded in and cached inside the namespace
 	 -- table.
-	 for i = 0, gi.IRepository.get_n_infos(nil, namespace) - 1 do
-	    local info = gi.IRepository.get_info(nil, namespace, i)
-	    pcall(get_symbol, package, gi.base_info_get_name(info))
+	 for i = 0, gi.IRepository.get_n_infos(nil, name) - 1 do
+	    local info = gi.IRepository.get_info(nil, name, i)
+	    pcall(get_symbol, namespace, gi.base_info_get_name(info))
 	 end
       end
-   return package
+   return namespace
 end
 
--- Install metatable into packages table, so that on-demand loading works.
-setmetatable(packages, { __index = function(packages, name)
-				      return load_package(nil, name)
+-- Install metatable into repo table, so that on-demand loading works.
+setmetatable(repo, { __index = function(repo, name)
+				      return load_namespace(nil, name)
 				   end })
 
--- Convert our poor-man's GIRepository package into full-featured one.
+-- Convert our poor-man's GIRepository namespace into full-featured one.
 gi._enums.IInfoType = nil
-load_package(gi, 'GIRepository')
-load_class(gi, gi._classes.IRepository, gi.IRepository.find_by_name(nil, gi._meta.name, 'IRepository'))
+load_namespace(gi, 'GIRepository')
+load_class(gi, gi._classes.IRepository,
+	   gi.IRepository.find_by_name(nil, gi._meta.name, 'IRepository'))
 
--- Install new loader which will load packages on-demand using
--- 'packages' table.
-lua_package.loaders[#lua_package.loaders + 1] =
+-- Install new loader which will load lgi packages on-demand using 'repo'
+-- table.
+package.loaders[#package.loaders + 1] =
    function(name)
-      local prefix, name = string.match(name, '(.+)%.(.+)')
+      local prefix, name = string.match(name, '(.-)%.(.+)')
       if prefix == 'lgi' then
-	 local ok, result = pcall(load_package, nil, name)
+	 local ok, result = pcall(function() return repo[name] end)
 	 if not ok or not result then return result end
 	 return function() return result end
       end
