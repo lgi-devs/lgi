@@ -17,16 +17,17 @@
 
 /* Key in registry, containing table with al our private data. */
 static int lgi_regkey;
-enum
+enum lgi_reg
 {
   LGI_REG_CACHE = 1,
   LGI_REG_DISPOSE = 2,
+  LGI_REG_PACKAGES = 3,
   LGI_REG__LAST
 };
 
 /* Creates new userdata representing instance of struct described by 'info'.
    Transfer describes, whether the ownership is transferred and gc method
-   releases the object.  The special transfer value is GI_TRANSFER_CONTAINER,
+   releases the object.	 The special transfer value is GI_TRANSFER_CONTAINER,
    which means that the structure is allocated and its address is put into addr
    (i.e. addr parameter is output in this case). */
 static int struct_new(lua_State* L, GIStructInfo* info, gpointer* addr,
@@ -164,17 +165,17 @@ lgi_type_get_size(GITypeTag tag)
 
 static int
 lgi_simple_val_to_lua(lua_State* L, GITypeTag tag, GITransfer transfer,
-                      GArgument* val)
+		      GArgument* val)
 {
   int pushed = 1;
   switch (tag)
     {
       /* Simple (native) types. */
 #define TYPE_CASE(tag, type, member, push, free)	\
-      case GI_TYPE_TAG_ ## tag:                         \
-	push(L, val->member);                           \
-        if (transfer != GI_TRANSFER_NOTHING)            \
-          free;                                         \
+      case GI_TYPE_TAG_ ## tag:				\
+	push(L, val->member);				\
+	if (transfer != GI_TRANSFER_NOTHING)		\
+	  free;						\
 	break
 
       TYPE_CASE(BOOLEAN, gboolean, v_boolean, lua_pushboolean, (void)0);
@@ -198,7 +199,7 @@ lgi_simple_val_to_lua(lua_State* L, GITypeTag tag, GITransfer transfer,
       TYPE_CASE(SIZE, gsize, v_size, lua_pushinteger, (void)0);
       TYPE_CASE(GTYPE, GType, v_long, lua_pushinteger, (void)0);
       TYPE_CASE(UTF8, gpointer, v_pointer, lua_pushstring,
-                g_free(val->v_pointer));
+		g_free(val->v_pointer));
 
 #undef TYPE_CASE
     default:
@@ -209,11 +210,11 @@ lgi_simple_val_to_lua(lua_State* L, GITypeTag tag, GITransfer transfer,
 }
 
 static int lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GITransfer transfer,
-                          GArgument* val);
+			  GArgument* val);
 
 static int
 lgi_array_to_lua(lua_State* L, GITypeInfo* ti, GITransfer transfer,
-                 GArgument* val)
+		 GArgument* val)
 {
   /* Find out the array length and element size. TODO: Handle 'length'
      variant.*/
@@ -233,7 +234,7 @@ lgi_array_to_lua(lua_State* L, GITypeInfo* ti, GITransfer transfer,
     {
       /* Transfer type used for elements. */
       GITransfer realTransfer = (transfer == GI_TRANSFER_EVERYTHING) ?
-        GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING;
+	GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING;
 
       /* Create Lua table which will hold the array. */
       lua_createtable(L, len > 0 ? len : 0, 0);
@@ -275,7 +276,7 @@ lgi_array_to_lua(lua_State* L, GITypeInfo* ti, GITransfer transfer,
 
 static int
 lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GITransfer transfer,
-               GArgument* val)
+	       GArgument* val)
 {
   GITypeTag tag = g_type_info_get_tag(ti);
   int pushed = lgi_simple_val_to_lua(L, tag, transfer, val);
@@ -312,7 +313,7 @@ lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GITransfer transfer,
 	  break;
 
 	case GI_TYPE_TAG_ARRAY:
-          pushed = lgi_array_to_lua(L, ti, transfer, val);
+	  pushed = lgi_array_to_lua(L, ti, transfer, val);
 	  break;
 
 	default:
@@ -467,7 +468,7 @@ lgi_type_error(lua_State* L, GIBaseInfo* info, const char* fmt, ...)
 
 static int
 struct_new(lua_State* L, GIStructInfo* info, gpointer* addr,
-           GITransfer transfer)
+	   GITransfer transfer)
 {
   int vals;
   g_assert(addr != NULL);
@@ -490,7 +491,7 @@ struct_new(lua_State* L, GIStructInfo* info, gpointer* addr,
 
       /* Find out how big data should be allocated. */
       if (transfer == GI_TRANSFER_CONTAINER)
-        size += g_struct_info_get_size(info);
+	size += g_struct_info_get_size(info);
 
       /* Create and initialize new userdata instance. */
       struct_ = lua_newuserdata(L, size);
@@ -498,20 +499,20 @@ struct_new(lua_State* L, GIStructInfo* info, gpointer* addr,
       lua_setmetatable(L, -2);
       struct_->info = g_base_info_ref(info);
       if (transfer == GI_TRANSFER_CONTAINER)
-        *addr = struct_->data;
+	*addr = struct_->data;
       struct_->addr = *addr;
 
       /* Load and remember reference to dispose function. */
       struct_->ref_dispose = LUA_NOREF;
       if (transfer == GI_TRANSFER_EVERYTHING)
-        {
-          lua_rawgeti(L, LUA_REGISTRYINDEX, lgi_regkey);
-          lua_rawgeti(L, -1, LGI_REG_DISPOSE);
-          lua_concat(L, lgi_type_get_name(L, info));
-          lua_rawget(L, -2);
-          struct_->ref_dispose = luaL_ref(L, -2);
-          lua_pop(L, 2);
-        }
+	{
+	  lua_rawgeti(L, LUA_REGISTRYINDEX, lgi_regkey);
+	  lua_rawgeti(L, -1, LGI_REG_DISPOSE);
+	  lua_concat(L, lgi_type_get_name(L, info));
+	  lua_rawget(L, -2);
+	  struct_->ref_dispose = luaL_ref(L, -2);
+	  lua_pop(L, 2);
+	}
 
       vals = 1;
     }
@@ -790,8 +791,8 @@ function_call(lua_State* L)
   /* Handle return value. */
   g_callable_info_load_return_type(function->info, &args[0].ti);
   lua_argi += lgi_val_to_lua(L, &args[0].ti,
-                             g_callable_info_get_caller_owns(function->info),
-                             &args[0].arg);
+			     g_callable_info_get_caller_owns(function->info),
+			     &args[0].arg);
 
   /* Handle parameters. */
   for (i = 0; i < argc; i++, ffi_argi++)
@@ -800,8 +801,8 @@ function_call(lua_State* L)
 	  args[ffi_argi].dir == GI_DIRECTION_INOUT)
 	lua_argi +=
 	  lgi_val_to_lua(L, &args[ffi_argi].ti,
-                         g_arg_info_get_ownership_transfer(&args[ffi_argi].ai),
-                         &args[ffi_argi].arg);
+			 g_arg_info_get_ownership_transfer(&args[ffi_argi].ai),
+			 &args[ffi_argi].arg);
     }
 
   return lua_argi;
@@ -823,7 +824,7 @@ lgi_find(lua_State* L)
   int vals = 0;
 
   /* Get information about the symbol. */
-  info = g_irepository_find_by_name(NULL, "GIRepository", 
+  info = g_irepository_find_by_name(NULL, "GIRepository",
 				    container != NULL ? container : symbol);
 
   /* In case that container was specified, look the symbol up in it. */
@@ -868,7 +869,7 @@ lgi_find(lua_State* L)
     g_base_info_unref(info);
   lua_pushboolean(L, 0);
   lua_pushfstring(L, "unable to resolve GIRepository.%s%s%s",
-		  container != NULL ? container : "", 
+		  container != NULL ? container : "",
 		  container != NULL ? ":" : "",
 		  symbol);
   return 2;
@@ -908,6 +909,33 @@ lgi_reg_udata(lua_State* L, const struct luaL_reg* reg, const char* meta)
   lua_pop(L, 1);
 }
 
+static void
+lgi_create_reg(lua_State* L, enum lgi_reg reg, const char* exportname,
+	       gboolean withmeta)
+{
+  /* Create the table. */
+  lua_newtable(L);
+
+  /* Assign the metatable, if requested. */
+  if (withmeta)
+    {
+      lua_pushvalue(L, -2);
+      lua_setmetatable(L, -2);
+      lua_replace(L, -2);
+    }
+
+  /* Assign table into the packages table. */
+  if (exportname != NULL)
+    {
+      lua_pushstring(L, exportname);
+      lua_pushvalue(L, -2);
+      lua_rawset(L, -5);
+    }
+
+  /* Assign new table into registry and leave it out from stack. */
+  lua_rawseti(L, -2, reg);
+}
+
 int
 luaopen_lgi__core(lua_State* L)
 {
@@ -923,6 +951,9 @@ luaopen_lgi__core(lua_State* L)
   lgi_reg_udata(L, struct_reg, UD_STRUCT);
   lgi_reg_udata(L, function_reg, UD_FUNCTION);
 
+  /* Register _core interface. */
+  luaL_register(L, "lgi._core", lgi_reg);
+
   /* Prepare registry table (avoid polluting global registry, make
      private table in it instead.*/
   lua_newtable(L);
@@ -931,36 +962,25 @@ luaopen_lgi__core(lua_State* L)
 
   /* Create object cache, which has weak values. */
   lua_newtable(L);
-  lua_newtable(L);
   lua_pushstring(L, "__mode");
   lua_pushstring(L, "v");
   lua_rawset(L, -3);
-  lua_setmetatable(L, -2);
-  lua_rawseti(L, -2, LGI_REG_CACHE);
+  lgi_create_reg(L, LGI_REG_CACHE, NULL, TRUE);
 
   /* Create dispose table. */
-  lua_newtable(L);
-  lua_rawseti(L, -2, LGI_REG_DISPOSE);
+  lgi_create_reg(L, LGI_REG_DISPOSE, "dispose", FALSE);
 
-  /* Pop registry table. */
-  lua_pop(L, 1);
-
-  /* Register _core interface. */
-  luaL_register(L, "lgi._core", lgi_reg);
-
-  /* Export dispose table into core namespace. */
-  lua_rawgeti(L, LUA_REGISTRYINDEX, lgi_regkey);
-  lua_pushstring(L, "dispose");
-  lua_rawgeti(L, -2, LGI_REG_DISPOSE);
-  lua_rawset(L, -4);
-  lua_pop(L, 1);
+  /* Create packages table. */
+  lgi_create_reg(L, LGI_REG_PACKAGES, "packages", FALSE);
 
   /* In debug version, make our private registry browsable. */
 #ifndef NDEBUG
   lua_pushstring(L, "reg");
-  lua_rawgeti(L, LUA_REGISTRYINDEX, lgi_regkey);
-  lua_rawset(L, -3);
+  lua_pushvalue(L, -2);
+  lua_rawset(L, -4);
 #endif
 
+  /* Pop the registry table, return registration table. */
+  lua_pop(L, 1);
   return 1;
 }

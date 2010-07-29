@@ -24,7 +24,7 @@ do
    local unref_info = assert(core.find('base_info_unref'))
    local unref = core.get(unref_info)
    core.dispose['GIRepository.IBaseInfo'] = unref;
-   
+
    -- Note that this is the only place when we need to explicitely
    -- unref any IBaseInfo, because unref_info was created *before*
    -- core.dispose contained unref handler for it.
@@ -35,9 +35,13 @@ do
 
    -- Make sure that Typelib structure is also properly freed when
    -- allocated (by bootstrap code).
-   core.dispose['GIRepository.Typelib'] = 
+   core.dispose['GIRepository.Typelib'] =
       core.get(assert(core.find('free', 'Typelib')))
 end
+
+-- Table with all loaded packages.  Its metatable takes care of loading
+-- on-demand.  Created by C-side bootstrap.
+local packages = core.packages
 
 -- Pseudo-package table for GIRepository, populated with basic methods
 -- manually.  Used only during bootstrap, not the same as
@@ -62,30 +66,26 @@ do
    }
 
    gi.IRepository = {}
-   get_symbols(gi.IRepository, { 'require', 'find_by_name', 'get_n_infos', 
-				 'get_info', 'get_dependencies', 
+   get_symbols(gi.IRepository, { 'require', 'find_by_name', 'get_n_infos',
+				 'get_info', 'get_dependencies',
 				 'get_version', }, 'IRepository')
-   get_symbols(gi, { 'base_info_get_type', 'base_info_is_deprecated', 
+   get_symbols(gi, { 'base_info_get_type', 'base_info_is_deprecated',
 		     'base_info_get_name', 'base_info_get_namespace', })
    get_symbols(gi, { 'enum_info_get_n_values', 'enum_info_get_value', })
    get_symbols(gi, { 'value_info_get_value', })
-   get_symbols(gi, { 'struct_info_get_n_methods', 'struct_info_get_method', 
+   get_symbols(gi, { 'struct_info_get_n_methods', 'struct_info_get_method',
 		     'struct_info_is_gtype_struct', })
-   get_symbols(gi, { 'interface_info_get_n_prerequisites', 
+   get_symbols(gi, { 'interface_info_get_n_prerequisites',
 		     'interface_info_get_prerequisite',
-		     'interface_info_get_n_methods', 
-		     'interface_info_get_method', 
-		     'interface_info_get_n_constants', 
+		     'interface_info_get_n_methods',
+		     'interface_info_get_method',
+		     'interface_info_get_n_constants',
 		     'interface_info_get_constant', })
-   get_symbols(gi, { 'object_info_get_parent', 'object_info_get_n_interfaces', 
-		     'object_info_get_interface', 'object_info_get_n_methods', 
-		     'object_info_get_method', 'object_info_get_n_constants', 
+   get_symbols(gi, { 'object_info_get_parent', 'object_info_get_n_interfaces',
+		     'object_info_get_interface', 'object_info_get_n_methods',
+		     'object_info_get_method', 'object_info_get_n_constants',
 		     'object_info_get_constant', })
 end
-
--- Table with all loaded packages.  Its metatable takes care of loading
--- on-demand.
-local packages = {}
 
 -- Metatable for bitflags tables, resolving arbitrary number to the
 -- table containing symbolic names of contained bits.
@@ -168,16 +168,16 @@ typeloader[gi.IInfoType.STRUCT] =
 	    value[gi.base_info_get_name(mi)] = core.get(mi)
 	 end
 
-	 -- Try to find dispose method.  Unfortunately, there seems to
+	 -- Try to find dispose method.	 Unfortunately, there seems to
 	 -- be no systematic approach in typelibs, so we go for
 	 -- heuristics; prefer 'unref', then 'free'.  If it does not
 	 -- fit, specific package has to repair setting in its
 	 -- postprocessing hook.
-	 local name = package._info.namespace .. '.' .. 
+	 local name = package._info.namespace .. '.' ..
 	    gi.base_info_get_name(info)
 	 if not core.dispose[name] then
 	    local disposer = value.unref
-	    if disposer then 
+	    if disposer then
 	       value.unref = nil
 	    else disposer = value.free
 	       if disposer then value.free = nil end
@@ -325,13 +325,9 @@ end
 -- Install metatable into packages table, so that on-demand loading works.
 setmetatable(packages, { __index = load_package })
 
--- Expose 'packages' table in core namespace, mostly for debugging
--- purposes.
-core.packages = packages
-
 -- Install new loader which will load packages on-demand using
 -- 'packages' table.
-lua_package.loaders[#lua_package.loaders + 1] = 
+lua_package.loaders[#lua_package.loaders + 1] =
    function(name)
       local prefix, name = string.match(name, '(.+)%.(.+)')
       if prefix == 'lgi' then
