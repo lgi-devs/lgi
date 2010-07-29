@@ -43,10 +43,10 @@ end
 -- on-demand.  Created by C-side bootstrap.
 local packages = core.packages
 
--- Pseudo-package table for GIRepository, populated with basic methods
--- manually.  Used only during bootstrap, not the same as
--- packages.GIRepository one.
+-- Package table for GIRepository, populated with basic methods
+-- manually.  Later it will be converted to full-featured package.
 local gi = {}
+core.packages.GIRepository = gi
 
 -- Loads given set of symbols into table.
 local function get_symbols(into, symbols, container)
@@ -279,16 +279,15 @@ typeloader[gi.IInfoType.OBJECT] =
 
 -- Loads package, optionally with specified version and returns table which
 -- represents it (usable as package table for Lua package loader).
-local function load_package(packages, namespace, version)
-
-   -- If the package is already loaded, just use it.
-   local package = rawget(packages, namespace)
-   if package then return package end
+local function load_package(package, namespace, version)
 
    -- Create package table with _info table containing auxiliary information
    -- and data for the package.
-   package = { _info = { namespace = namespace, dependencies = {} } }
-   packages[namespace] = package
+   if not package then
+      package = {}
+      packages[namespace] = package
+   end
+   package._info = { namespace = namespace, dependencies = {} }
 
    -- Load the typelibrary for the namespace.
    package._info.typelib = assert(gi.IRepository.require(
@@ -299,7 +298,7 @@ local function load_package(packages, namespace, version)
    -- Load all package dependencies.
    for _, dep in pairs(gi.IRepository.get_dependencies(nil, namespace) or {}) do
       local name, version  = string.match(dep, '(.+)-(.+)')
-      package._info.dependencies[name] = load_package(packages, name, version)
+      package._info.dependencies[name] = load_package(nil, name, version)
    end
 
    -- Install 'resolve' closure, which forces loading this namespace.
@@ -322,7 +321,13 @@ local function load_package(packages, namespace, version)
 end
 
 -- Install metatable into packages table, so that on-demand loading works.
-setmetatable(packages, { __index = load_package })
+setmetatable(packages, { __index = function(packages, name)
+				      return load_package(nil, name)
+				   end })
+
+-- Convert our poor-man's GIRepository package into full-featured one.
+gi.IInfoType = nil
+load_package(gi, 'GIRepository')
 
 -- Install new loader which will load packages on-demand using
 -- 'packages' table.
