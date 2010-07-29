@@ -107,14 +107,22 @@ function enum_mt.__index(enum, value)
    end
 end
 
--- Metatable for objects and interfaces, looks up missing symbols in
--- inherited tables.
-local inheriting_mt = {}
-function inheriting_mt.__index(class, symbol)
-   for _, inherited in pairs(class._inherits) do
+-- Metatable for _inherits field of objects and interfaces, looks up
+-- the symbol in all inherited elements.
+local _inherits_mt = {}
+function _inherits_mt.__index(_inherits, symbol)
+   for _, inherited in pairs(_inherits) do
       local sym = inherited[symbol]
       if sym then return sym end
    end
+end
+
+-- Metatable for all elements which are able to inherit from another
+-- elements though _inherits field. Looks up missing symbols in
+-- inherited tables.
+local inheriting_mt = {}
+function inheriting_mt.__index(inheriting, symbol)
+   return _inherits[symbol]
 end
 
 -- Table containing loaders for various GI types, indexed by
@@ -237,7 +245,7 @@ typeloader[gi.IInfoType.INTERFACE] =
       end
 
       -- Load all prerequisites (i.e. inherited interfaces).
-      value._inherits = {}
+      value._inherits = setmetatable({}, _inherits_mt)
       for i = 0, gi.interface_info_get_n_prerequisites(info) - 1 do
 	 local pi = gi.interface_info_get_prerequisite(info, i)
 	 load_by_info(value._inherits, package, pi)
@@ -262,7 +270,7 @@ typeloader[gi.IInfoType.OBJECT] =
       end
 
       -- Load parent object.
-      value._inherits = {}
+      value._inherits = setmetatable({}, _inherits_mt)
       local pi = gi.object_info_get_parent(info)
       if pi then
 	 load_by_info(value._inherits, package, pi)
