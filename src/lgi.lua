@@ -47,45 +47,44 @@ local packages = core.packages
 -- manually.  Used only during bootstrap, not the same as
 -- packages.GIRepository one.
 local gi = {}
-do
-   -- Loads given set of symbols into table.
-   local function get_symbols(into, symbols, container)
-      for _, symbol in pairs(symbols) do
-	 into[symbol] = core.get(assert(core.find(symbol, container)))
-      end
+
+-- Loads given set of symbols into table.
+local function get_symbols(into, symbols, container)
+   for _, symbol in pairs(symbols) do
+      into[symbol] = core.get(assert(core.find(symbol, container)))
    end
-
-   gi.IInfoType = {
-      FUNCTION = 1,
-      STRUCT = 3,
-      ENUM = 5,
-      FLAGS = 6,
-      OBJECT = 7,
-      INTERFACE = 8,
-      CONSTANT = 9,
-   }
-
-   gi.IRepository = {}
-   get_symbols(gi.IRepository, { 'require', 'find_by_name', 'get_n_infos',
-				 'get_info', 'get_dependencies',
-				 'get_version', }, 'IRepository')
-   get_symbols(gi, { 'base_info_get_type', 'base_info_is_deprecated',
-		     'base_info_get_name', 'base_info_get_namespace', })
-   get_symbols(gi, { 'enum_info_get_n_values', 'enum_info_get_value', })
-   get_symbols(gi, { 'value_info_get_value', })
-   get_symbols(gi, { 'struct_info_get_n_methods', 'struct_info_get_method',
-		     'struct_info_is_gtype_struct', })
-   get_symbols(gi, { 'interface_info_get_n_prerequisites',
-		     'interface_info_get_prerequisite',
-		     'interface_info_get_n_methods',
-		     'interface_info_get_method',
-		     'interface_info_get_n_constants',
-		     'interface_info_get_constant', })
-   get_symbols(gi, { 'object_info_get_parent', 'object_info_get_n_interfaces',
-		     'object_info_get_interface', 'object_info_get_n_methods',
-		     'object_info_get_method', 'object_info_get_n_constants',
-		     'object_info_get_constant', })
 end
+
+gi.IInfoType = {
+   FUNCTION = 1,
+   STRUCT = 3,
+   ENUM = 5,
+   FLAGS = 6,
+   OBJECT = 7,
+   INTERFACE = 8,
+   CONSTANT = 9,
+}
+
+gi.IRepository = {}
+get_symbols(gi.IRepository, { 'require', 'find_by_name', 'get_n_infos',
+			      'get_info', 'get_dependencies',
+			      'get_version', }, 'IRepository')
+get_symbols(
+   gi, {
+      'base_info_get_type', 'base_info_is_deprecated',
+      'base_info_get_name', 'base_info_get_namespace',
+      'enum_info_get_n_values', 'enum_info_get_value',
+      'value_info_get_value',
+      'struct_info_is_gtype_struct',
+      'struct_info_get_n_methods', 'struct_info_get_method',
+      'interface_info_get_n_prerequisites', 'interface_info_get_prerequisite',
+      'interface_info_get_n_methods', 'interface_info_get_method',
+      'interface_info_get_n_constants', 'interface_info_get_constant',
+      'object_info_get_parent',
+      'object_info_get_n_interfaces', 'object_info_get_interface',
+      'object_info_get_n_methods', 'object_info_get_method',
+      'object_info_get_n_constants', 'object_info_get_constant',
+      })
 
 -- Metatable for bitflags tables, resolving arbitrary number to the
 -- table containing symbolic names of contained bits.
