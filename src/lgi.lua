@@ -76,12 +76,14 @@ get_symbols(
       'enum_info_get_n_values', 'enum_info_get_value',
       'value_info_get_value',
       'struct_info_is_gtype_struct',
+      'struct_info_get_n_fields', 'struct_info_get_field',
       'struct_info_get_n_methods', 'struct_info_get_method',
       'interface_info_get_n_prerequisites', 'interface_info_get_prerequisite',
       'interface_info_get_n_methods', 'interface_info_get_method',
       'interface_info_get_n_constants', 'interface_info_get_constant',
       'object_info_get_parent',
       'object_info_get_n_interfaces', 'object_info_get_interface',
+      'object_info_get_n_fields', 'object_info_get_field',
       'object_info_get_n_methods', 'object_info_get_method',
       'object_info_get_n_constants', 'object_info_get_constant',
       })
@@ -161,40 +163,6 @@ typeloader[gi.IInfoType.CONSTANT] =
       return core.get(info)
    end
 
-typeloader[gi.IInfoType.STRUCT] =
-   function(package, info)
-      local value
-
-      -- Avoid exposing internal structs created for object implementations.
-      if not gi.struct_info_is_gtype_struct(info) then
-	 value = {}
-
-	 -- Create table with all methods of the structure.
-	 for i = 0, gi.struct_info_get_n_methods(info) - 1 do
-	    local mi = gi.struct_info_get_method(info, i)
-	    value[gi.base_info_get_name(mi)] = core.get(mi)
-	 end
-
-	 -- Try to find dispose method.	 Unfortunately, there seems to
-	 -- be no systematic approach in typelibs, so we go for
-	 -- heuristics; prefer 'unref', then 'free'.  If it does not
-	 -- fit, specific package has to repair setting in its
-	 -- postprocessing hook.
-	 local name = package._info.namespace .. '.' ..
-	    gi.base_info_get_name(info)
-	 if not core.dispose[name] then
-	    local disposer = value.unref
-	    if disposer then
-	       value.unref = nil
-	    else disposer = value.free
-	       if disposer then value.free = nil end
-	    end
-	    core.dispose[name] = disposer
-	 end
-      end
-      return value
-   end
-
 local function load_enum(info, meta)
    local value = {}
 
@@ -221,6 +189,46 @@ typeloader[gi.IInfoType.FLAGS] =
       return load_enum(info, bitflags_mt)
    end
 
+typeloader[gi.IInfoType.STRUCT] =
+   function(package, info)
+      local value
+
+      -- Avoid exposing internal structs created for object implementations.
+      if not gi.struct_info_is_gtype_struct(info) then
+	 value = {}
+
+	 -- Create table with all methods of the structure.
+	 for i = 0, gi.struct_info_get_n_methods(info) - 1 do
+	    local mi = gi.struct_info_get_method(info, i)
+	    value[gi.base_info_get_name(mi)] = core.get(mi)
+	 end
+
+	 -- Load all fields.
+	 for i = 0, gi.struct_info_get_n_fields(info) - 1 do
+	    local mi = gi.struct_info_get_field(info, i)
+	    value[gi.base_info_get_name(mi)] = mi
+	 end
+
+	 -- Try to find dispose method.	 Unfortunately, there seems to
+	 -- be no systematic approach in typelibs, so we go for
+	 -- heuristics; prefer 'unref', then 'free'.  If it does not
+	 -- fit, specific package has to repair setting in its
+	 -- postprocessing hook.
+	 local name = package._info.namespace .. '.' ..
+	    gi.base_info_get_name(info)
+	 if not core.dispose[name] then
+	    local disposer = value.unref
+	    if disposer then
+	       value.unref = nil
+	    else disposer = value.free
+	       if disposer then value.free = nil end
+	    end
+	    core.dispose[name] = disposer
+	 end
+      end
+      return value
+   end
+
 local function load_by_info(into, package, info)
    local name = gi.base_info_get_name(info)
    local namespace = gi.base_info_get_namespace(info)
@@ -242,6 +250,12 @@ typeloader[gi.IInfoType.INTERFACE] =
       for i = 0, gi.interface_info_get_n_methods(info) - 1 do
 	 local mi = gi.interface_info_get_method(info, i)
 	 value[gi.base_info_get_name(mi)] = core.get(mi)
+      end
+
+      -- Load all fields.
+      for i = 0, gi.interface_info_get_n_fields(info) - 1 do
+	 local mi = gi.interface_info_get_field(info, i)
+	 value[gi.base_info_get_name(mi)] = mi
       end
 
       -- Load all prerequisites (i.e. inherited interfaces).
@@ -267,6 +281,12 @@ typeloader[gi.IInfoType.OBJECT] =
       for i = 0, gi.object_info_get_n_constants(info) - 1 do
 	 local mi = gi.object_info_get_constant(info, i)
 	 value[gi.base_info_get_name(mi)] = core.get(mi)
+      end
+
+      -- Load all fields.
+      for i = 0, gi.object_info_get_n_fields(info) - 1 do
+	 local mi = gi.object_info_get_field(info, i)
+	 value[gi.base_info_get_name(mi)] = mi
       end
 
       -- Load parent object.
