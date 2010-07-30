@@ -59,9 +59,10 @@ struct ud_compound
 
   /* Lua reference to repo table representing this compound. */
   int ref_repo : 31;
-  int owns : 1;
 
   /* Flag indicating whether compound is owned. */
+  int owns : 1;
+
   /* If the structure is allocated 'on the stack', its data is here. */
   gchar data[1];
 };
@@ -409,17 +410,18 @@ lgi_val_from_lua(lua_State* L, int index, GITypeInfo* ti, GArgument* val,
 	      case GI_INFO_TYPE_STRUCT:
 	      case GI_INFO_TYPE_OBJECT:
 		val->v_pointer = compound_get(L, index, ii, optional);
+		vals = 1;
 		break;
 
 	      default:
-		vals = 0;
+		break;
 	      }
 	    g_base_info_unref(ii);
 	  }
 	  break;
 
 	default:
-	  vals = 0;
+	  break;
 	}
     }
 
@@ -561,14 +563,13 @@ compound_new(lua_State* L, GIBaseInfo* info, gpointer* addr,
   compound->ref_repo = LUA_REFNIL;
   lua_rawgeti(L, LUA_REGISTRYINDEX, lgi_regkey);
   lua_rawgeti(L, -1, LGI_REG_REPO);
-  lua_replace(L, -2);
   lua_getfield(L, -1, g_base_info_get_namespace(info));
   if (!lua_isnil(L, -1))
     {
       lua_getfield(L, -1, g_base_info_get_name(info));
-      compound->ref_repo = luaL_ref(L, -3);
+      compound->ref_repo = luaL_ref(L, -4);
     }
-  lua_pop(L, 1);
+  lua_pop(L, 2);
 
   if (transfer == GI_TRANSFER_CONTAINER)
     *addr = compound->data;
