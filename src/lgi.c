@@ -575,7 +575,7 @@ compound_new(lua_State* L, GIBaseInfo* info, gpointer* addr,
   lua_getfield(L, -1, g_base_info_get_namespace(info));
   if (!lua_isnil(L, -1))
     {
-      lua_getfield(L, -2, g_base_info_get_name(info));
+      lua_getfield(L, -1, g_base_info_get_name(info));
       if (!lua_isnil(L, -1))
 	{
 	  lua_rawgeti(L, -4, LGI_REG_TYPEINFO);
