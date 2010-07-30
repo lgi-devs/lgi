@@ -520,6 +520,8 @@ compound_callmeta(lua_State* L, const char* metaname, int nargs, int nrets)
   if (!lua_isnil(L, -1))
     {
       /* Perform the call, insert function before arguments. */
+      g_debug("compound_gc(%p): invoking meta `%s'",
+              lua_touserdata(L, - nargs - 1), metaname);
       lua_insert(L, - nargs - 1);
       lua_call(L, nargs, nrets);
       called = TRUE;
@@ -527,6 +529,8 @@ compound_callmeta(lua_State* L, const char* metaname, int nargs, int nrets)
   else
     {
       /* Cleanup the stack, as if the call would happen. */
+      g_debug("compound_gc(%p): meta `%s' not present",
+              lua_touserdata(L, - nargs - 1), metaname);
       lua_pop(L, nargs + 1);
       if (nrets != 0)
 	lua_settop(L, lua_gettop(L) + nrets);
@@ -921,7 +925,8 @@ function_call(lua_State* L)
   } *args;
 
   /* Check general function characteristics. */
-  g_debug("function_call: %s", g_base_info_get_name(function->info));
+  g_debug("function_call(%p): %s", function,
+          g_base_info_get_name(function->info));
   flags = g_function_info_get_flags(function->info);
   has_self = (flags & GI_FUNCTION_IS_METHOD) != 0 &&
     (flags & GI_FUNCTION_IS_CONSTRUCTOR) == 0;
@@ -1091,6 +1096,39 @@ lgi_log(lua_State* L)
                                      lgi_log_levels) + 2);
   g_log(G_LOG_DOMAIN, level, "%s", message);
   return 0;  
+}
+
+const char* lgi_sd(lua_State *L)
+{
+  int i;
+  gchar* msg;
+  int top = lua_gettop(L);
+  for (i = 1; i <= top; i++) {  /* repeat for each level */
+    int t = lua_type(L, i);
+    gchar* item, *nmsg;
+    switch (t) {
+    case LUA_TSTRING:  /* strings */
+      item = g_strdup_printf("`%s'", lua_tostring(L, i));
+      break;
+    
+    case LUA_TBOOLEAN:  /* booleans */
+      item = g_strdup_printf(lua_toboolean(L, i) ? "true" : "false");
+      break;
+    
+    case LUA_TNUMBER:  /* numbers */
+      item = g_strdup_printf("%g", lua_tonumber(L, i));
+      break;
+    
+    default:  /* other values */
+      item = g_strdup_printf("%s(%p)", lua_typename(L, t), lua_topointer(L, i));
+      break;
+    }
+    nmsg = g_strconcat(msg, " ", item, NULL);
+    g_free(msg);
+    g_free(item);
+    msg = nmsg;
+  }
+  return msg;
 }
 #endif
 
