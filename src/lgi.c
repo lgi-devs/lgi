@@ -518,8 +518,6 @@ compound_callmeta(lua_State* L, const char* metaname, int nargs, int nrets)
   if (!lua_isnil(L, -1))
     {
       /* Perform the call, insert function before arguments. */
-      g_debug("compound_callmeta(%p): invoking `%s'",
-              lua_touserdata(L, - nargs - 1), metaname);
       lua_insert(L, - nargs - 1);
       lua_call(L, nargs, nrets);
       called = TRUE;
@@ -527,8 +525,6 @@ compound_callmeta(lua_State* L, const char* metaname, int nargs, int nrets)
   else
     {
       /* Cleanup the stack, as if the call would happen. */
-      g_debug("compound_callmeta(%p): `%s' not present",
-              lua_touserdata(L, - nargs - 1), metaname);
       lua_pop(L, nargs + 1);
       if (nrets != 0)
 	lua_settop(L, lua_gettop(L) + nrets);
@@ -544,8 +540,6 @@ compound_new(lua_State* L, GIBaseInfo* info, gpointer* addr,
   int vals;
   struct ud_compound* compound;
   g_assert(addr != NULL);
-  g_debug("compound_new(%s.%s, %p)", g_base_info_get_namespace(info),
-          g_base_info_get_name(info), *addr);
 
   /* NULL pointer results in 'nil' compound. */
   if (transfer != GI_TRANSFER_CONTAINER && *addr == NULL)
@@ -567,7 +561,6 @@ compound_new(lua_State* L, GIBaseInfo* info, gpointer* addr,
 
   /* Create and initialize new userdata instance. */
   compound = lua_newuserdata(L, size);
-  g_debug("compound_new() got assigned %p", compound);
   luaL_getmetatable(L, UD_COMPOUND);
   lua_setmetatable(L, -2);
 
@@ -625,7 +618,6 @@ static int
 compound_gc(lua_State* L)
 {
   struct ud_compound* compound = compound_load(L, 1);
-  g_debug("compound_gc(%p)", compound);
   if (compound->owns)
     {
       GIInfoType type;
@@ -726,22 +718,16 @@ compound_get(lua_State* L, int index, GIBaseInfo* ii, gboolean optional)
       lua_pushstring(L, ".");
       lua_pushstring(L, g_base_info_get_name(ii));
       lua_concat(L, 3);
-      compound = compound_load(L, -1);
-      if (!lua_isnil(L, -1))
-	{
-	  lua_getfield(L, -1, "name");
-	  if (g_strcmp0(lua_tostring(L, -1), lua_tostring(L, -4)) != 0)
-	    {
-	      if (!optional)
-		luaL_argerror(L, index, lua_tostring(L, -1));
-	      else
-		compound = NULL;
-	    }
-
-	  lua_pop(L, 1);
-	}
-
-      lua_pop(L, 3);
+      compound = compound_load(L, index);
+      lua_getfield(L, -1, "name");
+      if (g_strcmp0(lua_tostring(L, -1), lua_tostring(L, -4)) != 0)
+      {
+          if (!optional)
+              luaL_argerror(L, index, lua_tostring(L, -1));
+          else
+              compound = NULL;
+      }
+      lua_pop(L, 4);
     }
 
   return compound != NULL ? compound->addr : NULL;
