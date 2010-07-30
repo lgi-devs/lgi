@@ -17,6 +17,13 @@ local core = require 'lgi._core'
 
 module 'lgi'
 
+-- Prepare logging support.
+core.log = core.log or function() end
+local function log(format, ...) core.log(format:format(...), 'debug') end
+local function loginfo(format, ...) core.log(format:format(...), 'info') end
+
+loginfo 'starting Lgi bootstrap'
+
 -- Repository, table with all loaded namespaces.  Its metatable takes care of
 -- loading on-demand.  Created by C-side bootstrap.
 local repo = core.repo
@@ -105,6 +112,8 @@ do
    unref(free_info)
 end
 
+loginfo 'base_info and Typelib dispose/acquire installed'
+
 -- Loads given set of symbols into table.
 local function get_symbols(into, symbols, container)
    for _, symbol in pairs(symbols) do
@@ -141,6 +150,8 @@ get_symbols(
       'object_info_get_n_properties', 'object_info_get_property',
       'object_info_get_n_signals', 'object_info_get_signal',
       })
+
+loginfo 'repo.GIRepository pre-populated'
 
 -- Table containing loaders for various GI types, indexed by
 -- gi.IInfoType constants.
@@ -328,6 +339,7 @@ local function get_symbol(namespace, symbol)
    if value then return value end
 
    -- Lookup baseinfo of requested symbol in the repo.
+   log('loading symbol %s.%s', namespace[0].name, symbol)
    local info = gi.IRepository.find_by_name(nil, namespace[0].name, symbol)
 
    -- Decide according to symbol type what to do.
@@ -351,6 +363,7 @@ end
 -- represents it (usable as package table for Lua package loader).
 local function load_namespace(namespace, name, version)
    -- If package does not exist yet, create and store it into packages.
+   log('loading namespace %s', name)
    if not namespace then
       namespace = {}
       repo[name] = namespace
@@ -396,6 +409,7 @@ setmetatable(repo, { __index = function(repo, name)
 				   end })
 
 -- Convert our poor-man's GIRepository namespace into full-featured one.
+loginfo 'upgrading repo.GIRepository to full-featured namespace'
 gi._enums.IInfoType = nil
 load_namespace(gi, 'GIRepository')
 load_class(gi, gi._classes.IRepository,
@@ -403,6 +417,7 @@ load_class(gi, gi._classes.IRepository,
 
 -- Install new loader which will load lgi packages on-demand using 'repo'
 -- table.
+loginfo 'installing custom Lua package loader'
 package.loaders[#package.loaders + 1] =
    function(name)
       local prefix, name = string.match(name, '(.-)%.(.+)')

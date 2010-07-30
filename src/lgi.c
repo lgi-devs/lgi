@@ -542,6 +542,8 @@ compound_new(lua_State* L, GIBaseInfo* info, gpointer* addr,
   int vals;
   struct ud_compound* compound;
   g_assert(addr != NULL);
+  g_debug("compound_new(%s.%s, %p)", g_base_info_get_namespace(info),
+          g_base_info_get_name(info), *addr);
 
   /* NULL pointer results in 'nil' compound. */
   if (transfer != GI_TRANSFER_CONTAINER && *addr == NULL)
@@ -627,6 +629,7 @@ static int
 compound_gc(lua_State* L)
 {
   struct ud_compound* compound = compound_load(L, 1);
+  g_debug("compound_gc(%p)", compound);
   if (compound->owns && !lua_isnil(L, -1))
     {
       GIInfoType type;
@@ -918,7 +921,7 @@ function_call(lua_State* L)
   } *args;
 
   /* Check general function characteristics. */
-  g_printf("call: %s\n", g_base_info_get_name(function->info));
+  g_debug("function_call: %s", g_base_info_get_name(function->info));
   flags = g_function_info_get_flags(function->info);
   has_self = (flags & GI_FUNCTION_IS_METHOD) != 0 &&
     (flags & GI_FUNCTION_IS_CONSTRUCTOR) == 0;
@@ -1021,7 +1024,7 @@ lgi_find(lua_State* L)
   GIBaseInfo *info, *fi;
   int vals = 0;
 
-  g_printf("find: %s.%s\n", symbol, container);
+  g_debug("core.find(%s.%s)", symbol, container);
 
   /* Get information about the symbol. */
   info = g_irepository_find_by_name(NULL, "GIRepository",
@@ -1073,12 +1076,30 @@ lgi_get(lua_State* L)
 {
   /* Create new instance based on the embedded typeinfo. */
   GArgument unused;
+  g_debug("core.get()");
   return lgi_type_new(L, compound_get(L, 1, lgi_baseinfo_info, FALSE), &unused);
 }
+
+#ifndef NDEBUG
+static const char* lgi_log_levels[] = 
+  { "error", "critical", "warning", "message", "info", "debug", NULL };
+static int
+lgi_log(lua_State* L)
+{
+  const char* message = luaL_checkstring(L, 1);
+  int level = 1 << (luaL_checkoption(L, 2, lgi_log_levels[5],
+                                     lgi_log_levels) + 2);
+  g_log(G_LOG_DOMAIN, level, "%s", message);
+  return 0;  
+}
+#endif
 
 static const struct luaL_reg lgi_reg[] = {
   { "find", lgi_find },
   { "get", lgi_get },
+#ifndef NDEBUG
+  { "log", lgi_log },
+#endif
   { NULL, NULL }
 };
 
