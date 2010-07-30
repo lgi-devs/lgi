@@ -89,32 +89,22 @@ gi._enums = { IInfoType = setmetatable({
 				       }, enum_mt) }
 
 -- We have to set up proper dispose handler for IBaseInfo and Typelib
--- otherwise the rest of this bootstrap code will leak them.  Note
--- that infos created here would leak anyway, therefore we unref them
--- manually.
-do
-   local ref_info, unref_info, free_info =
-      core.find('base_info_ref'), core.find('base_info_unref'),
-   core.find('free', 'Typelib')
-   local unref = core.get(unref_info)
-   gi._structs = {
-      IBaseInfo = { [0] =
-		    { name = "GIRepository.IBaseInfo",
-		      type = gi.IInfoType.STRUCT,
-		      acquire = core.get(ref_info),
-		      dispose = core.get(unref_info) } },
-      Typelib = { [0] =
-		  { name = "GIRepository.Typelib",
-		    type = gi.IInfoType.STRUCT,
-		    dispose = core.get(free_info) } }
-   }
+-- otherwise the rest of this bootstrap code will leak them.  First of all
+-- create metas for IBaseInfo and ITypelib, then look up ref/unref/free
+-- handlers (so that find-returned records have already properly assigned
+-- metas) and then dereference record and assign acquire/dispose methods.
+gi._structs = {
+   IBaseInfo = { [0] = { name = "GIRepository.IBaseInfo",
+			 type = gi.IInfoType.STRUCT } },
+   Typelib = { [0] = { name = "GIRepository.Typelib",
+		       type = gi.IInfoType.STRUCT } },
+}
 
-   unref(ref_info)
-   unref(unref_info)
-   unref(free_info)
-end
+gi._structs.IBaseInfo[0].acquire = core.get(core.find('base_info_ref'))
+gi._structs.IBaseInfo[0].dispose = core.get(core.find('base_info_unref'))
+gi._structs.Typelib[0].dispose = core.get(core.find('free', 'Typelib'))
 
-loginfo 'base_info and Typelib dispose/acquire installed'
+log 'IBaseInfo and Typelib dispose/acquire installed'
 
 -- Loads given set of symbols into table.
 local function get_symbols(into, symbols, container)
