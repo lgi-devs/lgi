@@ -12,6 +12,7 @@
 #include <lauxlib.h>
 
 #include <glib.h>
+#include <glib/gprintf.h>
 #include <glib-object.h>
 #include <girepository.h>
 #include <girffi.h>
@@ -899,6 +900,7 @@ function_call(lua_State* L)
   } *args;
 
   /* Check general function characteristics. */
+  g_printf("call: %s\n", g_base_info_get_name(function->info));
   flags = g_function_info_get_flags(function->info);
   has_self = (flags & GI_FUNCTION_IS_METHOD) != 0 &&
     (flags & GI_FUNCTION_IS_CONSTRUCTOR) == 0;
@@ -1000,6 +1002,8 @@ lgi_find(lua_State* L)
   const gchar* container = luaL_optstring(L, 2, NULL);
   GIBaseInfo *info, *fi;
   int vals = 0;
+
+  g_printf("find: %s.%s\n", symbol, container);
 
   /* Get information about the symbol. */
   info = g_irepository_find_by_name(NULL, "GIRepository",
