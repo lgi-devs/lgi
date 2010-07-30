@@ -7,8 +7,10 @@
 
 --]]--
 
-local assert, setmetatable, getmetatable, type, pairs, pcall, string, rawget =
-      assert, setmetatable, getmetatable, type, pairs, pcall, string, rawget
+local assert, setmetatable, getmetatable, type, pairs, pcall, string, rawget,
+   table =
+      assert, setmetatable, getmetatable, type, pairs, pcall, string, rawget,
+      table
 local bit = require 'bit'
 local package = package
 
@@ -359,54 +361,55 @@ local function get_symbol(namespace, symbol)
    return value
 end
 
+
 -- Loads namespace, optionally with specified version and returns table which
 -- represents it (usable as package table for Lua package loader).
-local function load_namespace(namespace, name, version)
+local function load_namespace(into, name)
    -- If package does not exist yet, create and store it into packages.
-   log('loading namespace %s', name)
-   if not namespace then
-      namespace = {}
-      repo[name] = namespace
+   if not into then
+      into = {}
+      repo[name] = into
    end
+
+   log('loading namespace %s', name)
 
    -- Create _meta table containing auxiliary information
    -- and data for the namespace.  This table also serves as metatable for the
    -- namespace, providing __index method for retrieveing namespace content.
-   namespace[0] = { name = name, type = 'NAMESPACE',
-		       dependencies = {}, __index = get_symbol }
-   setmetatable(namespace, namespace[0])
+   into[0] = { name = name, type = 'NAMESPACE', dependencies = {},
+	       __index = get_symbol }
+   setmetatable(into, into[0])
 
    -- Load the typelibrary for the namespace.
-   namespace[0].typelib = assert(gi.IRepository.require(
-				       nil, name, version, 0))
-   namespace[0].version = version or gi.IRepository.get_version(nil, name)
+   into[0].typelib = assert(gi.IRepository.require(nil, name, nil, 0))
+   into[0].version = gi.IRepository.get_version(nil, name)
 
    -- Load all namespace dependencies.
-   for _, dep in pairs(gi.IRepository.get_dependencies(nil, name) or {}) do
-      local name, version  = string.match(dep, '(.+)-(.+)')
-      namespace[0].dependencies[name] = load_namespace(nil, name, version)
+   for _, name in pairs(gi.IRepository.get_dependencies(nil, name) or {}) do
+      into[0].dependencies = repo[string.match(name, '(.+)-(.+)')]
    end
 
    -- Install 'resolve' closure, which forces loading this namespace.
    -- Useful when someone wants to inspect what's inside (e.g. some
    -- kind of source browser or smart editor).
-   namespace[0].resolve =
+   into[0].resolve =
       function()
 	 -- Iterate through all items in the namespace and dereference them,
 	 -- which causes them to be loaded in and cached inside the namespace
 	 -- table.
 	 for i = 0, gi.IRepository.get_n_infos(nil, name) - 1 do
 	    local info = gi.IRepository.get_info(nil, name, i)
-	    pcall(get_symbol, namespace, gi.base_info_get_name(info))
+	    pcall(get_symbol, into, gi.base_info_get_name(info))
 	 end
       end
-   return namespace
+   log('namespace %s-%s loaded', name, into[0].version)
+   return into
 end
 
 -- Install metatable into repo table, so that on-demand loading works.
 setmetatable(repo, { __index = function(repo, name)
-				      return load_namespace(nil, name)
-				   end })
+				  return load_namespace(nil, name)
+			       end })
 
 -- Convert our poor-man's GIRepository namespace into full-featured one.
 loginfo 'upgrading repo.GIRepository to full-featured namespace'
