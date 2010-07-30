@@ -407,6 +407,8 @@ gi._enums.IInfoType = nil
 load_namespace(gi, 'GIRepository')
 load_class(gi, gi._classes.IRepository,
 	   gi.IRepository.find_by_name(nil, gi[0].name, 'IRepository'))
+load_struct(gi, gi._structs.Typelib,
+	    gi.IRepository.find_by_name(nil, gi[0].name, 'Typelib'))
 
 -- Install new loader which will load lgi packages on-demand using 'repo'
 -- table.
