@@ -1086,7 +1086,7 @@ lgi_get(lua_State* L)
 }
 
 #ifndef NDEBUG
-static const char* lgi_log_levels[] = 
+static const char* lgi_log_levels[] =
   { "error", "critical", "warning", "message", "info", "debug", NULL };
 static int
 lgi_log(lua_State* L)
@@ -1095,13 +1095,15 @@ lgi_log(lua_State* L)
   int level = 1 << (luaL_checkoption(L, 2, lgi_log_levels[5],
                                      lgi_log_levels) + 2);
   g_log(G_LOG_DOMAIN, level, "%s", message);
-  return 0;  
+  return 0;
 }
 
 const char* lgi_sd(lua_State *L)
 {
   int i;
-  gchar* msg;
+  static gchar* msg = 0;
+  g_free(msg);
+  msg = g_strdup("");
   int top = lua_gettop(L);
   for (i = 1; i <= top; i++) {  /* repeat for each level */
     int t = lua_type(L, i);
@@ -1110,15 +1112,15 @@ const char* lgi_sd(lua_State *L)
     case LUA_TSTRING:  /* strings */
       item = g_strdup_printf("`%s'", lua_tostring(L, i));
       break;
-    
+
     case LUA_TBOOLEAN:  /* booleans */
       item = g_strdup_printf(lua_toboolean(L, i) ? "true" : "false");
       break;
-    
+
     case LUA_TNUMBER:  /* numbers */
       item = g_strdup_printf("%g", lua_tonumber(L, i));
       break;
-    
+
     default:  /* other values */
       item = g_strdup_printf("%s(%p)", lua_typename(L, t), lua_topointer(L, i));
       break;
