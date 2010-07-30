@@ -12,6 +12,7 @@
 #include <lauxlib.h>
 
 #include <glib.h>
+#include <glib-object.h>
 #include <girepository.h>
 #include <girffi.h>
 
@@ -20,25 +21,28 @@ static int lgi_regkey;
 enum lgi_reg
 {
   LGI_REG_CACHE = 1,
-  LGI_REG_DISPOSE = 2,
-  LGI_REG_REPO = 3,
+  LGI_REG_REPO = 2,
   LGI_REG__LAST
 };
 
-/* Creates new userdata representing instance of struct/object described by
-   'info'.  Transfer describes, whether the ownership is transferred and gc
-   method releases the object.  The special transfer value is
-   GI_TRANSFER_CONTAINER, which means that the structure is allocated and its
-   address is put into addr (i.e. addr parameter is output in this case). */
-static int compound_new(lua_State* L, GIBaseInfo* info, gpointer* addr,
-                        GITransfer transfer);
+/* GIBaseInfo of GIBaseInfo type itself.  Leaks, never freed. */
+GIBaseInfo* lgi_baseinfo_info;
+
+/* Creates new userdata representing instance of struct/object
+   described by 'ii'.  Transfer describes, whether the
+   ownership is transferred and gc method releases the object.	The
+   special transfer value is GI_TRANSFER_CONTAINER, which means that
+   the structure is allocated and its address is put into addr
+   (i.e. addr parameter is output in this case). */
+static int compound_new(lua_State* L, GIBaseInfo* ii, gpointer* addr,
+			GITransfer transfer);
 
 /* Retrieves compound-type parameter from given Lua-stack position, checks,
    whether it is suitable for requested ii type.  Returns pointer to the
    compound object, returns NULL if Lua-stack value is nil and optional is
    TRUE. */
-static gpointer compound_from_lua(lua_State* L, int arg, GIBaseInfo* ii,
-                                  gboolean optional);
+static gpointer compound_get(lua_State* L, int arg, GIBaseInfo* ii,
+			     gboolean optional);
 
 /* Creates new userdata representing instance of function described by
    'info'. Parses function signature and might report an error if the
@@ -301,12 +305,12 @@ lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GITransfer transfer,
 	      case GI_INFO_TYPE_FLAGS:
 		/* Resolve enum to the real value. */
 		vals = lgi_simple_val_to_lua(L,
-                                             g_enum_info_get_storage_type(ii),
-                                             GI_TRANSFER_NOTHING, val);
+					     g_enum_info_get_storage_type(ii),
+					     GI_TRANSFER_NOTHING, val);
 		break;
 
 	      case GI_INFO_TYPE_STRUCT:
-              case GI_INFO_TYPE_OBJECT:
+	      case GI_INFO_TYPE_OBJECT:
 		/* Create/Get compound object. */
 		vals = compound_new(L, ii, &val->v_pointer, transfer);
 		break;
@@ -332,7 +336,7 @@ lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GITransfer transfer,
 
 static int
 lgi_simple_val_from_lua(lua_State* L, int index, GITypeTag tag,
-                        GArgument* val, gboolean optional)
+			GArgument* val, gboolean optional)
 {
   int vals = 1;
   switch (tag)
@@ -384,37 +388,38 @@ lgi_val_from_lua(lua_State* L, int index, GITypeInfo* ti, GArgument* val,
   if (vals == 0)
     {
       switch (tag)
-        {
-        case GI_TYPE_TAG_INTERFACE:
-          /* Interface types.  Get the interface type and switch according to
-             the real type. */
-          {
-            GIBaseInfo* ii = g_type_info_get_interface(ti);
-            switch (g_base_info_get_type(ii))
-              {
-              case GI_INFO_TYPE_ENUM:
-              case GI_INFO_TYPE_FLAGS:
-                /* Resolve Lua-number to enum value. */
-                vals = lgi_simple_val_from_lua(L, index,
-                                               g_enum_info_get_storage_type(ii),
-                                               val, optional);
-                break;
+	{
+	case GI_TYPE_TAG_INTERFACE:
+	  /* Interface types.  Get the interface type and switch according to
+	     the real type. */
+	  {
+	    GIBaseInfo* ii = g_type_info_get_interface(ti);
+	    switch (g_base_info_get_type(ii))
+	      {
+	      case GI_INFO_TYPE_ENUM:
+	      case GI_INFO_TYPE_FLAGS:
+		/* Resolve Lua-number to enum value. */
+		vals =
+		  lgi_simple_val_from_lua(L, index,
+					  g_enum_info_get_storage_type(ii),
+					  val, optional);
+		break;
 
-              case GI_INFO_TYPE_STRUCT:
-              case GI_INFO_TYPE_OBJECT:
-                val->v_pointer = compound_from_lua(L, index, ii, optional);
-                break;
+	      case GI_INFO_TYPE_STRUCT:
+	      case GI_INFO_TYPE_OBJECT:
+		val->v_pointer = compound_get(L, index, ii, optional);
+		break;
 
-              default:
-                vals = 0;
-              }
-            g_base_info_unref(ii);
-          }
-          break;
+	      default:
+		vals = 0;
+	      }
+	    g_base_info_unref(ii);
+	  }
+	  break;
 
-        default:
-          vals = 0;
-        }
+	default:
+	  vals = 0;
+	}
     }
 
   return vals;
@@ -478,35 +483,54 @@ lgi_type_get_name(lua_State* L, GIBaseInfo* info)
   return n;
 }
 
-/* Throws error with specified format, prepended with name of
-   specified type. */
-static int
-lgi_type_error(lua_State* L, GIBaseInfo* info, const char* fmt, ...)
+/* Loads reg_cache and ref_repo elements for compound arg on the stack.	 */
+static struct ud_compound*
+compound_load(lua_State* L, int arg)
 {
-  va_list vl;
-  int n = lgi_type_get_name(L, info);
-  va_start(vl, fmt);
-  lua_pushstring(L, ": ");
-  lua_pushvfstring(L, fmt, vl);
-  lua_concat(L, n + 2);
-  return luaL_error(L, "%s", lua_tostring(L, -1));
+  struct ud_compound* compound = luaL_checkudata(L, arg, UD_COMPOUND);
+  lua_rawgeti(L, LUA_REGISTRYINDEX, lgi_regkey);
+  lua_rawgeti(L, -1, LGI_REG_CACHE);
+  lua_replace(L, -2);
+  lua_rawgeti(L, -1, compound->ref_repo);
+  return compound;
 }
 
-/* Gets repo object for given compound typeinfo. Returns FALSE (and pushes nil)
-   if such object does not exist in the namespace. */
+/* Calls repo metamethod (if exists) for compound at self, assumes
+   that stack is loaded using compound_load.  Returns TRUE if the
+   function was called. */
 static gboolean
-compound_find_info(lua_State* L, GIBaseInfo* info)
+compound_callmeta(lua_State* L, const char* metaname, int nargs, int nrets)
 {
-  lua_rawgeti(L, LUA_REGISTRYINDEX, lgi_regkey);
-  return !lua_isnil(L, -1);
+  gboolean called = FALSE;
+
+  /* Find method and check its type. */
+  lua_rawgeti(L, nargs - 1, 0);
+  lua_getfield(L, -1, metaname);
+  lua_replace(L, -2);
+  if (!lua_isnil(L, -1))
+    {
+      /* Perform the call, insert function before arguments. */
+      lua_insert(L, - nargs - 1);
+      lua_call(L, nargs, nrets);
+      called = TRUE;
+    }
+  else
+    {
+      /* Cleanup the stack, as if the call would happen. */
+      lua_pop(L, nargs + 1);
+      if (nrets != 0)
+	lua_settop(L, lua_gettop(L) + nrets);
+    }
+
+  return called;
 }
 
 static int
 compound_new(lua_State* L, GIBaseInfo* info, gpointer* addr,
-             GITransfer transfer)
+	     GITransfer transfer)
 {
   int vals;
-  struct ud_compound* compound_;
+  struct ud_compound* compound;
   g_assert(addr != NULL);
 
   /* NULL pointer results in 'nil' compound. */
@@ -519,7 +543,7 @@ compound_new(lua_State* L, GIBaseInfo* info, gpointer* addr,
   else
     vals = lgi_get_cached(L, *addr);
 
-  if (vals != 1)
+  if (vals != 0)
     return vals;
 
   /* Find out how big data should be allocated. */
@@ -528,147 +552,289 @@ compound_new(lua_State* L, GIBaseInfo* info, gpointer* addr,
     size += g_struct_info_get_size(info);
 
   /* Create and initialize new userdata instance. */
-  compound_ = lua_newuserdata(L, size);
+  compound = lua_newuserdata(L, size);
   luaL_getmetatable(L, UD_COMPOUND);
   lua_setmetatable(L, -2);
-  if (transfer == GI_TRANSFER_CONTAINER)
-    *addr = compound_->data;
-  compound_->addr = *addr;
-  compound_->owns = (transfer == GI_TRANSFER_EVERYTHING);
 
   /* Load and remember reference to repo object. */
-  compound_->ref_repo = LUA_NOREF;
+  compound->ref_repo = LUA_REFNIL;
   lua_rawgeti(L, LUA_REGISTRYINDEX, lgi_regkey);
-  lua_rawgeti(L, -1, LGI_REG_CACHE);
-  lua_rawgeti(L, -2, LGI_REG_REPO);
-  lua_pushstring(L, g_base_info_get_namespace(info));
-  lua_gettable(L, -2);
-  lua_pushstring(L, g_base_info_get_name(info));
-  lua_gettable(L, -2);
-  luaL_ref(L, -4);
-  lua_pop(L, 4);
+  lua_rawgeti(L, -1, LGI_REG_REPO);
+  lua_replace(L, -2);
+  lua_getfield(L, -1, g_base_info_get_namespace(info));
+  if (!lua_isnil(L, -1))
+    {
+      lua_getfield(L, -1, g_base_info_get_name(info));
+      compound->ref_repo = luaL_ref(L, -3);
+    }
+  lua_pop(L, 1);
+
+  if (transfer == GI_TRANSFER_CONTAINER)
+    *addr = compound->data;
+  else if (transfer == GI_TRANSFER_NOTHING)
+    {
+      /* Try to acquire ownership if possible, because we are not sure
+	 how long the object will be alive. */
+      switch (g_base_info_get_type(info))
+	{
+	case GI_INFO_TYPE_OBJECT:
+	  /* This is simple, ref the object. */
+	  g_object_ref(*addr);
+	  transfer = GI_TRANSFER_EVERYTHING;
+	  break;
+
+	case GI_INFO_TYPE_STRUCT:
+	  /* If the metatable contains 'acquire', call it. */
+	  lua_pushvalue(L, -2);
+	  if (compound_callmeta(L, "acquire", 1, 0))
+	    transfer = GI_TRANSFER_EVERYTHING;
+	  break;
+
+	default:
+	  break;
+	}
+    }
+
+  compound->addr = *addr;
+  compound->owns = (transfer == GI_TRANSFER_EVERYTHING);
+  lua_pop(L, 1);
+
+  /* Store newly created compound to the cache. */
+  lgi_set_cached(L, compound);
   return 1;
 };
 
 static int
-struct_gc(lua_State* L)
+compound_gc(lua_State* L)
 {
-  struct ud_struct* struct_ = luaL_checkudata(L, 1, UD_STRUCT);
-
-  /* Get dispose function of the object and call it. */
-  lua_rawgeti(L, LUA_REGISTRYINDEX, lgi_regkey);
-  lua_rawgeti(L, -1, LGI_REG_DISPOSE);
-  lua_rawgeti(L, -1, struct_->ref_dispose);
-  if (luaL_getmetafield(L, -1, "__call") == 1)
+  struct ud_compound* compound = compound_load(L, 1);
+  if (compound->owns && !lua_isnil(L, -1))
     {
-      lua_pushvalue(L, -2);
-      lua_pushvalue(L, 1);
-      lua_pcall(L, 2, 0, 0);
+      GIInfoType type;
+
+      /* Check the type of the compound. */
+      lua_rawgeti(L, -1, 0);
+      lua_getfield(L, -1, "type");
+      type = lua_tointeger(L, -1);
+      lua_pop(L, 2);
+      switch (type)
+	{
+	case GI_INFO_TYPE_STRUCT:
+	  /* Call dispose method, if available. */
+	  lua_pushvalue(L, 1);
+	  compound_callmeta(L, "dispose", 1, 0);
+	  break;
+
+	case GI_INFO_TYPE_OBJECT:
+	  /* Simply unref the object. */
+	  g_object_unref(compound->addr);
+	  break;
+
+	default:
+	  break;
+	}
     }
 
-  /* Free other fields of struct_. */
-  luaL_unref(L, -2, struct_->ref_dispose);
-  g_base_info_unref(struct_->info);
+  /* Free the reference to the repo in cache regtable. */
+  luaL_unref(L, -2, compound->ref_repo);
   return 0;
 }
 
 static int
-struct_tostring(lua_State* L)
+compound_tostring(lua_State* L)
 {
-  int n;
-  struct ud_struct* struct_ = luaL_checkudata(L, 1, UD_STRUCT);
-  lua_pushstring(L, "lgi-struct: ");
-  n = lgi_type_get_name(L, struct_->info);
-  lua_pushfstring(L, " %p", struct_);
-  lua_concat(L, n + 2);
+  struct ud_compound* compound = compound_load(L, 1);
+  lua_pushfstring(L, "lgi %p:", compound);
+  if (!lua_isnil(L, -2))
+    {
+      lua_rawgeti(L, -2, 0);
+      lua_getfield(L, -2, "name");
+      lua_insert(L, -3);
+      lua_pop(L, 1);
+      lua_concat(L, 2);
+    }
   return 1;
 }
 
-static GITypeInfo*
-struct_load_field(lua_State* L, struct ud_struct* struct_, const gchar* name,
-		  gint reqflag, GArgument** val)
+/* Reports error related to given compound element. Expects
+   compound_loaded' stack layout.*/
+static int
+compound_error(lua_State* L, const char* errmsg, int element)
 {
-  GIFieldInfo* fi = NULL;
-  GITypeInfo* ti;
-  int i;
-  for (i = 0; i < g_struct_info_get_n_fields(struct_->info); i++)
-    {
-      fi = g_struct_info_get_field(struct_->info, i);
-      g_assert(fi != NULL);
-      if (g_strcmp0(g_base_info_get_name(fi), name) == 0)
-	break;
-
-      g_base_info_unref(fi);
-      fi = NULL;
-    }
-
-  if (fi == NULL)
-    {
-      lua_concat(L, lgi_type_get_name(L, struct_->info));
-      lgi_type_error(L, struct_->info, "no '%s'", name);
-    }
-
-  if ((g_field_info_get_flags(fi) & reqflag) == 0)
-    {
-      g_base_info_unref(fi);
-      lgi_type_error(L, struct_->info, "'%s' not %s",
-		     name, reqflag == GI_FIELD_IS_READABLE ?
-		     "readable" : "writable");
-    }
-
-  *val = G_STRUCT_MEMBER_P(struct_->addr, g_field_info_get_offset(fi));
-  ti = g_field_info_get_type(fi);
-  g_base_info_unref(fi);
-  return ti;
+  /* Prepare name of the compound. */
+  lua_rawgeti(L, -1, 0);
+  lua_getfield(L, -1, "name");
+  return luaL_error(L, errmsg, lua_tostring(L, -1), lua_tostring(L, element));
 }
 
-static int
-struct_index(lua_State* L)
+static gpointer
+compound_get(lua_State* L, int index, GIBaseInfo* ii, gboolean optional)
 {
-  struct ud_struct* struct_ = luaL_checkudata(L, 1, UD_STRUCT);
-  const gchar* name = luaL_checkstring(L, 2);
-  int vals;
-
-  /* Check, whether there is apropriate method. */
-  GIFunctionInfo* fi = g_struct_info_find_method(struct_->info, name);
-  if (fi != NULL)
+  struct ud_compound* compound;
+  GType type;
+  if (optional)
     {
-      vals = function_new(L, fi);
-      g_base_info_unref(fi);
+      compound = lua_touserdata(L, index);
+      if (compound == NULL)
+	return NULL;
+
+      if (!lua_getmetatable(L, index))
+	return NULL;
+
+      lua_getfield(L, LUA_REGISTRYINDEX, UD_COMPOUND);
+      if (!lua_rawequal(L, -1, -2))
+	compound = NULL;
+      lua_pop(L, 2);
+      if (compound == NULL)
+	return NULL;
+    }
+  else
+    compound = luaL_checkudata(L, index, UD_COMPOUND);
+
+  /* Final check for type ancestry.  Faster one is using dynamic
+     introspection from g_type, but not all 'ii' have that. */
+  type = g_registered_type_info_get_g_type(ii);
+  if (G_TYPE_IS_DERIVED(type))
+    {
+      /* Compare using G_TYPE machinery. */
+      GType real = G_TYPE_FROM_INSTANCE(compound->addr);
+      if (!g_type_is_a(real, type))
+	{
+	  if (!optional)
+	    luaL_argerror(L, index, g_type_name(real));
+	  else
+	    return NULL;
+	}
     }
   else
     {
-      GArgument* val;
-      GITypeInfo* ti = struct_load_field(L, struct_, name,
-					 GI_FIELD_IS_READABLE, &val);
-      vals = lgi_val_to_lua(L, ti, GI_TRANSFER_NOTHING, val);
-      g_base_info_unref(ti);
+      /* Compare strings using repo and GI machinery. */
+      lua_pushstring(L, g_base_info_get_namespace(ii));
+      lua_pushstring(L, ".");
+      lua_pushstring(L, g_base_info_get_name(ii));
+      lua_concat(L, 3);
+      lua_rawgeti(L, LUA_REGISTRYINDEX, lgi_regkey);
+      lua_rawgeti(L, -1, LGI_REG_REPO);
+      lua_rawgeti(L, -1, compound->ref_repo);
+      if (!lua_isnil(L, -1))
+	{
+	  lua_rawgeti(L, -1, 0);
+	  lua_getfield(L, -1, "name");
+	  if (g_strcmp0(lua_tostring(L, -1), lua_tostring(L, -6)) != 0)
+	    {
+	      if (!optional)
+		luaL_argerror(L, index, lua_tostring(L, -1));
+	      else
+		compound = NULL;
+	    }
+
+	  lua_pop(L, 2);
+	}
+
+      lua_pop(L, 4);
     }
 
-  return vals;
+  return compound != NULL ? compound->addr : NULL;
 }
 
+/* Processes compound element of 'field' type. */
 static int
-struct_newindex(lua_State* L)
+compound_element_field(lua_State* L, gpointer addr, GIFieldInfo* fi, int newval)
 {
-  struct ud_struct* struct_ = luaL_checkudata(L, 1, UD_STRUCT);
-  const gchar* name = luaL_checkstring(L, 2);
+  GArgument* val = G_STRUCT_MEMBER_P(addr, g_field_info_get_offset(fi));
+  GITypeInfo* ti = g_field_info_get_type(fi);
   int vals;
-  GITypeInfo* ti;
-  GArgument* val;
+  if (newval == -1)
+    vals = lgi_val_to_lua(L, ti, GI_TRANSFER_NOTHING, val);
+  else
+    vals = lgi_val_from_lua(L, newval, ti, val, FALSE);
 
-  /* Find the field. */
-  ti = struct_load_field(L, struct_, name, GI_FIELD_IS_WRITABLE, &val);
-  vals = lgi_val_from_lua(L, 3, ti, val, FALSE);
   g_base_info_unref(ti);
   return vals;
 }
 
+/* Calls compound_load (arg1), checks elemenet (arg2), and processes
+   it; either reads it to stack (newval = -1) or sets it to value at
+   newval stack. */
+static int
+compound_element(lua_State* L, int newval)
+{
+  /* Load compound and element. */
+  int vals = 0, type;
+  struct ud_compound* compound = compound_load(L, 1);
+  lua_pushvalue(L, 2);
+  lua_gettable(L, -2);
+  type = lua_type(L, -1);
+  if (type == LUA_TNIL)
+    {
+      /* Not found.  Try calling meta index/newindex. */
+      lua_pop(L, 1);
+      lua_pushvalue(L, 1);
+      lua_pushvalue(L, 2);
+      if (newval != -1)
+	lua_pushvalue(L, newval);
+      else
+	vals = 1;
+      if (!compound_callmeta(L, newval == -1 ? "index" : "newindex",
+			     3 - vals, vals))
+	return compound_error(L, "%s: no `%s'", 2);
+    }
+  else
+    {
+      /* Special handling is for compound-userdata, which contain some
+	 kind of baseinfo. */
+      GIBaseInfo* ei = compound_get(L, -1, lgi_baseinfo_info, TRUE);
+      if (ei != NULL)
+	{
+	  switch (g_base_info_get_type(ei))
+	    {
+	    case GI_INFO_TYPE_FIELD:
+	      vals = compound_element_field(L, compound->addr, ei, newval);
+	      break;
+
+	    case GI_INFO_TYPE_PROPERTY:
+	      break;
+
+	    default:
+	      break;
+	    }
+
+	  /* Don't unref ei, its lifetime is controlled by userdata. */
+	}
+      else
+	{
+	  /* Everything else is simply forwarded for index, or error
+	     for newindex. */
+	  if (newval != -1)
+	    {
+	      lua_pop(L, 1);
+	      return compound_error(L, "%s: `%s' not writable", 2);
+	    }
+	  else
+	    vals = 1;
+	}
+    }
+
+  return vals;
+}
+
+static int
+compound_index(lua_State* L)
+{
+  return compound_element(L, -1);
+}
+
+static int
+compound_newindex(lua_State* L)
+{
+  return compound_element(L, 3);
+}
+
 static const struct luaL_reg struct_reg[] = {
-  { "__gc", struct_gc },
-  { "__tostring", struct_tostring },
-  { "__index", struct_index },
-  { "__newindex", struct_newindex },
+  { "__gc", compound_gc },
+  { "__tostring", compound_tostring },
+  { "__index", compound_index },
+  { "__newindex", compound_newindex },
   { NULL, NULL }
 };
 
@@ -754,26 +920,8 @@ function_call(lua_State* L)
     {
       /* 'self' handling: check for object type and marshall it in
 	 from lua. */
-      if (lua_isnil(L, lua_argi))
-	/* nil represents NULL pointer no matter for which type. */
-	args[1].arg.v_pointer = NULL;
-      else
-	{
-	  GIBaseInfo* selfi = g_base_info_get_container(function->info);
-	  switch (g_base_info_get_type(selfi))
-	    {
-	    case GI_INFO_TYPE_STRUCT:
-	      {
-		struct ud_struct* struct_ =
-		  luaL_checkudata(L, lua_argi, UD_STRUCT);
-		args[1].arg.v_pointer = struct_->addr;
-	      }
-	      break;
-
-	    default:
-	      lgi_type_error(L, function->info, "unsupported 'self' type");
-	    }
-	}
+      GIBaseInfo* pi = g_base_info_get_container(function->info);
+      args[1].arg.v_pointer = compound_get(L, lua_argi, pi, TRUE);
 
       /* Advance to the next argument. */
       lua_argi++;
@@ -850,7 +998,7 @@ lgi_find(lua_State* L)
 {
   const gchar* symbol = luaL_checkstring(L, 1);
   const gchar* container = luaL_optstring(L, 2, NULL);
-  GIBaseInfo *info, *fi, *baseinfo_info;
+  GIBaseInfo *info, *fi;
   int vals = 0;
 
   /* Get information about the symbol. */
@@ -866,6 +1014,10 @@ lgi_find(lua_State* L)
 	  fi = g_object_info_find_method(info, symbol);
 	  break;
 
+	case GI_INFO_TYPE_INTERFACE:
+	  fi = g_interface_info_find_method(info, symbol);
+	  break;
+
 	case GI_INFO_TYPE_STRUCT:
 	  fi = g_struct_info_find_method(info, symbol);
 	  break;
@@ -879,50 +1031,27 @@ lgi_find(lua_State* L)
     }
 
   if (info == NULL)
-    goto err;
-
-  /* Find IBaseInfo for 'info' instance. */
-  baseinfo_info = g_irepository_find_by_name(NULL, "GIRepository", "IBaseInfo");
-  if (baseinfo_info == NULL)
     {
-      symbol = "IBaseInfo";
-      container = NULL;
-      goto err;
+      lua_pushboolean(L, 0);
+      lua_pushfstring(L, "unable to resolve GIRepository.%s%s%s",
+		      container != NULL ? container : "",
+		      container != NULL ? ":" : "",
+		      symbol);
+      return 2;
     }
 
   /* Create new IBaseInfo structure and return it. */
-  vals = struct_new(L, baseinfo_info, (gpointer*)&info, GI_TRANSFER_EVERYTHING);
+  vals = compound_new(L, lgi_baseinfo_info, (gpointer*)&info,
+		      GI_TRANSFER_EVERYTHING);
   return vals;
-
- err:
-  if (info != NULL)
-    g_base_info_unref(info);
-  lua_pushboolean(L, 0);
-  lua_pushfstring(L, "unable to resolve GIRepository.%s%s%s",
-		  container != NULL ? container : "",
-		  container != NULL ? ":" : "",
-		  symbol);
-  return 2;
 }
 
 static int
 lgi_get(lua_State* L)
 {
-  struct ud_struct* struct_ = luaL_checkudata(L, 1, UD_STRUCT);
-  GArgument unused;
-
-  /* Check, that structure is really GIRepository.IBaseInfo */
-  if (g_strcmp0(g_base_info_get_namespace(struct_->info),
-		"GIRepository") != 0 ||
-      g_strcmp0(g_base_info_get_name(struct_->info), "IBaseInfo") != 0)
-    {
-      /* Incorrect parameter. */
-      lua_concat(L, lgi_type_get_name(L, struct_->info));
-      return luaL_argerror(L, 1, lua_tostring(L, -1));
-    }
-
   /* Create new instance based on the embedded typeinfo. */
-  return lgi_type_new(L, struct_->addr, &unused);
+  GArgument unused;
+  return lgi_type_new(L, compound_get(L, 1, lgi_baseinfo_info, FALSE), &unused);
 }
 
 static const struct luaL_reg lgi_reg[] = {
@@ -976,9 +1105,11 @@ luaopen_lgi__core(lua_State* L)
   g_irepository_require(NULL, "GIRepository", NULL, 0, &err);
   if (err != NULL)
     lgi_throw(L, err);
+  lgi_baseinfo_info = g_irepository_find_by_name(NULL, "GIRepository",
+						 "IBaseInfo");
 
   /* Register userdata types. */
-  lgi_reg_udata(L, struct_reg, UD_STRUCT);
+  lgi_reg_udata(L, struct_reg, UD_COMPOUND);
   lgi_reg_udata(L, function_reg, UD_FUNCTION);
 
   /* Register _core interface. */
@@ -996,9 +1127,6 @@ luaopen_lgi__core(lua_State* L)
   lua_pushstring(L, "v");
   lua_rawset(L, -3);
   lgi_create_reg(L, LGI_REG_CACHE, NULL, TRUE);
-
-  /* Create dispose table. */
-  lgi_create_reg(L, LGI_REG_DISPOSE, "dispose", FALSE);
 
   /* Create repo table. */
   lgi_create_reg(L, LGI_REG_REPO, "repo", FALSE);

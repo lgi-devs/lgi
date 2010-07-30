@@ -17,28 +17,6 @@ local core = require 'lgi._core'
 
 module 'lgi'
 
--- Initial bootstrap phase, We have to set up proper dispose handler
--- for IBaseInfo records, otherwise the rest of this bootstrap code
--- will leak them.
-do
-   local unref_info = assert(core.find('base_info_unref'))
-   local unref = core.get(unref_info)
-   core.dispose['GIRepository.IBaseInfo'] = unref;
-
-   -- Note that this is the only place when we need to explicitely
-   -- unref any IBaseInfo, because unref_info was created *before*
-   -- core.dispose contained unref handler for it.
-   unref(unref_info)
-
-   -- Since now any IBaseInfo record is automatically unrefed in its
-   -- __gc metamethod.
-
-   -- Make sure that Typelib structure is also properly freed when
-   -- allocated (by bootstrap code).
-   core.dispose['GIRepository.Typelib'] =
-      core.get(assert(core.find('free', 'Typelib')))
-end
-
 -- Repository, table with all loaded namespaces.  Its metatable takes care of
 -- loading on-demand.  Created by C-side bootstrap.
 local repo = core.repo
@@ -91,6 +69,42 @@ end
 local gi = setmetatable({}, compound_mt)
 core.repo.GIRepository = gi
 
+gi._enums = { IInfoType = setmetatable({
+					  FUNCTION = 1,
+					  STRUCT = 3,
+					  ENUM = 5,
+					  FLAGS = 6,
+					  OBJECT = 7,
+					  INTERFACE = 8,
+					  CONSTANT = 9,
+				       }, enum_mt) }
+
+-- We have to set up proper dispose handler for IBaseInfo and Typelib
+-- otherwise the rest of this bootstrap code will leak them.  Note
+-- that infos created here would leak anyway, therefore we unref them
+-- manually.
+do
+   local ref_info, unref_info, free_info =
+      core.find('base_info_ref'), core.find('base_info_unref'),
+   core.find('free', 'Typelib')
+   local unref = core.get(unref_info)
+   gi._structs = {
+      IBaseInfo = { [0] =
+		    { name = "GIRepository.IBaseInfo",
+		      type = gi.IInfoType.STRUCT,
+		      acquire = core.get(ref_info),
+		      dispose = core.get(unref_info) } },
+      Typelib = { [0] =
+		  { name = "GIRepository.Typelib",
+		    type = gi.IInfoType.STRUCT,
+		    dispose = core.get(free_info) } }
+   }
+
+   unref(ref_info)
+   unref(unref_info)
+   unref(free_info)
+end
+
 -- Loads given set of symbols into table.
 local function get_symbols(into, symbols, container)
    for _, symbol in pairs(symbols) do
@@ -98,20 +112,7 @@ local function get_symbols(into, symbols, container)
    end
 end
 
-gi._enums = {}
-gi._enums.IInfoType = setmetatable(
-   {
-      FUNCTION = 1,
-      STRUCT = 3,
-      ENUM = 5,
-      FLAGS = 6,
-      OBJECT = 7,
-      INTERFACE = 8,
-      CONSTANT = 9,
-   }, enum_mt)
-
-gi._classes = {}
-gi._classes.IRepository = setmetatable({ _methods = {} }, compound_mt)
+gi._classes = { IRepository = setmetatable({ _methods = {} }, compound_mt) }
 get_symbols(gi._classes.IRepository._methods,
 	    { 'require', 'find_by_name', 'get_n_infos',
 	      'get_info', 'get_dependencies',
@@ -123,6 +124,7 @@ get_symbols(
       'base_info_get_name', 'base_info_get_namespace',
       'enum_info_get_n_values', 'enum_info_get_value',
       'value_info_get_value',
+      'registered_type_info_get_g_type',
       'struct_info_is_gtype_struct',
       'struct_info_get_n_fields', 'struct_info_get_field',
       'struct_info_get_n_methods', 'struct_info_get_method',
@@ -158,6 +160,7 @@ typeloader[gi.IInfoType.CONSTANT] =
 local function add_compound_meta(compound, info)
    compound[0] = compound[0] or {}
    compound[0].type = gi.base_info_get_type(info)
+   compound[0].gtype = gi.registered_type_info_get_g_type(info)
    compound[0].name = gi.base_info_get_namespace(info) .. '.' ..
    gi.base_info_get_name(info)
 end
@@ -225,15 +228,13 @@ local function load_struct(namespace, into, info)
       -- heuristics; prefer 'unref', then 'free'.  If it does not
       -- fit, specific package has to repair setting in its
       -- postprocessing hook.
-      local name = namespace[0].name .. '.' .. gi.base_info_get_name(info)
-      local dispose = core.dispose[name] or into._methods[1]
+      local dispose = into[0].dispose
       if not dispose then
-	 for _, dispname in pairs { 'unref', 'free' } do
-	    dispose = into._methods[dispname]
-	    if dispose then into._methods[dispname] = nil break end
+	 for _, name in pairs { 'unref', 'free' } do
+	    dispose = into._methods[name]
+	    if dispose then into._methods[name] = nil break end
 	 end
-	 into._methods[1] = dispose
-	 core.dispose[name] = dispose
+	 into[0].dispose = dispose
       end
    end
 end
@@ -364,7 +365,7 @@ local function load_namespace(namespace, name, version)
 
    -- Load the typelibrary for the namespace.
    namespace[0].typelib = assert(gi.IRepository.require(
-				       nil, name, version))
+				       nil, name, version, 0))
    namespace[0].version = version or gi.IRepository.get_version(nil, name)
 
    -- Load all namespace dependencies.
