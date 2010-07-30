@@ -17,15 +17,6 @@
 #include <girepository.h>
 #include <girffi.h>
 
-/* Key in registry, containing table with al our private data. */
-static int lgi_regkey;
-enum lgi_reg
-{
-  LGI_REG_CACHE = 1,
-  LGI_REG_REPO = 2,
-  LGI_REG__LAST
-};
-
 /* GIBaseInfo of GIBaseInfo type itself.  Leaks, never freed. */
 GIBaseInfo* lgi_baseinfo_info;
 
@@ -75,6 +66,22 @@ struct ud_function
   GIFunctionInfo* info;
 };
 #define UD_FUNCTION "lgi.function"
+
+/* Key in registry, containing table with al our private data. */
+static int lgi_regkey;
+enum lgi_reg
+{
+  /* gpointer(ludata) -> instance(ud_compound/ud_function), __mode=v */
+  LGI_REG_CACHE = 1,
+
+  /* compound.ref_repo -> repo type _meta (i.e. [0]) table. */
+  LGI_REG_TYPEINFO = 2,
+
+  /* whole repository, filled in by bootstrap. */
+  LGI_REG_REPO = 3,
+
+  LGI_REG__LAST
+};
 
 static int
 lgi_error(lua_State* L, GError* err)
@@ -499,7 +506,7 @@ compound_load(lua_State* L, int arg)
 }
 
 /* Calls repo metamethod (if exists) for compound at self, assumes
-   that stack is loaded using compound_load.  Returns TRUE if the
+   that ref_repo is on the top of the stack.  Returns TRUE if the
    function was called. */
 static gboolean
 compound_callmeta(lua_State* L, const char* metaname, int nargs, int nrets)
@@ -566,10 +573,20 @@ compound_new(lua_State* L, GIBaseInfo* info, gpointer* addr,
   lua_getfield(L, -1, g_base_info_get_namespace(info));
   if (!lua_isnil(L, -1))
     {
-      lua_getfield(L, -1, g_base_info_get_name(info));
-      compound->ref_repo = luaL_ref(L, -4);
+      lua_getfield(L, -2, g_base_info_get_name(info));
+      if (!lua_isnil(L, -1))
+	{
+	  lua_rawgeti(L, -4, LGI_REG_TYPEINFO);
+	  lua_rawgeti(L, -2, 0);
+	  lua_pushvalue(L, -1);
+	  compound->ref_repo = luaL_ref(L, -3);
+	  lua_replace(L, -3);
+	  lua_pop(L, 1);
+	}
+      lua_replace(L, -2);
     }
-  lua_pop(L, 2);
+  lua_replace(L, -3);
+  lua_pop(L, 1);
 
   if (transfer == GI_TRANSFER_CONTAINER)
     *addr = compound->data;
@@ -1128,10 +1145,12 @@ luaopen_lgi__core(lua_State* L)
 
   /* Create object cache, which has weak values. */
   lua_newtable(L);
-  lua_pushstring(L, "__mode");
   lua_pushstring(L, "v");
-  lua_rawset(L, -3);
+  lua_setfield(L, -2, "__mode");
   lgi_create_reg(L, LGI_REG_CACHE, NULL, TRUE);
+
+  /* Create typeinfo table. */
+  lgi_create_reg(L, LGI_REG_TYPEINFO, NULL, FALSE);
 
   /* Create repo table. */
   lgi_create_reg(L, LGI_REG_REPO, "repo", FALSE);
