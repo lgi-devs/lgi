@@ -147,34 +147,12 @@ lgi_type_get_size(GITypeTag tag)
   gsize size;
   switch (tag)
     {
-#define TYPE_CASE(tag, type)			\
-      case GI_TYPE_TAG_ ## tag:			\
-	size = sizeof (type);			\
+#define TYPE_SIMPLE(tag, ctype, argf, dtor, push, check)	\
+      case GI_TYPE_TAG_ ## tag:					\
+	size = sizeof (ctype);					\
 	break;
+#include "arg.h"
 
-      TYPE_CASE(BOOLEAN, gboolean);
-      TYPE_CASE(INT8, gint8);
-      TYPE_CASE(UINT8, guint8);
-      TYPE_CASE(INT16, gint16);
-      TYPE_CASE(UINT16, guint16);
-      TYPE_CASE(INT32, gint32);
-      TYPE_CASE(UINT32, guint32);
-      TYPE_CASE(INT64, gint64);
-      TYPE_CASE(UINT64, guint64);
-      TYPE_CASE(FLOAT, gfloat);
-      TYPE_CASE(DOUBLE, gdouble);
-      TYPE_CASE(SHORT, gshort);
-      TYPE_CASE(USHORT, gushort);
-      TYPE_CASE(INT, gint);
-      TYPE_CASE(UINT, guint);
-      TYPE_CASE(LONG, glong);
-      TYPE_CASE(ULONG, gulong);
-      TYPE_CASE(SSIZE, gssize);
-      TYPE_CASE(SIZE, gsize);
-      TYPE_CASE(GTYPE, GType);
-      TYPE_CASE(UTF8, gpointer);
-
-#undef TYPE_CASE
     default:
       size = 0;
     }
@@ -190,37 +168,14 @@ lgi_simple_val_to_lua(lua_State* L, GITypeTag tag, GITransfer transfer,
   switch (tag)
     {
       /* Simple (native) types. */
-#define TYPE_CASE(tag, type, member, push, free)	\
-      case GI_TYPE_TAG_ ## tag:				\
-	push(L, val->member);				\
-	if (transfer != GI_TRANSFER_NOTHING)		\
-	  free;						\
-	break
+#define TYPE_SIMPLE(tag, ctype, argf, dtor, push, check)	\
+      case GI_TYPE_TAG_ ## tag:					\
+	push(L, val->argf);					\
+	if (transfer != GI_TRANSFER_NOTHING)			\
+	  dtor(val->argf);					\
+	break;
+#include "arg.h"
 
-      TYPE_CASE(BOOLEAN, gboolean, v_boolean, lua_pushboolean, (void)0);
-      TYPE_CASE(INT8, gint8, v_int8, lua_pushinteger, (void)0);
-      TYPE_CASE(UINT8, guint8, v_uint8, lua_pushinteger, (void)0);
-      TYPE_CASE(INT16, gint16, v_int16, lua_pushinteger, (void)0);
-      TYPE_CASE(UINT16, guint16, v_uint16, lua_pushinteger, (void)0);
-      TYPE_CASE(INT32, gint32, v_int32, lua_pushinteger, (void)0);
-      TYPE_CASE(UINT32, guint32, v_uint32, lua_pushinteger, (void)0);
-      TYPE_CASE(INT64, gint64, v_int64, lua_pushnumber, (void)0);
-      TYPE_CASE(UINT64, guint64, v_uint64, lua_pushnumber, (void)0);
-      TYPE_CASE(FLOAT, gfloat, v_float, lua_pushinteger, (void)0);
-      TYPE_CASE(DOUBLE, gdouble, v_double, lua_pushinteger, (void)0);
-      TYPE_CASE(SHORT, gshort, v_short, lua_pushinteger, (void)0);
-      TYPE_CASE(USHORT, gushort, v_ushort, lua_pushinteger, (void)0);
-      TYPE_CASE(INT, gint, v_int, lua_pushinteger, (void)0);
-      TYPE_CASE(UINT, guint, v_uint, lua_pushinteger, (void)0);
-      TYPE_CASE(LONG, glong, v_long, lua_pushinteger, (void)0);
-      TYPE_CASE(ULONG, gulong, v_ulong, lua_pushinteger, (void)0);
-      TYPE_CASE(SSIZE, gssize, v_ssize, lua_pushinteger, (void)0);
-      TYPE_CASE(SIZE, gsize, v_size, lua_pushinteger, (void)0);
-      TYPE_CASE(GTYPE, GType, v_long, lua_pushinteger, (void)0);
-      TYPE_CASE(UTF8, gpointer, v_pointer, lua_pushstring,
-		g_free(val->v_pointer));
-
-#undef TYPE_CASE
     default:
       vals = 0;
     }
@@ -350,36 +305,12 @@ lgi_simple_val_from_lua(lua_State* L, int index, GITypeTag tag,
   int vals = 1;
   switch (tag)
     {
-#define TYPE_CASE(tag, type, member, expr)			\
+#define TYPE_SIMPLE(tag, ctype, argf, dtor, push, check)	\
       case GI_TYPE_TAG_ ## tag :				\
-	val->member = (type)((optional &&			\
+	val->argf = (ctype)((optional &&			\
 			      lua_isnoneornil(L, index)) ?	\
-			     0 : expr);				\
+			    0 : check(L, index));		\
 	break
-
-      TYPE_CASE(BOOLEAN, gboolean, v_boolean, lua_toboolean(L, index));
-      TYPE_CASE(INT8, gint8, v_int8, luaL_checkinteger(L, index));
-      TYPE_CASE(UINT8, guint8, v_uint8, luaL_checkinteger(L, index));
-      TYPE_CASE(INT16, gint16, v_int16, luaL_checkinteger(L, index));
-      TYPE_CASE(UINT16, guint16, v_uint16, luaL_checkinteger(L, index));
-      TYPE_CASE(INT32, gint32, v_int32, luaL_checkinteger(L, index));
-      TYPE_CASE(UINT32, guint32, v_uint32, luaL_checkinteger(L, index));
-      TYPE_CASE(INT64, gint64, v_int64, luaL_checknumber(L, index));
-      TYPE_CASE(UINT64, guint64, v_uint64, luaL_checknumber(L, index));
-      TYPE_CASE(FLOAT, gfloat, v_float, luaL_checkinteger(L, index));
-      TYPE_CASE(DOUBLE, gdouble, v_double, luaL_checkinteger(L, index));
-      TYPE_CASE(SHORT, gshort, v_short, luaL_checkinteger(L, index));
-      TYPE_CASE(USHORT, gushort, v_ushort, luaL_checkinteger(L, index));
-      TYPE_CASE(INT, gint, v_int, luaL_checkinteger(L, index));
-      TYPE_CASE(UINT, guint, v_uint, luaL_checkinteger(L, index));
-      TYPE_CASE(LONG, glong, v_long, luaL_checkinteger(L, index));
-      TYPE_CASE(ULONG, gulong, v_ulong, luaL_checkinteger(L, index));
-      TYPE_CASE(SSIZE, gssize, v_ssize, luaL_checkinteger(L, index));
-      TYPE_CASE(SIZE, gsize, v_size, luaL_checkinteger(L, index));
-      TYPE_CASE(GTYPE, GType, v_long, luaL_checkinteger(L, index));
-      TYPE_CASE(UTF8, gpointer, v_pointer, luaL_checkstring(L, index));
-
-#undef TYPE_CASE
 
     default:
       vals = 0;
