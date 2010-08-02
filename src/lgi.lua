@@ -357,7 +357,7 @@ local function get_symbol(namespace, symbol)
 	 end
 
 	 -- Cache the symbol in specified category in the namespace.
-	 namespace[category] = namespace[category] or {}
+	 namespace[category] = rawget(namespace, category) or {}
 	 namespace[category][symbol] = value
       end
    end
