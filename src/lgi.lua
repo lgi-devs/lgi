@@ -8,9 +8,9 @@
 --]]--
 
 local assert, setmetatable, getmetatable, type, pairs, pcall, string, rawget,
-   table =
+   table, require =
       assert, setmetatable, getmetatable, type, pairs, pcall, string, rawget,
-      table
+      table, require
 local bit = require 'bit'
 local package = package
 
@@ -342,6 +342,12 @@ local function get_symbol(namespace, symbol)
 	 local category
 	 value, category = assert(loader(namespace, info))
 
+	 -- Process value with the hook, if some hook is installed.
+	 local hook = namespace[0].hook
+	 if hook then
+	    value = hook(symbol, value)
+	 end
+
 	 -- Cache the symbol in specified category in the namespace.
 	 namespace[category] = namespace[category] or {}
 	 namespace[category][symbol] = value
@@ -369,6 +375,10 @@ local function load_namespace(into, name)
    into[0] = { name = name, type = 'NAMESPACE', dependencies = {},
 	       __index = get_symbol }
    setmetatable(into, into[0])
+
+   -- Load override into the namespace hook, if the override exists.
+   local ok, override = pcall(require, 'lgi.override.' .. name)
+   if ok and hook then into[0].hook = override.hook end
 
    -- Load the typelibrary for the namespace.
    into[0].typelib = assert(gi.IRepository.require(nil, name, nil, 0))
