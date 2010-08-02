@@ -74,7 +74,7 @@ enum lgi_reg
   /* gpointer(ludata) -> instance(ud_compound/ud_function), __mode=v */
   LGI_REG_CACHE = 1,
 
-  /* compound.ref_repo -> repo type _meta (i.e. [0]) table. */
+  /* compound.ref_repo -> repo type table. */
   LGI_REG_TYPEINFO = 2,
 
   /* whole repository, filled in by bootstrap. */
@@ -514,7 +514,9 @@ compound_callmeta(lua_State* L, const char* metaname, int nargs, int nrets)
   gboolean called = FALSE;
 
   /* Find method and check its type. */
-  lua_getfield(L, - nargs - 1, metaname);
+  lua_rawgeti(L, - nargs - 1, 0);
+  lua_getfield(L, -1, metaname);
+  lua_replace(L, -2);
   if (!lua_isnil(L, -1))
     {
       /* Perform the call, insert function before arguments. */
@@ -564,15 +566,14 @@ compound_new(lua_State* L, GIBaseInfo* info, gpointer* addr,
   luaL_getmetatable(L, UD_COMPOUND);
   lua_setmetatable(L, -2);
 
-  /* Load reference to meta (ref_repo) of the object. */
+  /* Load ref_repo reference to repo table of the object. */
   compound->ref_repo = LUA_REFNIL;
   lua_rawgeti(L, LUA_REGISTRYINDEX, lgi_regkey);
   lua_rawgeti(L, -1, LGI_REG_REPO);
   lua_getfield(L, -1, g_base_info_get_namespace(info));
   lua_getfield(L, -1, g_base_info_get_name(info));
-  lua_rawgeti(L, -1, 0);
-  lua_replace(L, -4);
-  lua_pop(L, 2);
+  lua_replace(L, -3);
+  lua_pop(L, 1);
 
   /* Store it to the typeinfo. */
   lua_rawgeti(L, -2, LGI_REG_TYPEINFO);
@@ -623,9 +624,10 @@ compound_gc(lua_State* L)
       GIInfoType type;
 
       /* Check the type of the compound. */
+      lua_rawgeti(L, -1, 0);
       lua_getfield(L, -1, "type");
       type = lua_tointeger(L, -1);
-      lua_pop(L, 1);
+      lua_pop(L, 2);
       switch (type)
 	{
 	case GI_INFO_TYPE_STRUCT:
@@ -654,11 +656,10 @@ compound_tostring(lua_State* L)
 {
   struct ud_compound* compound = compound_load(L, 1);
   lua_pushfstring(L, "lgi %p:", compound);
-  if (!lua_isnil(L, -2))
-    {
-      lua_getfield(L, -2, "name");
-      lua_concat(L, 2);
-    }
+  lua_rawgeti(L, -2, 0);
+  lua_getfield(L, -1, "name");
+  lua_replace(L, -2);
+  lua_concat(L, 2);
   return 1;
 }
 
@@ -668,6 +669,7 @@ static int
 compound_error(lua_State* L, const char* errmsg, int element)
 {
   /* Prepare name of the compound. */
+  lua_rawgeti(L, -2, 0);
   lua_getfield(L, -1, "name");
   return luaL_error(L, errmsg, lua_tostring(L, -1), lua_tostring(L, element));
 }
@@ -719,15 +721,16 @@ compound_get(lua_State* L, int index, GIBaseInfo* ii, gboolean optional)
       lua_pushstring(L, g_base_info_get_name(ii));
       lua_concat(L, 3);
       compound = compound_load(L, index);
+      lua_rawgeti(L, -1, 0);
       lua_getfield(L, -1, "name");
-      if (g_strcmp0(lua_tostring(L, -1), lua_tostring(L, -4)) != 0)
+      if (g_strcmp0(lua_tostring(L, -1), lua_tostring(L, -5)) != 0)
       {
           if (!optional)
               luaL_argerror(L, index, lua_tostring(L, -1));
           else
               compound = NULL;
       }
-      lua_pop(L, 4);
+      lua_pop(L, 5);
     }
 
   return compound != NULL ? compound->addr : NULL;
