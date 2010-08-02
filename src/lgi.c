@@ -742,11 +742,22 @@ compound_element_field(lua_State* L, gpointer addr, GIFieldInfo* fi, int newval)
 {
   GArgument* val = G_STRUCT_MEMBER_P(addr, g_field_info_get_offset(fi));
   GITypeInfo* ti = g_field_info_get_type(fi);
+  int flags = g_field_info_get_flags(fi);
   int vals;
   if (newval == -1)
-    vals = lgi_val_to_lua(L, ti, GI_TRANSFER_NOTHING, val);
+    {
+      if ((flags & GI_FIELD_IS_READABLE) == 0)
+	return luaL_argerror(L, 2, "not readable");
+
+      vals = lgi_val_to_lua(L, ti, GI_TRANSFER_NOTHING, val);
+    }
   else
-    vals = lgi_val_from_lua(L, newval, ti, val, FALSE);
+    {
+      if ((flags & GI_FIELD_IS_WRITABLE) == 0)
+	return luaL_argerror(L, 2, "not writable");
+
+      vals = lgi_val_from_lua(L, newval, ti, val, FALSE);
+    }
 
   g_base_info_unref(ti);
   return vals;
