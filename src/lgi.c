@@ -147,9 +147,10 @@ lgi_type_get_size(GITypeTag tag)
   gsize size;
   switch (tag)
     {
-#define TYPE_SIMPLE(tag, ctype, argf, dtor, push, check)	\
+#define TYPE_SIMPLE(tag, ctype, argf, dtor, push, check,	\
+      valget, valset)						\
       case GI_TYPE_TAG_ ## tag:					\
-	size = sizeof (ctype);					\
+	size = sizeof (ctype);
 	break;
 #include "arg.h"
 
@@ -168,7 +169,8 @@ lgi_simple_val_to_lua(lua_State* L, GITypeTag tag, GITransfer transfer,
   switch (tag)
     {
       /* Simple (native) types. */
-#define TYPE_SIMPLE(tag, ctype, argf, dtor, push, check)	\
+#define TYPE_SIMPLE(tag, ctype, argf, dtor, push, check,	\
+      valget, valset)						\
       case GI_TYPE_TAG_ ## tag:					\
 	push(L, val->argf);					\
 	if (transfer != GI_TRANSFER_NOTHING)			\
@@ -305,12 +307,14 @@ lgi_simple_val_from_lua(lua_State* L, int index, GITypeTag tag,
   int vals = 1;
   switch (tag)
     {
-#define TYPE_SIMPLE(tag, ctype, argf, dtor, push, check)	\
+#define TYPE_SIMPLE(tag, ctype, argf, dtor, push, check,	\
+      valget, valset)						\
       case GI_TYPE_TAG_ ## tag :				\
 	val->argf = (ctype)((optional &&			\
 			      lua_isnoneornil(L, index)) ?	\
 			    0 : check(L, index));		\
-	break
+	break;
+#include "arg.h"
 
     default:
       vals = 0;
@@ -325,44 +329,111 @@ lgi_val_from_lua(lua_State* L, int index, GITypeInfo* ti, GArgument* val,
 {
   GITypeTag tag = g_type_info_get_tag(ti);
   int vals = lgi_simple_val_from_lua(L, index, tag, val, optional);
-  if (vals == 0)
+  if (vals == 0 && tag == GI_TYPE_TAG_INTERFACE)
     {
-      switch (tag)
+      /* Interface types.  Get the interface type and switch according to
+	 the real type. */
+      GIBaseInfo* ii = g_type_info_get_interface(ti);
+      switch (g_base_info_get_type(ii))
 	{
-	case GI_TYPE_TAG_INTERFACE:
-	  /* Interface types.  Get the interface type and switch according to
-	     the real type. */
-	  {
-	    GIBaseInfo* ii = g_type_info_get_interface(ti);
-	    switch (g_base_info_get_type(ii))
-	      {
-	      case GI_INFO_TYPE_ENUM:
-	      case GI_INFO_TYPE_FLAGS:
-		/* Resolve Lua-number to enum value. */
-		vals =
-		  lgi_simple_val_from_lua(L, index,
-					  g_enum_info_get_storage_type(ii),
-					  val, optional);
-		break;
+	case GI_INFO_TYPE_ENUM:
+	case GI_INFO_TYPE_FLAGS:
+	  /* Resolve Lua-number to enum value. */
+	  vals = lgi_simple_val_from_lua(L, index,
+					 g_enum_info_get_storage_type(ii),
+					 val, optional);
+	  break;
 
-	      case GI_INFO_TYPE_STRUCT:
-	      case GI_INFO_TYPE_OBJECT:
-		val->v_pointer = compound_get(L, index, ii, optional);
-		vals = 1;
-		break;
-
-	      default:
-		break;
-	      }
-	    g_base_info_unref(ii);
-	  }
+	case GI_INFO_TYPE_STRUCT:
+	case GI_INFO_TYPE_OBJECT:
+	  val->v_pointer = compound_get(L, index, ii, optional);
+	  vals = 1;
 	  break;
 
 	default:
 	  break;
 	}
+      g_base_info_unref(ii);
     }
 
+  return vals;
+}
+
+/* Converts GValue to GArgument according to specified GITypeTag. */
+static int
+lgi_value_simple_to_arg(GITypeTag tag, const GValue* val, GArgument* arg)
+{
+  int vals = 1;
+  switch (tag)
+    {
+#define TYPE_SIMPLE(tag, ctype, argf, dtor, push, check,	\
+		    val_get, val_set)				\
+      case GI_TYPE_TAG_ ## tag:					\
+	arg->argf = val_get(val);				\
+	break;
+#include "arg.h"
+
+    default:
+      vals = 0;
+    }
+
+  return vals;
+}
+
+static int
+lgi_value_enum_to_arg(GIBaseInfo* ii, gint enumval, GArgument* arg)
+{
+  int vals = 1;
+  GITypeTag tag = g_enum_info_get_storage_type(ii);
+  switch (tag)
+    {
+#define TYPE_SIMPLE(tag, ctype, argf, dtor, push, check,	\
+		    val_get, val_set)				\
+      case GI_TYPE_TAG_ ## tag:					\
+	arg->argf = (ctype)enumval;				\
+      break;
+#include "arg.h"
+
+    default:
+      vals = 0;
+    }
+  return vals;
+}
+
+static int
+lgi_value_to_arg(GITypeInfo* ti, const GValue* val, GArgument* arg)
+{
+  GITypeTag tag = g_type_info_get_tag(ti);
+  int vals = lgi_value_simple_to_arg(tag, val, arg);
+  if (vals == 0 && tag == GI_TYPE_TAG_INTERFACE)
+    {
+      GIBaseInfo* ii = g_type_info_get_interface(ti);
+      switch (g_base_info_get_type(ii))
+	{
+	case GI_INFO_TYPE_ENUM:
+	  vals = lgi_value_enum_to_arg(ii, g_value_get_flags(val), arg);
+	  break;
+
+	case GI_INFO_TYPE_FLAGS:
+	  vals = lgi_value_enum_to_arg(ii, g_value_get_enum(val), arg);
+	  break;
+
+	case GI_INFO_TYPE_STRUCT:
+	  /* TODO: Handling properties of 'struct' type; are they
+	     allowed at all? */
+	  g_warning("TODO: `struct' property ignored.");
+	  break;
+
+	case GI_INFO_TYPE_OBJECT:
+	  arg->v_pointer = g_value_get_object(val);
+	  vals = 1;
+	  break;
+
+	default:
+	  break;
+	}
+      g_base_info_unref(ii);
+    }
   return vals;
 }
 
@@ -656,10 +727,10 @@ compound_get(lua_State* L, int index, GIBaseInfo* ii, gboolean optional)
       lua_getfield(L, -1, "name");
       if (g_strcmp0(lua_tostring(L, -1), lua_tostring(L, -5)) != 0)
       {
-          if (!optional)
-              luaL_argerror(L, index, lua_tostring(L, -1));
-          else
-              compound = NULL;
+	  if (!optional)
+	      luaL_argerror(L, index, lua_tostring(L, -1));
+	  else
+	      compound = NULL;
       }
       lua_pop(L, 5);
     }
@@ -678,14 +749,20 @@ compound_element_field(lua_State* L, gpointer addr, GIFieldInfo* fi, int newval)
   if (newval == -1)
     {
       if ((flags & GI_FIELD_IS_READABLE) == 0)
-	return luaL_argerror(L, 2, "not readable");
+	{
+	  g_base_info_unref(ti);
+	  return luaL_argerror(L, 2, "not readable");
+	}
 
       vals = lgi_val_to_lua(L, ti, GI_TRANSFER_NOTHING, val);
     }
   else
     {
       if ((flags & GI_FIELD_IS_WRITABLE) == 0)
-	return luaL_argerror(L, 2, "not writable");
+	{
+	  g_base_info_unref(ti);
+	  return luaL_argerror(L, 2, "not writable");
+	}
 
       vals = lgi_val_from_lua(L, newval, ti, val, FALSE);
     }
@@ -694,7 +771,45 @@ compound_element_field(lua_State* L, gpointer addr, GIFieldInfo* fi, int newval)
   return vals;
 }
 
-/* Calls compound_load (arg1), checks elemenet (arg2), and processes
+/* Processes compound element of 'property' type. */
+static int
+compound_element_property(lua_State* L, gpointer addr, GIPropertyInfo* pi,
+			  int newval)
+{
+  GValue val;
+  GArgument arg;
+  int vals = 0, flags = g_property_info_get_flags(pi);
+  GITypeInfo* ti = g_property_info_get_type(pi);
+  const gchar* name = g_base_info_get_name(pi);
+
+  if (newval == -1)
+    {
+      if ((flags & G_PARAM_READABLE) == 0)
+	{
+	  g_base_info_unref(ti);
+	  return luaL_argerror(L, 2, "not readable");
+	}
+
+      g_object_get_property((GObject*)addr, name, &val);
+      if (lgi_value_to_arg(ti, &val, &arg) == 1)
+	vals = lgi_val_to_lua(L, ti, 
+			      GI_TRANSFER_NOTHING,
+			      /* g_property_info_get_ownership_transfer(pi), */
+			      &arg);
+    }
+  else
+    {
+      if ((flags & G_PARAM_WRITABLE) == 0)
+	{
+	  g_base_info_unref(ti);
+	  return luaL_argerror(L, 2, "not writable");
+	}
+    }
+
+  return vals;
+}
+
+/* Calls compound_load (arg1), checks element (arg2), and processes
    it; either reads it to stack (newval = -1) or sets it to value at
    newval stack. */
 static int
@@ -734,6 +849,7 @@ compound_element(lua_State* L, int newval)
 	      break;
 
 	    case GI_INFO_TYPE_PROPERTY:
+	      vals = compound_element_property(L, compound->addr, ei, newval);
 	      break;
 
 	    default:
@@ -841,7 +957,7 @@ function_call(lua_State* L)
 
   /* Check general function characteristics. */
   g_debug("function_call(%p): %s", function,
-          g_base_info_get_name(function->info));
+	  g_base_info_get_name(function->info));
   flags = g_function_info_get_flags(function->info);
   has_self = (flags & GI_FUNCTION_IS_METHOD) != 0 &&
     (flags & GI_FUNCTION_IS_CONSTRUCTOR) == 0;
@@ -1008,7 +1124,7 @@ lgi_log(lua_State* L)
 {
   const char* message = luaL_checkstring(L, 1);
   int level = 1 << (luaL_checkoption(L, 2, lgi_log_levels[5],
-                                     lgi_log_levels) + 2);
+				     lgi_log_levels) + 2);
   g_log(G_LOG_DOMAIN, level, "%s", message);
   return 0;
 }
