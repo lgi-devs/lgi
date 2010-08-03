@@ -394,7 +394,8 @@ local function load_namespace(into, name)
 
    -- Load all namespace dependencies.
    for _, name in pairs(gi.IRepository.get_dependencies(nil, name) or {}) do
-      into[0].dependencies = repo[string.match(name, '(.+)-(.+)')]
+      log('loading dependency %s', name)
+      into[0].dependencies = repo[string.match(name, '(.+)-.+')]
    end
 
    -- Install 'resolve' closure, which forces loading this namespace.
