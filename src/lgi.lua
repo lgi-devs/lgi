@@ -8,9 +8,9 @@
 --]]--
 
 local assert, setmetatable, getmetatable, type, pairs, pcall, string, rawget,
-   table, require, tostring =
+   table, require, tostring, error =
       assert, setmetatable, getmetatable, type, pairs, pcall, string, rawget,
-      table, require, tostring
+      table, require, tostring, error
 local bit = require 'bit'
 local package = package
 
@@ -94,7 +94,16 @@ gi._enums = { IInfoType = setmetatable({
 					  OBJECT = 7,
 					  INTERFACE = 8,
 					  CONSTANT = 9,
-				       }, enum_mt) }
+				       }, enum_mt),
+	      ITypeTag = setmetatable({
+					 ARRAY = 15,
+					 INTERFACE = 16,
+				      }, enum_mt),
+	      IArrayType = setmetatable({
+					   C = 0,
+					   ARRAY = 1,
+					}, enum_mt),
+	   }
 
 -- We have to set up proper dispose handler for IBaseInfo and Typelib
 -- otherwise the rest of this bootstrap code will leak them.  First of all
@@ -149,9 +158,44 @@ get_symbols(
       'object_info_get_n_constants', 'object_info_get_constant',
       'object_info_get_n_properties', 'object_info_get_property',
       'object_info_get_n_signals', 'object_info_get_signal',
+      'type_info_get_tag', 'type_info_get_param_type',
+      'type_info_get_interface', 'type_info_get_array_type',
+      'callable_info_get_return_type', 'callable_info_get_n_args',
+      'callable_info_get_arg', 'arg_info_get_type',
+      'constant_info_get_type',
+      'property_info_get_type',
+      'field_info_get_type',
       })
 
 loginfo 'repo.GIRepository pre-populated'
+
+-- Checks that type represented by ITypeInfo can be handled.
+local function check_type(typeinfo)
+   local tag, bi = gi.type_info_get_tag(typeinfo)
+   if tag < gi.ITypeTag.ARRAY then return true
+   elseif tag == gi.ITypeTag.ARRAY then
+      local atype = gi.type_info_get_array_type(typeinfo)
+      if atype ~= gi.IArrayType.C and atype ~= gi.IArrayType.ARRAY then
+	 error("dependent type array bad type " .. atype)
+      end
+      bi = gi.type_info_get_param_type(typeinfo, 0)
+   elseif tag == gi.ITypeTag.INTERFACE then
+      bi = gi.type_info_get_interface(typeinfo)
+   end
+   assert(bi, "dependent type " .. tag .. " can't be handled")
+   local ns, name  = gi.base_info_get_namespace(bi), gi.base_info_get_name(bi)
+   assert(ns and name and repo[ns][name], 
+	  "dependent type `" .. ns .. "." .. name .. "' not available")
+end
+
+-- Checks all arguments and return type of specified ICallableInfo.
+local function check_callable(info)
+   check_type(gi.callable_info_get_return_type(info))
+   for i = 0, gi.callable_info_get_n_args(info) - 1 do
+      local ai = gi.callable_info_get_arg(info, i)
+      check_type(gi.arg_info_get_type(ai))
+   end
+end
 
 -- Table containing loaders for various GI types, indexed by
 -- gi.IInfoType constants.
@@ -159,11 +203,13 @@ local typeloader = {}
 
 typeloader[gi.IInfoType.FUNCTION] =
    function(namespace, info)
+      check_callable(info)
       return core.get(info), '_functions'
    end
 
 typeloader[gi.IInfoType.CONSTANT] =
    function(namespace, info)
+      check_type(gi.constant_info_get_type(info))
       return core.get(info), '_constants'
    end
 
@@ -214,7 +260,7 @@ local function load_compound(into, info, loads)
       for i = 0, gets[1](info) - 1 do
 	 into[name] = into[name] or {}
 	 local mi = gets[2](info, i)
-	 local process = gets[3] or function(c, n, i) c[n] = i end
+	 local process = gets[3]
 	 process(into[name], gi.base_info_get_name(mi), mi)
       end
    end
@@ -229,9 +275,16 @@ local function load_struct(namespace, into, info)
 	 {
 	    _methods = { gi.struct_info_get_n_methods,
 			 gi.struct_info_get_method,
-			 function(c, n, i) c[n] = core.get(i) end },
+			 function(c, n, i)
+			    check_callable(i)
+			    c[n] = core.get(i)
+			 end },
 	    _fields = { gi.struct_info_get_n_fields,
-			gi.struct_info_get_field },
+			gi.struct_info_get_field,
+			function(c, n, i)
+			   check_type(gi.field_info_get_type(i));
+			   c[n] = i
+			end },
 	 })
 
       -- Try to find dispose method. Unfortunately, there seems to
@@ -267,22 +320,33 @@ typeloader[gi.IInfoType.INTERFACE] =
 	    _properties = { gi.interface_info_get_n_properties,
 			    gi.interface_info_get_property,
 			    function(c, n, i)
+			       check_type(gi.property_info_get_type(i))
 			       c[string.gsub(n, '%-', '_')] = i
 			    end },
 	    _methods = { gi.interface_info_get_n_methods,
 			 gi.interface_info_get_method,
-			 function(c, n, i) c[n] = core.get(i) end },
+			 function(c, n, i)
+			    check_callable(i)
+			    c[n] = core.get(i)
+			 end },
 	    _signals = { gi.interface_info_get_n_signals,
-			 gi.interface_info_get_signal },
+			 gi.interface_info_get_signal,
+			 function(c, n, i)
+			    check_callable(i)
+			    c[n] = i
+			 end },
 	    _constants = { gi.interface_info_get_n_constants,
 			   gi.interface_info_get_constant,
-			   function(c, n, i) c[n] = core.get(i) end },
+			   function(c, n, i)
+			      check_type(gi.constant_info_get_type(i))
+			      c[n] = core.get(i)
+			   end },
 	    _inherits = { gi.interface_info_get_n_prerequisites,
 			  gi.interface_info_get_prerequisite,
 			  function(c, n, i)
 			     local ns = gi.base_info_get_namespace(i)
 			     c[ns .. '.' .. n] = repo[ns][n]
-			  end }
+			  end },
 	 })
       return value, '_interfaces'
    end
@@ -296,22 +360,33 @@ local function load_class(namespace, into, info)
 	 _properties = { gi.object_info_get_n_properties,
 			 gi.object_info_get_property,
 			 function(c, n, i)
+			    check_type(gi.property_info_get_type(i))
 			    c[string.gsub(n, '%-', '_')] = i
 			 end },
 	 _methods = { gi.object_info_get_n_methods,
 		      gi.object_info_get_method,
-		      function(c, n, i) c[n] = core.get(i) end },
+		      function(c, n, i)
+			 check_callable(i)
+			 c[n] = core.get(i)
+		      end },
 	 _signals = { gi.object_info_get_n_signals,
-		      gi.object_info_get_signal },
+		      gi.object_info_get_signal,
+		      function(c, n, i)
+			 check_type(gi.constant_info_get_type(i))
+			 c[n] = core.get(i)
+		      end },
 	 _constants = { gi.object_info_get_n_constants,
 			gi.object_info_get_constant,
-			function(c, n, i) c[n] = core.get(i) end },
+			function(c, n, i)
+			   check_type(gi.constant_info_get_type(i))
+			   c[n] = core.get(i)
+			end },
 	 _inherits = { gi.object_info_get_n_interfaces,
 		       gi.object_info_get_interface,
 		       function(c, n, i)
 			  local ns = gi.base_info_get_namespace(i)
 			  c[ns .. '.' .. n] = repo[ns][n]
-		       end }
+		       end },
       })
 
    -- Add parent (if any) into _inherits table.
@@ -471,6 +546,8 @@ setmetatable(repo, { __index = function(repo, name)
 -- Convert our poor-man's GIRepository namespace into full-featured one.
 loginfo 'upgrading repo.GIRepository to full-featured namespace'
 gi._enums.IInfoType = nil
+gi._enums.ITypeTag = nil
+gi._enums.IArrayType = nil
 load_namespace(gi, 'GIRepository')
 load_class(gi, gi._classes.IRepository,
 	   gi.IRepository.find_by_name(nil, gi[0].name, 'IRepository'))
