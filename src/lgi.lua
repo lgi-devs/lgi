@@ -30,13 +30,21 @@ loginfo 'starting Lgi bootstrap'
 -- loading on-demand.  Created by C-side bootstrap.
 local repo = core.repo
 
+-- Table with all categories which should be looked up when searching
+-- for symbol.
+local categories = { 
+   ['_classes'] = true, ['_structs'] = true, ['_enums'] = true,
+   ['_functions'] = true, ['_constants'] = true, ['_callbacks'] = true,
+   ['_methods'] = true, ['_fields'] = true, ['_properties'] = true,
+   ['_signals'] = true,
+}
+
 -- Loads symbol from specified compound (object, struct or interface).
 -- Recursively looks up inherited elements.
 local function find_in_compound(compound, symbol, inherited)
    -- Check fields of this compound.
    for name, container in pairs(compound) do
-      if name ~= 0 and name ~= '_inherits' and
-	 (not inherited or name ~= '_fields') then
+      if categories[name] then
 	 local val = container[symbol]
 	 if val then return val end
       end
