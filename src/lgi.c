@@ -150,7 +150,7 @@ lgi_type_get_size(GITypeTag tag)
 #define TYPE_SIMPLE(tag, ctype, argf, dtor, push, check,	\
 		    valtype, valget, valset)			\
       case tag:							\
-	size = sizeof (ctype);
+	size = sizeof(ctype);					\
 	break;
 #include "arg.h"
 
