@@ -26,21 +26,21 @@ GIBaseInfo* lgi_baseinfo_info;
    special transfer value is GI_TRANSFER_CONTAINER, which means that
    the structure is allocated and its address is put into addr
    (i.e. addr parameter is output in this case). */
-static int compound_new(lua_State* L, GIBaseInfo* ii, gpointer* addr,
-			GITransfer transfer);
+static int compound_store(lua_State* L, GIBaseInfo* ii, gpointer* addr,
+                          GITransfer transfer);
 
 /* Retrieves compound-type parameter from given Lua-stack position, checks,
    whether it is suitable for requested ii type.  Returns pointer to the
    compound object, returns NULL if Lua-stack value is nil and optional is
    TRUE. */
-static gpointer compound_get(lua_State* L, int arg, GIBaseInfo* ii,
-			     gboolean optional);
+static gpointer compound_load(lua_State* L, int arg, GIBaseInfo* ii,
+                              gboolean optional);
 
 /* Creates new userdata representing instance of function described by
    'info'. Parses function signature and might report an error if the
    function cannot be wrapped by lgi.  In any case, returns number of
    items pushed to the stack.*/
-static int function_new(lua_State* L, GIFunctionInfo* info);
+static int function_store(lua_State* L, GIFunctionInfo* info);
 
 /* 'compound' userdata: wraps compound with reference to its repo table. */
 struct ud_compound
@@ -278,7 +278,7 @@ lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GITransfer transfer,
 	      case GI_INFO_TYPE_STRUCT:
 	      case GI_INFO_TYPE_OBJECT:
 		/* Create/Get compound object. */
-		vals = compound_new(L, ii, &val->v_pointer, transfer);
+		vals = compound_store(L, ii, &val->v_pointer, transfer);
 		break;
 
 	      default:
@@ -346,7 +346,7 @@ lgi_val_from_lua(lua_State* L, int index, GITypeInfo* ti, GArgument* val,
 
 	case GI_INFO_TYPE_STRUCT:
 	case GI_INFO_TYPE_OBJECT:
-	  val->v_pointer = compound_get(L, index, ii, optional);
+	  val->v_pointer = compound_load(L, index, ii, optional);
 	  vals = 1;
 	  break;
 
@@ -446,7 +446,7 @@ value_load(lua_State* L, GValue* val, int narg, GITypeInfo* ti)
 	    break;
 
 	  case GI_INFO_TYPE_OBJECT:
-	    g_value_set_object(val, compound_get(L, narg, ii, FALSE));
+	    g_value_set_object(val, compound_load(L, narg, ii, FALSE));
 	    break;
 
 	  case GI_INFO_TYPE_STRUCT:
@@ -496,7 +496,7 @@ value_store(lua_State* L, GValue* val, GITypeInfo* ti)
 	  case GI_INFO_TYPE_OBJECT:
 	    {
 	      gpointer addr = g_value_dup_object(val);
-	      vals = compound_new(L, ii, &addr, GI_TRANSFER_EVERYTHING);
+	      vals = compound_store(L, ii, &addr, GI_TRANSFER_EVERYTHING);
 	    }
 	    break;
 
@@ -526,12 +526,12 @@ lgi_type_new(lua_State* L, GIBaseInfo* ii, GArgument* val)
   switch (g_base_info_get_type(ii))
     {
     case GI_INFO_TYPE_FUNCTION:
-      vals = function_new(L, ii);
+      vals = function_store(L, ii);
       break;
 
     case GI_INFO_TYPE_STRUCT:
     case GI_INFO_TYPE_OBJECT:
-      vals = compound_new(L, ii, &val->v_pointer, GI_TRANSFER_CONTAINER);
+      vals = compound_store(L, ii, &val->v_pointer, GI_TRANSFER_CONTAINER);
       break;
 
     case GI_INFO_TYPE_CONSTANT:
@@ -577,7 +577,7 @@ lgi_type_get_name(lua_State* L, GIBaseInfo* info)
 
 /* Loads reg_typeinfo and ref_repo elements for compound arg on the stack.  */
 static struct ud_compound*
-compound_load(lua_State* L, int arg)
+compound_prepare(lua_State* L, int arg)
 {
   struct ud_compound* compound = luaL_checkudata(L, arg, UD_COMPOUND);
   lua_rawgeti(L, LUA_REGISTRYINDEX, lgi_regkey);
@@ -618,8 +618,8 @@ compound_callmeta(lua_State* L, const char* metaname, int nargs, int nrets)
 }
 
 static int
-compound_new(lua_State* L, GIBaseInfo* info, gpointer* addr,
-	     GITransfer transfer)
+compound_store(lua_State* L, GIBaseInfo* info, gpointer* addr,
+              GITransfer transfer)
 {
   int vals;
   struct ud_compound* compound;
@@ -700,7 +700,7 @@ compound_new(lua_State* L, GIBaseInfo* info, gpointer* addr,
 static int
 compound_gc(lua_State* L)
 {
-  struct ud_compound* compound = compound_load(L, 1);
+  struct ud_compound* compound = compound_prepare(L, 1);
   if (compound->owns)
     {
       GIInfoType type;
@@ -736,7 +736,7 @@ compound_gc(lua_State* L)
 static int
 compound_tostring(lua_State* L)
 {
-  struct ud_compound* compound = compound_load(L, 1);
+  struct ud_compound* compound = compound_prepare(L, 1);
   lua_pushfstring(L, "lgi %p:", compound);
   lua_rawgeti(L, -2, 0);
   lua_getfield(L, -1, "name");
@@ -746,7 +746,7 @@ compound_tostring(lua_State* L)
 }
 
 /* Reports error related to given compound element. Expects
-   compound_loaded' stack layout.*/
+   compound_prepared' stack layout.*/
 static int
 compound_error(lua_State* L, const char* errmsg, int element)
 {
@@ -757,7 +757,7 @@ compound_error(lua_State* L, const char* errmsg, int element)
 }
 
 static gpointer
-compound_get(lua_State* L, int index, GIBaseInfo* ii, gboolean optional)
+compound_load(lua_State* L, int index, GIBaseInfo* ii, gboolean optional)
 {
   struct ud_compound* compound;
   GType type;
@@ -798,7 +798,7 @@ compound_get(lua_State* L, int index, GIBaseInfo* ii, gboolean optional)
   else
     {
       /* Compare strings using repo and GI machinery. */
-      compound = compound_load(L, index);
+      compound = compound_prepare(L, index);
       lua_rawgeti(L, -1, 0);
       lua_getfield(L, -1, "name");
       lua_pushstring(L, g_base_info_get_namespace(ii));
@@ -890,7 +890,7 @@ compound_element_property(lua_State* L, gpointer addr, GIPropertyInfo* pi,
   return vals;
 }
 
-/* Calls compound_load (arg1), checks element (arg2), and processes
+/* Calls compound_prepare(arg1), checks element (arg2), and processes
    it; either reads it to stack (newval = -1) or sets it to value at
    newval stack. */
 static int
@@ -898,7 +898,7 @@ compound_element(lua_State* L, int newval)
 {
   /* Load compound and element. */
   int vals = 0, type;
-  struct ud_compound* compound = compound_load(L, 1);
+  struct ud_compound* compound = compound_prepare(L, 1);
   lua_pushvalue(L, 2);
   lua_gettable(L, -2);
   type = lua_type(L, -1);
@@ -920,7 +920,7 @@ compound_element(lua_State* L, int newval)
     {
       /* Special handling is for compound-userdata, which contain some
 	 kind of baseinfo. */
-      GIBaseInfo* ei = compound_get(L, -1, lgi_baseinfo_info, TRUE);
+      GIBaseInfo* ei = compound_load(L, -1, lgi_baseinfo_info, TRUE);
       if (ei != NULL)
 	{
 	  switch (g_base_info_get_type(ei))
@@ -977,7 +977,7 @@ static const struct luaL_reg struct_reg[] = {
 };
 
 static int
-function_new(lua_State* L, GIFunctionInfo* info)
+function_store(lua_State* L, GIFunctionInfo* info)
 {
   GError* err = NULL;
   struct ud_function* function = lua_newuserdata(L, sizeof(struct ud_function));
@@ -1061,7 +1061,7 @@ function_call(lua_State* L)
       /* 'self' handling: check for object type and marshall it in
 	 from lua. */
       GIBaseInfo* pi = g_base_info_get_container(function->info);
-      args[1].arg.v_pointer = compound_get(L, lua_argi, pi, TRUE);
+      args[1].arg.v_pointer = compound_load(L, lua_argi, pi, TRUE);
 
       /* Advance to the next argument. */
       lua_argi++;
@@ -1183,8 +1183,8 @@ lgi_find(lua_State* L)
     }
 
   /* Create new IBaseInfo structure and return it. */
-  vals = compound_new(L, lgi_baseinfo_info, (gpointer*)&info,
-		      GI_TRANSFER_EVERYTHING);
+  vals = compound_store(L, lgi_baseinfo_info, (gpointer*)&info,
+                        GI_TRANSFER_EVERYTHING);
   return vals;
 }
 
@@ -1194,7 +1194,8 @@ lgi_get(lua_State* L)
   /* Create new instance based on the embedded typeinfo. */
   GArgument unused;
   g_debug("core.get()");
-  return lgi_type_new(L, compound_get(L, 1, lgi_baseinfo_info, FALSE), &unused);
+  return lgi_type_new(L, compound_load(L, 1, lgi_baseinfo_info, FALSE),
+                      &unused);
 }
 
 #ifndef NDEBUG
