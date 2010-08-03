@@ -825,14 +825,14 @@ compound_get(lua_State* L, int index, GIBaseInfo* ii, gboolean optional)
   else
     {
       /* Compare strings using repo and GI machinery. */
+      compound = compound_load(L, index);
+      lua_rawgeti(L, -1, 0);
+      lua_getfield(L, -1, "name");
       lua_pushstring(L, g_base_info_get_namespace(ii));
       lua_pushstring(L, ".");
       lua_pushstring(L, g_base_info_get_name(ii));
       lua_concat(L, 3);
-      compound = compound_load(L, index);
-      lua_rawgeti(L, -1, 0);
-      lua_getfield(L, -1, "name");
-      if (g_strcmp0(lua_tostring(L, -1), lua_tostring(L, -5)) != 0)
+      if (g_strcmp0(lua_tostring(L, -1), lua_tostring(L, -2)) != 0)
       {
 	  if (!optional)
 	      luaL_argerror(L, index, lua_tostring(L, -1));
