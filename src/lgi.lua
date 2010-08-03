@@ -8,9 +8,9 @@
 --]]--
 
 local assert, setmetatable, getmetatable, type, pairs, pcall, string, rawget,
-   table, require =
+   table, require, tostring =
       assert, setmetatable, getmetatable, type, pairs, pcall, string, rawget,
-      table, require
+      table, require, tostring
 local bit = require 'bit'
 local package = package
 
@@ -32,7 +32,7 @@ local repo = core.repo
 
 -- Table with all categories which should be looked up when searching
 -- for symbol.
-local categories = { 
+local categories = {
    ['_classes'] = true, ['_structs'] = true, ['_enums'] = true,
    ['_functions'] = true, ['_constants'] = true, ['_callbacks'] = true,
    ['_methods'] = true, ['_fields'] = true, ['_properties'] = true,
@@ -353,18 +353,41 @@ local function get_symbol(namespace, symbol)
 	 -- Process value with the hook, if some hook is installed.
 	 local hook = namespace[0].hook
 	 if hook then
+	    log('passing symbol %s.%s through external hook',
+		namespace[0].name, symbol)
 	    value = hook(symbol, value)
 	 end
 
 	 -- Cache the symbol in specified category in the namespace.
-	 namespace[category] = rawget(namespace, category) or {}
-	 namespace[category][symbol] = value
+	 if value then
+	    namespace[category] = rawget(namespace, category) or {}
+	    namespace[category][symbol] = value
+	 end
       end
    end
 
    return value
 end
 
+-- Put GObject and GLib hooks into .preload.
+for name, hook in pairs
+{
+   GObject = {
+      Object = function(value)
+		  value._methods = {}
+	       end,
+   },
+} do package.preload['lgi._core.' .. name] =
+   function()
+      return {
+	 hook = function(symbol, value)
+		   local func = hook[symbol]
+		   if func then func(value) else value = nil end
+		   return value
+		end
+      }
+   end
+end
 
 -- Loads namespace, optionally with specified version and returns table which
 -- represents it (usable as package table for Lua package loader).
@@ -385,17 +408,20 @@ local function load_namespace(into, name)
    setmetatable(into, into[0])
 
    -- Load override into the namespace hook, if the override exists.
-   local ok, override = pcall(require, 'lgi.override.' .. name)
-   if ok and hook then into[0].hook = override.hook end
+   local ok, override = pcall(require, 'lgi._core.' .. name)
+   log('attempting to get hook lgi._core.%s: -> %s(%s)', name, tostring(ok),
+       tostring(override))
+   if ok and override then into[0].hook = override.hook end
 
    -- Load the typelibrary for the namespace.
+   log('requiring namespace %s', name)
    into[0].typelib = assert(gi.IRepository.require(nil, name, nil, 0))
    into[0].version = gi.IRepository.get_version(nil, name)
 
    -- Load all namespace dependencies.
    for _, name in pairs(gi.IRepository.get_dependencies(nil, name) or {}) do
-      log('loading dependency %s', name)
-      into[0].dependencies = repo[string.match(name, '(.+)-.+')]
+      log('getting dependency %s', name)
+      into[0].dependencies[name] = repo[string.match(name, '(.+)-.+')]
    end
 
    -- Install 'resolve' closure, which forces loading this namespace.
@@ -434,8 +460,9 @@ load_struct(gi, gi._structs.Typelib,
 loginfo 'installing custom Lua package loader'
 package.loaders[#package.loaders + 1] =
    function(name)
-      local prefix, name = string.match(name, '(.-)%.(.+)')
+      local prefix, name = string.match(name, '^(%w+)%.(%w+)$')
       if prefix == 'lgi' then
+	 log('lgi loader: trying to load %s.%s', prefix, name)
 	 local ok, result = pcall(function() return repo[name] end)
 	 if not ok or not result then return result end
 	 return function() return result end
