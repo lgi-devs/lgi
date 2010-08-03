@@ -171,5 +171,16 @@ DECLTYPE(GI_TYPE_TAG_UTF8,
          (gchar*)g_value_get_string,
          g_value_set_string)
 
+DECLTYPE(GI_TYPE_TAG_FILENAME,
+         gchar*,
+         v_string,
+         g_free,
+         lua_pushstring,
+         luaL_checkstring,
+         luaL_optstring,
+         G_TYPE_STRING,
+         (gchar*)g_value_get_string,
+         g_value_set_string)
+
 #undef DECLTYPE
 #undef DECLTYPE_NOP
