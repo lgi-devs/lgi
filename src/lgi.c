@@ -147,12 +147,12 @@ lgi_type_get_size(GITypeTag tag)
   gsize size;
   switch (tag)
     {
-#define TYPE_SIMPLE(tag, ctype, argf, dtor, push, check,	\
-		    valtype, valget, valset)			\
-      case tag:							\
-	size = sizeof(ctype);					\
+#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,      \
+                 valtype, valget, valset)                       \
+      case tag:                                                 \
+	size = sizeof(ctype);                                   \
 	break;
-#include "arg.h"
+#include "decltype.h"
 
     default:
       size = 0;
@@ -169,14 +169,14 @@ lgi_simple_val_to_lua(lua_State* L, GITypeTag tag, GITransfer transfer,
   switch (tag)
     {
       /* Simple (native) types. */
-#define TYPE_SIMPLE(tag, ctype, argf, dtor, push, check,	\
-		    valtype, valget, valset)			\
-      case tag:							\
-	push(L, val->argf);					\
-	if (transfer != GI_TRANSFER_NOTHING)			\
-	  dtor(val->argf);					\
+#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
+		    valtype, valget, valset)                    \
+      case tag:                                                 \
+	push(L, val->argf);                                     \
+	if (transfer != GI_TRANSFER_NOTHING)                    \
+	  dtor(val->argf);                                      \
 	break;
-#include "arg.h"
+#include "decltype.h"
 
     default:
       vals = 0;
@@ -307,14 +307,14 @@ lgi_simple_val_from_lua(lua_State* L, int index, GITypeTag tag,
   int vals = 1;
   switch (tag)
     {
-#define TYPE_SIMPLE(tag, ctype, argf, dtor, push, check,	\
+#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,      \
 		    valtype, valget, valset)			\
       case tag :						\
 	val->argf = (ctype)((optional &&			\
 			      lua_isnoneornil(L, index)) ?	\
 			    0 : check(L, index));		\
 	break;
-#include "arg.h"
+#include "decltype.h"
 
     default:
       vals = 0;
@@ -361,13 +361,16 @@ lgi_val_from_lua(lua_State* L, int index, GITypeInfo* ti, GArgument* val,
 
 /* Retrieves gtype for specified baseinfo. */
 static GType
-lgi_get_repo_gtype(lua_State* L, GIBaseInfo* ii)
+repo_get_gtype(lua_State* L, GIBaseInfo* ii)
 {
   GType type;
   lua_rawgeti(L, LUA_REGISTRYINDEX, lgi_regkey);
   lua_rawgeti(L, -1, LGI_REG_REPO);
   lua_getfield(L, -1, g_base_info_get_namespace(ii));
   lua_getfield(L, -1, g_base_info_get_name(ii));
+  if (lua_isnil(L, -1))
+    luaL_error(L, "`%s.%s' not present in repo", g_base_info_get_namespace(ii),
+               g_base_info_get_name(ii));
   lua_rawgeti(L, -1, 0);
   lua_getfield(L, -1, "gtype");
   type = (GType)luaL_checkinteger(L, -1);
@@ -382,12 +385,12 @@ lgi_value_simple_to_arg(GITypeTag tag, const GValue* val, GArgument* arg)
   int vals = 1;
   switch (tag)
     {
-#define TYPE_SIMPLE(tag, ctype, argf, dtor, push, check,	\
-		    val_type, val_get, val_set)			\
-      case tag:							\
-	arg->argf = val_get(val);				\
+#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
+		    val_type, val_get, val_set)                 \
+      case tag:                                                 \
+	arg->argf = val_get(val);                               \
 	break;
-#include "arg.h"
+#include "decltype.h"
 
     default:
       vals = 0;
@@ -403,12 +406,12 @@ lgi_value_enum_to_arg(GIEnumInfo* ei, gint enumval, GArgument* arg)
   GITypeTag tag = g_enum_info_get_storage_type(ei);
   switch (tag)
     {
-#define TYPE_SIMPLE(tag, ctype, argf, dtor, push, check,	\
-		    val_type, val_get, val_set)			\
-      case tag:							\
-	arg->argf = (ctype)enumval;				\
+#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
+		    val_type, val_get, val_set)                 \
+      case tag:                                                 \
+	arg->argf = (ctype)enumval;                             \
       break;
-#include "arg.h"
+#include "decltype.h"
 
     default:
       vals = 0;
@@ -460,13 +463,13 @@ lgi_value_simple_from_arg(GITypeTag tag, const GArgument* arg, GValue* val)
   int vals = 1;
   switch (tag)
     {
-#define TYPE_SIMPLE(tag, ctype, argf, dtor, push, check,	\
-		    val_type, val_get, val_set)			\
-      case tag:							\
-	g_value_init(val, val_type);				\
-	val_set(val, arg->argf);				\
+#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
+		    val_type, val_get, val_set)                 \
+      case tag:                                                 \
+	g_value_init(val, val_type);                            \
+	val_set(val, arg->argf);                                \
 	break;
-#include "arg.h"
+#include "decltype.h"
 
     default:
       vals = 0;
@@ -480,17 +483,17 @@ lgi_value_enum_from_arg(lua_State* L, GIEnumInfo* ei, const GArgument* arg,
 			GValue* val, gint* eval)
 {
   gint vals = 1;
-  GType type = lgi_get_repo_gtype(L, ei);
+  GType type = repo_get_gtype(L, ei);
 
   /* Get value from arg using enum's real underlying type. */
   switch (g_enum_info_get_storage_type(ei))
     {
-#define TYPE_SIMPLE(tag, ctype, argf, dtor, push, check,	\
-		    val_type, val_get, val_set)			\
-      case tag:							\
-	*eval = (gint)arg->argf;				\
+#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
+		    val_type, val_get, val_set)                 \
+      case tag:                                                 \
+	*eval = (gint)arg->argf;                                \
 	break;
-#include "arg.h"
+#include "decltype.h"
 
     default:
       vals = 0;
@@ -531,7 +534,7 @@ lgi_value_from_arg(lua_State* L, GITypeInfo* ti, const GArgument* arg,
 	  break;
 
 	case GI_INFO_TYPE_OBJECT:
-	  g_value_init(val, lgi_get_repo_gtype(L, ii));
+	  g_value_init(val, repo_get_gtype(L, ii));
 	  g_value_set_object(val, (GObject*)arg->v_pointer);
 	  vals = 1;
 	  break;
