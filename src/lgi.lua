@@ -377,12 +377,34 @@ for name, hook in pairs
 		  value._methods = {}
 	       end,
    },
+   GLib = {
+      Date = true,
+      DateDay = true, DateMonth = true, DateYear = true, DateWeekday = true,
+      DateDMY = true,
+      DATE_BAD_DAY = true, DATE_BAD_JULIAN = true, DATE_BAD_YEAR = true,
+      TimeVal = true, USEC_PER_SEC = true,
+
+      Timer = true,
+
+      MainLoop = true,
+      PRIORITY_HIGH = true, PRIORITY_DEFAULT = true, PRIORITY_HIGH_IDLE = true,
+      PRIORITY_DEFAULT_IDLE = true, PRIORITY_LOW = true,
+      MainContext = true,
+      Source = true,
+
+      MarkupParser = true, MarkupParseContext = true,
+      MarkupError = true, MARKUP_ERROR = true, MarkupParseFlags = true,
+
+      Checksum = true, ChecksumType = true,
+   }
 } do package.preload['lgi._core.' .. name] =
    function()
       return {
 	 hook = function(symbol, value)
 		   local func = hook[symbol]
-		   if func then func(value) else value = nil end
+		   if func then
+		      if type(func) == 'function' then func(value) end
+		   else value = nil end
 		   return value
 		end
       }
