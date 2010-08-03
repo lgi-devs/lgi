@@ -16,5 +16,7 @@ all : $(OUTPUT)
 $(OUTPUT) : lgi.o
 	$(CC) -o $@ $< $(LDFLAGS)
 
+lgi.o : lgi.c decltype.h
+
 clean :
 	rm -f lgi.o $(OUTPUT)
