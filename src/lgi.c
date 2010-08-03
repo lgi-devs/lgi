@@ -584,6 +584,7 @@ compound_prepare(lua_State* L, int arg)
   lua_rawgeti(L, -1, LGI_REG_TYPEINFO);
   lua_replace(L, -2);
   lua_rawgeti(L, -1, compound->ref_repo);
+  g_assert(!lua_isnil(L, -1));
   return compound;
 }
 
@@ -645,6 +646,7 @@ compound_store(lua_State* L, GIBaseInfo* info, gpointer* addr,
 
   /* Create and initialize new userdata instance. */
   compound = lua_newuserdata(L, size);
+  g_debug("compound_store(%p): addr=%p", compound, *addr);
   luaL_getmetatable(L, UD_COMPOUND);
   lua_setmetatable(L, -2);
 
@@ -701,11 +703,13 @@ static int
 compound_gc(lua_State* L)
 {
   struct ud_compound* compound = compound_prepare(L, 1);
+  g_debug("-> compound_gc(%p): addr=%p", compound, compound->addr);
   if (compound->owns)
     {
       GIInfoType type;
 
       /* Check the type of the compound. */
+      g_assert(!lua_isnil(L, -1));
       lua_rawgeti(L, -1, 0);
       lua_getfield(L, -1, "type");
       type = lua_tointeger(L, -1);
@@ -728,8 +732,9 @@ compound_gc(lua_State* L)
 	}
     }
 
-  /* Free the reference to the repo in typeinfo regtable. */
+  /* Free the reference to the repo object in typeinfo regtable. */
   luaL_unref(L, -2, compound->ref_repo);
+  g_debug("<- compound_gc()");
   return 0;
 }
 
@@ -1037,7 +1042,8 @@ function_call(lua_State* L)
   } *args;
 
   /* Check general function characteristics. */
-  g_debug("function_call(%p): %s", function,
+  g_debug("-> function_call(%p): %s.%s", function,
+          g_base_info_get_namespace(function->info),
 	  g_base_info_get_name(function->info));
   flags = g_function_info_get_flags(function->info);
   has_self = (flags & GI_FUNCTION_IS_METHOD) != 0 &&
@@ -1123,6 +1129,7 @@ function_call(lua_State* L)
 			 &args[ffi_argi].arg);
     }
 
+  g_debug("<- function_call(), %d rets", lua_argi);
   return lua_argi;
 }
 
