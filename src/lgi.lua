@@ -88,16 +88,20 @@ core.repo.GIRepository = gi
 
 gi._enums = { IInfoType = setmetatable({
 					  FUNCTION = 1,
+					  CALLBACK = 2,
 					  STRUCT = 3,
 					  ENUM = 5,
 					  FLAGS = 6,
 					  OBJECT = 7,
 					  INTERFACE = 8,
 					  CONSTANT = 9,
+					  TYPE = 18,
 				       }, enum_mt),
 	      ITypeTag = setmetatable({
 					 ARRAY = 15,
 					 INTERFACE = 16,
+					 GLIST = 17,
+					 GSLIST = 18,
 				      }, enum_mt),
 	      IArrayType = setmetatable({
 					   C = 0,
@@ -169,6 +173,10 @@ get_symbols(
 
 loginfo 'repo.GIRepository pre-populated'
 
+-- Weak table containing symbols which currently being loaded.  These
+-- symbols are not typeinfo-checked to avoid infinite recursion.
+local in_load = setmetatable({}, { __mode = 'v' })
+
 -- Checks that type represented by ITypeInfo can be handled.
 local function check_type(typeinfo)
    local tag, bi = gi.type_info_get_tag(typeinfo)
@@ -179,13 +187,23 @@ local function check_type(typeinfo)
 	 error("dependent type array bad type " .. atype)
       end
       bi = gi.type_info_get_param_type(typeinfo, 0)
+   elseif tag == gi.ITypeTag.GLIST or tag == gi.ITypeTag.GSLIST then
+      bi = gi.type_info_get_param_type(typeinfo, 0)
    elseif tag == gi.ITypeTag.INTERFACE then
       bi = gi.type_info_get_interface(typeinfo)
    end
    assert(bi, "dependent type " .. tag .. " can't be handled")
-   local ns, name  = gi.base_info_get_namespace(bi), gi.base_info_get_name(bi)
-   assert(ns and name and repo[ns][name], 
-	  "dependent type `" .. ns .. "." .. name .. "' not available")
+   local type = gi.base_info_get_type(bi)
+   if type == gi.IInfoType.TYPE then
+      check_type(bi)
+   else
+      local ns, name  = gi.base_info_get_namespace(bi),
+      gi.base_info_get_name(bi)
+      if not in_load[ns .. '.' .. name] then
+	 assert(ns and name and repo[ns][name],
+		"dependent type `" .. ns .. "." .. name .. "' not available")
+      end
+   end
 end
 
 -- Checks all arguments and return type of specified ICallableInfo.
@@ -205,6 +223,12 @@ typeloader[gi.IInfoType.FUNCTION] =
    function(namespace, info)
       check_callable(info)
       return core.get(info), '_functions'
+   end
+
+typeloader[gi.IInfoType.CALLBACK] =
+   function(namespace, info)
+      check_callable(info)
+      return info, '_callbacks'
    end
 
 typeloader[gi.IInfoType.CONSTANT] =
@@ -260,8 +284,7 @@ local function load_compound(into, info, loads)
       for i = 0, gets[1](info) - 1 do
 	 into[name] = into[name] or {}
 	 local mi = gets[2](info, i)
-	 local process = gets[3]
-	 process(into[name], gi.base_info_get_name(mi), mi)
+	 pcall(gets[3], into[name], gi.base_info_get_name(mi), mi)
       end
    end
 end
@@ -295,7 +318,7 @@ local function load_struct(namespace, into, info)
       local dispose = into[0].dispose
       if not dispose then
 	 for _, name in pairs { 'unref', 'free' } do
-	    dispose = into._methods[name]
+	    dispose = (into._methods or {})[name]
 	    if dispose then into._methods[name] = nil break end
 	 end
 	 into[0].dispose = dispose
@@ -417,6 +440,13 @@ local function get_symbol(namespace, symbol)
    log('loading symbol %s.%s', namespace[0].name, symbol)
    local info = gi.IRepository.find_by_name(nil, namespace[0].name, symbol)
 
+   -- Store the symbol into the in-load table, because we have to
+   -- avoid infinte recursion which might happen during type
+   -- validation if there are cycles in type definitions (e.g. struct
+   -- defining method having as an argument pointer to the struct).
+   local fullname = namespace[0].name .. '.' .. symbol
+   in_load[fullname] = info
+
    -- Decide according to symbol type what to do.
    if info and not gi.base_info_is_deprecated(info) then
       local infotype = gi.base_info_get_type(info)
@@ -441,6 +471,7 @@ local function get_symbol(namespace, symbol)
       end
    end
 
+   in_load[fullname] = nil
    return value
 end
 
@@ -453,6 +484,8 @@ for name, hook in pairs
 	       end,
    },
    GLib = {
+      DestroyNotify = true,
+
       Date = true,
       DateDay = true, DateMonth = true, DateYear = true, DateWeekday = true,
       DateDMY = true,
@@ -471,6 +504,10 @@ for name, hook in pairs
       MarkupError = true, MARKUP_ERROR = true, MarkupParseFlags = true,
 
       Checksum = true, ChecksumType = true,
+
+      OptionError = true, OPTION_ERROR = true, OptionContext = true,
+      OptionArg = true, OptionFlags = true, OPTION_REMAINING = true,
+      OptionEntry = true, OptionGroup = true,
    }
 } do package.preload['lgi._core.' .. name] =
    function()
@@ -479,7 +516,10 @@ for name, hook in pairs
 		   local func = hook[symbol]
 		   if func then
 		      if type(func) == 'function' then func(value) end
-		   else value = nil end
+		   else
+		      log('filtering out %s.%s', name, symbol)
+		      value = nil
+		   end
 		   return value
 		end
       }
