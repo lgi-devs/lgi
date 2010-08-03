@@ -147,10 +147,10 @@ lgi_type_get_size(GITypeTag tag)
   gsize size;
   switch (tag)
     {
-#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,      \
-                 valtype, valget, valset)                       \
-      case tag:                                                 \
-	size = sizeof(ctype);                                   \
+#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
+		 valtype, valget, valset)			\
+      case tag:							\
+	size = sizeof(ctype);					\
 	break;
 #include "decltype.h"
 
@@ -170,11 +170,11 @@ lgi_simple_val_to_lua(lua_State* L, GITypeTag tag, GITransfer transfer,
     {
       /* Simple (native) types. */
 #define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
-		    valtype, valget, valset)                    \
-      case tag:                                                 \
-	push(L, val->argf);                                     \
-	if (transfer != GI_TRANSFER_NOTHING)                    \
-	  dtor(val->argf);                                      \
+		 valtype, valget, valset)			\
+      case tag:							\
+	push(L, val->argf);					\
+	if (transfer != GI_TRANSFER_NOTHING)			\
+	  dtor(val->argf);					\
 	break;
 #include "decltype.h"
 
@@ -307,8 +307,8 @@ lgi_simple_val_from_lua(lua_State* L, int index, GITypeTag tag,
   int vals = 1;
   switch (tag)
     {
-#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,      \
-		    valtype, valget, valset)			\
+#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
+		 valtype, valget, valset)			\
       case tag :						\
 	val->argf = (ctype)((optional &&			\
 			      lua_isnoneornil(L, index)) ?	\
@@ -370,7 +370,7 @@ repo_get_gtype(lua_State* L, GIBaseInfo* ii)
   lua_getfield(L, -1, g_base_info_get_name(ii));
   if (lua_isnil(L, -1))
     luaL_error(L, "`%s.%s' not present in repo", g_base_info_get_namespace(ii),
-               g_base_info_get_name(ii));
+	       g_base_info_get_name(ii));
   lua_rawgeti(L, -1, 0);
   lua_getfield(L, -1, "gtype");
   type = (GType)luaL_checkinteger(L, -1);
@@ -378,98 +378,86 @@ repo_get_gtype(lua_State* L, GIBaseInfo* ii)
   return type;
 }
 
-/* Converts GValue to GArgument according to specified GITypeTag. */
-static int
-lgi_value_simple_to_arg(GITypeTag tag, const GValue* val, GArgument* arg)
+/* Initializes type of GValue to specified ti. */
+static void
+value_init(lua_State* L, GValue* val, GITypeInfo* ti)
 {
-  int vals = 1;
+  GITypeTag tag = g_type_info_get_tag(ti);
   switch (tag)
     {
 #define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
-		    val_type, val_get, val_set)                 \
-      case tag:                                                 \
-	arg->argf = val_get(val);                               \
+		 val_type, val_get, val_set)			\
+      case tag:							\
+	g_value_init(val, val_type);				\
 	break;
 #include "decltype.h"
 
-    default:
-      vals = 0;
-    }
+    case GI_TYPE_TAG_INTERFACE:
+      {
+	GIBaseInfo* ii = g_type_info_get_interface(ti);
+	GIInfoType type = g_base_info_get_type(ii);
+	switch (type)
+	  {
+	  case GI_INFO_TYPE_ENUM:
+	  case GI_INFO_TYPE_FLAGS:
+	  case GI_INFO_TYPE_OBJECT:
+	    g_value_init(val, repo_get_gtype(L, ii));
+	    break;
 
-  return vals;
-}
-
-static int
-lgi_value_enum_to_arg(GIEnumInfo* ei, gint enumval, GArgument* arg)
-{
-  int vals = 1;
-  GITypeTag tag = g_enum_info_get_storage_type(ei);
-  switch (tag)
-    {
-#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
-		    val_type, val_get, val_set)                 \
-      case tag:                                                 \
-	arg->argf = (ctype)enumval;                             \
+	  default:
+	    g_base_info_unref(ii);
+	    luaL_error(L, "value_init: bad ti.iface.type=%d", (int)type);
+	  }
+	g_base_info_unref(ii);
+      }
       break;
-#include "decltype.h"
 
     default:
-      vals = 0;
+      luaL_error(L, "value_init: bad ti.tag=%d", (int)tag);
     }
-  return vals;
 }
 
+/* Loads GValue contents from specified stack position, expects ii type.
+   Assumes that val is already inited by value_init(). */
 static int
-lgi_value_to_arg(GITypeInfo* ti, const GValue* val, GArgument* arg)
-{
-  GITypeTag tag = g_type_info_get_tag(ti);
-  int vals = lgi_value_simple_to_arg(tag, val, arg);
-  if (vals == 0 && tag == GI_TYPE_TAG_INTERFACE)
-    {
-      GIBaseInfo* ii = g_type_info_get_interface(ti);
-      switch (g_base_info_get_type(ii))
-	{
-	case GI_INFO_TYPE_ENUM:
-	  vals = lgi_value_enum_to_arg(ii, g_value_get_enum(val), arg);
-	  break;
-
-	case GI_INFO_TYPE_FLAGS:
-	  vals = lgi_value_enum_to_arg(ii, g_value_get_flags(val), arg);
-	  break;
-
-	case GI_INFO_TYPE_STRUCT:
-	  /* TODO: Handling properties of 'struct' type; are they
-	     allowed at all? */
-	  g_warning("TODO: `struct' property ignored.");
-	  break;
-
-	case GI_INFO_TYPE_OBJECT:
-	  arg->v_pointer = g_value_get_object(val);
-	  vals = 1;
-	  break;
-
-	default:
-	  break;
-	}
-      g_base_info_unref(ii);
-    }
-  return vals;
-}
-
-/* Converts GArgument to GValue according to specified GITypeTag. */
-static int
-lgi_value_simple_from_arg(GITypeTag tag, const GArgument* arg, GValue* val)
+value_load(lua_State* L, GValue* val, int narg, GITypeInfo* ti)
 {
   int vals = 1;
-  switch (tag)
+  switch (g_type_info_get_tag(ti))
     {
 #define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
-		    val_type, val_get, val_set)                 \
-      case tag:                                                 \
-	g_value_init(val, val_type);                            \
-	val_set(val, arg->argf);                                \
+		 val_type, val_get, val_set)			\
+      case tag:							\
+	val_set(val, check(L, narg));				\
 	break;
 #include "decltype.h"
+
+    case GI_TYPE_TAG_INTERFACE:
+      {
+	GIBaseInfo* ii = g_type_info_get_interface(ti);
+	switch (g_base_info_get_type(ii))
+	  {
+	  case GI_INFO_TYPE_ENUM:
+	    g_value_set_enum(val, luaL_checkinteger(L, narg));
+	    break;
+
+	  case GI_INFO_TYPE_FLAGS:
+	    g_value_set_flags(val, luaL_checkinteger(L, narg));
+	    break;
+
+	  case GI_INFO_TYPE_OBJECT:
+	    g_value_set_object(val, compound_get(L, narg, ii, FALSE));
+	    break;
+
+	  case GI_INFO_TYPE_STRUCT:
+	    return luaL_error(L, "don't know how to handle struct->GValue");
+
+	  default:
+	    vals = 0;
+	  }
+	g_base_info_unref(ii);
+      }
+      break;
 
     default:
       vals = 0;
@@ -478,72 +466,54 @@ lgi_value_simple_from_arg(GITypeTag tag, const GArgument* arg, GValue* val)
   return vals;
 }
 
+/* Pushes GValue content to stack, assumes that value is of ii type. */
 static int
-lgi_value_enum_from_arg(lua_State* L, GIEnumInfo* ei, const GArgument* arg,
-			GValue* val, gint* eval)
+value_store(lua_State* L, GValue* val, GITypeInfo* ti)
 {
-  gint vals = 1;
-  GType type = repo_get_gtype(L, ei);
-
-  /* Get value from arg using enum's real underlying type. */
-  switch (g_enum_info_get_storage_type(ei))
+  int vals = 1;
+  switch (g_type_info_get_tag(ti))
     {
 #define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
-		    val_type, val_get, val_set)                 \
-      case tag:                                                 \
-	*eval = (gint)arg->argf;                                \
+		 val_type, val_get, val_set)			\
+      case tag:							\
+	push(L, val_get(val));					\
 	break;
 #include "decltype.h"
+
+    case GI_TYPE_TAG_INTERFACE:
+      {
+	GIBaseInfo* ii = g_type_info_get_interface(ti);
+	switch (g_base_info_get_type(ii))
+	  {
+	  case GI_INFO_TYPE_ENUM:
+	    lua_pushinteger(L, g_value_get_enum(val));
+	    break;
+
+	  case GI_INFO_TYPE_FLAGS:
+	    lua_pushinteger(L, g_value_get_flags(val));
+	    break;
+
+	  case GI_INFO_TYPE_OBJECT:
+	    {
+	      gpointer addr = g_value_dup_object(val);
+	      vals = compound_new(L, ii, &addr, GI_TRANSFER_EVERYTHING);
+	    }
+	    break;
+
+	  case GI_INFO_TYPE_STRUCT:
+	    return luaL_error(L, "don't know how to handle GValue->struct");
+
+	  default:
+	    vals = 0;
+	  }
+	g_base_info_unref(ii);
+      }
+      break;
 
     default:
       vals = 0;
     }
 
-  if (vals != 0)
-    g_value_init(val, type);
-
-  return vals;
-}
-
-static int
-lgi_value_from_arg(lua_State* L, GITypeInfo* ti, const GArgument* arg,
-		   GValue* val)
-{
-  GITypeTag tag = g_type_info_get_tag(ti);
-  int vals = lgi_value_simple_from_arg(tag, arg, val);
-  if (vals == 0 && tag == GI_TYPE_TAG_INTERFACE)
-    {
-      GIBaseInfo* ii = g_type_info_get_interface(ti);
-      gint eval;
-      switch (g_base_info_get_type(ii))
-	{
-	case GI_INFO_TYPE_ENUM:
-	  vals = lgi_value_enum_from_arg(L, ii, arg, val, &eval);
-	  g_value_set_enum(val, eval);
-	  break;
-
-	case GI_INFO_TYPE_FLAGS:
-	  vals = lgi_value_enum_from_arg(L, ii, arg, val, &eval);
-	  g_value_set_flags(val, eval);
-	  break;
-
-	case GI_INFO_TYPE_STRUCT:
-	  /* TODO: Handling properties of 'struct' type; are they
-	     allowed at all? */
-	  g_warning("TODO: `struct' property ignored.");
-	  break;
-
-	case GI_INFO_TYPE_OBJECT:
-	  g_value_init(val, repo_get_gtype(L, ii));
-	  g_value_set_object(val, (GObject*)arg->v_pointer);
-	  vals = 1;
-	  break;
-
-	default:
-	  break;
-	}
-      g_base_info_unref(ii);
-    }
   return vals;
 }
 
@@ -886,11 +856,12 @@ static int
 compound_element_property(lua_State* L, gpointer addr, GIPropertyInfo* pi,
 			  int newval)
 {
-  GValue val = {0};
-  GArgument arg;
   int vals = 0, flags = g_property_info_get_flags(pi);
   GITypeInfo* ti = g_property_info_get_type(pi);
   const gchar* name = g_base_info_get_name(pi);
+  GValue val = {0};
+
+  value_init(L, &val, ti);
 
   if (newval == -1)
     {
@@ -901,15 +872,7 @@ compound_element_property(lua_State* L, gpointer addr, GIPropertyInfo* pi,
 	}
 
       g_object_get_property((GObject*)addr, name, &val);
-      if (lgi_value_to_arg(ti, &val, &arg) == 1)
-	{
-	  vals =
-	    lgi_val_to_lua(L, ti,
-			   GI_TRANSFER_NOTHING,
-			   /* g_property_info_get_ownership_transfer(pi), */
-			   &arg);
-	  g_value_unset(&val);
-	}
+      vals = value_store(L, &val, ti);
     }
   else
     {
@@ -919,14 +882,11 @@ compound_element_property(lua_State* L, gpointer addr, GIPropertyInfo* pi,
 	  return luaL_argerror(L, 2, "not writable");
 	}
 
-      if (lgi_val_from_lua(L, 3, ti, &arg, FALSE) == 1 &&
-	  lgi_value_from_arg(L, ti, &arg, &val))
-	{
-	  g_object_set_property((GObject*)addr, name, &val);
-	  g_value_unset(&val);
-	}
+      vals = value_load(L, &val, 3, ti);
+      g_object_set_property((GObject*)addr, name, &val);
     }
 
+  g_value_unset(&val);
   return vals;
 }
 
@@ -1257,7 +1217,7 @@ const char* lgi_sd(lua_State *L)
   g_free(msg);
   msg = g_strdup("");
   int top = lua_gettop(L);
-  for (i = 1; i <= top; i++) {  /* repeat for each level */
+  for (i = 1; i <= top; i++) {	/* repeat for each level */
     int t = lua_type(L, i);
     gchar* item, *nmsg;
     switch (t) {
@@ -1265,7 +1225,7 @@ const char* lgi_sd(lua_State *L)
       item = g_strdup_printf("`%s'", lua_tostring(L, i));
       break;
 
-    case LUA_TBOOLEAN:  /* booleans */
+    case LUA_TBOOLEAN:	/* booleans */
       item = g_strdup_printf(lua_toboolean(L, i) ? "true" : "false");
       break;
 
