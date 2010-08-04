@@ -8,9 +8,9 @@
 --]]--
 
 local assert, setmetatable, getmetatable, type, pairs, pcall, string, rawget,
-   table, require, tostring, error =
+   table, require, tostring, error, ipairs =
       assert, setmetatable, getmetatable, type, pairs, pcall, string, rawget,
-      table, require, tostring, error
+      table, require, tostring, error, ipairs
 local bit = require 'bit'
 local package = package
 
@@ -107,6 +107,11 @@ gi._enums = { IInfoType = setmetatable({
 					   C = 0,
 					   ARRAY = 1,
 					}, enum_mt),
+	      IFunctionInfoFlags = setmetatable({
+						   IS_CONSTRUCTOR = 2,
+						   IS_GETTER = 4,
+						   IS_SETTER = 8
+						}, bitflags_mt),
 	   }
 
 -- We have to set up proper dispose handler for IBaseInfo and Typelib
@@ -165,7 +170,9 @@ get_symbols(
       'type_info_get_tag', 'type_info_get_param_type',
       'type_info_get_interface', 'type_info_get_array_type',
       'callable_info_get_return_type', 'callable_info_get_n_args',
-      'callable_info_get_arg', 'arg_info_get_type',
+      'callable_info_get_arg',
+      'function_info_get_flags',
+      'arg_info_get_type',
       'constant_info_get_type',
       'property_info_get_type',
       'field_info_get_type',
@@ -173,7 +180,7 @@ get_symbols(
 
 loginfo 'repo.GIRepository pre-populated'
 
--- Weak table containing symbols which currently being loaded.  These
+-- Weak table containing symbols which currently being loaded.	These
 -- symbols are not typeinfo-checked to avoid infinite recursion.
 local in_load = setmetatable({}, { __mode = 'v' })
 
@@ -293,35 +300,65 @@ end
 local function load_struct(namespace, into, info)
    -- Avoid exposing internal structs created for object implementations.
    if not gi.struct_info_is_gtype_struct(info) then
+      local has_ctor = false
       load_compound(
 	 into, info,
 	 {
-	    _methods = { gi.struct_info_get_n_methods,
-			 gi.struct_info_get_method,
-			 function(c, n, i)
-			    check_callable(i)
-			    c[n] = core.get(i)
-			 end },
-	    _fields = { gi.struct_info_get_n_fields,
-			gi.struct_info_get_field,
-			function(c, n, i)
-			   check_type(gi.field_info_get_type(i));
-			   c[n] = i
-			end },
+	    _methods = {
+	       gi.struct_info_get_n_methods,
+	       gi.struct_info_get_method,
+	       function(c, n, i)
+		  local flags = gi.function_info_get_flags(i)
+		  if bit.band(
+		     flags, bit.bor(gi.IFunctionInfoFlags.IS_GETTER,
+				    gi.IFunctionInfoFlags.IS_SETTER)) == 0 then
+		     check_callable(i)
+		     c[n] = core.get(i)
+		     if bit.band(
+			flags, gi.IFunctionInfoFlags.IS_CONSTRUCTOR) ~= 0 then
+			has_ctor = true
+		     end
+		  end
+	       end },
+	    _fields = {
+	       gi.struct_info_get_n_fields,
+	       gi.struct_info_get_field,
+	       function(c, n, i)
+		  check_type(gi.field_info_get_type(i));
+		  c[n] = i
+	       end },
 	 })
 
-      -- Try to find dispose method. Unfortunately, there seems to
-      -- be no systematic approach in typelibs, so we go for
-      -- heuristics; prefer 'unref', then 'free'.  If it does not
-      -- fit, specific package has to repair setting in its
-      -- postprocessing hook.
-      local dispose = into[0].dispose
-      if not dispose then
-	 for _, name in pairs { 'unref', 'free' } do
-	    dispose = (into._methods or {})[name]
-	    if dispose then into._methods[name] = nil break end
+      -- Try to find dispose and acquire methods. If not set otherwise, choose
+      -- 'ref' for acquire and 'unref', 'free'.
+      local function sethandler(name, alternatives)
+	 local handler = into[0][name]
+	 if not handler then
+	    for _, aname in ipairs(alternatives) do
+	       handler = (into._methods or {})[aname]
+	       if handler then into._methods[aname] = nil break end
+	    end
+	    into[0][name] = handler
 	 end
-	 into[0].dispose = dispose
+      end
+
+      sethandler('acquire', { 'ref' })
+      sethandler('dispose', { 'unref', 'free' })
+
+      -- If there is still no dispose handler, assign GLib.g_free() to do it.
+      if not into[0].dispose then into[0].dispose = repo.GLib.free end
+
+      -- If there is no constructor, generate one which sets up requested
+      -- fields.
+      if not has_ctor then
+	 into._methods = into._methods or {}
+	 into._methods.new = function(fields)
+				local struct = core.get(info)
+				for field, value in pairs(fields or {}) do
+				   struct[field] = value
+				end
+				return struct
+			     end
       end
    end
 end
@@ -332,6 +369,18 @@ typeloader[gi.IInfoType.STRUCT] =
       load_struct(namespace, value, info)
       return value, '_structs'
    end
+
+-- Removes accessor methods for properties.  Properties should be accessed as
+-- properties, not by function calls, and this removes some clutter and memory
+-- overhead.
+local function remove_property_accessors(compound)
+   if compound._methods then
+      for propname in pairs(compound._properties or {}) do
+	 compound._methods['get_' .. propname] = nil
+	 compound._methods['set_' .. propname] = nil
+      end
+   end
+end
 
 typeloader[gi.IInfoType.INTERFACE] =
    function(namespace, info)
@@ -346,12 +395,18 @@ typeloader[gi.IInfoType.INTERFACE] =
 			       check_type(gi.property_info_get_type(i))
 			       c[string.gsub(n, '%-', '_')] = i
 			    end },
-	    _methods = { gi.interface_info_get_n_methods,
-			 gi.interface_info_get_method,
-			 function(c, n, i)
-			    check_callable(i)
-			    c[n] = core.get(i)
-			 end },
+	    _methods = {
+	       gi.interface_info_get_n_methods,
+	       gi.interface_info_get_method,
+	       function(c, n, i)
+		  local flags = gi.function_info_get_flags(i)
+		  if bit.band(
+		     flags, bit.bor(gi.IFunctionInfoFlags.IS_GETTER,
+				    gi.IFunctionInfoFlags.IS_SETTER)) == 0 then
+		     check_callable(i)
+		     c[n] = core.get(i)
+		  end
+	       end },
 	    _signals = { gi.interface_info_get_n_signals,
 			 gi.interface_info_get_signal,
 			 function(c, n, i)
@@ -371,6 +426,7 @@ typeloader[gi.IInfoType.INTERFACE] =
 			     c[ns .. '.' .. n] = repo[ns][n]
 			  end },
 	 })
+      remove_property_accessors(value)
       return value, '_interfaces'
    end
 
@@ -420,6 +476,7 @@ local function load_class(namespace, into, info)
       into._inherits = into._inherits or {}
       into._inherits[ns .. '.' .. name] = repo[ns][name]
    end
+   remove_property_accessors(into)
 end
 
 typeloader[gi.IInfoType.OBJECT] =
@@ -484,7 +541,7 @@ for name, hook in pairs
 	       end,
    },
    GLib = {
-      DestroyNotify = true,
+      free = true,
 
       Date = true,
       DateDay = true, DateMonth = true, DateYear = true, DateWeekday = true,
@@ -588,6 +645,7 @@ loginfo 'upgrading repo.GIRepository to full-featured namespace'
 gi._enums.IInfoType = nil
 gi._enums.ITypeTag = nil
 gi._enums.IArrayType = nil
+gi._enums.IFunctionInfoFlags = nil
 load_namespace(gi, 'GIRepository')
 load_class(gi, gi._classes.IRepository,
 	   gi.IRepository.find_by_name(nil, gi[0].name, 'IRepository'))
