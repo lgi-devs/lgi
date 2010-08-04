@@ -194,8 +194,6 @@ local function check_type(typeinfo)
 	 error("dependent type array bad type " .. atype)
       end
       bi = gi.type_info_get_param_type(typeinfo, 0)
-   elseif tag == gi.ITypeTag.GLIST or tag == gi.ITypeTag.GSLIST then
-      bi = gi.type_info_get_param_type(typeinfo, 0)
    elseif tag == gi.ITypeTag.INTERFACE then
       bi = gi.type_info_get_interface(typeinfo)
    end
@@ -561,10 +559,6 @@ for name, hook in pairs
       MarkupError = true, MARKUP_ERROR = true, MarkupParseFlags = true,
 
       Checksum = true, ChecksumType = true,
-
-      OptionError = true, OPTION_ERROR = true, OptionContext = true,
-      OptionArg = true, OptionFlags = true, OPTION_REMAINING = true,
-      OptionEntry = true, OptionGroup = true,
    }
 } do package.preload['lgi._core.' .. name] =
    function()
