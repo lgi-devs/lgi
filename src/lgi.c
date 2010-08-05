@@ -6,16 +6,11 @@
  * License: MIT.
  */
 
-#define G_LOG_DOMAIN "Lgi"
+#include "lgi.h"
 
-#include <lua.h>
-#include <lauxlib.h>
-
-#include <glib.h>
-#include <glib/gprintf.h>
-#include <glib-object.h>
-#include <girepository.h>
 #include <girffi.h>
+
+int lgi_regkey;
 
 /* GIBaseInfo of GIBaseInfo type itself.  Leaks, never freed. */
 GIBaseInfo* lgi_baseinfo_info;
@@ -66,22 +61,6 @@ struct ud_function
   GIFunctionInfo* info;
 };
 #define UD_FUNCTION "lgi.function"
-
-/* Key in registry, containing table with al our private data. */
-static int lgi_regkey;
-enum lgi_reg
-{
-  /* gpointer(ludata) -> instance(ud_compound/ud_function), __mode=v */
-  LGI_REG_CACHE = 1,
-
-  /* compound.ref_repo -> repo type table. */
-  LGI_REG_TYPEINFO = 2,
-
-  /* whole repository, filled in by bootstrap. */
-  LGI_REG_REPO = 3,
-
-  LGI_REG__LAST
-};
 
 static int
 lgi_error(lua_State* L, GError* err)
@@ -1308,6 +1287,7 @@ luaopen_lgi__core(lua_State* L)
   /* Register userdata types. */
   lgi_reg_udata(L, struct_reg, UD_COMPOUND);
   lgi_reg_udata(L, function_reg, UD_FUNCTION);
+  lgi_reg_udata(L, lgi_callable_reg, LGI_CALLABLE);
 
   /* Register _core interface. */
   luaL_register(L, "lgi._core", lgi_reg);
