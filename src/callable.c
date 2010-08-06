@@ -23,20 +23,35 @@ typedef struct
   /* Flags with function characteristics. */
   guint has_self : 1;
   guint throws : 1;
-  guint argc : 6;
+  guint nargs : 4;
 
+  /* '1 (retval) + argc + has_self + throws' slots follow. */
+  struct 
+  {
+    /* Index of associated Lua input argument, or 0 if there is no Lua
+       arg. */
+    guint8 arg_in : 4;
+    guint8 arg_out : 4;
+  } args[1 /* nargs + 3 */];
+} LgiCallable;
+
+/* libffi-related data, appended after LgiCallable (which is also
+   variable-length one). */
+typedef struct
+{
   /* Initialized FFI CIF structure. */
   ffi_cif cif;
 
-  /* '1 (retval) + argc + has_self + throws' ffi_type slots follow. */
-  ffi_type ffi_args[1];
-} LgiCallable;
+  /* '1 (retval) + argc + has_self + throws' slots follow. */
+  ffi_type args[1 /* nargs + 3 */];
+} LgiCallableFfi;
 
 int
 lgi_callable_store(lua_State* L, GICallableInfo* info)
 {
   LgiCallable* callable;
-  gint nargs;
+  LgiCallableFfi* ffi;
+  gint nargs, argi, inargi, outargi;
   const gchar* symbol;
   
   /* Check cache, whether this callable object is already present. */
@@ -57,14 +72,16 @@ lgi_callable_store(lua_State* L, GICallableInfo* info)
 
   /* Allocate LgiCallable userdata. */
   nargs = g_callable_info_get_n_args(info);
-  callable = lua_newuserdata(L, G_STRUCT_OFFSET(LgiCallable, ffi_args) +
-                             sizeof(ffi_type) * (nargs + 3));
+  callable = 
+    lua_newuserdata(L, G_STRUCT_OFFSET(LgiCallable, args[nargs + 3]) +
+		    G_STRUCT_OFFSET(LgiCallableFfi, args[nargs + 3]));
+  ffi = (LgiCallableFfi*)&callable->args[nargs + 3];
   luaL_getmetatable(L, LGI_CALLABLE);
   lua_setmetatable(L, -2);
 
   /* Fill in callable with proper contents. */
   callable->info = g_base_info_ref(info);
-  callable->argc = nargs;
+  callable->nargs = nargs;
   callable->has_self = 0;
   callable->throws = 0;
   if (GI_IS_FUNCTION_INFO(info))
@@ -85,6 +102,13 @@ lgi_callable_store(lua_State* L, GICallableInfo* info)
         return luaL_error(L, "could not locate %s(%s): %s",
                           lua_tostring(L, -3), symbol, g_module_error());
     }
+
+  /* Go through arguments and fill in args properly. */
+  argi = 0;
+  inargi = 2;
+  outargi = 0;
+
+  /* First of all, check return value. */
 
   /* Store callable object to the cache. */
   lua_pushvalue(L, -3);
