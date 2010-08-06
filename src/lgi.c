@@ -127,7 +127,7 @@ lgi_type_get_size(GITypeTag tag)
   switch (tag)
     {
 #define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
-		 valtype, valget, valset)			\
+		 valtype, valget, valset, ffitype)              \
       case tag:							\
 	size = sizeof(ctype);					\
 	break;
@@ -149,7 +149,7 @@ lgi_simple_val_to_lua(lua_State* L, GITypeTag tag, GITransfer transfer,
     {
       /* Simple (native) types. */
 #define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
-		 valtype, valget, valset)			\
+		 valtype, valget, valset, ffitype)              \
       case tag:							\
 	push(L, val->argf);					\
 	if (transfer != GI_TRANSFER_NOTHING)			\
@@ -287,7 +287,7 @@ lgi_simple_val_from_lua(lua_State* L, int index, GITypeTag tag,
   switch (tag)
     {
 #define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
-		 valtype, valget, valset)			\
+		 valtype, valget, valset, ffitype)              \
       case tag :						\
 	val->argf = (ctype)((optional &&			\
 			      lua_isnoneornil(L, index)) ?	\
@@ -365,7 +365,7 @@ value_init(lua_State* L, GValue* val, GITypeInfo* ti)
   switch (tag)
     {
 #define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
-		 val_type, val_get, val_set)			\
+		 val_type, val_get, val_set, ffitype)           \
       case tag:							\
 	g_value_init(val, val_type);				\
 	break;
@@ -405,7 +405,7 @@ value_load(lua_State* L, GValue* val, int narg, GITypeInfo* ti)
   switch (g_type_info_get_tag(ti))
     {
 #define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
-		 val_type, val_get, val_set)			\
+		 val_type, val_get, val_set, ffitype)           \
       case tag:							\
 	val_set(val, check(L, narg));				\
 	break;
@@ -453,7 +453,7 @@ value_store(lua_State* L, GValue* val, GITypeInfo* ti)
   switch (g_type_info_get_tag(ti))
     {
 #define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
-		 val_type, val_get, val_set)			\
+		 val_type, val_get, val_set, ffitype)           \
       case tag:							\
 	push(L, val_get(val));					\
 	break;
@@ -532,7 +532,7 @@ lgi_type_new(lua_State* L, GIBaseInfo* ii, GArgument* val)
 
 /* Puts parts of the name to the stack, to be concatenated by lua_concat.
    Returns number of pushed elements. */
-static int
+int
 lgi_type_get_name(lua_State* L, GIBaseInfo* info)
 {
   GSList* list = NULL, *i;

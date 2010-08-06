@@ -16,6 +16,10 @@
 #include <glib/gprintf.h>
 #include <girepository.h>
 
+/* Puts parts of the name to the stack, to be concatenated by lua_concat.
+   Returns number of pushed elements. */
+int lgi_type_get_name(lua_State* L, GIBaseInfo* info);
+
 /* Key in registry, containing table with all our private data. */
 extern int lgi_regkey;
 typedef enum lgi_reg
@@ -42,5 +46,6 @@ int lgi_callable_store(lua_State* L, GICallableInfo* ci);
 
 /* Calls specified callable and arguments on the stack, using passed function
    address.  If it is NULL, an address is attempted to get from the info (if it
-   is actually IFunctionInfo). */
-int lgi_callable_call(lua_State* L, gpointer addr);
+   is actually IFunctionInfo). func is stack index of callable object and args
+   is stack index of first argument. */
+int lgi_callable_call(lua_State* L, gpointer addr, int func, int args);

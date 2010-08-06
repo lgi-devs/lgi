@@ -11,7 +11,7 @@
 /* Define describes property of given type.
 
 #define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,
-                    val_type, val_get, val_set)
+                 val_type, val_get, val_set, ffi_type)
 
 tag      GI_TYPE_TAG_ ## tag
 ctype    Name of C-style typedef
@@ -23,6 +23,7 @@ opt      lua opt_xxx method
 val_type g_type for storing in GValue
 val_get  g_value getter of this type
 val_set  g_value setter of this type
+
 */
 
 #define DECLTYPE_NOP(x) (void)0
@@ -37,7 +38,8 @@ DECLTYPE(GI_TYPE_TAG_BOOLEAN,
          DECLTYPE_OPTBOOLEAN,
          G_TYPE_BOOLEAN,
          g_value_get_boolean,
-         g_value_set_boolean)
+         g_value_set_boolean,
+         ffi_type_uint)
 
 DECLTYPE(GI_TYPE_TAG_INT8,
          gint8,
@@ -48,7 +50,8 @@ DECLTYPE(GI_TYPE_TAG_INT8,
          luaL_optinteger,
          G_TYPE_CHAR,
          g_value_get_char,
-         g_value_set_char)
+         g_value_set_char,
+         ffi_type_sint8)
 
 DECLTYPE(GI_TYPE_TAG_UINT8,
          guint8,
@@ -59,7 +62,8 @@ DECLTYPE(GI_TYPE_TAG_UINT8,
          luaL_optinteger,
          G_TYPE_UCHAR,
          g_value_get_uchar,
-         g_value_set_uchar)
+         g_value_set_uchar,
+         ffi_type_uint8)
 
 DECLTYPE(GI_TYPE_TAG_INT16,
          gint16,
@@ -70,7 +74,8 @@ DECLTYPE(GI_TYPE_TAG_INT16,
          luaL_optinteger,
          G_TYPE_INT,
          g_value_get_int,
-         g_value_set_int)
+         g_value_set_int,
+         ffi_type_sint16)
 
 DECLTYPE(GI_TYPE_TAG_UINT16,
          guint16,
@@ -81,7 +86,8 @@ DECLTYPE(GI_TYPE_TAG_UINT16,
          luaL_optinteger,
          G_TYPE_UINT,
          g_value_get_uint,
-         g_value_set_uint)
+         g_value_set_uint,
+         ffi_type_uint16)
 
 DECLTYPE(GI_TYPE_TAG_INT32,
          gint32,
@@ -92,7 +98,8 @@ DECLTYPE(GI_TYPE_TAG_INT32,
          luaL_optinteger,
          G_TYPE_INT,
          g_value_get_int,
-         g_value_set_int)
+         g_value_set_int,
+         ffi_type_sint32)
 
 DECLTYPE(GI_TYPE_TAG_UINT32,
          guint32,
@@ -103,7 +110,8 @@ DECLTYPE(GI_TYPE_TAG_UINT32,
          luaL_optnumber,
          G_TYPE_UINT,
          g_value_get_uint,
-         g_value_set_uint)
+         g_value_set_uint,
+         ffi_type_uint32)
 
 DECLTYPE(GI_TYPE_TAG_INT64,
          gint64,
@@ -114,7 +122,8 @@ DECLTYPE(GI_TYPE_TAG_INT64,
          luaL_optnumber,
          G_TYPE_INT64,
          g_value_get_int64,
-         g_value_set_int64)
+         g_value_set_int64,
+         ffi_type_sint64)
 
 DECLTYPE(GI_TYPE_TAG_UINT64,
          guint64,
@@ -125,7 +134,8 @@ DECLTYPE(GI_TYPE_TAG_UINT64,
          luaL_optnumber,
          G_TYPE_UINT64,
          g_value_get_uint64,
-         g_value_set_uint64)
+         g_value_set_uint64,
+         ffi_type_uint64)
 
 DECLTYPE(GI_TYPE_TAG_FLOAT,
          gfloat,
@@ -136,7 +146,8 @@ DECLTYPE(GI_TYPE_TAG_FLOAT,
          luaL_optnumber,
          G_TYPE_FLOAT,
          g_value_get_float,
-         g_value_set_float)
+         g_value_set_float,
+         ffi_type_float)
 
 DECLTYPE(GI_TYPE_TAG_DOUBLE,
          gdouble,
@@ -147,18 +158,34 @@ DECLTYPE(GI_TYPE_TAG_DOUBLE,
          luaL_optnumber,
          G_TYPE_DOUBLE,
          g_value_get_double,
-         g_value_set_double)
+         g_value_set_double,
+         ffi_type_double)
 
+#if GLIB_SIZEOF_SIZE_T == 4
 DECLTYPE(GI_TYPE_TAG_GTYPE,
          GType,
-         v_long,
+         v_size,
          DECLTYPE_NOP,
          lua_pushnumber,
          luaL_checklong,
          luaL_optlong,
          G_TYPE_GTYPE,
          g_value_get_gtype,
-         g_value_set_gtype)
+         g_value_set_gtype,
+         ffi_type_uint32)
+#else
+DECLTYPE(GI_TYPE_TAG_GTYPE,
+         GType,
+         v_size,
+         DECLTYPE_NOP,
+         lua_pushnumber,
+         luaL_checklong,
+         luaL_optlong,
+         G_TYPE_GTYPE,
+         g_value_get_gtype,
+         g_value_set_gtype,
+         ffi_type_uint64)
+#endif
 
 DECLTYPE(GI_TYPE_TAG_UTF8,
          gchar*,
@@ -169,7 +196,8 @@ DECLTYPE(GI_TYPE_TAG_UTF8,
          luaL_optstring,
          G_TYPE_STRING,
          (gchar*)g_value_get_string,
-         g_value_set_string)
+         g_value_set_string,
+         ffi_type_pointer)
 
 DECLTYPE(GI_TYPE_TAG_FILENAME,
          gchar*,
@@ -180,7 +208,8 @@ DECLTYPE(GI_TYPE_TAG_FILENAME,
          luaL_optstring,
          G_TYPE_STRING,
          (gchar*)g_value_get_string,
-         g_value_set_string)
+         g_value_set_string,
+         ffi_type_pointer)
 
 #undef DECLTYPE
 #undef DECLTYPE_NOP
