@@ -40,9 +40,10 @@ typedef enum lgi_reg
 #define LGI_CALLABLE "lgi.callable"
 extern const struct luaL_reg lgi_callable_reg[];
 
-/* Parses given GICallableInfo, creates new userdata for it and stores it to
-   the stack. */
-int lgi_callable_store(lua_State* L, GICallableInfo* ci);
+/* Parses given GICallableInfo, creates new userdata for it and stores
+   it to the stack. Uses cache, so already parsed callable held in the
+   cache is reused if possible. */
+int lgi_callable_create(lua_State* L, GICallableInfo* ci);
 
 /* Calls specified callable and arguments on the stack, using passed function
    address.  If it is NULL, an address is attempted to get from the info (if it
