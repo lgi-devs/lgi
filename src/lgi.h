@@ -50,3 +50,10 @@ int lgi_callable_create(lua_State* L, GICallableInfo* ci);
    is actually IFunctionInfo). func is stack index of callable object and args
    is stack index of first argument. */
 int lgi_callable_call(lua_State* L, gpointer addr, int func, int args);
+
+/* Retrieves compound-type parameter from given Lua-stack position, checks,
+   whether it is suitable for requested ii type.  Returns pointer to the
+   compound object, returns NULL if Lua-stack value is nil and optional is
+   TRUE. */
+gpointer lgi_compound_get(lua_State* L, int arg, GIBaseInfo* ii,
+                          gboolean optional);

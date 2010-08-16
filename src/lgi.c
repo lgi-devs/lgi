@@ -738,6 +738,12 @@ compound_error(lua_State* L, const char* errmsg, int element)
   return luaL_error(L, errmsg, lua_tostring(L, -1), lua_tostring(L, element));
 }
 
+gpointer
+lgi_compound_get(lua_State* L, int arg, GIBaseInfo* ii, gboolean optional)
+{
+  return compound_load(L, arg, ii, optional);
+}
+
 static gpointer
 compound_load(lua_State* L, int index, GIBaseInfo* ii, gboolean optional)
 {

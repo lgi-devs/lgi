@@ -61,6 +61,30 @@ typedef struct _Callable
   /* params points here, contains Param[nargs + 2] entries. */
 } Callable;
 
+/* Context of single Lua->gobject call. */
+typedef struct _Call
+{
+  /* Callable instance. */
+  Callable* callable;
+
+  /* Index of Lua stack where Lua arguments for the method begin. */
+  int narg;
+
+  /* Call arguments. */
+  GArgument* args;
+
+  /* Argument indirection for OUT and INOUT arguments. */
+  GArgument* redirect_out;
+
+  /* libffi argument array. */
+  void** ffi_args;
+
+  /* Followed by:
+     args -> GArgument[callable->nargs + 2];
+     redirect_out -> Gargument[callable->nargs + 2];
+     ffi_args -> void*[callable->nargs + 3]; */
+} Call;
+
 /* Gets ffi_type for given tag, returns NULL if it cannot be handled. */
 static ffi_type*
 get_simple_ffi_type(GITypeTag tag)
@@ -238,7 +262,7 @@ lgi_callable_create(lua_State* L, GICallableInfo* info)
     *ffi_arg++ = &ffi_type_pointer;
 
   /* Create ffi_cif. */
-  if (ffi_prep_cif(&callable->cif, FFI_DEFAULT_ABI, 
+  if (ffi_prep_cif(&callable->cif, FFI_DEFAULT_ABI,
 		   1 + callable->has_self + nargs + callable->throws,
 		   callable->ffi_args[0], &callable->ffi_args[1]) != FFI_OK)
     {
@@ -249,7 +273,7 @@ lgi_callable_create(lua_State* L, GICallableInfo* info)
 
   /* Process callable[args] and reassign narg and nret fields, so that instead
      of 0/-1 they contain real index of lua argument on the stack. */
-  for (argi = 0, in_argi = out_argi = 1; argi < nargs + 1 + callable->has_self; 
+  for (argi = 0, in_argi = out_argi = 1; argi < nargs + 1 + callable->has_self;
        argi++)
     {
       if (callable->params[argi].nval_in != 0)
@@ -274,14 +298,59 @@ int
 lgi_callable_call(lua_State* L, gpointer addr, int func_index, int args_index)
 {
   Callable* callable = luaL_checkudata(L, func_index, LGI_CALLABLE);
+  Call* call;
+  Param* param;
+  int argi;
 
   /* Check that we know where to call. */
-  if (addr == NULL && callable->address == NULL)
+  if (addr == NULL)
     {
-      lua_concat(L, lgi_type_get_name(L, callable->info));
-      return luaL_error(L, "`%s': no native addr to call",
-			lua_tostring(L, -1));
+      addr = callable->address;
+      if (addr == NULL)
+        {
+          lua_concat(L, lgi_type_get_name(L, callable->info));
+          return luaL_error(L, "`%s': no native addr to call",
+                            lua_tostring(L, -1));
+        }
     }
+
+  /* Allocate (on the stack) and fill in Call instance. */
+  call = g_alloca(sizeof(Call) +
+                  sizeof(GArgument) * (callable->nargs + 2) * 2 +
+                  sizeof(void*) * (callable->nargs + 3));
+  call->callable = callable;
+  call->narg = args_index;
+  call->args = (GArgument*)&call[1];
+  call->redirect_out = &call->args[callable->nargs + 2];
+  call->ffi_args = (void**)&call->redirect_out[callable->nargs + 2];
+
+  /* Prepare return value. */
+  call->ffi_args[0] = &call->args[0];
+
+  /* Prepare 'self', if present. */
+  argi = 1;
+  param = &callable->params[1];
+  if (callable->has_self)
+    {
+      call->args[1].v_pointer =
+        lgi_compound_get(L, param->nval_in,
+                         g_base_info_get_container(callable->info), FALSE);
+      call->ffi_args[1] = &call->args[1];
+      argi++;
+    }
+
+  /* Process input parameters. */
+
+  /* Call the function. */
+  ffi_call(&callable->cif, addr, call->ffi_args[0], &call->ffi_args[1]);
+
+  /* Check, whether function threw. */
+
+  /* Handle return value. */
+
+  /* Skip 'self' parameter. */
+
+  /* Process output parameters. */
 
   return 0;
 }
