@@ -52,10 +52,10 @@ typedef struct _Callable
   ffi_cif cif;
 
   /* Pointer to 'nargs + 3' ffi argument slots. */
-  struct ffi_type* ffi_args;
+  ffi_type** ffi_args;
 
   /* Pointer to 'nargs + 2' Param instances. */
-  struct Param *params;
+  Param *params;
 
   /* ffi_args points here, contains ffi_type[nargs + 3] entries. */
   /* params points here, contains Param[nargs + 2] entries. */
@@ -88,7 +88,7 @@ get_simple_ffi_type(GITypeTag tag)
 
 /* Gets ffi_type for given Param instance. */
 static ffi_type*
-get_ffi_type(const Param* param)
+get_ffi_type(Param* param)
 {
   /* In case of inout or out parameters, the type is always pointer. */
   GITypeTag tag = g_type_info_get_tag(&param->ti);
@@ -96,23 +96,20 @@ get_ffi_type(const Param* param)
   if (ffi == NULL)
     {
       /* Something more complex. */
-      switch (tag)
+      if (tag == GI_TYPE_TAG_INTERFACE)
 	{
-	case GI_TYPE_TAG_INTERFACE:
-	  {
-	    GIBaseInfo* ii = g_type_info_get_interface(&param->ti);
-	    switch (g_base_info_get_type(ii))
-	      {
-	      case GI_INFO_TYPE_ENUM:
-	      case GI_INFO_TYPE_FLAGS:
-		ffi = get_simple_ffi_type(g_enum_info_get_storage_type(ii));
-		break;
+	  GIBaseInfo* ii = g_type_info_get_interface(&param->ti);
+	  switch (g_base_info_get_type(ii))
+	    {
+	    case GI_INFO_TYPE_ENUM:
+	    case GI_INFO_TYPE_FLAGS:
+	      ffi = get_simple_ffi_type(g_enum_info_get_storage_type(ii));
+	      break;
 
-	      default:
-	      }
-	    g_base_info_unref(ii);
-	  }
-	  break;
+	    default:
+	      break;
+	    }
+	  g_base_info_unref(ii);
 	}
     }
 
@@ -124,7 +121,8 @@ lgi_callable_create(lua_State* L, GICallableInfo* info)
 {
   Callable* callable;
   Param* param;
-  gint nargs, argi, argstart;
+  ffi_type** ffi_arg;
+  gint nargs, argi, in_argi, out_argi;
   GIArgInfo ai;
   const gchar* symbol;
 
@@ -154,7 +152,7 @@ lgi_callable_create(lua_State* L, GICallableInfo* info)
   lua_setmetatable(L, -2);
 
   /* Fill in callable with proper contents. */
-  callable->ffi_args = (ffi_type*)&callable[1];
+  callable->ffi_args = (ffi_type**)&callable[1];
   callable->params = (Param*)&callable->ffi_args[nargs + 3];
   callable->info = g_base_info_ref(info);
   callable->nargs = nargs;
@@ -181,63 +179,67 @@ lgi_callable_create(lua_State* L, GICallableInfo* info)
 
   /* Process return value. */
   param = &callable->params[0];
+  ffi_arg = &callable->ffi_args[0];
   g_callable_info_load_return_type(callable->info, &param->ti);
   param->transfer = g_callable_info_get_caller_owns(callable->info);
-  param->caller_alloc = false;
-  param->optional = false;
-  callable->ffi_args[0] = get_ffi_type(param);
+  param->caller_alloc = FALSE;
+  param->optional = FALSE;
+  *ffi_arg = get_ffi_type(param);
   param->dir = GI_DIRECTION_OUT;
   param->nval_in = 0;
   param->nval_out = (callable->ffi_args[0] == &ffi_type_void) ? 0 : -1;
+  param++;
+  ffi_arg++;
 
   /* Process 'self' argument, if present. */
-  argstart = 1;
   if (callable->has_self)
     {
       callable->ffi_args[1] = &ffi_type_pointer;
       param->nval_in = -1;
       param->nval_out = 0;
-      argstart++;
       param++;
+      ffi_arg++;
     }
 
   /* Process the rest of the arguments. */
-  for (argi = 0; argi < nargs; argi++)
+  for (argi = 0; argi < nargs; argi++, param++, ffi_arg++)
     {
       g_callable_info_load_arg(callable->info, argi, &ai);
-      g_arg_info_load_type(&ai, &callable->params[argstart + argi].ti);
+      g_arg_info_load_type(&ai, &param->ti);
       param->dir = g_arg_info_get_direction(&ai);
       param->transfer = g_arg_info_get_ownership_transfer(&ai);
-      param->caller_allow = g_arg_info_is_caller_allocates(&ai);
+      param->caller_alloc = g_arg_info_is_caller_allocates(&ai);
       param->optional = g_arg_info_is_optional(&ai) ||
 	g_arg_info_may_be_null(&ai);
       switch (param->dir)
 	{
 	case GI_DIRECTION_IN:
-	  callable->ffi_args[argstart + argi] = get_ffi_type(param);
+	  *ffi_arg = get_ffi_type(param);
 	  param->nval_in = -1;
 	  param->nval_out = 0;
 	  break;
 
 	case GI_DIRECTION_OUT:
-	  callable->ffi_args[argstart + argi] = &ffi_type_pointer;
+	  *ffi_arg = &ffi_type_pointer;
 	  param->nval_in = 0;
 	  param->nval_out = -1;
 	  break;
 
 	case GI_DIRECTION_INOUT:
-	  callable->ffi_args[argstart + argi] = &ffi_type_pointer;
+	  *ffi_arg = &ffi_type_pointer;
 	  param->nval_in = -1;
 	  param->nval_out = -1;
 	  break;
+	}
     }
 
   /* Add ffi info for 'err' argument. */
   if (callable->throws)
-    callable->ffi_args[argstart + argi++] = &ffi_type_pointer;
+    *ffi_arg++ = &ffi_type_pointer;
 
   /* Create ffi_cif. */
-  if (ffi_prep_cif(&callable->cif, FFI_DEFAULT_ABI, argstart + argi,
+  if (ffi_prep_cif(&callable->cif, FFI_DEFAULT_ABI, 
+		   1 + callable->has_self + nargs + callable->throws,
 		   callable->ffi_args[0], &callable->ffi_args[1]) != FFI_OK)
     {
       lua_concat(L, lgi_type_get_name(L, callable->info));
@@ -247,7 +249,8 @@ lgi_callable_create(lua_State* L, GICallableInfo* info)
 
   /* Process callable[args] and reassign narg and nret fields, so that instead
      of 0/-1 they contain real index of lua argument on the stack. */
-  for (argi = 0; argi < nargs + 1 + callable->has_self; argi++)
+  for (argi = 0, in_argi = out_argi = 1; argi < nargs + 1 + callable->has_self; 
+       argi++)
     {
       if (callable->params[argi].nval_in != 0)
 	callable->params[argi].nval_in = in_argi++;

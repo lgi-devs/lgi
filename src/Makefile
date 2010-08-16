@@ -1,9 +1,9 @@
-PKG_PACKAGES = gobject-introspection-1.0 lua
-OUTPUT = lgi.dll
+PKG_PACKAGES = gobject-introspection-1.0 lua5.1
+OUTPUT = lgi.so
 
 OBJS = lgi.o callable.o
 
-CFLAGS = -c -pipe -Wall `pkg-config --cflags $(PKG_PACKAGES)`
+CFLAGS = -c -pipe -Wall -fPIC `pkg-config --cflags $(PKG_PACKAGES)`
 LDFLAGS = -shared `pkg-config --libs $(PKG_PACKAGES)`
 
 ifdef DEBUG
@@ -22,4 +22,4 @@ lgi.o : lgi.c lgi.h decltype.h
 callable.o : callable.c lgi.h decltype.h
 
 clean :
-	rm -f lgi.o $(OUTPUT)
+	rm -f $(OBJS) $(OUTPUT)
