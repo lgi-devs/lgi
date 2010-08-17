@@ -22,14 +22,14 @@ GIBaseInfo* lgi_baseinfo_info;
    the structure is allocated and its address is put into addr
    (i.e. addr parameter is output in this case). */
 static int compound_store(lua_State* L, GIBaseInfo* ii, gpointer* addr,
-                          GITransfer transfer);
+			  GITransfer transfer);
 
 /* Retrieves compound-type parameter from given Lua-stack position, checks,
    whether it is suitable for requested ii type.  Returns pointer to the
    compound object, returns NULL if Lua-stack value is nil and optional is
    TRUE. */
 static gpointer compound_load(lua_State* L, int arg, GIBaseInfo* ii,
-                              gboolean optional);
+			      gboolean optional);
 
 /* 'compound' userdata: wraps compound with reference to its repo table. */
 struct ud_compound
@@ -592,14 +592,14 @@ compound_callmeta(lua_State* L, const char* metaname, int nargs, int nrets)
 }
 
 int lgi_compound_create(lua_State* L, GIBaseInfo* ii, gpointer addr,
-                        GITransfer transfer)
+			GITransfer transfer)
 {
   return compound_store(L, ii, &addr, transfer);
 }
 
 static int
 compound_store(lua_State* L, GIBaseInfo* info, gpointer* addr,
-              GITransfer transfer)
+	      GITransfer transfer)
 {
   int vals;
   struct ud_compound* compound;
@@ -704,8 +704,8 @@ compound_gc(lua_State* L)
 	  break;
 
 	default:
-          g_warning("Incorrect type %d in compound_gc(%p)", (int)type,
-                    compound);
+	  g_warning("Incorrect type %d in compound_gc(%p)", (int)type,
+		    compound);
 	  break;
 	}
     }
@@ -1147,7 +1147,7 @@ lgi_find(lua_State* L)
 
   /* Create new IBaseInfo structure and return it. */
   vals = compound_store(L, lgi_baseinfo_info, (gpointer*)&info,
-                        GI_TRANSFER_EVERYTHING);
+			GI_TRANSFER_EVERYTHING);
   return vals;
 }
 
@@ -1158,7 +1158,7 @@ lgi_get(lua_State* L)
   GArgument unused;
   g_debug("core.get()");
   return lgi_type_new(L, compound_load(L, 1, lgi_baseinfo_info, FALSE),
-                      &unused);
+		      &unused);
 }
 
 #ifndef NDEBUG
@@ -1261,11 +1261,12 @@ luaopen_lgi__core(lua_State* L)
 
   /* GLib initializations. */
   g_type_init();
+  g_irepository_get_default();
   g_irepository_require(NULL, "GIRepository", NULL, 0, &err);
   if (err != NULL)
     lgi_throw(L, err);
-  lgi_baseinfo_info = g_irepository_find_by_name(NULL, "GIRepository",
-						 "IBaseInfo");
+  lgi_baseinfo_info =
+    g_irepository_find_by_name(NULL, "GIRepository", "IBaseInfo");
 
   /* Register userdata types. */
   lgi_reg_udata(L, struct_reg, UD_COMPOUND);
