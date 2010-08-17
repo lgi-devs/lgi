@@ -31,12 +31,6 @@ static int compound_store(lua_State* L, GIBaseInfo* ii, gpointer* addr,
 static gpointer compound_load(lua_State* L, int arg, GIBaseInfo* ii,
                               gboolean optional);
 
-/* Creates new userdata representing instance of function described by
-   'info'. Parses function signature and might report an error if the
-   function cannot be wrapped by lgi.  In any case, returns number of
-   items pushed to the stack.*/
-static int function_store(lua_State* L, GIFunctionInfo* info);
-
 /* 'compound' userdata: wraps compound with reference to its repo table. */
 struct ud_compound
 {
@@ -505,7 +499,7 @@ lgi_type_new(lua_State* L, GIBaseInfo* ii, GArgument* val)
   switch (g_base_info_get_type(ii))
     {
     case GI_INFO_TYPE_FUNCTION:
-      vals = function_store(L, ii);
+      vals = lgi_callable_create(L, ii);
       break;
 
     case GI_INFO_TYPE_STRUCT:
@@ -595,6 +589,12 @@ compound_callmeta(lua_State* L, const char* metaname, int nargs, int nrets)
     }
 
   return called;
+}
+
+int lgi_compound_create(lua_State* L, GIBaseInfo* ii, gpointer addr,
+                        GITransfer transfer)
+{
+  return compound_store(L, ii, &addr, transfer);
 }
 
 static int
@@ -963,29 +963,6 @@ static const struct luaL_reg struct_reg[] = {
   { "__newindex", compound_newindex },
   { NULL, NULL }
 };
-
-static int
-function_store(lua_State* L, GIFunctionInfo* info)
-{
-  GError* err = NULL;
-  struct ud_function* function = lua_newuserdata(L, sizeof(struct ud_function));
-  luaL_getmetatable(L, UD_FUNCTION);
-  lua_setmetatable(L, -2);
-  function->info = g_base_info_ref(info);
-  if (!g_function_info_prep_invoker(info, &function->invoker, &err))
-    lgi_throw(L, err);
-
-  /* Check, whether such function is not already present in the cache.
-     If it is, use the one we already have. */
-  if (lgi_get_cached(L, function->invoker.native_address) == 1)
-    /* Replace with previously created function. */
-    lua_replace(L, -2);
-  else
-    /* Store new function into the cache. */
-    lgi_set_cached(L, function->invoker.native_address);
-
-  return 1;
-}
 
 static int
 function_gc(lua_State* L)

@@ -51,6 +51,11 @@ int lgi_callable_create(lua_State* L, GICallableInfo* ci);
    is stack index of first argument. */
 int lgi_callable_call(lua_State* L, gpointer addr, int func, int args);
 
+/* Creates new compound of given address and type, pushes its userdata on the
+ * lua stack. */
+int lgi_compound_create(lua_State* L, GIBaseInfo* ii, gpointer addr,
+                        GITransfer transfer);
+
 /* Retrieves compound-type parameter from given Lua-stack position, checks,
    whether it is suitable for requested ii type.  Returns pointer to the
    compound object, returns NULL if Lua-stack value is nil and optional is
