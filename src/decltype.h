@@ -187,6 +187,7 @@ DECLTYPE(GI_TYPE_TAG_GTYPE,
          ffi_type_uint64)
 #endif
 
+#ifndef DECLTYPE_NUMERIC_ONLY
 DECLTYPE(GI_TYPE_TAG_UTF8,
          gchar*,
          v_string,
@@ -210,6 +211,7 @@ DECLTYPE(GI_TYPE_TAG_FILENAME,
          (gchar*)g_value_get_string,
          g_value_set_string,
          ffi_type_pointer)
+#endif
 
 #undef DECLTYPE
 #undef DECLTYPE_NOP
