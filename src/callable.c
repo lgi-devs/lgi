@@ -157,16 +157,13 @@ lgi_callable_create(lua_State* L, GICallableInfo* info)
   luaL_checkstack(L, 5, "");
   lua_rawgeti(L, LUA_REGISTRYINDEX, lgi_regkey);
   lua_rawgeti(L, -1, LGI_REG_CACHE);
-  lua_pushstring(L, g_base_info_get_namespace(info));
-  lua_pushstring(L, ".");
-  lua_pushstring(L, g_base_info_get_name(info));
-  lua_concat(L, 3);
+  lua_concat(L, lgi_type_get_name(L, info));
   lua_pushvalue(L, -1);
   lua_gettable(L, -3);
   if (!lua_isnil(L, -1))
     {
       lua_replace(L, -4);
-      lua_pop(L, 3);
+      lua_pop(L, 2);
       return 1;
     }
 
