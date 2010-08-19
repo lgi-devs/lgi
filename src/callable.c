@@ -9,7 +9,6 @@
  */
 
 #include "lgi.h"
-
 #include <ffi.h>
 
 /* Represents single parameter in callable description. */
@@ -97,9 +96,9 @@ get_simple_ffi_type(GITypeTag tag)
       break;
 
 #define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
-		 val_type, val_get, val_set, ffitype)           \
-      case tag:                                                 \
-	ffi = &ffitype;                                         \
+		 val_type, val_get, val_set, ffitype)		\
+      case tag:							\
+	ffi = &ffitype;						\
 	break;
 #include "decltype.h"
 
@@ -169,8 +168,8 @@ lgi_callable_create(lua_State* L, GICallableInfo* info)
   /* Allocate Callable userdata. */
   nargs = g_callable_info_get_n_args(info);
   callable = lua_newuserdata(L, sizeof(Callable) +
-			     sizeof(ffi_type) * (nargs + 3) +
-			     sizeof(Param) * (nargs + 2));
+                             sizeof(ffi_type) * (nargs + 3) +
+                             sizeof(Param) * (nargs + 2));
   luaL_getmetatable(L, LGI_CALLABLE);
   lua_setmetatable(L, -2);
 
@@ -200,6 +199,11 @@ lgi_callable_create(lua_State* L, GICallableInfo* info)
 	return luaL_error(L, "could not locate %s(%s): %s",
 			  lua_tostring(L, -3), symbol, g_module_error());
     }
+
+  /* Clear all 'internal' flags inside callable parameters, parameters are then
+     marked as internal during processing of their parents. */
+  for (argi = 0; argi < 1 + callable->has_self + nargs; argi++)
+    callable->params[argi].internal = FALSE;
 
   /* Process return value. */
   param = &callable->params[0];
@@ -231,9 +235,8 @@ lgi_callable_create(lua_State* L, GICallableInfo* info)
       param->caller_alloc = g_arg_info_is_caller_allocates(&ai);
       param->optional = g_arg_info_is_optional(&ai) ||
 	g_arg_info_may_be_null(&ai);
-      param->internal = FALSE;
       *ffi_arg = (param->dir == GI_DIRECTION_IN) ?
-        get_ffi_type(param) : &ffi_type_pointer;
+	get_ffi_type(param) : &ffi_type_pointer;
     }
 
   /* Add ffi info for 'err' argument. */
@@ -265,19 +268,19 @@ lgi_callable_create(lua_State* L, GICallableInfo* info)
    if value was handled, 0 otherwise. */
 static int
 marshal_simple(lua_State* L, gboolean to_c, int arg, gboolean optional,
-               GITypeTag tag, GArgument* val)
+	       GITypeTag tag, GArgument* val)
 {
   int nret = 1;
   switch (tag)
     {
 #define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
-		 valtype, valget, valset, ffitype)              \
+		 valtype, valget, valset, ffitype)		\
       case tag:							\
-        if (to_c)                                               \
-          val->argf = (ctype)(optional ?                        \
-                              opt(L, arg, 0) : check(L, arg));  \
-        else                                                    \
-          push(L, val->argf);                                   \
+	if (to_c)						\
+	  val->argf = (ctype)(optional ?			\
+			      opt(L, arg, 0) : check(L, arg));	\
+	else							\
+	  push(L, val->argf);					\
 	break;
 #include "decltype.h"
 
@@ -288,7 +291,7 @@ marshal_simple(lua_State* L, gboolean to_c, int arg, gboolean optional,
   return nret;
 }
 
-/* Converts given argument to/from Lua.  Returns 1 value handled, 0
+/* Converts given argument to/from Lua.	 Returns 1 value handled, 0
    otherwise. */
 static int
 marshal(lua_State* L, gboolean to_c, Call* call, int param_idx, int lua_arg)
@@ -300,44 +303,44 @@ marshal(lua_State* L, gboolean to_c, Call* call, int param_idx, int lua_arg)
   if (nret == 0)
     {
       switch (tag)
-        {
-        case GI_TYPE_TAG_INTERFACE:
-          {
-            GIBaseInfo* ii = g_type_info_get_interface(&param->ti);
-            GIInfoType type = g_base_info_get_type(ii);
-            switch (type)
-              {
-              case GI_INFO_TYPE_ENUM:
-              case GI_INFO_TYPE_FLAGS:
-                /* Store underlying value directly. */
-                nret = marshal_simple(L, to_c, lua_arg, param->optional,
-                                      g_enum_info_get_storage_type(ii), val);
-                break;
+	{
+	case GI_TYPE_TAG_INTERFACE:
+	  {
+	    GIBaseInfo* ii = g_type_info_get_interface(&param->ti);
+	    GIInfoType type = g_base_info_get_type(ii);
+	    switch (type)
+	      {
+	      case GI_INFO_TYPE_ENUM:
+	      case GI_INFO_TYPE_FLAGS:
+		/* Store underlying value directly. */
+		nret = marshal_simple(L, to_c, lua_arg, param->optional,
+				      g_enum_info_get_storage_type(ii), val);
+		break;
 
-              case GI_INFO_TYPE_STRUCT:
-              case GI_INFO_TYPE_OBJECT:
-                if (to_c)
-                  {
-                    val->v_pointer = lgi_compound_get(L, lua_arg, ii,
-                                                      param->optional);
-                    nret = 1;
-                  }
-                else
-                  nret = lgi_compound_create(L, ii, val->v_pointer,
-                                             param->transfer);
-                break;
+	      case GI_INFO_TYPE_STRUCT:
+	      case GI_INFO_TYPE_OBJECT:
+		if (to_c)
+		  {
+		    val->v_pointer = lgi_compound_get(L, lua_arg, ii,
+						      param->optional);
+		    nret = 1;
+		  }
+		else
+		  nret = lgi_compound_create(L, ii, val->v_pointer,
+					     param->transfer);
+		break;
 
-              default:
-                g_warning("bad typeinfo interface type %d (arg %d)",
-                          type, param_idx);
-              }
-            g_base_info_unref(ii);
-          }
-          break;
+	      default:
+		g_warning("bad typeinfo interface type %d (arg %d)",
+			  type, param_idx);
+	      }
+	    g_base_info_unref(ii);
+	  }
+	  break;
 
-        default:
-          g_warning("bad typeinfo tag %d (arg %d)", tag, param_idx);
-        }
+	default:
+	  g_warning("bad typeinfo tag %d (arg %d)", tag, param_idx);
+	}
     }
 
   return nret;
@@ -346,27 +349,34 @@ marshal(lua_State* L, gboolean to_c, Call* call, int param_idx, int lua_arg)
 int
 lgi_callable_call(lua_State* L, gpointer addr, int func_index, int args_index)
 {
-  Callable* callable = luaL_checkudata(L, func_index, LGI_CALLABLE);
   Call* call;
   Param* param;
   int argi, i, lua_argi, nret;
+  GError* err = NULL;
+  Callable* callable = luaL_checkudata(L, func_index, LGI_CALLABLE);
 
   /* Check that we know where to call. */
   if (addr == NULL)
     {
       addr = callable->address;
       if (addr == NULL)
-        {
-          lua_concat(L, lgi_type_get_name(L, callable->info));
-          return luaL_error(L, "`%s': no native addr to call",
-                            lua_tostring(L, -1));
-        }
+	{
+	  lua_concat(L, lgi_type_get_name(L, callable->info));
+	  return luaL_error(L, "`%s': no native addr to call",
+			    lua_tostring(L, -1));
+	}
     }
+
+#ifndef NDEBUG
+  lua_concat(L, lgi_type_get_name(L, callable->info));
+  g_debug("calling `%s'", lua_tostring(L, -1));
+  lua_pop(L, 1);
+#endif
 
   /* Allocate (on the stack) and fill in Call instance. */
   call = g_alloca(sizeof(Call) +
-                  sizeof(GArgument) * (callable->nargs + 2) * 2 +
-                  sizeof(void*) * (callable->nargs + 3));
+		  sizeof(GArgument) * (callable->nargs + 2) * 2 +
+		  sizeof(void*) * (callable->nargs + 3));
   call->callable = callable;
   call->narg = args_index;
   call->args = (GArgument*)&call[1];
@@ -382,10 +392,10 @@ lgi_callable_call(lua_State* L, gpointer addr, int func_index, int args_index)
   param = &callable->params[1];
   if (callable->has_self)
     {
-      call->args[argi].v_pointer =
-        lgi_compound_get(L, args_index,
-                         g_base_info_get_container(callable->info), TRUE);
-      call->ffi_args[argi] = &call->args[argi];
+      call->args[1].v_pointer =
+	lgi_compound_get(L, args_index,
+			 g_base_info_get_container(callable->info), TRUE);
+      call->ffi_args[1] = &call->args[1];
       argi++;
       lua_argi++;
     }
@@ -395,22 +405,28 @@ lgi_callable_call(lua_State* L, gpointer addr, int func_index, int args_index)
     {
       /* Prepare ffi_args and redirection for out/inout parameters. */
       if (param->dir == GI_DIRECTION_IN)
-        call->ffi_args[argi] = &call->args[argi];
+	call->ffi_args[argi] = &call->args[argi];
       else
-        {
-          call->ffi_args[argi] = &call->redirect_out[argi];
-          call->redirect_out[argi] = &call->args[argi];
-        }
+	{
+	  call->ffi_args[argi] = &call->redirect_out[argi];
+	  call->redirect_out[argi] = &call->args[argi];
+	}
 
       if (!param->internal)
-        /* Convert parameter from Lua stack to C. */
-        marshal(L, TRUE, call, argi, lua_argi++);
+	/* Convert parameter from Lua stack to C. */
+	marshal(L, TRUE, call, argi, lua_argi++);
     }
+
+  /* Add error for 'throws' type function. */
+  if (callable->throws)
+      call->ffi_args[argi++] = &err;
 
   /* Call the function. */
   ffi_call(&callable->cif, addr, call->ffi_args[0], &call->ffi_args[1]);
 
   /* Check, whether function threw. */
+  if (err != NULL)
+    return lgi_error(L, err);
 
   /* Handle return value. */
   nret = 0;

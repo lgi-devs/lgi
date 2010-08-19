@@ -56,7 +56,7 @@ struct ud_function
 };
 #define UD_FUNCTION "lgi.function"
 
-static int
+int
 lgi_error(lua_State* L, GError* err)
 {
   lua_pushboolean(L, 0);
