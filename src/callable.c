@@ -268,9 +268,12 @@ lgi_callable_create(lua_State* L, GICallableInfo* info)
    if value was handled, 0 otherwise. */
 static int
 marshal_simple(lua_State* L, gboolean to_c, int arg, gboolean optional,
-	       GITypeTag tag, GArgument* val)
+	       GIDirection dir, GITransfer transfer, GITypeTag tag, 
+	       GArgument* val)
 {
   int nret = 1;
+  gboolean destroy = !to_c && dir != GI_DIRECTION_IN && 
+    transfer == GI_TRANSFER_EVERYTHING;
   switch (tag)
     {
 #define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
@@ -280,7 +283,11 @@ marshal_simple(lua_State* L, gboolean to_c, int arg, gboolean optional,
 	  val->argf = (ctype)(optional ?			\
 			      opt(L, arg, 0) : check(L, arg));	\
 	else							\
-	  push(L, val->argf);					\
+	  {							\
+	    push(L, val->argf);					\
+	    if (destroy)					\
+	      dtor(val->argf);					\
+	  }							\
 	break;
 #include "decltype.h"
 
@@ -402,12 +409,13 @@ marshal_from_carray(lua_State* L, Call* call, Param* param, GArgument* val,
 	    break;
 
 	  /* Store value into the table. */
-	  eparam.ti = param->ti;
+	  eparam.ti = *eti;
 	  eparam.dir = GI_DIRECTION_OUT;
 	  eparam.transfer = (param->transfer == GI_TRANSFER_EVERYTHING) ?
 	    GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING;
 	  eparam.caller_alloc = FALSE;
 	  eparam.optional = TRUE;
+	  eparam.internal = FALSE;
 	  if (marshal(L, FALSE, NULL, &eparam, eval, 0) == 1)
 	    lua_rawseti(L, -2, index + 1);
 	}
@@ -430,7 +438,8 @@ marshal(lua_State* L, gboolean to_c, Call* call, Param* param, GArgument* val,
 	int lua_arg)
 {
   GITypeTag tag = g_type_info_get_tag(&param->ti);
-  int nret = marshal_simple(L, to_c, lua_arg, param->optional, tag, val);
+  int nret = marshal_simple(L, to_c, lua_arg, param->optional, param->dir, 
+			    param->transfer, tag, val);
   if (nret == 0)
     {
       switch (tag)
@@ -445,26 +454,8 @@ marshal(lua_State* L, gboolean to_c, Call* call, Param* param, GArgument* val,
 	      case GI_INFO_TYPE_FLAGS:
 		/* Store underlying value directly. */
 		nret = marshal_simple(L, to_c, lua_arg, param->optional,
+				      param->dir, param->transfer,
 				      g_enum_info_get_storage_type(ii), val);
-		break;
-
-	      case GI_TYPE_TAG_ARRAY:
-		{
-		  GIArrayType atype = g_type_info_get_array_type(&param->ti);
-		  switch (atype)
-		    {
-		    case GI_ARRAY_TYPE_C:
-		      nret = (to_c ?
-			      marshal_to_carray(L, call, param,
-						val, lua_arg) :
-			      marshal_from_carray(L, call, param,
-						  val, lua_arg));
-		      break;
-
-		    default:
-		      g_warning("bad array type %d", atype);
-		    }
-		}
 		break;
 
 	      case GI_INFO_TYPE_STRUCT:
@@ -484,6 +475,23 @@ marshal(lua_State* L, gboolean to_c, Call* call, Param* param, GArgument* val,
 		g_warning("bad typeinfo interface type %d", type);
 	      }
 	    g_base_info_unref(ii);
+	  }
+	  break;
+
+	case GI_TYPE_TAG_ARRAY:
+	  {
+	    GIArrayType atype = g_type_info_get_array_type(&param->ti);
+	    switch (atype)
+	      {
+	      case GI_ARRAY_TYPE_C:
+		nret = (to_c ?
+			marshal_to_carray(L, call, param, val, lua_arg) :
+			marshal_from_carray(L, call, param, val, lua_arg));
+		break;
+
+	      default:
+		g_warning("bad array type %d", atype);
+	      }
 	  }
 	  break;
 
@@ -515,12 +523,6 @@ lgi_callable_call(lua_State* L, gpointer addr, int func_index, int args_index)
 			    lua_tostring(L, -1));
 	}
     }
-
-#ifndef NDEBUG
-  lua_concat(L, lgi_type_get_name(L, callable->info));
-  g_debug("calling `%s'", lua_tostring(L, -1));
-  lua_pop(L, 1);
-#endif
 
   /* Allocate (on the stack) and fill in Call instance. */
   call = g_alloca(sizeof(Call) +

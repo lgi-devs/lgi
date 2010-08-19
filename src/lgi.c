@@ -1156,7 +1156,6 @@ lgi_get(lua_State* L)
 {
   /* Create new instance based on the embedded typeinfo. */
   GArgument unused;
-  g_debug("core.get()");
   return lgi_type_new(L, compound_load(L, 1, lgi_baseinfo_info, FALSE),
                       &unused);
 }

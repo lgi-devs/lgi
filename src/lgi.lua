@@ -512,11 +512,7 @@ local function get_symbol(namespace, symbol)
 
 	 -- Process value with the hook, if some hook is installed.
 	 local hook = namespace[0].hook
-	 if hook then
-	    log('passing symbol %s.%s through external hook',
-		namespace[0].name, symbol)
-	    value = hook(symbol, value)
-	 end
+	 if hook then value = hook(symbol, value) end
 
 	 -- Cache the symbol in specified category in the namespace.
 	 if value then
@@ -568,7 +564,6 @@ for name, hook in pairs
 		   if func then
 		      if type(func) == 'function' then func(value) end
 		   else
-		      log('filtering out %s.%s', name, symbol)
 		      value = nil
 		   end
 		   return value
