@@ -120,9 +120,9 @@ gi._enums = { IInfoType = setmetatable({
 -- handlers (so that find-returned records have already properly assigned
 -- metas) and then dereference record and assign acquire/dispose methods.
 gi._structs = {
-   IBaseInfo = { [0] = { name = "GIRepository.IBaseInfo",
+   IBaseInfo = { [0] = { name = 'GIRepository.IBaseInfo',
 			 type = gi.IInfoType.STRUCT } },
-   Typelib = { [0] = { name = "GIRepository.Typelib",
+   Typelib = { [0] = { name = 'GIRepository.Typelib',
 		       type = gi.IInfoType.STRUCT } },
 }
 
@@ -492,7 +492,6 @@ local function get_symbol(namespace, symbol)
    if value then return value end
 
    -- Lookup baseinfo of requested symbol in the repo.
-   log('loading symbol %s.%s', namespace[0].name, symbol)
    local info = gi.IRepository.find_by_name(nil, namespace[0].name, symbol)
 
    -- Store the symbol into the in-load table, because we have to
@@ -592,8 +591,6 @@ local function load_namespace(into, name)
 
    -- Load override into the namespace hook, if the override exists.
    local ok, override = pcall(require, 'lgi._core.' .. name)
-   log('attempting to get hook lgi._core.%s: -> %s(%s)', name, tostring(ok),
-       tostring(override))
    if ok and override then into[0].hook = override.hook end
 
    -- Load the typelibrary for the namespace.
