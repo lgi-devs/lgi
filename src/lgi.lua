@@ -546,6 +546,8 @@ for name, hook in pairs
       MainContext = true,
       Source = true,
 
+      SeekType = true,
+
       MarkupParser = true, MarkupParseContext = true,
       MarkupError = true, MARKUP_ERROR = true, MarkupParseFlags = true,
 
