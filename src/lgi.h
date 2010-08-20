@@ -16,6 +16,9 @@
 #include <glib/gprintf.h>
 #include <girepository.h>
 
+/* Global context of main thread, usable for callbacks to work with. */
+extern lua_State* lgi_main_thread_state;
+
 /* Reports specified GLib error as function return.  Returns number of items
  * pushed to the stack.  err instance is automatically freed. */
 int lgi_error(lua_State* L, GError* err);

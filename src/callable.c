@@ -14,15 +14,18 @@
 /* Represents single parameter in callable description. */
 typedef struct _Param
 {
-  /* Typeinfo instance, initialzed, loaded (not dynamically
-     allocated).  Only for 'self' parameters this instance is
-     unused. */
+  /* Arginfo and Typeinfo instance, initialzed, loaded (not dynamically
+     allocated). */
   GITypeInfo ti;
+  GIArgInfo ai;
 
-  /* Other information about parameter. */
+  /* Direction of the argument. */
   GIDirection dir;
+
+  /* Ownership passing rule for output parameters. */
   GITransfer transfer;
-  gboolean caller_alloc;
+
+  /* Flag indicating whether argument is optional. */
   gboolean optional;
 
   /* Flag indicating whether this parameter is represented by Lua input and/or
@@ -89,6 +92,23 @@ typedef struct _Call
      ffi_args -> void*[callable->nargs + 2]; */
 } Call;
 
+/* Structure containing closure data. */
+typedef struct _Closure
+{
+  /* Libffi closure object. */
+  ffi_closure ffi_closure;
+
+  /* Lua reference to associated callable. */
+  int callable_ref;
+
+  /* Lua reference to target function to be invoked. */
+  int target_ref;
+
+  /* Flag indicating whether closure should auto-destroy itself after it is
+     called. */
+  gboolean autodestroy;
+} Closure;
+
 /* Gets ffi_type for given tag, returns NULL if it cannot be handled. */
 static ffi_type*
 get_simple_ffi_type(GITypeTag tag)
@@ -151,7 +171,6 @@ lgi_callable_create(lua_State* L, GICallableInfo* info)
   Param* param;
   ffi_type** ffi_arg;
   gint nargs, argi;
-  GIArgInfo ai;
 
   /* Check cache, whether this callable object is already present. */
   luaL_checkstack(L, 5, "");
@@ -208,13 +227,12 @@ lgi_callable_create(lua_State* L, GICallableInfo* info)
     callable->params[argi].internal = FALSE;
 
   /* Process return value. */
-  param = &callable->retval;
-  g_callable_info_load_return_type(callable->info, &param->ti);
-  param->transfer = g_callable_info_get_caller_owns(callable->info);
-  param->caller_alloc = FALSE;
-  param->optional = FALSE;
-  param->dir = GI_DIRECTION_OUT;
-  callable->ffi_retval = get_ffi_type(param);
+  g_callable_info_load_return_type(callable->info, &callable->retval.ti);
+  callable->retval.dir = GI_DIRECTION_OUT;
+  callable->retval.transfer = g_callable_info_get_caller_owns(callable->info);
+  callable->retval.optional = FALSE;
+  callable->retval.internal = FALSE;
+  callable->ffi_retval = get_ffi_type(&callable->retval);
 
   /* Process 'self' argument, if present. */
   ffi_arg = &callable->ffi_args[0];
@@ -225,15 +243,25 @@ lgi_callable_create(lua_State* L, GICallableInfo* info)
   param = &callable->params[0];
   for (argi = 0; argi < nargs; argi++, param++, ffi_arg++)
     {
-      g_callable_info_load_arg(callable->info, argi, &ai);
-      g_arg_info_load_type(&ai, &param->ti);
-      param->dir = g_arg_info_get_direction(&ai);
-      param->transfer = g_arg_info_get_ownership_transfer(&ai);
-      param->caller_alloc = g_arg_info_is_caller_allocates(&ai);
-      param->optional = g_arg_info_is_optional(&ai) ||
-	g_arg_info_may_be_null(&ai);
+      g_callable_info_load_arg(callable->info, argi, &param->ai);
+      g_arg_info_load_type(&param->ai, &param->ti);
+      param->dir = g_arg_info_get_direction(&param->ai);
+      param->transfer = g_arg_info_get_ownership_transfer(&param->ai);
+      param->optional = g_arg_info_is_optional(&param->ai) ||
+	g_arg_info_may_be_null(&param->ai);
       *ffi_arg = (param->dir == GI_DIRECTION_IN) ?
 	get_ffi_type(param) : &ffi_type_pointer;
+
+      /* If this is callback, mark user_data and destroy_notify as internal. */
+      if (g_arg_info_get_scope(&param->ai) != GI_SCOPE_TYPE_INVALID)
+        {
+          gint arg = g_arg_info_get_closure(&param->ai);
+          if (arg > 0 && arg < nargs)
+            callable->params[arg - 1].internal = TRUE;
+          arg = g_arg_info_get_destroy(&param->ai);
+          if (arg > 0 && arg < nargs)
+            callable->params[arg - 1].internal = TRUE;
+        }
     }
 
   /* Add ffi info for 'err' argument. */
@@ -265,11 +293,11 @@ lgi_callable_create(lua_State* L, GICallableInfo* info)
    if value was handled, 0 otherwise. */
 static int
 marshal_simple(lua_State* L, gboolean to_c, int arg, gboolean optional,
-	       GIDirection dir, GITransfer transfer, GITypeTag tag, 
+	       GIDirection dir, GITransfer transfer, GITypeTag tag,
 	       GArgument* val)
 {
   int nret = 1;
-  gboolean destroy = !to_c && dir != GI_DIRECTION_IN && 
+  gboolean destroy = !to_c && dir != GI_DIRECTION_IN &&
     transfer == GI_TRANSFER_EVERYTHING;
   switch (tag)
     {
@@ -407,10 +435,8 @@ marshal_from_carray(lua_State* L, Call* call, Param* param, GArgument* val,
 
 	  /* Store value into the table. */
 	  eparam.ti = *eti;
-	  eparam.dir = GI_DIRECTION_OUT;
 	  eparam.transfer = (param->transfer == GI_TRANSFER_EVERYTHING) ?
 	    GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING;
-	  eparam.caller_alloc = FALSE;
 	  eparam.optional = TRUE;
 	  eparam.internal = FALSE;
 	  if (marshal(L, FALSE, NULL, &eparam, eval, 0) == 1)
@@ -428,6 +454,59 @@ marshal_from_carray(lua_State* L, Call* call, Param* param, GArgument* val,
   return 1;
 }
 
+/* Closure callback, called by libffi when C code wants to invoke Lua
+   callback. */
+static void closure_callback(ffi_cif* cif, void* ret, void** args,
+                             void* closure)
+{
+}
+
+/* Destroys specified closure. */
+static void
+closure_destroy(lua_State* L, Closure* closure)
+{
+  luaL_unref(L, LUA_REGISTRYINDEX, closure->callable_ref);
+  luaL_unref(L, LUA_REGISTRYINDEX, closure->target_ref);
+  ffi_closure_free(closure);
+}
+
+/* Creates closure from Lua function to be passed to C. */
+static void
+marshal_create_closure(lua_State* L, Call* call, Param* param,
+                       GArgument* val, int lua_arg)
+{
+  Closure* closure;
+  GICallableInfo* ci;
+  Callable* callable;
+
+  /* Allocate closure space. */
+  closure = ffi_closure_alloc(sizeof(Closure), &val->v_pointer);
+
+  /* Prepare callable and store reference to it. */
+  ci = g_type_info_get_interface(&param->ti);
+  lgi_callable_create(L, ci);
+  callable = lua_touserdata(L, -1);
+  closure->callable_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+  g_base_info_unref(ci);
+
+  /* Store reference to target Lua function. */
+  lua_pushvalue(L, lua_arg);
+  closure->target_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+
+  /* Check, whether closure should destroy itself automatically. */
+  closure->autodestroy = (g_arg_info_get_scope(&param->ai) ==
+                          GI_SCOPE_TYPE_ASYNC);
+
+  /* Create closure. */
+  if (ffi_prep_closure_loc(&closure->ffi_closure, &callable->cif,
+                           closure_callback, closure, val->v_pointer) != FFI_OK)
+    {
+      closure_destroy(L, closure);
+      lua_concat(L, lgi_type_get_name(L, ci));
+      luaL_error(L, "failed to prepare closure for `%'", lua_tostring(L, -1));
+    }
+}
+
 /* Converts given argument to/from Lua.	 Returns 1 value handled, 0
    otherwise. */
 static int
@@ -435,7 +514,7 @@ marshal(lua_State* L, gboolean to_c, Call* call, Param* param, GArgument* val,
 	int lua_arg)
 {
   GITypeTag tag = g_type_info_get_tag(&param->ti);
-  int nret = marshal_simple(L, to_c, lua_arg, param->optional, param->dir, 
+  int nret = marshal_simple(L, to_c, lua_arg, param->optional,param->dir,
 			    param->transfer, tag, val);
   if (nret == 0)
     {
@@ -568,7 +647,7 @@ lgi_callable_call(lua_State* L, gpointer addr, int func_index, int args_index)
             {
               /* Special handling for out/caller-alloc structures; we have to
                  manually pre-create them and store them on the stack. */
-              if (param->caller_alloc &&
+              if (g_arg_info_is_caller_allocates(&param->ai) &&
                   g_type_info_get_tag(&param->ti) == GI_TYPE_TAG_INTERFACE)
                 {
                   GIBaseInfo* ii = g_type_info_get_interface(&param->ti);
