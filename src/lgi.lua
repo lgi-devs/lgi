@@ -449,7 +449,6 @@ local function load_class(namespace, into, info)
 	 _signals = { gi.object_info_get_n_signals,
 		      gi.object_info_get_signal,
 		      function(c, n, i)
-			 check_type(gi.constant_info_get_type(i))
 			 c[n] = core.get(i)
 		      end },
 	 _constants = { gi.object_info_get_n_constants,
