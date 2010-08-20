@@ -261,9 +261,6 @@ local function load_enum(info, meta)
       value[name] = gi.value_info_get_value(mi)
    end
 
-   -- Install _meta table.
-   add_compound_meta(value, info)
-
    -- Install metatable providing reverse lookup (i.e name(s) by
    -- value).
    setmetatable(value, meta)
