@@ -465,8 +465,7 @@ marshal(lua_State* L, gboolean to_c, Call* call, Param* param, GArgument* val,
 		    nret = 1;
 		  }
 		else
-		  nret = lgi_compound_create(L, ii, val->v_pointer,
-					     param->transfer);
+		  nret = lgi_compound_create(L, ii, val->v_pointer);
 		break;
 
 	      default:
@@ -506,9 +505,12 @@ lgi_callable_call(lua_State* L, gpointer addr, int func_index, int args_index)
 {
   Call* call;
   Param* param;
-  int argi, i, lua_argi, nret;
+  int i, lua_argi, nret;
   GError* err = NULL;
   Callable* callable = luaL_checkudata(L, func_index, LGI_CALLABLE);
+
+  /* We cannot push more stuff than count of arguments we have. */
+  luaL_checkstack(L, callable->nargs, "");
 
   /* Check that we know where to call. */
   if (addr == NULL)
@@ -534,21 +536,21 @@ lgi_callable_call(lua_State* L, gpointer addr, int func_index, int args_index)
 
   /* Prepare 'self', if present. */
   lua_argi = args_index;
-  argi = 0;
   if (callable->has_self)
     {
-      call->args[argi].v_pointer =
+      call->args[0].v_pointer =
 	lgi_compound_get(L, args_index,
 			 g_base_info_get_container(callable->info), TRUE);
-      call->ffi_args[argi] = &call->args[argi];
-      argi++; lua_argi++;
+      call->ffi_args[0] = &call->args[0];
+      lua_argi++;
     }
 
   /* Process input parameters. */
   param = &callable->params[0];
-  for (i = 0; i < callable->nargs; i++, param++, argi++)
+  for (i = 0; i < callable->nargs; i++, param++)
     {
       /* Prepare ffi_args and redirection for out/inout parameters. */
+      int argi = i + callable->has_self;
       if (param->dir == GI_DIRECTION_IN)
 	call->ffi_args[argi] = &call->args[argi];
       else
@@ -557,14 +559,31 @@ lgi_callable_call(lua_State* L, gpointer addr, int func_index, int args_index)
 	  call->redirect_out[argi] = &call->args[argi];
 	}
 
-      if (!param->internal && param->dir != GI_DIRECTION_OUT)
-	/* Convert parameter from Lua stack to C. */
-	marshal(L, TRUE, call, param, &call->args[argi], lua_argi++);
+      if (!param->internal)
+        {
+          if (param->dir != GI_DIRECTION_OUT)
+            /* Convert parameter from Lua stack to C. */
+            marshal(L, TRUE, call, param, &call->args[argi], lua_argi++);
+          else
+            {
+              /* Special handling for out/caller-alloc structures; we have to
+                 manually pre-create them and store them on the stack. */
+              if (param->caller_alloc &&
+                  g_type_info_get_tag(&param->ti) == GI_TYPE_TAG_INTERFACE)
+                {
+                  GIBaseInfo* ii = g_type_info_get_interface(&param->ti);
+                  if (g_base_info_get_type(ii) == GI_INFO_TYPE_STRUCT)
+                    lgi_compound_create_struct(L, ii,
+                                               &call->args[argi].v_pointer);
+                  g_base_info_unref(ii);
+                }
+            }
+        }
     }
 
   /* Add error for 'throws' type function. */
   if (callable->throws)
-      call->ffi_args[argi++] = &err;
+      call->ffi_args[callable->has_self + callable->nargs] = &err;
 
   /* Call the function. */
   ffi_call(&callable->cif, addr, &call->retval, call->ffi_args);
@@ -578,9 +597,11 @@ lgi_callable_call(lua_State* L, gpointer addr, int func_index, int args_index)
   if (g_type_info_get_tag(&callable->retval.ti) != GI_TYPE_TAG_VOID)
     nret = marshal(L, FALSE, call, &callable->retval, &call->retval, 0);
 
-  /* Skip 'self' parameter. */
-
   /* Process output parameters. */
+  param = &callable->params[0];
+  for (i = 0; i < callable->nargs; i++, param++)
+    if (!param->internal && param->dir != GI_DIRECTION_IN)
+      nret += marshal(L, FALSE, call, param, &call->args[i], 0);
 
   return nret;
 }

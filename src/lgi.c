@@ -591,10 +591,16 @@ compound_callmeta(lua_State* L, const char* metaname, int nargs, int nrets)
   return called;
 }
 
-int lgi_compound_create(lua_State* L, GIBaseInfo* ii, gpointer addr,
-                        GITransfer transfer)
+int
+lgi_compound_create(lua_State* L, GIBaseInfo* ii, gpointer addr)
 {
-  return compound_store(L, ii, &addr, transfer);
+  return compound_store(L, ii, &addr, GI_TRANSFER_EVERYTHING);
+}
+
+int
+lgi_compound_create_struct(lua_State* L, GIBaseInfo* ii, gpointer* addr)
+{
+    return compound_store(L, ii, addr, GI_TRANSFER_CONTAINER);
 }
 
 static int
@@ -1103,8 +1109,6 @@ lgi_find(lua_State* L)
   const gchar* container = luaL_optstring(L, 2, NULL);
   GIBaseInfo *info, *fi;
   int vals = 0;
-
-  g_debug("core.find(%s.%s)", symbol, container);
 
   /* Get information about the symbol. */
   info = g_irepository_find_by_name(NULL, "GIRepository",
