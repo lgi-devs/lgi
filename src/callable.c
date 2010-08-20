@@ -457,6 +457,7 @@ marshal(lua_State* L, gboolean to_c, Call* call, Param* param, GArgument* val,
 
 	      case GI_INFO_TYPE_STRUCT:
 	      case GI_INFO_TYPE_OBJECT:
+	      case GI_INFO_TYPE_INTERFACE:
 		if (to_c)
 		  {
 		    val->v_pointer = lgi_compound_get(L, lua_arg, ii,
