@@ -48,14 +48,6 @@ struct ud_compound
 };
 #define UD_COMPOUND "lgi.compound"
 
-/* 'function' userdata: wraps function prepared to be called through ffi. */
-struct ud_function
-{
-  GIFunctionInvoker invoker;
-  GIFunctionInfo* info;
-};
-#define UD_FUNCTION "lgi.function"
-
 int
 lgi_error(lua_State* L, GError* err)
 {
@@ -971,138 +963,6 @@ static const struct luaL_reg struct_reg[] = {
 };
 
 static int
-function_gc(lua_State* L)
-{
-  struct ud_function* function = luaL_checkudata(L, 1, UD_FUNCTION);
-  g_function_invoker_destroy(&function->invoker);
-  g_base_info_unref(function->info);
-  return 0;
-}
-
-static int
-function_tostring(lua_State* L)
-{
-  int n;
-  struct ud_function* function = luaL_checkudata(L, 1, UD_FUNCTION);
-  lua_pushstring(L, "lgi-functn: ");
-  n = lgi_type_get_name(L, function->info);
-  lua_pushfstring(L, " %p", function);
-  lua_concat(L, n + 2);
-  return 1;
-}
-
-static int
-function_call(lua_State* L)
-{
-  gint i, argc, argffi, flags, lua_argi, ti_argi, ffi_argi;
-  gboolean has_self, throws;
-  gpointer* args_ptr;
-  GError* err = NULL;
-  struct ud_function* function = luaL_checkudata(L, 1, UD_FUNCTION);
-  struct arginfo
-  {
-    GArgument arg;
-    GIArgInfo ai;
-    GITypeInfo ti;
-    GIDirection dir;
-  } *args;
-
-  /* Check general function characteristics. */
-  flags = g_function_info_get_flags(function->info);
-  has_self = (flags & GI_FUNCTION_IS_METHOD) != 0 &&
-    (flags & GI_FUNCTION_IS_CONSTRUCTOR) == 0;
-  throws = (flags & GI_FUNCTION_THROWS) != 0;
-  argc = g_callable_info_get_n_args(function->info);
-
-  /* Allocate array for arguments. */
-  argffi = argc + 1 + has_self + throws;
-  args = g_newa(struct arginfo, argffi);
-  args_ptr = g_newa(gpointer, argffi);
-  for (i = 0; i < argffi; ++i)
-    args_ptr[i] = &args[i].arg;
-
-  /* Process parameters for input. */
-  lua_argi = 2;
-  ffi_argi = 1;
-  ti_argi = 0;
-  if (has_self)
-    {
-      /* 'self' handling: check for object type and marshall it in
-	 from lua. */
-      GIBaseInfo* pi = g_base_info_get_container(function->info);
-      args[1].arg.v_pointer = compound_load(L, lua_argi, pi, TRUE);
-
-      /* Advance to the next argument. */
-      lua_argi++;
-      ffi_argi++;
-    }
-
-  /* Handle parameters. */
-  for (i = 0; i < argc; i++, ffi_argi++)
-    {
-      g_callable_info_load_arg(function->info, ti_argi++, &args[ffi_argi].ai);
-      g_arg_info_load_type(&args[ffi_argi].ai, &args[ffi_argi].ti);
-      args[ffi_argi].dir = g_arg_info_get_direction(&args[ffi_argi].ai);
-      if (args[ffi_argi].dir == GI_DIRECTION_IN ||
-	  args[ffi_argi].dir == GI_DIRECTION_INOUT)
-	lua_argi +=
-	  lgi_val_from_lua(L, lua_argi, &args[ffi_argi].ti, &args[ffi_argi].arg,
-			   g_arg_info_is_optional(&args[ffi_argi].ai) ||
-			   g_arg_info_may_be_null(&args[ffi_argi].ai));
-      else if (g_arg_info_is_caller_allocates(&args[ffi_argi].ai))
-	{
-	  /* Allocate target space. */
-	  GIBaseInfo* ii = g_type_info_get_interface(&args[ffi_argi].ti);
-	  lgi_type_new(L, ii, &args[ffi_argi].arg);
-	  g_base_info_unref(ii);
-	}
-    }
-
-  /* Handle 'throws' parameter, if function does it. */
-  if (throws)
-    args[ffi_argi].arg.v_pointer = &err;
-
-  /* Perform the call. */
-  ffi_call(&function->invoker.cif, function->invoker.native_address,
-	   args_ptr[0], &args_ptr[1]);
-
-  /* Check, whether function threw. */
-  if (err != NULL)
-    return lgi_error(L, err);
-
-  /* Process parameters for output. */
-  lua_argi = 0;
-  ffi_argi = has_self ? 2 : 1;
-  ti_argi = 0;
-
-  /* Handle return value. */
-  g_callable_info_load_return_type(function->info, &args[0].ti);
-  lua_argi += lgi_val_to_lua(L, &args[0].ti,
-			     g_callable_info_get_caller_owns(function->info),
-			     &args[0].arg);
-
-  /* Handle parameters. */
-  for (i = 0; i < argc; i++, ffi_argi++)
-    {
-      if (args[ffi_argi].dir == GI_DIRECTION_OUT ||
-	  args[ffi_argi].dir == GI_DIRECTION_INOUT)
-	lua_argi +=
-	  lgi_val_to_lua(L, &args[ffi_argi].ti,
-			 g_arg_info_get_ownership_transfer(&args[ffi_argi].ai),
-			 &args[ffi_argi].arg);
-    }
-
-  return lua_argi;
-}
-
-static const struct luaL_reg function_reg[] = {
-  { "__gc", function_gc },
-  { "__call", function_call },
-  { "__tostring", function_tostring },
-  { NULL, NULL }
-};
-
-static int
 lgi_find(lua_State* L)
 {
   const gchar* symbol = luaL_checkstring(L, 1);
@@ -1272,7 +1132,6 @@ luaopen_lgi__core(lua_State* L)
 
   /* Register userdata types. */
   lgi_reg_udata(L, struct_reg, UD_COMPOUND);
-  lgi_reg_udata(L, function_reg, UD_FUNCTION);
   lgi_reg_udata(L, lgi_callable_reg, LGI_CALLABLE);
 
   /* Register _core interface. */
