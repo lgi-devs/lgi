@@ -67,7 +67,7 @@ function bitflags_mt.__index(bitflags, value)
    local t = {}
    for name, flag in pairs(bitflags) do
       if type(flag) == 'number' and bit.band(flag, value) == flag then
-	 t[flag] = name
+	 t[name] = flag
       end
    end
    return t
