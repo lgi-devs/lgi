@@ -36,12 +36,37 @@ void lgi_marshal_2c(lua_State* L, GITypeInfo* ti, GArgument* val, int narg,
  		    gboolean optional, GICallableInfo* ci, GArgument* args)
 {
   GITypeTag tag = g_type_info_get_tag(ti);
-  int nret = marshal_2c_simple(L, tag, val, narg, optional);
-  if (nret == 0)
+  if (marshal_2c_simple(L, tag, val, narg, optional))
     {
       switch (tag)
 	{
 	case GI_TYPE_TAG_VOID:
+	  break;
+
+	case GI_TYPE_TAG_INTERFACE:
+	  {
+	    GIBaseInfo* ii = g_type_info_get_interface(ti);
+	    GIInfoType type = g_base_info_get_type(ii);
+	    switch (type)
+	      {
+	      case GI_INFO_TYPE_ENUM:
+	      case GI_INFO_TYPE_FLAGS:
+		/* Directly store underlying value. */
+		marshal_2c_simple(L, g_enum_info_get_storage_type(ii), val,
+				  narg, optional);
+		break;
+
+	      case GI_INFO_TYPE_STRUCT:
+	      case GI_INFO_TYPE_OBJECT:
+	      case GI_INFO_TYPE_INTERFACE:
+		val->v_pointer = lgi_compound_get(L, narg, ii, optional);
+		break;
+
+	      default:
+		g_warning("unable to marshal iface type `%d'", (int)type);
+	      }
+	    g_base_info_unref(ii);
+	  }
 	  break;
 
 	default:
@@ -50,11 +75,10 @@ void lgi_marshal_2c(lua_State* L, GITypeInfo* ti, GArgument* val, int narg,
     }
 }
 
-/* Marshals simple types to/from lua.  Simple are number and strings. Returns 1
-   if value was handled, 0 otherwise. */
+/* Marshals simple types to Lua.  Simple are number and
+   strings. Returns 1 if value was handled, 0 otherwise. */
 static int
-marshal_2lua_simple(lua_State* L, GITypeInfo* ti, GArgument* val, gboolean own,
-		    GITypeTag tag)
+marshal_2lua_simple(lua_State* L, GITypeTag tag, GArgument* val, gboolean own)
 {
   int nret = 1;
   switch (tag)
@@ -81,12 +105,38 @@ int lgi_marshal_2lua(lua_State* L, GITypeInfo* ti, GArgument* val, gboolean own,
 		     GICallableInfo* ci, GArgument* args)
 {
   GITypeTag tag = g_type_info_get_tag(ti);
-  int nret = marshal_2lua_simple(L, ti, val, own, tag);
+  int nret = marshal_2lua_simple(L, tag, val, own);
   if (nret == 0)
     {
       switch (tag)
 	{
 	case GI_TYPE_TAG_VOID:
+	  break;
+
+	case GI_TYPE_TAG_INTERFACE:
+	  {
+	    GIBaseInfo* ii = g_type_info_get_interface(ti);
+	    GIInfoType type = g_base_info_get_type(ii);
+	    switch (type)
+	      {
+	      case GI_INFO_TYPE_ENUM:
+	      case GI_INFO_TYPE_FLAGS:
+		/* Directly store underlying value. */
+		nret = marshal_2lua_simple(L, g_enum_info_get_storage_type(ii),
+					   val, own);
+		break;
+
+	      case GI_INFO_TYPE_STRUCT:
+	      case GI_INFO_TYPE_OBJECT:
+	      case GI_INFO_TYPE_INTERFACE:
+		nret = lgi_compound_create(L, ii, val->v_pointer, own);
+		break;
+
+	      default:
+		g_warning("unable to marshal iface type `%d'", (int)type);
+	      }
+	    g_base_info_unref(ii);
+	  }
 	  break;
 
 	default:

@@ -69,7 +69,8 @@ int lgi_callable_call(lua_State* L, gpointer addr, int func, int args);
 
 /* Creates new compound of given address and type, pushes its userdata on the
  * lua stack. */
-int lgi_compound_create(lua_State* L, GIBaseInfo* ii, gpointer addr);
+int lgi_compound_create(lua_State* L, GIBaseInfo* ii, gpointer addr,
+                        gboolean own);
 
 /* Creates new struct including allocated place for it. */
 int lgi_compound_create_struct(lua_State* L, GIBaseInfo* ii, gpointer* addr);
