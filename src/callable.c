@@ -289,171 +289,6 @@ lgi_callable_create(lua_State* L, GICallableInfo* info)
   return 1;
 }
 
-/* Marshals simple types to/from lua.  Simple are number and strings. Returns 1
-   if value was handled, 0 otherwise. */
-static int
-marshal_simple(lua_State* L, gboolean to_c, int arg, gboolean optional,
-	       GIDirection dir, GITransfer transfer, GITypeTag tag,
-	       GArgument* val)
-{
-  int nret = 1;
-  gboolean destroy = !to_c && dir != GI_DIRECTION_IN &&
-    transfer == GI_TRANSFER_EVERYTHING;
-  switch (tag)
-    {
-#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
-		 valtype, valget, valset, ffitype)		\
-      case tag:							\
-	if (to_c)						\
-	  val->argf = (ctype)(optional ?			\
-			      opt(L, arg, 0) : check(L, arg));	\
-	else							\
-	  {							\
-	    push(L, val->argf);					\
-	    if (destroy)					\
-	      dtor(val->argf);					\
-	  }							\
-	break;
-#include "decltype.h"
-
-    default:
-      nret = 0;
-    }
-
-  return nret;
-}
-
-/* Returns int value of specified parameter.  If specified parameter does not
-   exist or its value cannot be converted to int, FALSE is returned. */
-static gboolean
-get_int_param(Call* call, int param, int *val)
-{
-  GArgument* arg;
-  int argi;
-
-  if (param > 0 && param <= call->callable->nargs)
-    {
-      argi = 1 + call->callable->has_self + (param - 1);
-      arg = &call->args[argi];
-      switch (g_type_info_get_tag(&call->callable->params[argi].ti))
-	{
-#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
-		 valtype, valget, valset, ffitype)		\
-	  case tag:                                             \
-	    *val = (int) arg->argf;                             \
-	    return TRUE;
-#define DECLTYPE_NUMERIC_ONLY
-#include "decltype.h"
-
-	default:
-	  break;
-	}
-    }
-
-  return FALSE;
-}
-
-static gsize
-get_type_size(GITypeTag tag)
-{
-  gsize size;
-  switch (tag)
-    {
-#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
-		 valtype, valget, valset, ffitype)              \
-      case tag:							\
-	size = sizeof(ctype);					\
-	break;
-#include "decltype.h"
-
-    default:
-      size = sizeof(gpointer);
-    }
-
-  return size;
-}
-
-static int marshal(lua_State* L, gboolean to_c, Call* call, Param* param,
-		   GArgument* val, int lua_arg);
-
-static int
-marshal_to_carray(lua_State* L, Call* call, Param* param, GArgument* val,
-		  int lua_arg)
-{
-  return 0;
-}
-
-static int
-marshal_from_carray(lua_State* L, Call* call, Param* param, GArgument* val,
-		      int lua_arg)
-{
-  gint len, index;
-
-  /* First of all, find out the length of the array. */
-  if (g_type_info_is_zero_terminated(&param->ti))
-    len = -1;
-  else
-    {
-      len = g_type_info_get_array_fixed_size(&param->ti);
-      if (len == -1)
-	{
-	  /* Length of the array is dynamic. get it from other argument. */
-	  if (call == NULL)
-	    return 0;
-
-	  len = g_type_info_get_array_length(&param->ti);
-	  if (!get_int_param(call, len, &len))
-	    return 0;
-	}
-    }
-
-  /* Get pointer to array data. */
-  if (val->v_pointer == NULL)
-    /* NULL array is represented by nil. */
-    lua_pushnil(L);
-  else
-    {
-      GITypeInfo* eti = g_type_info_get_param_type(&param->ti, 0);
-      GITypeTag etag = g_type_info_get_tag(eti);
-      gsize size = get_type_size(etag);
-
-      /* Create Lua table which will hold the array. */
-      lua_createtable(L, len > 0 ? len : 0, 0);
-
-      /* Iterate through array elements. */
-      for (index = 0; len < 0 || index < len; index++)
-	{
-	  /* Get value from specified index. */
-	  Param eparam;
-	  gint offset = index * size;
-	  GArgument* eval = (GArgument*)((char*)val->v_pointer + offset);
-
-	  /* If the array is zero-terminated, terminate now and don't
-	     include NULL entry. */
-	  if (len < 0 && eval->v_pointer == NULL)
-	    break;
-
-	  /* Store value into the table. */
-	  eparam.ti = *eti;
-	  eparam.transfer = (param->transfer == GI_TRANSFER_EVERYTHING) ?
-	    GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING;
-	  eparam.optional = TRUE;
-	  eparam.internal = FALSE;
-	  if (marshal(L, FALSE, NULL, &eparam, eval, 0) == 1)
-	    lua_rawseti(L, -2, index + 1);
-	}
-
-      /* If needed, free the array itself. */
-      if (param->transfer != GI_TRANSFER_NOTHING)
-	g_free(val->v_pointer);
-
-      /* Free element's typeinfo. */
-      g_base_info_unref(eti);
-    }
-
-  return 1;
-}
-
 /* Closure callback, called by libffi when C code wants to invoke Lua
    callback. */
 static void closure_callback(ffi_cif* cif, void* ret, void** args,
@@ -505,78 +340,6 @@ marshal_create_closure(lua_State* L, Call* call, Param* param,
       lua_concat(L, lgi_type_get_name(L, ci));
       luaL_error(L, "failed to prepare closure for `%'", lua_tostring(L, -1));
     }
-}
-
-/* Converts given argument to/from Lua.	 Returns 1 value handled, 0
-   otherwise. */
-static int
-marshal(lua_State* L, gboolean to_c, Call* call, Param* param, GArgument* val,
-	int lua_arg)
-{
-  GITypeTag tag = g_type_info_get_tag(&param->ti);
-  int nret = marshal_simple(L, to_c, lua_arg, param->optional,param->dir,
-			    param->transfer, tag, val);
-  if (nret == 0)
-    {
-      switch (tag)
-	{
-	case GI_TYPE_TAG_INTERFACE:
-	  {
-	    GIBaseInfo* ii = g_type_info_get_interface(&param->ti);
-	    GIInfoType type = g_base_info_get_type(ii);
-	    switch (type)
-	      {
-	      case GI_INFO_TYPE_ENUM:
-	      case GI_INFO_TYPE_FLAGS:
-		/* Store underlying value directly. */
-		nret = marshal_simple(L, to_c, lua_arg, param->optional,
-				      param->dir, param->transfer,
-				      g_enum_info_get_storage_type(ii), val);
-		break;
-
-	      case GI_INFO_TYPE_STRUCT:
-	      case GI_INFO_TYPE_OBJECT:
-	      case GI_INFO_TYPE_INTERFACE:
-		if (to_c)
-		  {
-		    val->v_pointer = lgi_compound_get(L, lua_arg, ii,
-						      param->optional);
-		    nret = 1;
-		  }
-		else
-		  nret = lgi_compound_create(L, ii, val->v_pointer);
-		break;
-
-	      default:
-		g_warning("bad typeinfo interface type %d", type);
-	      }
-	    g_base_info_unref(ii);
-	  }
-	  break;
-
-	case GI_TYPE_TAG_ARRAY:
-	  {
-	    GIArrayType atype = g_type_info_get_array_type(&param->ti);
-	    switch (atype)
-	      {
-	      case GI_ARRAY_TYPE_C:
-		nret = (to_c ?
-			marshal_to_carray(L, call, param, val, lua_arg) :
-			marshal_from_carray(L, call, param, val, lua_arg));
-		break;
-
-	      default:
-		g_warning("bad array type %d", atype);
-	      }
-	  }
-	  break;
-
-	default:
-	  g_warning("bad typeinfo tag %d", tag);
-	}
-    }
-
-  return nret;
 }
 
 int
@@ -642,7 +405,8 @@ lgi_callable_call(lua_State* L, gpointer addr, int func_index, int args_index)
         {
           if (param->dir != GI_DIRECTION_OUT)
             /* Convert parameter from Lua stack to C. */
-            marshal(L, TRUE, call, param, &call->args[argi], lua_argi++);
+            lgi_marshal_2c(L, &param->ti, &call->args[argi], lua_argi++,
+			   param->optional, callable->info, call->args);
           else
             {
               /* Special handling for out/caller-alloc structures; we have to
@@ -674,13 +438,18 @@ lgi_callable_call(lua_State* L, gpointer addr, int func_index, int args_index)
   /* Handle return value. */
   nret = 0;
   if (g_type_info_get_tag(&callable->retval.ti) != GI_TYPE_TAG_VOID)
-    nret = marshal(L, FALSE, call, &callable->retval, &call->retval, 0);
+    nret = lgi_marshal_2lua(L, &callable->retval.ti, &call->retval,
+			    callable->retval.transfer, GI_SCOPE_TYPE_INVALID,
+			    callable->info, call->args) ? 1 : 0;
 
   /* Process output parameters. */
   param = &callable->params[0];
   for (i = 0; i < callable->nargs; i++, param++)
     if (!param->internal && param->dir != GI_DIRECTION_IN)
-      nret += marshal(L, FALSE, call, param, &call->args[i], 0);
+      if (lgi_marshal_2lua(L, &param->ti, &call->args[i],
+			   param->transfer, g_arg_info_get_scope(&param->ai),
+			   callable->info, call->args))
+	nret++;
 
   return nret;
 }
