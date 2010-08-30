@@ -51,10 +51,11 @@ extern const struct luaL_reg lgi_callable_reg[];
 void lgi_marshal_2c(lua_State* L, GITypeInfo* ti, GArgument* val, int narg,
 		    gboolean optional, GICallableInfo* ci, GArgument* args);
 
-/* Marshalls single value from GLib/C to Lua.  Returns 1 if something
-   was pushed to the stack. */
-int lgi_marshal_2lua(lua_State* L, GITypeInfo* ti, GArgument* val, gboolean own,
-		     GICallableInfo* ci, GArgument* args);
+/* Marshalls single value from GLib/C to Lua.  Returns TRUE if
+   something was pushed to the stack. */
+gboolean lgi_marshal_2lua(lua_State* L, GITypeInfo* ti, GArgument* val, 
+			  GITransfer xfer, GIScopeType scope,
+			  GICallableInfo* ci, GArgument* args);
 
 /* Parses given GICallableInfo, creates new userdata for it and stores
    it to the stack. Uses cache, so already parsed callable held in the
@@ -69,8 +70,8 @@ int lgi_callable_call(lua_State* L, gpointer addr, int func, int args);
 
 /* Creates new compound of given address and type, pushes its userdata on the
  * lua stack. */
-int lgi_compound_create(lua_State* L, GIBaseInfo* ii, gpointer addr,
-                        gboolean own);
+gboolean lgi_compound_create(lua_State* L, GIBaseInfo* ii, gpointer addr,
+			     gboolean own);
 
 /* Creates new struct including allocated place for it. */
 int lgi_compound_create_struct(lua_State* L, GIBaseInfo* ii, gpointer* addr);

@@ -583,9 +583,9 @@ compound_callmeta(lua_State* L, const char* metaname, int nargs, int nrets)
   return called;
 }
 
-int
+gboolean
 lgi_compound_create(lua_State* L, GIBaseInfo* ii, gpointer addr,
-                        gboolean own)
+		    gboolean own)
 {
   return compound_store(L, ii, &addr, 
 			own ? GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING);
