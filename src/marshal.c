@@ -71,7 +71,7 @@ marshal_2c_simple(lua_State* L, GITypeTag tag, GArgument* val, int narg,
 		 valtype, valget, valset, ffitype)		\
       case tag:							\
 	val->argf = (optional && lua_isnoneornil(L, narg)) ?	\
-	  (ctype)0 : (ctype)check(L, narg);
+	  (ctype)0 : (ctype)check(L, narg);                     \
 	break;
 #include "decltype.h"
 
@@ -114,14 +114,14 @@ void lgi_marshal_2c(lua_State* L, GITypeInfo* ti, GArgument* val, int narg,
 		break;
 
 	      default:
-		g_warning("unable to marshal iface type `%d'", (int) type);
+		g_warning("unable to marshal2c iface type `%d'", (int) type);
 	      }
 	    g_base_info_unref(ii);
 	  }
 	  break;
 
 	default:
-	  g_warning("unable to marshal type with tag `%d'", (int) tag);
+	  g_warning("unable to marshal2c type with tag `%d'", (int) tag);
 	}
     }
 }
@@ -147,7 +147,7 @@ marshal_2lua_simple(lua_State* L, GITypeTag tag, GArgument* val, gboolean own)
       handled = FALSE;
     }
 
-  return FALSE;
+  return handled;
 }
 
 static gboolean
@@ -256,7 +256,7 @@ lgi_marshal_2lua(lua_State* L, GITypeInfo* ti, GArgument* val,
 		break;
 
 	      default:
-		g_warning("unable to marshal iface type `%d'", (int) type);
+		g_warning("unable to marshal2lua iface type `%d'", (int) type);
 	      }
 	    g_base_info_unref(ii);
 	  }
@@ -277,7 +277,7 @@ lgi_marshal_2lua(lua_State* L, GITypeInfo* ti, GArgument* val,
 	  }
 	  break;
 	default:
-	  g_warning("unable to marshal type with tag `%d'", (int) tag);
+	  g_warning("unable to marshal2lua type with tag `%d'", (int) tag);
 	}
     }
 

@@ -4,8 +4,7 @@
  * License: MIT.
  *
  * This code deals with calling from Lua to C and vice versa, using
- * gobject-introspection information and libffi machinery.  Basically this is
- * the complex part of Lgi.
+ * gobject-introspection information and libffi machinery.
  */
 
 #include "lgi.h"
@@ -14,7 +13,7 @@
 /* Represents single parameter in callable description. */
 typedef struct _Param
 {
-  /* Arginfo and Typeinfo instance, initialzed, loaded (not dynamically
+  /* Arginfo and Typeinfo instance, initialized, loaded (not dynamically
      allocated). */
   GITypeInfo ti;
   GIArgInfo ai;
