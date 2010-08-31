@@ -296,49 +296,50 @@ static void closure_callback(ffi_cif* cif, void* ret, void** args,
 }
 
 /* Destroys specified closure. */
-static void
-closure_destroy(lua_State* L, Closure* closure)
+void lgi_closure_destroy(gpointer user_data)
 {
+  lua_State* L = lgi_main_thread_state;
+  Closure* closure = user_data;
   luaL_unref(L, LUA_REGISTRYINDEX, closure->callable_ref);
   luaL_unref(L, LUA_REGISTRYINDEX, closure->target_ref);
   ffi_closure_free(closure);
 }
 
 /* Creates closure from Lua function to be passed to C. */
-static void
-marshal_create_closure(lua_State* L, Call* call, Param* param,
-                       GArgument* val, int lua_arg)
+gpointer
+lgi_closure_create(lua_State* L, GICallableInfo* ci, int target,
+                   gboolean autodestroy, gpointer* call_addr)
 {
   Closure* closure;
-  GICallableInfo* ci;
   Callable* callable;
 
   /* Allocate closure space. */
-  closure = ffi_closure_alloc(sizeof(Closure), &val->v_pointer);
+  closure = ffi_closure_alloc(sizeof(Closure), call_addr);
 
   /* Prepare callable and store reference to it. */
-  ci = g_type_info_get_interface(&param->ti);
   lgi_callable_create(L, ci);
   callable = lua_touserdata(L, -1);
   closure->callable_ref = luaL_ref(L, LUA_REGISTRYINDEX);
-  g_base_info_unref(ci);
 
   /* Store reference to target Lua function. */
-  lua_pushvalue(L, lua_arg);
+  lua_pushvalue(L, target);
   closure->target_ref = luaL_ref(L, LUA_REGISTRYINDEX);
 
-  /* Check, whether closure should destroy itself automatically. */
-  closure->autodestroy = (g_arg_info_get_scope(&param->ai) ==
-                          GI_SCOPE_TYPE_ASYNC);
+  /* Remember whether closure should destroy itself automatically after being
+     invoked. */
+  closure->autodestroy = autodestroy;
 
   /* Create closure. */
   if (ffi_prep_closure_loc(&closure->ffi_closure, &callable->cif,
-                           closure_callback, closure, val->v_pointer) != FFI_OK)
+                           closure_callback, closure, *call_addr) != FFI_OK)
     {
-      closure_destroy(L, closure);
+      lgi_closure_destroy(closure);
       lua_concat(L, lgi_type_get_name(L, ci));
       luaL_error(L, "failed to prepare closure for `%'", lua_tostring(L, -1));
+      return NULL;
     }
+
+  return closure;
 }
 
 int

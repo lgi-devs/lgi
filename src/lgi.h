@@ -68,6 +68,15 @@ int lgi_callable_create(lua_State* L, GICallableInfo* ci);
    is stack index of first argument. */
 int lgi_callable_call(lua_State* L, gpointer addr, int func, int args);
 
+/* Creates closure for specified Lua function (or callable table or
+   userdata). Returns user_data field for the closure and fills call_addr with
+   executable address for the closure. */
+gpointer lgi_closure_create(lua_State* L, GICallableInfo* ci, int target,
+                            gboolean autodestroy, gpointer* call_addr);
+
+/* GDestroyNotify-compatible callback for destroying closure. */
+void lgi_closure_destroy(gpointer user_data);
+
 /* Creates new compound of given address and type, pushes its userdata on the
  * lua stack. */
 gboolean lgi_compound_create(lua_State* L, GIBaseInfo* ii, gpointer addr,
