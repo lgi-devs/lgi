@@ -47,15 +47,20 @@ typedef enum lgi_reg
 #define LGI_CALLABLE "lgi.callable"
 extern const struct luaL_reg lgi_callable_reg[];
 
-/* Marshalls single value from Lua to GLib/C. */
-void lgi_marshal_2c(lua_State* L, GITypeInfo* ti, GArgument* val, int narg,
-		    gboolean optional, GICallableInfo* ci, GArgument* args);
+#define LGI_CLOSUREGUARD "lgi.closureguard"
+extern const struct luaL_reg lgi_closureguard_reg[];
+
+/* Marshalls single value from Lua to GLib/C. Returns number of temporary
+   entries pushed to Lua stack, which should be popped before function call
+   returns. */
+int lgi_marshal_2c(lua_State* L, GITypeInfo* ti, GIArgInfo* ai,
+                    GArgument* val, int narg, GICallableInfo* ci,
+                    GArgument* args);
 
 /* Marshalls single value from GLib/C to Lua.  Returns TRUE if
    something was pushed to the stack. */
 gboolean lgi_marshal_2lua(lua_State* L, GITypeInfo* ti, GArgument* val, 
-			  GITransfer xfer, GIScopeType scope,
-			  GICallableInfo* ci, GArgument* args);
+			  GITransfer xfer, GICallableInfo* ci, GArgument* args);
 
 /* Parses given GICallableInfo, creates new userdata for it and stores
    it to the stack. Uses cache, so already parsed callable held in the

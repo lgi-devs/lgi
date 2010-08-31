@@ -24,9 +24,6 @@ typedef struct _Param
   /* Ownership passing rule for output parameters. */
   GITransfer transfer;
 
-  /* Flag indicating whether argument is optional. */
-  gboolean optional;
-
   /* Flag indicating whether this parameter is represented by Lua input and/or
      returned value.  Not represented are e.g. callback's user_data, array
      sizes etc. */
@@ -46,7 +43,6 @@ typedef struct _Callable
   /* Flags with function characteristics. */
   guint has_self : 1;
   guint throws : 1;
-  guint optional : 1;
   guint nargs : 6;
 
   /* Initialized FFI CIF structure. */
@@ -229,7 +225,6 @@ lgi_callable_create(lua_State* L, GICallableInfo* info)
   g_callable_info_load_return_type(callable->info, &callable->retval.ti);
   callable->retval.dir = GI_DIRECTION_OUT;
   callable->retval.transfer = g_callable_info_get_caller_owns(callable->info);
-  callable->retval.optional = FALSE;
   callable->retval.internal = FALSE;
   callable->ffi_retval = get_ffi_type(&callable->retval);
 
@@ -246,8 +241,6 @@ lgi_callable_create(lua_State* L, GICallableInfo* info)
       g_arg_info_load_type(&param->ai, &param->ti);
       param->dir = g_arg_info_get_direction(&param->ai);
       param->transfer = g_arg_info_get_ownership_transfer(&param->ai);
-      param->optional = g_arg_info_is_optional(&param->ai) ||
-	g_arg_info_may_be_null(&param->ai);
       *ffi_arg = (param->dir == GI_DIRECTION_IN) ?
 	get_ffi_type(param) : &ffi_type_pointer;
 
@@ -258,6 +251,14 @@ lgi_callable_create(lua_State* L, GICallableInfo* info)
           if (arg > 0 && arg < nargs)
             callable->params[arg - 1].internal = TRUE;
           arg = g_arg_info_get_destroy(&param->ai);
+          if (arg > 0 && arg < nargs)
+            callable->params[arg - 1].internal = TRUE;
+        }
+      /* Similarly for array length field. */
+      if (g_type_info_get_tag(&param->ti) == GI_TYPE_TAG_ARRAY &&
+          g_type_info_get_array_type(&param->ti) == GI_ARRAY_TYPE_C)
+        {
+          gint arg = g_type_info_get_array_length(&param->ti);
           if (arg > 0 && arg < nargs)
             callable->params[arg - 1].internal = TRUE;
         }
@@ -388,6 +389,7 @@ lgi_callable_call(lua_State* L, gpointer addr, int func_index, int args_index)
     }
 
   /* Process input parameters. */
+  nret = 0;
   param = &callable->params[0];
   for (i = 0; i < callable->nargs; i++, param++)
     {
@@ -405,8 +407,8 @@ lgi_callable_call(lua_State* L, gpointer addr, int func_index, int args_index)
         {
           if (param->dir != GI_DIRECTION_OUT)
             /* Convert parameter from Lua stack to C. */
-            lgi_marshal_2c(L, &param->ti, &call->args[argi], lua_argi++,
-			   param->optional, callable->info, call->args);
+            nret += lgi_marshal_2c(L, &param->ti, &param->ai, &call->args[argi],
+                                   lua_argi++, callable->info, call->args);
           else
             {
               /* Special handling for out/caller-alloc structures; we have to
@@ -431,6 +433,10 @@ lgi_callable_call(lua_State* L, gpointer addr, int func_index, int args_index)
   /* Call the function. */
   ffi_call(&callable->cif, addr, &call->retval, call->ffi_args);
 
+  /* Pop any temporary items from the stack which might be stored there by
+     marshalling code. */
+  lua_pop(L, nret);
+
   /* Check, whether function threw. */
   if (err != NULL)
     return lgi_error(L, err);
@@ -439,16 +445,15 @@ lgi_callable_call(lua_State* L, gpointer addr, int func_index, int args_index)
   nret = 0;
   if (g_type_info_get_tag(&callable->retval.ti) != GI_TYPE_TAG_VOID)
     nret = lgi_marshal_2lua(L, &callable->retval.ti, &call->retval,
-			    callable->retval.transfer, GI_SCOPE_TYPE_INVALID,
-			    callable->info, call->args) ? 1 : 0;
+			    callable->retval.transfer, callable->info,
+                            call->args) ? 1 : 0;
 
   /* Process output parameters. */
   param = &callable->params[0];
   for (i = 0; i < callable->nargs; i++, param++)
     if (!param->internal && param->dir != GI_DIRECTION_IN)
       if (lgi_marshal_2lua(L, &param->ti, &call->args[i],
-			   param->transfer, g_arg_info_get_scope(&param->ai),
-			   callable->info, call->args))
+			   param->transfer, callable->info, call->args))
 	nret++;
 
   return nret;

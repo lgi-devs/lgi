@@ -1140,6 +1140,7 @@ luaopen_lgi__core(lua_State* L)
   /* Register userdata types. */
   lgi_reg_udata(L, struct_reg, UD_COMPOUND);
   lgi_reg_udata(L, lgi_callable_reg, LGI_CALLABLE);
+  lgi_reg_udata(L, lgi_closureguard_reg, LGI_CLOSUREGUARD);
 
   /* Register _core interface. */
   luaL_register(L, "lgi._core", lgi_reg);

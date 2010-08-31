@@ -71,7 +71,7 @@ marshal_2c_simple(lua_State* L, GITypeTag tag, GArgument* val, int narg,
 		 valtype, valget, valset, ffitype)		\
       case tag:							\
 	val->argf = (optional && lua_isnoneornil(L, narg)) ?	\
-	  (ctype)0 : (ctype)check(L, narg);                     \
+	  (ctype) 0 : (ctype) check(L, narg);                   \
 	break;
 #include "decltype.h"
 
@@ -82,10 +82,68 @@ marshal_2c_simple(lua_State* L, GITypeTag tag, GArgument* val, int narg,
   return handled;
 }
 
-/* Marshalls single value from Lua to GLib/C. */
-void lgi_marshal_2c(lua_State* L, GITypeInfo* ti, GArgument* val, int narg,
- 		    gboolean optional, GICallableInfo* ci, GArgument* args)
+static int
+closureguard_gc(lua_State* L)
 {
+  gpointer closure = *(gpointer*)lua_touserdata(L, 1);
+  lgi_closure_destroy(closure);
+  return 0;
+}
+
+const struct luaL_reg lgi_closureguard_reg[] = {
+  { "__gc", closureguard_gc },
+  { NULL, NULL }
+};
+
+/* Marshalls given callable from Lua to C. */
+static int
+marshal_2c_callable(lua_State* L, GICallableInfo* ci, GIArgInfo* ai,
+                    GArgument* val, int narg,
+                    GICallableInfo* argci, GArgument* args)
+{
+  int nret = 0;
+  GIScopeType scope = g_arg_info_get_scope(ai);
+  
+  /* Create the closure. */
+  gpointer closure = lgi_closure_create(L, ci, narg,
+                                        scope == GI_SCOPE_TYPE_ASYNC,
+                                        &val->v_pointer);
+
+  /* Store user_data and/or destroy_notify arguments. */
+  if (argci != NULL && args != NULL)
+    {
+      gint arg;
+      gint nargs = g_callable_info_get_n_args(argci);
+      arg = g_arg_info_get_closure(ci) - 1;
+      if (arg >= 0 && arg < nargs)
+        args[arg].v_pointer = closure;
+      arg = g_arg_info_get_destroy(ci) - 1;
+      if (arg >= 0 && arg < nargs)
+        args[arg].v_pointer = lgi_closure_destroy;
+    }
+
+  /* In case of scope == SCOPE_TYPE_CALL, we have to create and store on the
+     stack helper Lua userdata which destroy the closure in its gc. */
+  if (scope == GI_SCOPE_TYPE_CALL)
+    {
+      gpointer* closureguard;
+      luaL_checkstack(L, 1, "");
+      closureguard = lua_newuserdata(L, sizeof(gpointer));
+      *closureguard = closure;
+      nret = 1;
+    }
+
+  return nret;
+}
+
+/* Marshalls single value from Lua to GLib/C. */
+int
+lgi_marshal_2c(lua_State* L, GITypeInfo* ti, GIArgInfo* ai, GArgument* val,
+               int narg, GICallableInfo* ci, GArgument* args)
+{
+  int nret = 0;
+  gboolean optional = (ai != NULL && (g_arg_info_is_optional(ai) ||
+                                      g_arg_info_may_be_null(ai)));
   GITypeTag tag = g_type_info_get_tag(ti);
   if (!marshal_2c_simple(L, tag, val, narg, optional))
     {
@@ -113,6 +171,10 @@ void lgi_marshal_2c(lua_State* L, GITypeInfo* ti, GArgument* val, int narg,
 		val->v_pointer = lgi_compound_get(L, narg, ii, optional);
 		break;
 
+              case GI_INFO_TYPE_CALLBACK:
+                nret = marshal_2c_callable(L, ii, ai, val, narg, ci, args);
+                break;
+
 	      default:
 		g_warning("unable to marshal2c iface type `%d'", (int) type);
 	      }
@@ -124,6 +186,8 @@ void lgi_marshal_2c(lua_State* L, GITypeInfo* ti, GArgument* val, int narg,
 	  g_warning("unable to marshal2c type with tag `%d'", (int) tag);
 	}
     }
+
+  return nret;
 }
 
 /* Marshals simple types to Lua.  Simple are number and
@@ -203,7 +267,7 @@ marshal_2lua_carray(lua_State* L, GITypeInfo* ti, GArgument* val,
 	  if (lgi_marshal_2lua(L, eti, eval, 
 			       (xfer == GI_TRANSFER_EVERYTHING) ?
 			       GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING,
-			       GI_SCOPE_TYPE_INVALID, NULL, NULL))
+			       NULL, NULL))
 	    lua_rawseti(L, -2, index + 1);
 	}
 
@@ -222,7 +286,7 @@ marshal_2lua_carray(lua_State* L, GITypeInfo* ti, GArgument* val,
    was pushed to the stack. */
 gboolean
 lgi_marshal_2lua(lua_State* L, GITypeInfo* ti, GArgument* val,
-		 GITransfer xfer, GIScopeType scope, 
+		 GITransfer xfer,
 		 GICallableInfo* ci, GArgument* args)
 {
   gboolean own = (xfer != GI_TRANSFER_NOTHING);
