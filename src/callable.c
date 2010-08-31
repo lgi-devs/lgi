@@ -291,13 +291,32 @@ lgi_callable_create(lua_State* L, GICallableInfo* info)
 
 /* Closure callback, called by libffi when C code wants to invoke Lua
    callback. */
-static void closure_callback(ffi_cif* cif, void* ret, void** args,
-                             void* closure)
+static void
+closure_callback(ffi_cif* cif, void* ret, void** args, void* closure_arg)
 {
+  Callable* callable;
+  Closure* closure = closure_arg;
+
+  /* Get access to proper Lua context. */
+  lua_State* L = lgi_main_thread_state;
+
+  /* Get access to Callable structure. */
+  lua_rawgeti(L, LUA_REGISTRYINDEX, closure->callable_ref);
+  callable = lua_touserdata(L, -1);
+  lua_pop(L, 1);
+
+  /* Push function (target) to be called to the stack. */
+  lua_rawgeti(L, LUA_REGISTRYINDEX, closure->target_ref);
+
+  /* If the closure is marked as autodestroy, destroy it now.  Note that it is
+     unfortunately not possible to destroy it directly here, because we would
+     delete the code under our feet and crash and burn :-(. Instead, we create
+     marshal guard and leave it to GC to destroy the closure later. */
 }
 
 /* Destroys specified closure. */
-void lgi_closure_destroy(gpointer user_data)
+void
+lgi_closure_destroy(gpointer user_data)
 {
   lua_State* L = lgi_main_thread_state;
   Closure* closure = user_data;
