@@ -112,7 +112,7 @@ lgi_type_get_size(GITypeTag tag)
   gsize size;
   switch (tag)
     {
-#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
+#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup,	\
 		 valtype, valget, valset, ffitype)              \
       case tag:							\
 	size = sizeof(ctype);					\
@@ -134,7 +134,7 @@ lgi_simple_val_to_lua(lua_State* L, GITypeTag tag, GITransfer transfer,
   switch (tag)
     {
       /* Simple (native) types. */
-#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
+#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup,	\
 		 valtype, valget, valset, ffitype)              \
       case tag:							\
 	push(L, val->argf);					\
@@ -272,7 +272,7 @@ lgi_simple_val_from_lua(lua_State* L, int index, GITypeTag tag,
   int vals = 1;
   switch (tag)
     {
-#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
+#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup,	\
 		 valtype, valget, valset, ffitype)              \
       case tag :						\
 	val->argf = (ctype)((optional &&			\
@@ -350,7 +350,7 @@ value_init(lua_State* L, GValue* val, GITypeInfo* ti)
   GITypeTag tag = g_type_info_get_tag(ti);
   switch (tag)
     {
-#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
+#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup,	\
 		 val_type, val_get, val_set, ffitype)           \
       case tag:							\
 	g_value_init(val, val_type);				\
@@ -390,7 +390,7 @@ value_load(lua_State* L, GValue* val, int narg, GITypeInfo* ti)
   int vals = 1;
   switch (g_type_info_get_tag(ti))
     {
-#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
+#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup,	\
 		 val_type, val_get, val_set, ffitype)           \
       case tag:							\
 	val_set(val, check(L, narg));				\
@@ -438,7 +438,7 @@ value_store(lua_State* L, GValue* val, GITypeInfo* ti)
   int vals = 1;
   switch (g_type_info_get_tag(ti))
     {
-#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
+#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup,	\
 		 val_type, val_get, val_set, ffitype)           \
       case tag:							\
 	push(L, val_get(val));					\

@@ -22,7 +22,7 @@ get_int_param(GICallableInfo* ci, GArgument* args, int param, int *val)
       g_arg_info_load_type(&ai, &ti);
       switch (g_type_info_get_tag(&ti))
 	{
-#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
+#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup,	\
 		 valtype, valget, valset, ffitype)		\
 	  case tag:                                             \
 	    *val = (int) args[param].argf;			\
@@ -45,7 +45,7 @@ get_type_size(GITypeTag tag)
   gsize size;
   switch (tag)
     {
-#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
+#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup,	\
 		 valtype, valget, valset, ffitype)              \
       case tag:							\
 	size = sizeof(ctype);					\
@@ -61,17 +61,19 @@ get_type_size(GITypeTag tag)
 
 /* Marshals simple types to C.  Simple are number and strings. */
 static gboolean
-marshal_2c_simple(lua_State* L, GITypeTag tag, GArgument* val, int narg,
-		  gboolean optional)
+marshal_2c_simple(lua_State* L, GITypeTag tag, GITransfer transfer,
+                  GArgument* val, int narg, gboolean optional)
 {
   gboolean handled = TRUE;
   switch (tag)
     {
-#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
+#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup,	\
 		 valtype, valget, valset, ffitype)		\
       case tag:							\
 	val->argf = (optional && lua_isnoneornil(L, narg)) ?	\
 	  (ctype) 0 : (ctype) check(L, narg);                   \
+        if (transfer == GI_TRANSFER_EVERYTHING)                 \
+          val->argf = dup(val->argf);                           \
 	break;
 #include "decltype.h"
 
@@ -122,14 +124,14 @@ marshal_2c_callable(lua_State* L, GICallableInfo* ci, GIArgInfo* ai,
 
 /* Marshalls single value from Lua to GLib/C. */
 int
-lgi_marshal_2c(lua_State* L, GITypeInfo* ti, GIArgInfo* ai, GArgument* val,
-               int narg, GICallableInfo* ci, GArgument* args)
+lgi_marshal_2c(lua_State* L, GITypeInfo* ti, GIArgInfo* ai, GITransfer transfer,
+               GArgument* val, int narg, GICallableInfo* ci, GArgument* args)
 {
   int nret = 0;
   gboolean optional = (ai != NULL && (g_arg_info_is_optional(ai) ||
                                       g_arg_info_may_be_null(ai)));
   GITypeTag tag = g_type_info_get_tag(ti);
-  if (!marshal_2c_simple(L, tag, val, narg, optional))
+  if (!marshal_2c_simple(L, tag, transfer, val, narg, optional))
     {
       switch (tag)
 	{
@@ -145,8 +147,8 @@ lgi_marshal_2c(lua_State* L, GITypeInfo* ti, GIArgInfo* ai, GArgument* val,
 	      case GI_INFO_TYPE_ENUM:
 	      case GI_INFO_TYPE_FLAGS:
 		/* Directly store underlying value. */
-		marshal_2c_simple(L, g_enum_info_get_storage_type(ii), val,
-				  narg, optional);
+		marshal_2c_simple(L, g_enum_info_get_storage_type(ii),
+                                  GI_TRANSFER_NOTHING, val, narg, optional);
 		break;
 
 	      case GI_INFO_TYPE_STRUCT:
@@ -182,7 +184,7 @@ marshal_2lua_simple(lua_State* L, GITypeTag tag, GArgument* val, gboolean own)
   gboolean handled = TRUE;
   switch (tag)
     {
-#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
+#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup,	\
 		 valtype, valget, valset, ffitype)		\
       case tag:							\
 	push(L, val->argf);					\

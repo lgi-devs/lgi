@@ -115,7 +115,7 @@ get_simple_ffi_type(GITypeTag tag)
       ffi = &ffi_type_void;
       break;
 
-#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt,	\
+#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup,	\
 		 val_type, val_get, val_set, ffitype)		\
       case tag:							\
 	ffi = &ffitype;						\
@@ -296,7 +296,7 @@ closure_callback(ffi_cif* cif, void* ret, void** args, void* closure_arg)
 {
   Callable* callable;
   Closure* closure = closure_arg;
-  int res;
+  gint res, npos, i;
 
   /* Get access to proper Lua context. */
   lua_State* L = lgi_main_thread_state;
@@ -312,12 +312,32 @@ closure_callback(ffi_cif* cif, void* ret, void** args, void* closure_arg)
   /* Marshal input arguments to lua. */
 
   /* Call it. */
-  res = lua_pcall(L, 0, 0, 0);
+  res = lua_pcall(L, 0, LUA_MULTRET, 0);
+  npos = 1;
 
   /* Check, whether we can report an error here. */
   if (res == 0)
     {
-      /* Marshal output arguments from lua. */
+      /* Marshal return value from Lua. */
+      if (g_type_info_get_tag(&callable->retval.ti) != GI_TYPE_TAG_VOID)
+        {
+          lgi_marshal_2c(L, &callable->retval.ti, NULL,
+                         callable->retval.transfer, ret, npos, NULL, NULL);
+          npos++;
+        }
+
+      /* Marshal output arguments from Lua. */
+      for (i = 0; i < callable->params; ++i)
+        {
+          Param* param = &callable->param[i];
+          if (!param->internal && param->dir != GI_DIRECTION_IN)
+            {
+              lgi_marshal_2c(L, &param->ti, &param->ai, param->transfer,
+                             &args[i + callable->has_self], npos,
+                             callable->info, args + callable->has_self);
+              npos++;
+            }
+        }
     }
   else if (callable->throws) 
     {
@@ -476,8 +496,9 @@ lgi_callable_call(lua_State* L, gpointer addr, int func_index, int args_index)
         {
           if (param->dir != GI_DIRECTION_OUT)
             /* Convert parameter from Lua stack to C. */
-            nret += lgi_marshal_2c(L, &param->ti, &param->ai, &call->args[argi],
-                                   lua_argi++, callable->info, call->args);
+            nret += lgi_marshal_2c(L, &param->ti, &param->ai, param->transfer,
+                                   &call->args[argi], lua_argi++,
+                                   callable->info, call->args);
           else
             {
               /* Special handling for out/caller-alloc structures; we have to

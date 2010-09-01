@@ -54,8 +54,8 @@ extern const struct luaL_reg lgi_closureguard_reg[];
    entries pushed to Lua stack, which should be popped before function call
    returns. */
 int lgi_marshal_2c(lua_State* L, GITypeInfo* ti, GIArgInfo* ai,
-                    GArgument* val, int narg, GICallableInfo* ci,
-                    GArgument* args);
+                   GITransfer xfer,  GArgument* val, int narg,
+                   GICallableInfo* ci, GArgument* args);
 
 /* Marshalls single value from GLib/C to Lua.  Returns TRUE if
    something was pushed to the stack. */
