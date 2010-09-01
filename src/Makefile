@@ -3,13 +3,17 @@ OUTPUT = lgi.so
 
 OBJS = lgi.o marshal.o callable.o
 
-CFLAGS = -c -pipe -Wall -fPIC `pkg-config --cflags $(PKG_PACKAGES)`
+CFLAGS = -c -pipe -Wall `pkg-config --cflags $(PKG_PACKAGES)`
 LDFLAGS = -shared `pkg-config --libs $(PKG_PACKAGES)`
 
 ifdef DEBUG
 	CFLAGS += -g -O0
 else
 	CFLAGS += -O2 -DNDEBUG
+endif
+
+ifneq ($(shell uname -o), Cygwin)
+	CFLAGS += -fPIC
 endif
 
 .PHONY : all clean
