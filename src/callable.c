@@ -296,6 +296,7 @@ closure_callback(ffi_cif* cif, void* ret, void** args, void* closure_arg)
 {
   Callable* callable;
   Closure* closure = closure_arg;
+  int res;
 
   /* Get access to proper Lua context. */
   lua_State* L = lgi_main_thread_state;
@@ -308,10 +309,35 @@ closure_callback(ffi_cif* cif, void* ret, void** args, void* closure_arg)
   /* Push function (target) to be called to the stack. */
   lua_rawgeti(L, LUA_REGISTRYINDEX, closure->target_ref);
 
+  /* Marshal input arguments to lua. */
+
+  /* Call it. */
+  res = lua_pcall(L, 0, 0, 0);
+
+  /* Check, whether we can report an error here. */
+  if (res == 0)
+    {
+      /* Marshal output arguments from lua. */
+    }
+  else if (callable->throws) 
+    {
+      /* If the function is expected to return errors, create proper error. */
+      GQuark q = g_quark_from_static_string("lgi-callback-error-quark");
+      GError** err = ((GArgument*) args[callable->has_self +
+                                        callable->nargs])->v_pointer;
+      g_set_error_literal(err, q, 1, lua_tostring(L, -1));
+      lua_pop(L, 1);
+    }
+
   /* If the closure is marked as autodestroy, destroy it now.  Note that it is
      unfortunately not possible to destroy it directly here, because we would
      delete the code under our feet and crash and burn :-(. Instead, we create
      marshal guard and leave it to GC to destroy the closure later. */
+  if (closure->autodestroy)
+    {
+      lgi_closure_guard(L, closure);
+      lua_pop(L, 1);
+    }
 }
 
 /* Destroys specified closure. */
