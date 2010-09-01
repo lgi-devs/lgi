@@ -72,18 +72,18 @@ typedef struct _Call
   int narg;
 
   /* Call arguments. */
-  GArgument retval;
-  GArgument* args;
+  GIArgument retval;
+  GIArgument* args;
 
   /* Argument indirection for OUT and INOUT arguments. */
-  GArgument** redirect_out;
+  GIArgument** redirect_out;
 
   /* libffi argument array. */
   void** ffi_args;
 
   /* Followed by:
-     args -> GArgument[callable->nargs + 1];
-     redirect_out -> GArgument*[callable->nargs + 1];
+     args -> GIArgument[callable->nargs + 1];
+     redirect_out -> GIArgument*[callable->nargs + 1];
      ffi_args -> void*[callable->nargs + 2]; */
 } Call;
 
@@ -315,12 +315,12 @@ lgi_callable_call(lua_State* L, gpointer addr, int func_index, int args_index)
 
   /* Allocate (on the stack) and fill in Call instance. */
   call = g_alloca(sizeof(Call) +
-		  sizeof(GArgument) * (callable->nargs + 1) * 2 +
+		  sizeof(GIArgument) * (callable->nargs + 1) * 2 +
 		  sizeof(void*) * (callable->nargs + 2));
   call->callable = callable;
   call->narg = args_index;
-  call->args = (GArgument*)&call[1];
-  call->redirect_out = (GArgument**)&call->args[callable->nargs + 1];
+  call->args = (GIArgument*)&call[1];
+  call->redirect_out = (GIArgument**)&call->args[callable->nargs + 1];
   call->ffi_args = (void**)&call->redirect_out[callable->nargs + 1];
 
   /* Prepare 'self', if present. */
@@ -461,6 +461,11 @@ closure_callback(ffi_cif* cif, void* ret, void** args, void* closure_arg)
   /* Push function (target) to be called to the stack. */
   lua_rawgeti(L, LUA_REGISTRYINDEX, closure->target_ref);
 
+  /* Marshall 'self' argument, if it is present. */
+  if (callable->has_self)
+    lgi_compound_create(L, g_base_info_get_container(callable->info),
+			((GIArgument*) args[0])->v_pointer, FALSE);
+
   /* Marshal input arguments to lua. */
 
   /* Call it. */
@@ -479,14 +484,15 @@ closure_callback(ffi_cif* cif, void* ret, void** args, void* closure_arg)
 	}
 
       /* Marshal output arguments from Lua. */
-      for (i = 0; i < callable->params; ++i)
+      for (i = 0; i < callable->nargs; ++i)
 	{
-	  Param* param = &callable->param[i];
+	  Param* param = &callable->params[i];
 	  if (!param->internal && param->dir != GI_DIRECTION_IN)
 	    {
 	      lgi_marshal_2c(L, &param->ti, &param->ai, param->transfer,
-			     &args[i + callable->has_self], npos,
-			     callable->info, args + callable->has_self);
+			     (GIArgument*)args[i + callable->has_self], npos,
+			     callable->info, 
+			     (GIArgument*)(args + callable->has_self));
 	      npos++;
 	    }
 	}
@@ -495,8 +501,8 @@ closure_callback(ffi_cif* cif, void* ret, void** args, void* closure_arg)
     {
       /* If the function is expected to return errors, create proper error. */
       GQuark q = g_quark_from_static_string("lgi-callback-error-quark");
-      GError** err = ((GArgument*) args[callable->has_self +
-					callable->nargs])->v_pointer;
+      GError** err = ((GIArgument*) args[callable->has_self +
+					 callable->nargs])->v_pointer;
       g_set_error_literal(err, q, 1, lua_tostring(L, -1));
       lua_pop(L, 1);
     }

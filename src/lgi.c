@@ -128,7 +128,7 @@ lgi_type_get_size(GITypeTag tag)
 
 static int
 lgi_simple_val_to_lua(lua_State* L, GITypeTag tag, GITransfer transfer,
-		      GArgument* val)
+		      GIArgument* val)
 {
   int vals = 1;
   switch (tag)
@@ -151,11 +151,11 @@ lgi_simple_val_to_lua(lua_State* L, GITypeTag tag, GITransfer transfer,
 }
 
 static int lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GITransfer transfer,
-			  GArgument* val);
+			  GIArgument* val);
 
 static int
 lgi_array_to_lua(lua_State* L, GITypeInfo* ti, GITransfer transfer,
-		 GArgument* val)
+		 GIArgument* val)
 {
   /* Find out the array length and element size. TODO: Handle 'length'
      variant.*/
@@ -184,12 +184,12 @@ lgi_array_to_lua(lua_State* L, GITypeInfo* ti, GITransfer transfer,
       for (index = 0; len < 0 || index < len; index++)
 	{
 	  /* Get value from specified index. */
-	  GArgument* eval;
+	  GIArgument* eval;
 	  gint offset = index * size;
 	  if (atype == GI_ARRAY_TYPE_C)
-	    eval = (GArgument*)((gchar*)val->v_pointer + offset);
+	    eval = (GIArgument*)((gchar*)val->v_pointer + offset);
 	  else if (atype == GI_ARRAY_TYPE_ARRAY)
-	    eval = (GArgument*)(((GArray*)val->v_pointer)->data + offset);
+	    eval = (GIArgument*)(((GArray*)val->v_pointer)->data + offset);
 
 	  /* If the array is zero-terminated, terminate now and don't
 	     include NULL entry. */
@@ -217,7 +217,7 @@ lgi_array_to_lua(lua_State* L, GITypeInfo* ti, GITransfer transfer,
 
 static int
 lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GITransfer transfer,
-	       GArgument* val)
+	       GIArgument* val)
 {
   GITypeTag tag = g_type_info_get_tag(ti);
   int vals = lgi_simple_val_to_lua(L, tag, transfer, val);
@@ -267,7 +267,7 @@ lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GITransfer transfer,
 
 static int
 lgi_simple_val_from_lua(lua_State* L, int index, GITypeTag tag,
-			GArgument* val, gboolean optional)
+			GIArgument* val, gboolean optional)
 {
   int vals = 1;
   switch (tag)
@@ -289,7 +289,7 @@ lgi_simple_val_from_lua(lua_State* L, int index, GITypeTag tag,
 }
 
 static int
-lgi_val_from_lua(lua_State* L, int index, GITypeInfo* ti, GArgument* val,
+lgi_val_from_lua(lua_State* L, int index, GITypeInfo* ti, GIArgument* val,
 		 gboolean optional)
 {
   GITypeTag tag = g_type_info_get_tag(ti);
@@ -485,7 +485,7 @@ value_store(lua_State* L, GValue* val, GITypeInfo* ti)
 /* Allocates/initializes specified object (if applicable), stores it
    on the stack. */
 static int
-lgi_type_new(lua_State* L, GIBaseInfo* ii, GArgument* val)
+lgi_type_new(lua_State* L, GIBaseInfo* ii, GIArgument* val)
 {
   int vals = 0;
   switch (g_base_info_get_type(ii))
@@ -502,7 +502,7 @@ lgi_type_new(lua_State* L, GIBaseInfo* ii, GArgument* val)
     case GI_INFO_TYPE_CONSTANT:
       {
 	GITypeInfo* ti = g_constant_info_get_type(ii);
-	GArgument val;
+	GIArgument val;
 	g_constant_info_get_value(ii, &val);
 	vals = lgi_val_to_lua(L, ti, GI_TRANSFER_NOTHING, &val);
 	g_base_info_unref(ti);
@@ -810,7 +810,7 @@ compound_load(lua_State* L, int index, GIBaseInfo* ii, gboolean optional)
 static int
 compound_element_field(lua_State* L, gpointer addr, GIFieldInfo* fi, int newval)
 {
-  GArgument* val = G_STRUCT_MEMBER_P(addr, g_field_info_get_offset(fi));
+  GIArgument* val = G_STRUCT_MEMBER_P(addr, g_field_info_get_offset(fi));
   GITypeInfo* ti = g_field_info_get_type(fi);
   int flags = g_field_info_get_flags(fi);
   int vals;
@@ -1021,7 +1021,7 @@ static int
 lgi_get(lua_State* L)
 {
   /* Create new instance based on the embedded typeinfo. */
-  GArgument unused;
+  GIArgument unused;
   return lgi_type_new(L, compound_load(L, 1, lgi_baseinfo_info, FALSE),
                       &unused);
 }

@@ -11,7 +11,7 @@
 /* Returns int value of specified parameter.  If specified parameter does not
    exist or its value cannot be converted to int, FALSE is returned. */
 static gboolean
-get_int_param(GICallableInfo* ci, GArgument* args, int param, int *val)
+get_int_param(GICallableInfo* ci, GIArgument* args, int param, int *val)
 {
   param--;
   if (param >= 0 && param < g_callable_info_get_n_args(ci))
@@ -62,7 +62,7 @@ get_type_size(GITypeTag tag)
 /* Marshals simple types to C.  Simple are number and strings. */
 static gboolean
 marshal_2c_simple(lua_State* L, GITypeTag tag, GITransfer transfer,
-                  GArgument* val, int narg, gboolean optional)
+                  GIArgument* val, int narg, gboolean optional)
 {
   gboolean handled = TRUE;
   switch (tag)
@@ -87,8 +87,8 @@ marshal_2c_simple(lua_State* L, GITypeTag tag, GITransfer transfer,
 /* Marshalls given callable from Lua to C. */
 static int
 marshal_2c_callable(lua_State* L, GICallableInfo* ci, GIArgInfo* ai,
-                    GArgument* val, int narg,
-                    GICallableInfo* argci, GArgument* args)
+                    GIArgument* val, int narg,
+                    GICallableInfo* argci, GIArgument* args)
 {
   int nret = 0;
   GIScopeType scope = g_arg_info_get_scope(ai);
@@ -125,7 +125,7 @@ marshal_2c_callable(lua_State* L, GICallableInfo* ci, GIArgInfo* ai,
 /* Marshalls single value from Lua to GLib/C. */
 int
 lgi_marshal_2c(lua_State* L, GITypeInfo* ti, GIArgInfo* ai, GITransfer transfer,
-               GArgument* val, int narg, GICallableInfo* ci, GArgument* args)
+               GIArgument* val, int narg, GICallableInfo* ci, GIArgument* args)
 {
   int nret = 0;
   gboolean optional = (ai != NULL && (g_arg_info_is_optional(ai) ||
@@ -179,7 +179,7 @@ lgi_marshal_2c(lua_State* L, GITypeInfo* ti, GIArgInfo* ai, GITransfer transfer,
 /* Marshals simple types to Lua.  Simple are number and
    strings. Returns TRUE if value was handled, 0 otherwise. */
 static gboolean
-marshal_2lua_simple(lua_State* L, GITypeTag tag, GArgument* val, gboolean own)
+marshal_2lua_simple(lua_State* L, GITypeTag tag, GIArgument* val, gboolean own)
 {
   gboolean handled = TRUE;
   switch (tag)
@@ -201,8 +201,8 @@ marshal_2lua_simple(lua_State* L, GITypeTag tag, GArgument* val, gboolean own)
 }
 
 static gboolean
-marshal_2lua_carray(lua_State* L, GITypeInfo* ti, GArgument* val, 
-		    GITransfer xfer, GICallableInfo* ci, GArgument* args)
+marshal_2lua_carray(lua_State* L, GITypeInfo* ti, GIArgument* val, 
+		    GITransfer xfer, GICallableInfo* ci, GIArgument* args)
 {
   gint len, index;
 
@@ -242,7 +242,7 @@ marshal_2lua_carray(lua_State* L, GITypeInfo* ti, GArgument* val,
 	{
 	  /* Get value from specified index. */
 	  gint offset = index * size;
-	  GArgument* eval = (GArgument*)((char*)val->v_pointer + offset);
+	  GIArgument* eval = (GIArgument*)((char*)val->v_pointer + offset);
 
 	  /* If the array is zero-terminated, terminate now and don't
 	     include NULL entry. */
@@ -271,9 +271,9 @@ marshal_2lua_carray(lua_State* L, GITypeInfo* ti, GArgument* val,
 /* Marshalls single value from GLib/C to Lua.  Returns 1 if something
    was pushed to the stack. */
 gboolean
-lgi_marshal_2lua(lua_State* L, GITypeInfo* ti, GArgument* val,
+lgi_marshal_2lua(lua_State* L, GITypeInfo* ti, GIArgument* val,
 		 GITransfer xfer,
-		 GICallableInfo* ci, GArgument* args)
+		 GICallableInfo* ci, GIArgument* args)
 {
   gboolean own = (xfer != GI_TRANSFER_NOTHING);
   GITypeTag tag = g_type_info_get_tag(ti);
