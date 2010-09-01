@@ -246,22 +246,22 @@ lgi_callable_create(lua_State* L, GICallableInfo* info)
 
       /* If this is callback, mark user_data and destroy_notify as internal. */
       if (g_arg_info_get_scope(&param->ai) != GI_SCOPE_TYPE_INVALID)
-        {
-          gint arg = g_arg_info_get_closure(&param->ai);
-          if (arg > 0 && arg < nargs)
-            callable->params[arg - 1].internal = TRUE;
-          arg = g_arg_info_get_destroy(&param->ai);
-          if (arg > 0 && arg < nargs)
-            callable->params[arg - 1].internal = TRUE;
-        }
+	{
+	  gint arg = g_arg_info_get_closure(&param->ai);
+	  if (arg > 0 && arg < nargs)
+	    callable->params[arg - 1].internal = TRUE;
+	  arg = g_arg_info_get_destroy(&param->ai);
+	  if (arg > 0 && arg < nargs)
+	    callable->params[arg - 1].internal = TRUE;
+	}
       /* Similarly for array length field. */
       if (g_type_info_get_tag(&param->ti) == GI_TYPE_TAG_ARRAY &&
-          g_type_info_get_array_type(&param->ti) == GI_ARRAY_TYPE_C)
-        {
-          gint arg = g_type_info_get_array_length(&param->ti);
-          if (arg > 0 && arg < nargs)
-            callable->params[arg - 1].internal = TRUE;
-        }
+	  g_type_info_get_array_type(&param->ti) == GI_ARRAY_TYPE_C)
+	{
+	  gint arg = g_type_info_get_array_length(&param->ti);
+	  if (arg > 0 && arg < nargs)
+	    callable->params[arg - 1].internal = TRUE;
+	}
     }
 
   /* Add ffi info for 'err' argument. */
@@ -287,149 +287,6 @@ lgi_callable_create(lua_State* L, GICallableInfo* info)
   lua_replace(L, -5);
   lua_pop(L, 3);
   return 1;
-}
-
-/* Closure callback, called by libffi when C code wants to invoke Lua
-   callback. */
-static void
-closure_callback(ffi_cif* cif, void* ret, void** args, void* closure_arg)
-{
-  Callable* callable;
-  Closure* closure = closure_arg;
-  gint res, npos, i;
-
-  /* Get access to proper Lua context. */
-  lua_State* L = lgi_main_thread_state;
-
-  /* Get access to Callable structure. */
-  lua_rawgeti(L, LUA_REGISTRYINDEX, closure->callable_ref);
-  callable = lua_touserdata(L, -1);
-  lua_pop(L, 1);
-
-  /* Push function (target) to be called to the stack. */
-  lua_rawgeti(L, LUA_REGISTRYINDEX, closure->target_ref);
-
-  /* Marshal input arguments to lua. */
-
-  /* Call it. */
-  res = lua_pcall(L, 0, LUA_MULTRET, 0);
-  npos = 1;
-
-  /* Check, whether we can report an error here. */
-  if (res == 0)
-    {
-      /* Marshal return value from Lua. */
-      if (g_type_info_get_tag(&callable->retval.ti) != GI_TYPE_TAG_VOID)
-        {
-          lgi_marshal_2c(L, &callable->retval.ti, NULL,
-                         callable->retval.transfer, ret, npos, NULL, NULL);
-          npos++;
-        }
-
-      /* Marshal output arguments from Lua. */
-      for (i = 0; i < callable->params; ++i)
-        {
-          Param* param = &callable->param[i];
-          if (!param->internal && param->dir != GI_DIRECTION_IN)
-            {
-              lgi_marshal_2c(L, &param->ti, &param->ai, param->transfer,
-                             &args[i + callable->has_self], npos,
-                             callable->info, args + callable->has_self);
-              npos++;
-            }
-        }
-    }
-  else if (callable->throws) 
-    {
-      /* If the function is expected to return errors, create proper error. */
-      GQuark q = g_quark_from_static_string("lgi-callback-error-quark");
-      GError** err = ((GArgument*) args[callable->has_self +
-                                        callable->nargs])->v_pointer;
-      g_set_error_literal(err, q, 1, lua_tostring(L, -1));
-      lua_pop(L, 1);
-    }
-
-  /* If the closure is marked as autodestroy, destroy it now.  Note that it is
-     unfortunately not possible to destroy it directly here, because we would
-     delete the code under our feet and crash and burn :-(. Instead, we create
-     marshal guard and leave it to GC to destroy the closure later. */
-  if (closure->autodestroy)
-    {
-      lgi_closure_guard(L, closure);
-      lua_pop(L, 1);
-    }
-}
-
-/* Destroys specified closure. */
-void
-lgi_closure_destroy(gpointer user_data)
-{
-  lua_State* L = lgi_main_thread_state;
-  Closure* closure = user_data;
-  luaL_unref(L, LUA_REGISTRYINDEX, closure->callable_ref);
-  luaL_unref(L, LUA_REGISTRYINDEX, closure->target_ref);
-  ffi_closure_free(closure);
-}
-
-/* Creates closure from Lua function to be passed to C. */
-gpointer
-lgi_closure_create(lua_State* L, GICallableInfo* ci, int target,
-                   gboolean autodestroy, gpointer* call_addr)
-{
-  Closure* closure;
-  Callable* callable;
-
-  /* Allocate closure space. */
-  closure = ffi_closure_alloc(sizeof(Closure), call_addr);
-
-  /* Prepare callable and store reference to it. */
-  lgi_callable_create(L, ci);
-  callable = lua_touserdata(L, -1);
-  closure->callable_ref = luaL_ref(L, LUA_REGISTRYINDEX);
-
-  /* Store reference to target Lua function. */
-  lua_pushvalue(L, target);
-  closure->target_ref = luaL_ref(L, LUA_REGISTRYINDEX);
-
-  /* Remember whether closure should destroy itself automatically after being
-     invoked. */
-  closure->autodestroy = autodestroy;
-
-  /* Create closure. */
-  if (ffi_prep_closure_loc(&closure->ffi_closure, &callable->cif,
-                           closure_callback, closure, *call_addr) != FFI_OK)
-    {
-      lgi_closure_destroy(closure);
-      lua_concat(L, lgi_type_get_name(L, ci));
-      luaL_error(L, "failed to prepare closure for `%'", lua_tostring(L, -1));
-      return NULL;
-    }
-
-  return closure;
-}
-
-static int
-closureguard_gc(lua_State* L)
-{
-  gpointer closure = *(gpointer*)lua_touserdata(L, 1);
-  lgi_closure_destroy(closure);
-  return 0;
-}
-
-const struct luaL_reg lgi_closureguard_reg[] = {
-  { "__gc", closureguard_gc },
-  { NULL, NULL }
-};
-
-void
-lgi_closure_guard(lua_State* L, gpointer user_data)
-{
-  gpointer* closureguard;
-  luaL_checkstack(L, 1, "");
-  closureguard = lua_newuserdata(L, sizeof(gpointer));
-  *closureguard = user_data;
-  luaL_getmetatable(L, LGI_CLOSUREGUARD);
-  lua_setmetatable(L, -2);
 }
 
 int
@@ -493,27 +350,27 @@ lgi_callable_call(lua_State* L, gpointer addr, int func_index, int args_index)
 	}
 
       if (!param->internal)
-        {
-          if (param->dir != GI_DIRECTION_OUT)
-            /* Convert parameter from Lua stack to C. */
-            nret += lgi_marshal_2c(L, &param->ti, &param->ai, param->transfer,
-                                   &call->args[argi], lua_argi++,
-                                   callable->info, call->args);
-          else
-            {
-              /* Special handling for out/caller-alloc structures; we have to
-                 manually pre-create them and store them on the stack. */
-              if (g_arg_info_is_caller_allocates(&param->ai) &&
-                  g_type_info_get_tag(&param->ti) == GI_TYPE_TAG_INTERFACE)
-                {
-                  GIBaseInfo* ii = g_type_info_get_interface(&param->ti);
-                  if (g_base_info_get_type(ii) == GI_INFO_TYPE_STRUCT)
-                    lgi_compound_create_struct(L, ii,
-                                               &call->args[argi].v_pointer);
-                  g_base_info_unref(ii);
-                }
-            }
-        }
+	{
+	  if (param->dir != GI_DIRECTION_OUT)
+	    /* Convert parameter from Lua stack to C. */
+	    nret += lgi_marshal_2c(L, &param->ti, &param->ai, param->transfer,
+				   &call->args[argi], lua_argi++,
+				   callable->info, call->args);
+	  else
+	    {
+	      /* Special handling for out/caller-alloc structures; we have to
+		 manually pre-create them and store them on the stack. */
+	      if (g_arg_info_is_caller_allocates(&param->ai) &&
+		  g_type_info_get_tag(&param->ti) == GI_TYPE_TAG_INTERFACE)
+		{
+		  GIBaseInfo* ii = g_type_info_get_interface(&param->ti);
+		  if (g_base_info_get_type(ii) == GI_INFO_TYPE_STRUCT)
+		    lgi_compound_create_struct(L, ii,
+					       &call->args[argi].v_pointer);
+		  g_base_info_unref(ii);
+		}
+	    }
+	}
     }
 
   /* Add error for 'throws' type function. */
@@ -536,7 +393,7 @@ lgi_callable_call(lua_State* L, gpointer addr, int func_index, int args_index)
   if (g_type_info_get_tag(&callable->retval.ti) != GI_TYPE_TAG_VOID)
     nret = lgi_marshal_2lua(L, &callable->retval.ti, &call->retval,
 			    callable->retval.transfer, callable->info,
-                            call->args) ? 1 : 0;
+			    call->args) ? 1 : 0;
 
   /* Process output parameters. */
   param = &callable->params[0];
@@ -583,3 +440,146 @@ const struct luaL_reg lgi_callable_reg[] = {
   { "__call", callable_call },
   { NULL, NULL }
 };
+
+/* Closure callback, called by libffi when C code wants to invoke Lua
+   callback. */
+static void
+closure_callback(ffi_cif* cif, void* ret, void** args, void* closure_arg)
+{
+  Callable* callable;
+  Closure* closure = closure_arg;
+  gint res, npos, i;
+
+  /* Get access to proper Lua context. */
+  lua_State* L = lgi_main_thread_state;
+
+  /* Get access to Callable structure. */
+  lua_rawgeti(L, LUA_REGISTRYINDEX, closure->callable_ref);
+  callable = lua_touserdata(L, -1);
+  lua_pop(L, 1);
+
+  /* Push function (target) to be called to the stack. */
+  lua_rawgeti(L, LUA_REGISTRYINDEX, closure->target_ref);
+
+  /* Marshal input arguments to lua. */
+
+  /* Call it. */
+  res = lua_pcall(L, 0, LUA_MULTRET, 0);
+  npos = 1;
+
+  /* Check, whether we can report an error here. */
+  if (res == 0)
+    {
+      /* Marshal return value from Lua. */
+      if (g_type_info_get_tag(&callable->retval.ti) != GI_TYPE_TAG_VOID)
+	{
+	  lgi_marshal_2c(L, &callable->retval.ti, NULL,
+			 callable->retval.transfer, ret, npos, NULL, NULL);
+	  npos++;
+	}
+
+      /* Marshal output arguments from Lua. */
+      for (i = 0; i < callable->params; ++i)
+	{
+	  Param* param = &callable->param[i];
+	  if (!param->internal && param->dir != GI_DIRECTION_IN)
+	    {
+	      lgi_marshal_2c(L, &param->ti, &param->ai, param->transfer,
+			     &args[i + callable->has_self], npos,
+			     callable->info, args + callable->has_self);
+	      npos++;
+	    }
+	}
+    }
+  else if (callable->throws)
+    {
+      /* If the function is expected to return errors, create proper error. */
+      GQuark q = g_quark_from_static_string("lgi-callback-error-quark");
+      GError** err = ((GArgument*) args[callable->has_self +
+					callable->nargs])->v_pointer;
+      g_set_error_literal(err, q, 1, lua_tostring(L, -1));
+      lua_pop(L, 1);
+    }
+
+  /* If the closure is marked as autodestroy, destroy it now.  Note that it is
+     unfortunately not possible to destroy it directly here, because we would
+     delete the code under our feet and crash and burn :-(. Instead, we create
+     marshal guard and leave it to GC to destroy the closure later. */
+  if (closure->autodestroy)
+    {
+      lgi_closure_guard(L, closure);
+      lua_pop(L, 1);
+    }
+}
+
+/* Destroys specified closure. */
+void
+lgi_closure_destroy(gpointer user_data)
+{
+  lua_State* L = lgi_main_thread_state;
+  Closure* closure = user_data;
+  luaL_unref(L, LUA_REGISTRYINDEX, closure->callable_ref);
+  luaL_unref(L, LUA_REGISTRYINDEX, closure->target_ref);
+  ffi_closure_free(closure);
+}
+
+/* Creates closure from Lua function to be passed to C. */
+gpointer
+lgi_closure_create(lua_State* L, GICallableInfo* ci, int target,
+		   gboolean autodestroy, gpointer* call_addr)
+{
+  Closure* closure;
+  Callable* callable;
+
+  /* Allocate closure space. */
+  closure = ffi_closure_alloc(sizeof(Closure), call_addr);
+
+  /* Prepare callable and store reference to it. */
+  lgi_callable_create(L, ci);
+  callable = lua_touserdata(L, -1);
+  closure->callable_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+
+  /* Store reference to target Lua function. */
+  lua_pushvalue(L, target);
+  closure->target_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+
+  /* Remember whether closure should destroy itself automatically after being
+     invoked. */
+  closure->autodestroy = autodestroy;
+
+  /* Create closure. */
+  if (ffi_prep_closure_loc(&closure->ffi_closure, &callable->cif,
+			   closure_callback, closure, *call_addr) != FFI_OK)
+    {
+      lgi_closure_destroy(closure);
+      lua_concat(L, lgi_type_get_name(L, ci));
+      luaL_error(L, "failed to prepare closure for `%'", lua_tostring(L, -1));
+      return NULL;
+    }
+
+  return closure;
+}
+
+static int
+closureguard_gc(lua_State* L)
+{
+  gpointer closure = *(gpointer*)lua_touserdata(L, 1);
+  lgi_closure_destroy(closure);
+  return 0;
+}
+
+const struct luaL_reg lgi_closureguard_reg[] = {
+  { "__gc", closureguard_gc },
+  { NULL, NULL }
+};
+
+void
+lgi_closure_guard(lua_State* L, gpointer user_data)
+{
+  gpointer* closureguard;
+  luaL_checkstack(L, 1, "");
+  closureguard = lua_newuserdata(L, sizeof(gpointer));
+  *closureguard = user_data;
+  luaL_getmetatable(L, LGI_CLOSUREGUARD);
+  lua_setmetatable(L, -2);
+}
