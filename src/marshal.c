@@ -82,19 +82,6 @@ marshal_2c_simple(lua_State* L, GITypeTag tag, GArgument* val, int narg,
   return handled;
 }
 
-static int
-closureguard_gc(lua_State* L)
-{
-  gpointer closure = *(gpointer*)lua_touserdata(L, 1);
-  lgi_closure_destroy(closure);
-  return 0;
-}
-
-const struct luaL_reg lgi_closureguard_reg[] = {
-  { "__gc", closureguard_gc },
-  { NULL, NULL }
-};
-
 /* Marshalls given callable from Lua to C. */
 static int
 marshal_2c_callable(lua_State* L, GICallableInfo* ci, GIArgInfo* ai,
@@ -126,10 +113,7 @@ marshal_2c_callable(lua_State* L, GICallableInfo* ci, GIArgInfo* ai,
      stack helper Lua userdata which destroy the closure in its gc. */
   if (scope == GI_SCOPE_TYPE_CALL)
     {
-      gpointer* closureguard;
-      luaL_checkstack(L, 1, "");
-      closureguard = lua_newuserdata(L, sizeof(gpointer));
-      *closureguard = closure;
+      lgi_closure_guard(L, closure);
       nret = 1;
     }
 

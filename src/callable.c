@@ -362,6 +362,30 @@ lgi_closure_create(lua_State* L, GICallableInfo* ci, int target,
   return closure;
 }
 
+static int
+closureguard_gc(lua_State* L)
+{
+  gpointer closure = *(gpointer*)lua_touserdata(L, 1);
+  lgi_closure_destroy(closure);
+  return 0;
+}
+
+const struct luaL_reg lgi_closureguard_reg[] = {
+  { "__gc", closureguard_gc },
+  { NULL, NULL }
+};
+
+void
+lgi_closure_guard(lua_State* L, gpointer user_data)
+{
+  gpointer* closureguard;
+  luaL_checkstack(L, 1, "");
+  closureguard = lua_newuserdata(L, sizeof(gpointer));
+  *closureguard = user_data;
+  luaL_getmetatable(L, LGI_CLOSUREGUARD);
+  lua_setmetatable(L, -2);
+}
+
 int
 lgi_callable_call(lua_State* L, gpointer addr, int func_index, int args_index)
 {

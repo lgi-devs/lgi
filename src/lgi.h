@@ -60,7 +60,8 @@ int lgi_marshal_2c(lua_State* L, GITypeInfo* ti, GIArgInfo* ai,
 /* Marshalls single value from GLib/C to Lua.  Returns TRUE if
    something was pushed to the stack. */
 gboolean lgi_marshal_2lua(lua_State* L, GITypeInfo* ti, GArgument* val, 
-			  GITransfer xfer, GICallableInfo* ci, GArgument* args);
+			  GITransfer xfer,
+                          GICallableInfo* ci, GArgument* args);
 
 /* Parses given GICallableInfo, creates new userdata for it and stores
    it to the stack. Uses cache, so already parsed callable held in the
@@ -81,6 +82,10 @@ gpointer lgi_closure_create(lua_State* L, GICallableInfo* ci, int target,
 
 /* GDestroyNotify-compatible callback for destroying closure. */
 void lgi_closure_destroy(gpointer user_data);
+
+/* Creates closure guard Lua userdata object and puts it on the stack.  Closure
+ * guard automatically destroys the closure in its __gc metamethod. */
+void lgi_closure_guard(lua_State* L, gpointer user_data);
 
 /* Creates new compound of given address and type, pushes its userdata on the
  * lua stack. */
