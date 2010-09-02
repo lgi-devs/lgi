@@ -55,6 +55,12 @@ extern const struct luaL_reg lgi_callable_reg[];
 #define LGI_CLOSUREGUARD "lgi.closureguard"
 extern const struct luaL_reg lgi_closureguard_reg[];
 
+#define LGI_COMPOUND "lgi.compound"
+extern const struct luaL_reg lgi_compound_reg[];
+
+/* GIBaseInfo of GIBaseInfo type itself.  Leaks, never freed. */
+extern GIBaseInfo* lgi_baseinfo_info;
+
 /* Marshalls single value from Lua to GLib/C. Returns number of temporary
    entries pushed to Lua stack, which should be popped before function call
    returns. */
