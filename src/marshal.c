@@ -103,10 +103,10 @@ marshal_2c_callable(lua_State* L, GICallableInfo* ci, GIArgInfo* ai,
     {
       gint arg;
       gint nargs = g_callable_info_get_n_args(argci);
-      arg = g_arg_info_get_closure(ci) - 1;
+      arg = g_arg_info_get_closure(ai) - 1;
       if (arg >= 0 && arg < nargs)
         args[arg]->v_pointer = closure;
-      arg = g_arg_info_get_destroy(ci) - 1;
+      arg = g_arg_info_get_destroy(ai) - 1;
       if (arg >= 0 && arg < nargs)
         args[arg]->v_pointer = lgi_closure_destroy;
     }

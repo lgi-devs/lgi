@@ -334,7 +334,8 @@ lgi_callable_call(lua_State* L, gpointer addr, int func_index, int args_index)
       lua_argi++;
     }
 
-  /* Process input parameters. */
+  /* Prepare proper call->ffi_args[] pointing to real args (or redirects in
+     case of inout/out parameters). */
   nret = 0;
   param = &callable->params[0];
   for (i = 0; i < callable->nargs; i++, param++)
@@ -348,36 +349,41 @@ lgi_callable_call(lua_State* L, gpointer addr, int func_index, int args_index)
 	  call->ffi_args[argi] = &call->redirect_out[argi];
 	  call->redirect_out[argi] = &call->args[argi];
 	}
-
-      if (!param->internal)
-	{
-	  if (param->dir != GI_DIRECTION_OUT)
-	    /* Convert parameter from Lua stack to C. */
-	    nret += lgi_marshal_2c(L, &param->ti, &param->ai, param->transfer,
-				   &call->args[argi], lua_argi++,
-				   callable->info,
-                                   (GIArgument**) (call->ffi_args +
-                                                   callable->has_self));
-	  else
-	    {
-	      /* Special handling for out/caller-alloc structures; we have to
-		 manually pre-create them and store them on the stack. */
-	      if (g_arg_info_is_caller_allocates(&param->ai) &&
-		  g_type_info_get_tag(&param->ti) == GI_TYPE_TAG_INTERFACE)
-		{
-		  GIBaseInfo* ii = g_type_info_get_interface(&param->ti);
-		  if (g_base_info_get_type(ii) == GI_INFO_TYPE_STRUCT)
-		    lgi_compound_create_struct(L, ii,
-					       &call->args[argi].v_pointer);
-		  g_base_info_unref(ii);
-		}
-	    }
-	}
     }
+
+  /* Process input parameters. */
+  nret = 0;
+  param = &callable->params[0];
+  for (i = 0; i < callable->nargs; i++, param++)
+    if (!param->internal)
+      {
+        int argi = i + callable->has_self;
+        if (param->dir != GI_DIRECTION_OUT)
+          /* Convert parameter from Lua stack to C. */
+          nret += lgi_marshal_2c(L, &param->ti, &param->ai, param->transfer,
+                                 &call->args[argi], lua_argi++,
+                                 callable->info,
+                                 (GIArgument**) (call->ffi_args +
+                                                 callable->has_self));
+        else
+          {
+            /* Special handling for out/caller-alloc structures; we have to
+               manually pre-create them and store them on the stack. */
+            if (g_arg_info_is_caller_allocates(&param->ai) &&
+                g_type_info_get_tag(&param->ti) == GI_TYPE_TAG_INTERFACE)
+              {
+                GIBaseInfo* ii = g_type_info_get_interface(&param->ti);
+                if (g_base_info_get_type(ii) == GI_INFO_TYPE_STRUCT)
+                  lgi_compound_create_struct(L, ii,
+                                             &call->args[argi].v_pointer);
+                g_base_info_unref(ii);
+              }
+          }
+      }
 
   /* Add error for 'throws' type function. */
   if (callable->throws)
-      call->ffi_args[callable->has_self + callable->nargs] = &err;
+    call->ffi_args[callable->has_self + callable->nargs] = &err;
 
   /* Call the function. */
   ffi_call(&callable->cif, addr, &call->retval, call->ffi_args);
@@ -469,9 +475,13 @@ closure_callback(ffi_cif* cif, void* ret, void** args, void* closure_arg)
   lua_rawgeti(L, LUA_REGISTRYINDEX, closure->target_ref);
 
   /* Marshall 'self' argument, if it is present. */
+  npos = 0;
   if (callable->has_self)
-    lgi_compound_create(L, g_base_info_get_container(callable->info),
-			((GIArgument*) args[0])->v_pointer, FALSE);
+    {
+      lgi_compound_create(L, g_base_info_get_container(callable->info),
+                          ((GIArgument*) args[0])->v_pointer, FALSE);
+      npos++;
+    }
 
   /* Marshal input arguments to lua. */
   param = callable->params;
@@ -482,10 +492,11 @@ closure_callback(ffi_cif* cif, void* ret, void** args, void* closure_arg)
                          (GIArgument*) args[i + callable->has_self],
                          param->transfer, callable->info,
                          (GIArgument**) &args[callable->has_self]);
+        npos++;
       }
 
   /* Call it. */
-  res = lua_pcall(L, 0, LUA_MULTRET, 0);
+  res = lua_pcall(L, npos, LUA_MULTRET, 0);
   npos = 1;
 
   /* Check, whether we can report an error here. */
