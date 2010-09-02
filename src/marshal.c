@@ -13,7 +13,6 @@
 static gboolean
 get_int_param(GICallableInfo* ci, GIArgument** args, int param, int *val)
 {
-  param--;
   if (param >= 0 && param < g_callable_info_get_n_args(ci))
     {
       GIArgInfo ai;
@@ -103,10 +102,10 @@ marshal_2c_callable(lua_State* L, GICallableInfo* ci, GIArgInfo* ai,
     {
       gint arg;
       gint nargs = g_callable_info_get_n_args(argci);
-      arg = g_arg_info_get_closure(ai) - 1;
+      arg = g_arg_info_get_closure(ai);
       if (arg >= 0 && arg < nargs)
         args[arg]->v_pointer = closure;
-      arg = g_arg_info_get_destroy(ai) - 1;
+      arg = g_arg_info_get_destroy(ai);
       if (arg >= 0 && arg < nargs)
         args[arg]->v_pointer = lgi_closure_destroy;
     }
