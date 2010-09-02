@@ -8,8 +8,6 @@
 
 #include "lgi.h"
 
-#include <girffi.h>
-
 int lgi_regkey;
 
 /* GIBaseInfo of GIBaseInfo type itself.  Leaks, never freed. */
