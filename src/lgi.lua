@@ -505,68 +505,14 @@ local function get_symbol(namespace, symbol)
 	 local category
 	 value, category = assert(loader(namespace, info))
 
-	 -- Process value with the hook, if some hook is installed.
-	 local hook = namespace[0].hook
-	 if hook then value = hook(symbol, value) end
-
 	 -- Cache the symbol in specified category in the namespace.
-	 if value then
-	    namespace[category] = rawget(namespace, category) or {}
-	    namespace[category][symbol] = value
-	 end
+	 namespace[category] = rawget(namespace, category) or {}
+	 namespace[category][symbol] = value
       end
    end
 
    in_load[fullname] = nil
    return value
-end
-
--- Put GObject and GLib hooks into .preload.
-for name, hook in pairs
-{
-   GObject = {
-      Object = function(value)
-		  value._methods = {}
-	       end,
-   },
-   GLib = {
-      free = true,
-
-      Date = true,
-      DateDay = true, DateMonth = true, DateYear = true, DateWeekday = true,
-      DateDMY = true,
-      DATE_BAD_DAY = true, DATE_BAD_JULIAN = true, DATE_BAD_YEAR = true,
-      TimeVal = true, USEC_PER_SEC = true,
-
-      Timer = true,
-
-      MainLoop = true,
-      PRIORITY_HIGH = true, PRIORITY_DEFAULT = true, PRIORITY_HIGH_IDLE = true,
-      PRIORITY_DEFAULT_IDLE = true, PRIORITY_LOW = true,
-      MainContext = true,
-      Source = true,
-
-      SeekType = true,
-
-      MarkupParser = true, MarkupParseContext = true,
-      MarkupError = true, MARKUP_ERROR = true, MarkupParseFlags = true,
-
-      Checksum = true, ChecksumType = true,
-   }
-} do package.preload['lgi._core.' .. name] =
-   function()
-      return {
-	 hook = function(symbol, value)
-		   local func = hook[symbol]
-		   if func then
-		      if type(func) == 'function' then func(value) end
-		   else
-		      value = nil
-		   end
-		   return value
-		end
-      }
-   end
 end
 
 -- Loads namespace, optionally with specified version and returns table which
