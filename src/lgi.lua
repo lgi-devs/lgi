@@ -126,9 +126,12 @@ gi._structs = {
 		       type = gi.IInfoType.STRUCT } },
 }
 
-gi._structs.IBaseInfo[0].acquire = core.get(core.find('base_info_ref'))
-gi._structs.IBaseInfo[0].dispose = core.get(core.find('base_info_unref'))
-gi._structs.Typelib[0].dispose = core.get(core.find('free', 'Typelib'))
+gi._structs.IBaseInfo[0].acquire = core.get(
+   assert(core.find('base_info_ref')))
+gi._structs.IBaseInfo[0].dispose = core.get(
+   assert(core.find('base_info_unref')))
+gi._structs.Typelib[0].dispose = core.get(
+   assert(core.find('free', 'Typelib')))
 
 log 'IBaseInfo and Typelib dispose/acquire installed'
 
