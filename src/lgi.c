@@ -697,6 +697,7 @@ compound_gc(lua_State* L)
 	  break;
 
 	case GI_INFO_TYPE_OBJECT:
+        case GI_INFO_TYPE_INTERFACE:
 	  /* Simply unref the object. */
 	  g_object_unref(compound->addr);
 	  break;
