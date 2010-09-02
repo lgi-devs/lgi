@@ -165,7 +165,7 @@ lgi_callable_create(lua_State* L, GICallableInfo* info)
   Callable* callable;
   Param* param;
   ffi_type** ffi_arg;
-  gint nargs, argi;
+  gint nargs, argi, arg;
 
   /* Check cache, whether this callable object is already present. */
   luaL_checkstack(L, 5, "");
@@ -244,21 +244,20 @@ lgi_callable_create(lua_State* L, GICallableInfo* info)
       *ffi_arg = (param->dir == GI_DIRECTION_IN) ?
 	get_ffi_type(param) : &ffi_type_pointer;
 
-      /* If this is callback, mark user_data and destroy_notify as internal. */
-      if (g_arg_info_get_scope(&param->ai) != GI_SCOPE_TYPE_INVALID)
-	{
-	  gint arg = g_arg_info_get_closure(&param->ai);
-	  if (arg > 0 && arg < nargs)
-	    callable->params[arg - 1].internal = TRUE;
-	  arg = g_arg_info_get_destroy(&param->ai);
-	  if (arg > 0 && arg < nargs)
-	    callable->params[arg - 1].internal = TRUE;
-	}
+      /* Mark closure-related user_data fields and possibly destroy_notify
+         fields as internal. */
+      arg = g_arg_info_get_closure(&param->ai);
+      if (arg > 0 && arg < nargs)
+        callable->params[arg - 1].internal = TRUE;
+      arg = g_arg_info_get_destroy(&param->ai);
+      if (arg > 0 && arg < nargs)
+        callable->params[arg - 1].internal = TRUE;
+
       /* Similarly for array length field. */
       if (g_type_info_get_tag(&param->ti) == GI_TYPE_TAG_ARRAY &&
 	  g_type_info_get_array_type(&param->ti) == GI_ARRAY_TYPE_C)
 	{
-	  gint arg = g_type_info_get_array_length(&param->ti);
+	  arg = g_type_info_get_array_length(&param->ti);
 	  if (arg > 0 && arg < nargs)
 	    callable->params[arg - 1].internal = TRUE;
 	}
@@ -478,9 +477,9 @@ closure_callback(ffi_cif* cif, void* ret, void** args, void* closure_arg)
   npos = 0;
   if (callable->has_self)
     {
-      lgi_compound_create(L, g_base_info_get_container(callable->info),
-                          ((GIArgument*) args[0])->v_pointer, FALSE);
-      npos++;
+      if (lgi_compound_create(L, g_base_info_get_container(callable->info),
+                              ((GIArgument*) args[0])->v_pointer, FALSE))
+        npos++;
     }
 
   /* Marshal input arguments to lua. */
@@ -488,14 +487,17 @@ closure_callback(ffi_cif* cif, void* ret, void** args, void* closure_arg)
   for (i = 0; i < callable->nargs; ++i, ++param)
     if (!param->internal && param->dir != GI_DIRECTION_OUT)
       {
-        lgi_marshal_2lua(L, &param->ti,
-                         (GIArgument*) args[i + callable->has_self],
-                         param->transfer, callable->info,
-                         (GIArgument**) &args[callable->has_self]);
-        npos++;
+        if (lgi_marshal_2lua(L, &param->ti,
+                             (GIArgument*) args[i + callable->has_self],
+                             param->transfer, callable->info,
+                             (GIArgument**) &args[callable->has_self]))
+            npos++;
       }
 
   /* Call it. */
+  g_debug("invoking closure %s.%s/%p/(%d args), stack=%s",
+          g_base_info_get_namespace(callable->info),
+          g_base_info_get_name(callable->info), closure, npos, lgi_sd(L));
   res = lua_pcall(L, npos, LUA_MULTRET, 0);
   npos = 1;
 
@@ -549,6 +551,8 @@ lgi_closure_destroy(gpointer user_data)
 {
   lua_State* L = lgi_main_thread_state;
   Closure* closure = user_data;
+
+  g_debug("destroying closure %p", closure);
   luaL_unref(L, LUA_REGISTRYINDEX, closure->callable_ref);
   luaL_unref(L, LUA_REGISTRYINDEX, closure->target_ref);
   ffi_closure_free(closure);
