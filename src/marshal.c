@@ -11,7 +11,7 @@
 /* Returns int value of specified parameter.  If specified parameter does not
    exist or its value cannot be converted to int, FALSE is returned. */
 static gboolean
-get_int_param(GICallableInfo* ci, GIArgument* args, int param, int *val)
+get_int_param(GICallableInfo* ci, GIArgument** args, int param, int *val)
 {
   param--;
   if (param >= 0 && param < g_callable_info_get_n_args(ci))
@@ -25,7 +25,7 @@ get_int_param(GICallableInfo* ci, GIArgument* args, int param, int *val)
 #define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup,	\
 		 valtype, valget, valset, ffitype)		\
 	  case tag:                                             \
-	    *val = (int) args[param].argf;			\
+	    *val = (int) args[param]->argf;			\
 	    return TRUE;
 #define DECLTYPE_NUMERIC_ONLY
 #include "decltype.h"
@@ -88,7 +88,7 @@ marshal_2c_simple(lua_State* L, GITypeTag tag, GITransfer transfer,
 static int
 marshal_2c_callable(lua_State* L, GICallableInfo* ci, GIArgInfo* ai,
                     GIArgument* val, int narg,
-                    GICallableInfo* argci, GIArgument* args)
+                    GICallableInfo* argci, GIArgument** args)
 {
   int nret = 0;
   GIScopeType scope = g_arg_info_get_scope(ai);
@@ -105,10 +105,10 @@ marshal_2c_callable(lua_State* L, GICallableInfo* ci, GIArgInfo* ai,
       gint nargs = g_callable_info_get_n_args(argci);
       arg = g_arg_info_get_closure(ci) - 1;
       if (arg >= 0 && arg < nargs)
-        args[arg].v_pointer = closure;
+        args[arg]->v_pointer = closure;
       arg = g_arg_info_get_destroy(ci) - 1;
       if (arg >= 0 && arg < nargs)
-        args[arg].v_pointer = lgi_closure_destroy;
+        args[arg]->v_pointer = lgi_closure_destroy;
     }
 
   /* In case of scope == SCOPE_TYPE_CALL, we have to create and store on the
@@ -125,7 +125,7 @@ marshal_2c_callable(lua_State* L, GICallableInfo* ci, GIArgInfo* ai,
 /* Marshalls single value from Lua to GLib/C. */
 int
 lgi_marshal_2c(lua_State* L, GITypeInfo* ti, GIArgInfo* ai, GITransfer transfer,
-               GIArgument* val, int narg, GICallableInfo* ci, GIArgument* args)
+               GIArgument* val, int narg, GICallableInfo* ci, GIArgument** args)
 {
   int nret = 0;
   gboolean optional = (ai != NULL && (g_arg_info_is_optional(ai) ||
@@ -202,7 +202,7 @@ marshal_2lua_simple(lua_State* L, GITypeTag tag, GIArgument* val, gboolean own)
 
 static gboolean
 marshal_2lua_carray(lua_State* L, GITypeInfo* ti, GIArgument* val, 
-		    GITransfer xfer, GICallableInfo* ci, GIArgument* args)
+		    GITransfer xfer, GICallableInfo* ci, GIArgument** args)
 {
   gint len, index;
 
@@ -273,7 +273,7 @@ marshal_2lua_carray(lua_State* L, GITypeInfo* ti, GIArgument* val,
 gboolean
 lgi_marshal_2lua(lua_State* L, GITypeInfo* ti, GIArgument* val,
 		 GITransfer xfer,
-		 GICallableInfo* ci, GIArgument* args)
+		 GICallableInfo* ci, GIArgument** args)
 {
   gboolean own = (xfer != GI_TRANSFER_NOTHING);
   GITypeTag tag = g_type_info_get_tag(ti);

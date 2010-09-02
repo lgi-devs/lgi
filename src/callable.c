@@ -355,7 +355,9 @@ lgi_callable_call(lua_State* L, gpointer addr, int func_index, int args_index)
 	    /* Convert parameter from Lua stack to C. */
 	    nret += lgi_marshal_2c(L, &param->ti, &param->ai, param->transfer,
 				   &call->args[argi], lua_argi++,
-				   callable->info, call->args);
+				   callable->info,
+                                   (GIArgument**) (call->ffi_args +
+                                                   callable->has_self));
 	  else
 	    {
 	      /* Special handling for out/caller-alloc structures; we have to
@@ -393,14 +395,18 @@ lgi_callable_call(lua_State* L, gpointer addr, int func_index, int args_index)
   if (g_type_info_get_tag(&callable->retval.ti) != GI_TYPE_TAG_VOID)
     nret = lgi_marshal_2lua(L, &callable->retval.ti, &call->retval,
 			    callable->retval.transfer, callable->info,
-			    call->args) ? 1 : 0;
+			    (GIArgument**) (call->ffi_args +
+                                            callable->has_self))
+      ? 1 : 0;
 
   /* Process output parameters. */
   param = &callable->params[0];
   for (i = 0; i < callable->nargs; i++, param++)
     if (!param->internal && param->dir != GI_DIRECTION_IN)
       if (lgi_marshal_2lua(L, &param->ti, &call->args[i],
-			   param->transfer, callable->info, call->args))
+			   param->transfer, callable->info,
+                           (GIArgument**) (call->ffi_args +
+                                           callable->has_self)))
 	nret++;
 
   return nret;
@@ -449,6 +455,7 @@ closure_callback(ffi_cif* cif, void* ret, void** args, void* closure_arg)
   Callable* callable;
   Closure* closure = closure_arg;
   gint res, npos, i;
+  Param* param;
 
   /* Get access to proper Lua context. */
   lua_State* L = lgi_main_thread_state;
@@ -467,6 +474,15 @@ closure_callback(ffi_cif* cif, void* ret, void** args, void* closure_arg)
 			((GIArgument*) args[0])->v_pointer, FALSE);
 
   /* Marshal input arguments to lua. */
+  param = callable->params;
+  for (i = 0; i < callable->nargs; ++i, ++param)
+    if (!param->internal && param->dir != GI_DIRECTION_OUT)
+      {
+        lgi_marshal_2lua(L, &param->ti,
+                         (GIArgument*) args[i + callable->has_self],
+                         param->transfer, callable->info,
+                         (GIArgument**) &args[callable->has_self]);
+      }
 
   /* Call it. */
   res = lua_pcall(L, 0, LUA_MULTRET, 0);
@@ -484,18 +500,16 @@ closure_callback(ffi_cif* cif, void* ret, void** args, void* closure_arg)
 	}
 
       /* Marshal output arguments from Lua. */
-      for (i = 0; i < callable->nargs; ++i)
-	{
-	  Param* param = &callable->params[i];
-	  if (!param->internal && param->dir != GI_DIRECTION_IN)
-	    {
-	      lgi_marshal_2c(L, &param->ti, &param->ai, param->transfer,
-			     (GIArgument*)args[i + callable->has_self], npos,
-			     callable->info, 
-			     (GIArgument*)(args + callable->has_self));
-	      npos++;
-	    }
-	}
+      param = callable->params;
+      for (i = 0; i < callable->nargs; ++i, ++param)
+        if (!param->internal && param->dir != GI_DIRECTION_IN)
+          {
+            lgi_marshal_2c(L, &param->ti, &param->ai, param->transfer,
+                           (GIArgument*)args[i + callable->has_self], npos,
+                           callable->info,
+                           (GIArgument**)(args + callable->has_self));
+            npos++;
+          }
     }
   else if (callable->throws)
     {
