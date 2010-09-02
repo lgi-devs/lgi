@@ -16,6 +16,11 @@
 #include <glib/gprintf.h>
 #include <girepository.h>
 
+/* Lua stack dump for debugging purposes. */
+#ifndef NDEBUG
+const char* lgi_sd(lua_State *L);
+#endif
+
 /* Global context of main thread, usable for callbacks to work with. */
 extern lua_State* lgi_main_thread_state;
 
