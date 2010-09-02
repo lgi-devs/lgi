@@ -67,7 +67,7 @@ function bitflags_mt.__index(bitflags, value)
    local t = {}
    for name, flag in pairs(bitflags) do
       if type(flag) == 'number' and bit.band(flag, value) == flag then
-	 t[flag] = name
+	 t[name] = flag
       end
    end
    return t
@@ -120,9 +120,9 @@ gi._enums = { IInfoType = setmetatable({
 -- handlers (so that find-returned records have already properly assigned
 -- metas) and then dereference record and assign acquire/dispose methods.
 gi._structs = {
-   IBaseInfo = { [0] = { name = "GIRepository.IBaseInfo",
+   IBaseInfo = { [0] = { name = 'GIRepository.IBaseInfo',
 			 type = gi.IInfoType.STRUCT } },
-   Typelib = { [0] = { name = "GIRepository.Typelib",
+   Typelib = { [0] = { name = 'GIRepository.Typelib',
 		       type = gi.IInfoType.STRUCT } },
 }
 
@@ -260,9 +260,6 @@ local function load_enum(info, meta)
       local name = string.upper(gi.base_info_get_name(mi))
       value[name] = gi.value_info_get_value(mi)
    end
-
-   -- Install _meta table.
-   add_compound_meta(value, info)
 
    -- Install metatable providing reverse lookup (i.e name(s) by
    -- value).
@@ -449,7 +446,6 @@ local function load_class(namespace, into, info)
 	 _signals = { gi.object_info_get_n_signals,
 		      gi.object_info_get_signal,
 		      function(c, n, i)
-			 check_type(gi.constant_info_get_type(i))
 			 c[n] = core.get(i)
 		      end },
 	 _constants = { gi.object_info_get_n_constants,
@@ -492,7 +488,6 @@ local function get_symbol(namespace, symbol)
    if value then return value end
 
    -- Lookup baseinfo of requested symbol in the repo.
-   log('loading symbol %s.%s', namespace[0].name, symbol)
    local info = gi.IRepository.find_by_name(nil, namespace[0].name, symbol)
 
    -- Store the symbol into the in-load table, because we have to
@@ -512,11 +507,7 @@ local function get_symbol(namespace, symbol)
 
 	 -- Process value with the hook, if some hook is installed.
 	 local hook = namespace[0].hook
-	 if hook then
-	    log('passing symbol %s.%s through external hook',
-		namespace[0].name, symbol)
-	    value = hook(symbol, value)
-	 end
+	 if hook then value = hook(symbol, value) end
 
 	 -- Cache the symbol in specified category in the namespace.
 	 if value then
@@ -555,6 +546,8 @@ for name, hook in pairs
       MainContext = true,
       Source = true,
 
+      SeekType = true,
+
       MarkupParser = true, MarkupParseContext = true,
       MarkupError = true, MARKUP_ERROR = true, MarkupParseFlags = true,
 
@@ -568,7 +561,6 @@ for name, hook in pairs
 		   if func then
 		      if type(func) == 'function' then func(value) end
 		   else
-		      log('filtering out %s.%s', name, symbol)
 		      value = nil
 		   end
 		   return value
@@ -597,8 +589,6 @@ local function load_namespace(into, name)
 
    -- Load override into the namespace hook, if the override exists.
    local ok, override = pcall(require, 'lgi._core.' .. name)
-   log('attempting to get hook lgi._core.%s: -> %s(%s)', name, tostring(ok),
-       tostring(override))
    if ok and override then into[0].hook = override.hook end
 
    -- Load the typelibrary for the namespace.

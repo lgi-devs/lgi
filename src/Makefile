@@ -1,5 +1,7 @@
-PKG_PACKAGES = gobject-introspection-1.0 lua
-OUTPUT = lgi.dll
+PKG_PACKAGES = gobject-introspection-1.0 lua5.1
+OUTPUT = lgi.so
+
+OBJS = lgi.o marshal.o callable.o
 
 CFLAGS = -c -pipe -Wall `pkg-config --cflags $(PKG_PACKAGES)`
 LDFLAGS = -shared `pkg-config --libs $(PKG_PACKAGES)`
@@ -10,13 +12,19 @@ else
 	CFLAGS += -O2 -DNDEBUG
 endif
 
+ifneq ($(shell uname -o), Cygwin)
+	CFLAGS += -fPIC
+endif
+
 .PHONY : all clean
 all : $(OUTPUT)
 
-$(OUTPUT) : lgi.o
-	$(CC) -o $@ $< $(LDFLAGS)
+$(OUTPUT) : $(OBJS)
+	$(CC) -o $@ $^ $(LDFLAGS)
 
-lgi.o : lgi.c decltype.h
+lgi.o : lgi.c lgi.h decltype.h
+callable.o : callable.c lgi.h decltype.h
+marshal.o : marshal.c lgi.h decltype.h
 
 clean :
-	rm -f lgi.o $(OUTPUT)
+	rm -f $(OBJS) $(OUTPUT)
