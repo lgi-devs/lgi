@@ -264,7 +264,7 @@ luaopen_lgi__core(lua_State* L)
   if (err != NULL)
     lgi_throw(L, err);
   lgi_baseinfo_info = g_irepository_find_by_name(NULL, "GIRepository",
-						 "IBaseInfo");
+						 "BaseInfo");
 
   /* Register userdata types. */
   lgi_reg_udata(L, lgi_compound_reg, LGI_COMPOUND);
