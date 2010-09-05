@@ -59,6 +59,7 @@ end
 
 -- Metatable for compound repo objects.
 local compound_mt = { __index = find_in_compound }
+local struct_mt = { __index = find_in_compound }
 
 -- Metatable for bitflags tables, resolving arbitrary number to the
 -- table containing symbolic names of contained bits.
@@ -114,26 +115,14 @@ gi._enums = { InfoType = setmetatable({
 					       }, bitflags_mt),
 	   }
 
--- We have to set up proper dispose handler for BaseInfo and Typelib
--- otherwise the rest of this bootstrap code will leak them.  First of all
--- create metas for BaseInfo and ITypelib, then look up ref/unref/free
--- handlers (so that find-returned records have already properly assigned
--- metas) and then dereference record and assign acquire/dispose methods.
 gi._structs = {
-   BaseInfo = { [0] = { name = 'GIRepository.BaseInfo',
-			 type = gi.InfoType.STRUCT } },
-   Typelib = { [0] = { name = 'GIRepository.Typelib',
-		       type = gi.InfoType.STRUCT } },
+   BaseInfo = setmetatable(
+      { [0] = { name = 'GIRepository.BaseInfo',
+		type = gi.InfoType.STRUCT,
+		gtype = assert(core.gtype('BaseInfo')) },
+	_methods = {}
+     }, struct_mt)
 }
-
-gi._structs.BaseInfo[0].acquire = core.get(
-   assert(core.find('ref', 'BaseInfo')))
-gi._structs.BaseInfo[0].dispose = core.get(
-   assert(core.find('unref', 'BaseInfo')))
-gi._structs.Typelib[0].dispose = core.get(
-   assert(core.find('free', 'Typelib')))
-
-log 'BaseInfo and Typelib dispose/acquire installed'
 
 -- Loads given set of symbols into table.
 local function get_symbols(into, symbols, container)
@@ -142,17 +131,27 @@ local function get_symbols(into, symbols, container)
    end
 end
 
-gi._classes = { Repository = setmetatable({ _methods = {} }, compound_mt) }
+gi._classes = {
+   Repository = setmetatable({ _methods = {} }, compound_mt),
+   Typelib = setmetatable(
+      { [0] = { name = 'GIRepository.Typelib',
+		type = gi.InfoType.OBJECT,
+		gtype = assert(core.gtype('Typelib'))
+	     },
+	_methods = {}
+     }, compound_mt),
+}
 get_symbols(gi._classes.Repository._methods,
 	    { 'require', 'find_by_name', 'get_n_infos',
 	      'get_info', 'get_dependencies',
 	      'get_version', }, 'Repository')
-get_symbols(gi._classes.BaseInfo._methods,
-	    { 'get_type', 'is_deprecated', 'get_name',
+get_symbols(gi._structs.BaseInfo._methods,
+	    { 'is_deprecated', 'get_name',
 	      'get_namespace', }, 'BaseInfo')
 gi._functions = {}
 get_symbols(
    gi._functions, {
+      'base_info_get_type',
       'enum_info_get_n_values', 'enum_info_get_value',
       'value_info_get_value',
       'registered_type_info_get_g_type',
@@ -202,7 +201,7 @@ local function check_type(typeinfo)
       bi = gi.type_info_get_interface(typeinfo)
    end
    assert(bi, "dependent type " .. tag .. " can't be handled")
-   local type = gi.BaseInfo.get_type(bi)
+   local type = gi.base_info_get_type(bi)
    if type == gi.InfoType.TYPE then
       check_type(bi)
    else
@@ -249,7 +248,8 @@ typeloader[gi.InfoType.CONSTANT] =
 -- Installs _meta table into given compound according to specified info.
 local function add_compound_meta(compound, info)
    compound[0] = compound[0] or {}
-   compound[0].type = gi.BaseInfo.get_type(info)
+   compound[0].info = info
+   compound[0].type = gi.base_info_get_type(info)
    compound[0].gtype = gi.registered_type_info_get_g_type(info)
    compound[0].name = gi.BaseInfo.get_namespace(info) .. '.' ..
    gi.BaseInfo.get_name(info)
@@ -283,8 +283,8 @@ typeloader[gi.InfoType.FLAGS] =
 
 -- Loads all fields, consts, properties, methods and interfaces of given
 -- object.
-local function load_compound(into, info, loads)
-   setmetatable(into, compound_mt)
+local function load_compound(into, info, loads, mt)
+   setmetatable(into, mt)
    add_compound_meta(into, info)
    for name, gets in pairs(loads) do
       for i = 0, gets[1](info) - 1 do
@@ -295,11 +295,18 @@ local function load_compound(into, info, loads)
    end
 end
 
+function struct_mt.__call(type, fields)
+   local struct = core.get(type[0].info)
+   for name, value in pairs(fields or {}) do
+      struct[name] = value
+   end
+   return struct
+end
+
 -- Loads structure information into table representing the structure
 local function load_struct(namespace, into, info)
    -- Avoid exposing internal structs created for object implementations.
    if not gi.struct_info_is_gtype_struct(info) then
-      local has_ctor = false
       load_compound(
 	 into, info,
 	 {
@@ -313,10 +320,6 @@ local function load_struct(namespace, into, info)
 				    gi.FunctionInfoFlags.IS_SETTER)) == 0 then
 		     check_callable(i)
 		     c[n] = core.get(i)
-		     if bit.band(
-			flags, gi.FunctionInfoFlags.IS_CONSTRUCTOR) ~= 0 then
-			has_ctor = true
-		     end
 		  end
 	       end },
 	    _fields = {
@@ -326,39 +329,7 @@ local function load_struct(namespace, into, info)
 		  check_type(gi.field_info_get_type(i));
 		  c[n] = i
 	       end },
-	 })
-
-      -- Try to find dispose and acquire methods. If not set otherwise, choose
-      -- 'ref' for acquire and 'unref', 'free'.
-      local function sethandler(name, alternatives)
-	 local handler = into[0][name]
-	 if not handler then
-	    for _, aname in ipairs(alternatives) do
-	       handler = (into._methods or {})[aname]
-	       if handler then into._methods[aname] = nil break end
-	    end
-	    into[0][name] = handler
-	 end
-      end
-
-      sethandler('acquire', { 'ref' })
-      sethandler('dispose', { 'unref', 'free' })
-
-      -- If there is still no dispose handler, assign GLib.g_free() to do it.
-      if not into[0].dispose then into[0].dispose = repo.GLib.free end
-
-      -- If there is no constructor, generate one which sets up requested
-      -- fields.
-      if not has_ctor then
-	 into._methods = into._methods or {}
-	 into._methods.new = function(fields)
-				local struct = core.get(info)
-				for field, value in pairs(fields or {}) do
-				   struct[field] = value
-				end
-				return struct
-			     end
-      end
+	 }, struct_mt)
    end
 end
 
@@ -424,7 +395,7 @@ typeloader[gi.InfoType.INTERFACE] =
 			     local ns = gi.BaseInfo.get_namespace(i)
 			     c[ns .. '.' .. n] = repo[ns][n]
 			  end },
-	 })
+	 }, compound_mt)
       remove_property_accessors(value)
       return value, '_interfaces'
    end
@@ -450,7 +421,8 @@ local function load_class(namespace, into, info)
 	 _signals = { gi.object_info_get_n_signals,
 		      gi.object_info_get_signal,
 		      function(c, n, i)
-			 c[n] = core.get(i)
+			 check_callable(i)
+			 c[n] = i
 		      end },
 	 _constants = { gi.object_info_get_n_constants,
 			gi.object_info_get_constant,
@@ -464,15 +436,17 @@ local function load_class(namespace, into, info)
 			  local ns = gi.BaseInfo.get_namespace(i)
 			  c[ns .. '.' .. n] = repo[ns][n]
 		       end },
-      })
+      }, compound_mt)
 
    -- Add parent (if any) into _inherits table.
    local parent = gi.object_info_get_parent(info)
    if parent then
       local ns, name = gi.BaseInfo.get_namespace(parent),
       gi.BaseInfo.get_name(parent)
-      into._inherits = into._inherits or {}
-      into._inherits[ns .. '.' .. name] = repo[ns][name]
+      if ns ~= namespace[0].name or name ~= gi.BaseInfo.get_name(info) then
+	 into._inherits = into._inherits or {}
+	 into._inherits[ns .. '.' .. name] = repo[ns][name]
+      end
    end
    remove_property_accessors(into)
 end
@@ -503,7 +477,7 @@ local function get_symbol(namespace, symbol)
 
    -- Decide according to symbol type what to do.
    if info and not gi.BaseInfo.is_deprecated(info) then
-      local infotype = gi.BaseInfo.get_type(info)
+      local infotype = gi.base_info_get_type(info)
       local loader = typeloader[infotype]
       if loader then
 	 local category
@@ -528,8 +502,6 @@ local function load_namespace(into, name)
       repo[name] = into
    end
 
-   log('loading namespace %s', name)
-
    -- Create _meta table containing auxiliary information
    -- and data for the namespace.  This table also serves as metatable for the
    -- namespace, providing __index method for retrieveing namespace content.
@@ -542,13 +514,11 @@ local function load_namespace(into, name)
    if ok and override then into[0].hook = override.hook end
 
    -- Load the typelibrary for the namespace.
-   log('requiring namespace %s', name)
    into[0].typelib = assert(gi.Repository.require(nil, name, nil, 0))
    into[0].version = gi.Repository.get_version(nil, name)
 
    -- Load all namespace dependencies.
    for _, name in pairs(gi.Repository.get_dependencies(nil, name) or {}) do
-      log('getting dependency %s', name)
       into[0].dependencies[name] = repo[string.match(name, '(.+)-.+')]
    end
 
@@ -565,7 +535,6 @@ local function load_namespace(into, name)
 	    pcall(get_symbol, into, gi.BaseInfo.get_name(info))
 	 end
       end
-   log('namespace %s-%s loaded', name, into[0].version)
    return into
 end
 
@@ -583,8 +552,9 @@ gi._enums.FunctionInfoFlags = nil
 load_namespace(gi, 'GIRepository')
 load_class(gi, gi._classes.Repository,
 	   gi.Repository.find_by_name(nil, gi[0].name, 'Repository'))
-load_struct(gi, gi._structs.Typelib,
+load_class(gi, gi._classes.Typelib,
 	    gi.Repository.find_by_name(nil, gi[0].name, 'Typelib'))
+gi.BaseInfo[0].info = core.get(assert(core.find('BaseInfo')))
 
 -- Install new loader which will load lgi packages on-demand using 'repo'
 -- table.
@@ -593,7 +563,6 @@ package.loaders[#package.loaders + 1] =
    function(name)
       local prefix, name = string.match(name, '^(%w+)%.(%w+)$')
       if prefix == 'lgi' then
-	 log('lgi loader: trying to load %s.%s', prefix, name)
 	 local ok, result = pcall(function() return repo[name] end)
 	 if not ok or not result then return result end
 	 return function() return result end

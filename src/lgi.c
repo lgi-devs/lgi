@@ -48,8 +48,13 @@ lgi_type_new(lua_State* L, GIBaseInfo* ii, GIArgument* val)
       break;
 
     case GI_INFO_TYPE_STRUCT:
-    case GI_INFO_TYPE_OBJECT:
       vals = lgi_compound_create_struct(L, ii, &val->v_pointer);
+      break;
+
+    case GI_INFO_TYPE_OBJECT:
+      val->v_pointer = g_object_new(g_registered_type_info_get_g_type(ii),
+				    NULL);
+      vals = lgi_compound_create(L, ii, val->v_pointer, TRUE);
       break;
 
     case GI_INFO_TYPE_CONSTANT:
@@ -57,13 +62,19 @@ lgi_type_new(lua_State* L, GIBaseInfo* ii, GIArgument* val)
 	GITypeInfo* ti = g_constant_info_get_type(ii);
 	GIArgument val;
 	g_constant_info_get_value(ii, &val);
-        vals = lgi_marshal_2lua(L, ti, &val, GI_TRANSFER_NOTHING, NULL, NULL)
-          ? 1 : 0;
+	vals = lgi_marshal_2lua(L, ti, &val, GI_TRANSFER_NOTHING, NULL, NULL)
+	  ? 1 : 0;
 	g_base_info_unref(ti);
       }
       break;
 
     default:
+      lua_pushfstring(L, "failing to create unknown type %d (%s.%s)",
+		      g_base_info_get_type(ii),
+		      g_base_info_get_namespace(ii),
+		      g_base_info_get_name(ii));
+      g_warning("%s", lua_tostring(L, -1));
+      lua_error(L);
       break;
     }
 
@@ -152,7 +163,28 @@ lgi_get(lua_State* L)
   /* Create new instance based on the embedded typeinfo. */
   GIArgument unused;
   return lgi_type_new(L, lgi_compound_get(L, 1, lgi_baseinfo_info, FALSE),
-                      &unused);
+		      &unused);
+}
+
+static int
+lgi_gtype(lua_State* L)
+{
+  const gchar* name = luaL_checkstring(L, 1);
+  GIBaseInfo *info;
+
+  /* Get information about the name. */
+  info = g_irepository_find_by_name(NULL, "GIRepository", name);
+  if (info == NULL)
+    {
+      lua_pushboolean(L, 0);
+      lua_pushfstring(L, "unable to resolve GIRepository.%s", name);
+      return 2;
+    }
+
+  /* Create new IBaseInfo structure and return it. */
+  lua_pushinteger(L, g_registered_type_info_get_g_type(info));
+  g_base_info_unref(info);
+  return 1;
 }
 
 #ifndef NDEBUG
@@ -207,6 +239,7 @@ const char* lgi_sd(lua_State *L)
 static const struct luaL_reg lgi_reg[] = {
   { "find", lgi_find },
   { "get", lgi_get },
+  { "gtype", lgi_gtype },
 #ifndef NDEBUG
   { "log", lgi_log },
 #endif

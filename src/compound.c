@@ -16,14 +16,14 @@
    the structure is allocated and its address is put into addr
    (i.e. addr parameter is output in this case). */
 static int compound_store(lua_State* L, GIBaseInfo* ii, gpointer* addr,
-                          GITransfer transfer);
+			  GITransfer transfer);
 
 /* Retrieves compound-type parameter from given Lua-stack position, checks,
    whether it is suitable for requested ii type.  Returns pointer to the
    compound object, returns NULL if Lua-stack value is nil and optional is
    TRUE. */
 static gpointer compound_load(lua_State* L, int arg, GIBaseInfo* ii,
-                              gboolean optional);
+			      gboolean optional);
 
 /* 'compound' userdata: wraps compound with reference to its repo table. */
 typedef struct _Compound
@@ -464,53 +464,33 @@ compound_prepare(lua_State* L, int arg)
   return compound;
 }
 
-/* Calls repo metamethod (if exists) for compound at self, assumes
-   that ref_repo is on the top of the stack.  Returns TRUE if the
-   function was called. */
-static gboolean
-compound_callmeta(lua_State* L, const char* metaname, int nargs, int nrets)
-{
-  gboolean called = FALSE;
-
-  /* Find method and check its type. */
-  lua_rawgeti(L, - nargs - 1, 0);
-  lua_getfield(L, -1, metaname);
-  lua_replace(L, -2);
-  if (!lua_isnil(L, -1))
-    {
-      /* Perform the call, insert function before arguments. */
-      lua_insert(L, - nargs - 1);
-      lua_call(L, nargs, nrets);
-      called = TRUE;
-    }
-  else
-    {
-      /* Cleanup the stack, as if the call would happen. */
-      lua_pop(L, nargs + 1);
-      if (nrets != 0)
-	lua_settop(L, lua_gettop(L) + nrets);
-    }
-
-  return called;
-}
-
 gboolean
 lgi_compound_create(lua_State* L, GIBaseInfo* ii, gpointer addr,
 		    gboolean own)
 {
-  return compound_store(L, ii, &addr, 
+  return compound_store(L, ii, &addr,
 			own ? GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING);
 }
 
 int
 lgi_compound_create_struct(lua_State* L, GIBaseInfo* ii, gpointer* addr)
 {
-    return compound_store(L, ii, addr, GI_TRANSFER_CONTAINER);
+  /* Avoid creating non-boxed structures, because we do not know how
+     to destroy them. */
+  if (!g_type_is_a (g_registered_type_info_get_g_type (ii), G_TYPE_BOXED))
+    {
+      lua_pushfstring (L, "unable to create `%s.%s': non-boxed struct",
+		       g_base_info_get_namespace (ii),
+		       g_base_info_get_name (ii));
+      lua_error (L);
+    }
+
+  return compound_store (L, ii, addr, GI_TRANSFER_CONTAINER);
 }
 
 static int
-compound_store(lua_State* L, GIBaseInfo* info, gpointer* addr,
-              GITransfer transfer)
+compound_store (lua_State* L, GIBaseInfo* info, gpointer* addr,
+		GITransfer transfer)
 {
   int vals;
   Compound* compound;
@@ -567,13 +547,6 @@ compound_store(lua_State* L, GIBaseInfo* info, gpointer* addr,
 	  transfer = GI_TRANSFER_EVERYTHING;
 	  break;
 
-	case GI_INFO_TYPE_STRUCT:
-	  /* If the metatable contains 'acquire', call it. */
-	  lua_pushvalue(L, -2);
-	  if (compound_callmeta(L, "acquire", 1, 0))
-	    transfer = GI_TRANSFER_EVERYTHING;
-	  break;
-
 	default:
 	  break;
 	}
@@ -589,41 +562,27 @@ compound_store(lua_State* L, GIBaseInfo* info, gpointer* addr,
 };
 
 static int
-compound_gc(lua_State* L)
+compound_gc (lua_State* L)
 {
-  Compound* compound = compound_prepare(L, 1);
+  Compound* compound = compound_prepare (L, 1);
   if (compound->owns)
     {
-      GIInfoType type;
+      /* Check the gtype of the compound. */
+      GType gtype;
+      lua_rawgeti (L, -1, 0);
+      lua_getfield (L, -1, "gtype");
+      gtype = lua_tointeger (L, -1);
+      lua_pop (L, 2);
 
-      /* Check the type of the compound. */
-      lua_rawgeti(L, -1, 0);
-      lua_getfield(L, -1, "type");
-      type = lua_tointeger(L, -1);
-      lua_pop(L, 2);
-      switch (type)
-	{
-	case GI_INFO_TYPE_STRUCT:
-	  /* Call dispose method, if available. */
-	  lua_pushvalue(L, 1);
-	  compound_callmeta(L, "dispose", 1, 0);
-	  break;
-
-	case GI_INFO_TYPE_OBJECT:
-        case GI_INFO_TYPE_INTERFACE:
-	  /* Simply unref the object. */
-	  g_object_unref(compound->addr);
-	  break;
-
-	default:
-          g_warning("Incorrect type %d in compound_gc(%p)", (int)type,
-                    compound);
-	  break;
-	}
+      /* Decide what to do according to the type. */
+      if (G_TYPE_IS_OBJECT (gtype))
+	g_object_unref (compound->addr);
+      else if (G_TYPE_IS_BOXED (gtype))
+	g_boxed_free (gtype, compound->addr);
     }
 
   /* Free the reference to the repo object in typeinfo regtable. */
-  luaL_unref(L, -2, compound->ref_repo);
+  luaL_unref (L, -2, compound->ref_repo);
   return 0;
 }
 
@@ -660,62 +619,22 @@ static gpointer
 compound_load(lua_State* L, int index, GIBaseInfo* ii, gboolean optional)
 {
   Compound* compound;
-  GType type;
-  if (optional)
-    {
-      compound = lua_touserdata(L, index);
-      if (compound == NULL)
-	return NULL;
+  GType requested_type, real_type;
 
-      if (!lua_getmetatable(L, index))
-	return NULL;
+  if (optional && lua_isnoneornil(L, index))
+    return NULL;
 
-      lua_getfield(L, LUA_REGISTRYINDEX, LGI_COMPOUND);
-      if (!lua_rawequal(L, -1, -2))
-	compound = NULL;
-      lua_pop(L, 2);
-      if (compound == NULL)
-	return NULL;
-    }
-  else
-    compound = luaL_checkudata(L, index, LGI_COMPOUND);
+  /* Check for type ancestry. */
+  compound = compound_prepare(L, index);
+  lua_rawgeti(L, -1, 0);
+  lua_getfield(L, -1, "gtype");
+  real_type = lua_tointeger(L, -1);
+  requested_type = g_registered_type_info_get_g_type(ii);
+  if (!g_type_is_a(real_type, requested_type))
+    luaL_argerror(L, index, g_type_name(requested_type));
 
-  /* Final check for type ancestry.  Faster one is using dynamic
-     introspection from g_type, but not all 'ii' have that. */
-  type = g_registered_type_info_get_g_type(ii);
-  if (G_TYPE_IS_DERIVED(type))
-    {
-      /* Compare using G_TYPE machinery. */
-      GType real = G_TYPE_FROM_INSTANCE(compound->addr);
-      if (!g_type_is_a(real, type))
-	{
-	  if (!optional)
-	    luaL_argerror(L, index, g_type_name(real));
-	  else
-	    return NULL;
-	}
-    }
-  else
-    {
-      /* Compare strings using repo and GI machinery. */
-      compound = compound_prepare(L, index);
-      lua_rawgeti(L, -1, 0);
-      lua_getfield(L, -1, "name");
-      lua_pushstring(L, g_base_info_get_namespace(ii));
-      lua_pushstring(L, ".");
-      lua_pushstring(L, g_base_info_get_name(ii));
-      lua_concat(L, 3);
-      if (g_strcmp0(lua_tostring(L, -1), lua_tostring(L, -2)) != 0)
-      {
-	  if (!optional)
-	      luaL_argerror(L, index, lua_tostring(L, -1));
-	  else
-	      compound = NULL;
-      }
-      lua_pop(L, 5);
-    }
-
-  return compound != NULL ? compound->addr : NULL;
+  lua_pop(L, 4);
+  return compound->addr;
 }
 
 /* Processes compound element of 'field' type. */
@@ -803,19 +722,8 @@ compound_element(lua_State* L, int newval)
   lua_gettable(L, -2);
   type = lua_type(L, -1);
   if (type == LUA_TNIL)
-    {
-      /* Not found.  Try calling meta index/newindex. */
-      lua_pop(L, 1);
-      lua_pushvalue(L, 1);
-      lua_pushvalue(L, 2);
-      if (newval != -1)
-	lua_pushvalue(L, newval);
-      else
-	vals = 1;
-      if (!compound_callmeta(L, newval == -1 ? "index" : "newindex",
-			     3 - vals, vals))
-	return compound_error(L, "%s: no `%s'", 2);
-    }
+      /* Not found. */
+    return compound_error(L, "%s: no `%s'", 2);
   else
     {
       /* Special handling is for compound-userdata, which contain some
