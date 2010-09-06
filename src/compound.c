@@ -74,225 +74,6 @@ lgi_set_cached(lua_State* L, gpointer obj)
   lua_pop(L, 2);
 }
 
-/* Returns size in bytes of given type/value. */
-static gsize
-lgi_type_get_size(GITypeTag tag)
-{
-  gsize size;
-  switch (tag)
-    {
-#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup,	\
-		 valtype, valget, valset, ffitype)              \
-      case tag:							\
-	size = sizeof(ctype);					\
-	break;
-#include "decltype.h"
-
-    default:
-      size = 0;
-    }
-
-  return size;
-}
-
-static int
-lgi_simple_val_to_lua(lua_State* L, GITypeTag tag, GITransfer transfer,
-		      GIArgument* val)
-{
-  int vals = 1;
-  switch (tag)
-    {
-      /* Simple (native) types. */
-#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup,	\
-		 valtype, valget, valset, ffitype)              \
-      case tag:							\
-	push(L, val->argf);					\
-	if (transfer != GI_TRANSFER_NOTHING)			\
-	  dtor(val->argf);					\
-	break;
-#include "decltype.h"
-
-    default:
-      vals = 0;
-    }
-
-  return vals;
-}
-
-static int lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GITransfer transfer,
-			  GIArgument* val);
-
-static int
-lgi_array_to_lua(lua_State* L, GITypeInfo* ti, GITransfer transfer,
-		 GIArgument* val)
-{
-  /* Find out the array length and element size. TODO: Handle 'length'
-     variant.*/
-  gint index, len = g_type_info_get_array_fixed_size(ti);
-  GIArrayType atype = g_type_info_get_array_type(ti);
-  GITypeInfo* eti = g_type_info_get_param_type(ti, 0);
-  GITypeTag etag = g_type_info_get_tag(eti);
-  gsize size = lgi_type_get_size(etag);
-  gboolean zero_terminated = g_type_info_is_zero_terminated(ti);
-  if (atype == GI_ARRAY_TYPE_ARRAY)
-    len = ((GArray*)val->v_pointer)->len;
-
-  if (val->v_pointer == NULL)
-    /* NULL array is represented by nil. */
-    lua_pushnil(L);
-  else
-    {
-      /* Transfer type used for elements. */
-      GITransfer realTransfer = (transfer == GI_TRANSFER_EVERYTHING) ?
-	GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING;
-
-      /* Create Lua table which will hold the array. */
-      lua_createtable(L, len > 0 ? len : 0, 0);
-
-      /* Iterate through array elements. */
-      for (index = 0; len < 0 || index < len; index++)
-	{
-	  /* Get value from specified index. */
-	  GIArgument* eval;
-	  gint offset = index * size;
-	  if (atype == GI_ARRAY_TYPE_C)
-	    eval = (GIArgument*)((gchar*)val->v_pointer + offset);
-	  else if (atype == GI_ARRAY_TYPE_ARRAY)
-	    eval = (GIArgument*)(((GArray*)val->v_pointer)->data + offset);
-
-	  /* If the array is zero-terminated, terminate now and don't
-	     include NULL entry. */
-	  if (zero_terminated && eval->v_pointer == NULL)
-	    break;
-
-	  /* Store value into the table. */
-	  if (lgi_val_to_lua(L, eti, realTransfer, eval) == 1)
-	    lua_rawseti(L, -2, index + 1);
-	}
-
-      /* If needed, free the array itself. */
-      if (transfer != GI_TRANSFER_NOTHING)
-	{
-	  if (atype == GI_ARRAY_TYPE_C)
-	    g_free(val->v_pointer);
-	  else if (atype == GI_ARRAY_TYPE_ARRAY)
-	    g_array_unref((GArray*)val->v_pointer);
-	}
-    }
-
-  g_base_info_unref(eti);
-  return 1;
-}
-
-static int
-lgi_val_to_lua(lua_State* L, GITypeInfo* ti, GITransfer transfer,
-	       GIArgument* val)
-{
-  GITypeTag tag = g_type_info_get_tag(ti);
-  int vals = lgi_simple_val_to_lua(L, tag, transfer, val);
-  if (vals == 0)
-    {
-      switch (tag)
-	{
-	case GI_TYPE_TAG_INTERFACE:
-	  /* Interface types.  Get the interface type and switch according
-	     to the real type. */
-	  {
-	    GIBaseInfo* ii = g_type_info_get_interface(ti);
-	    switch (g_base_info_get_type(ii))
-	      {
-	      case GI_INFO_TYPE_ENUM:
-	      case GI_INFO_TYPE_FLAGS:
-		/* Resolve enum to the real value. */
-		vals = lgi_simple_val_to_lua(L,
-					     g_enum_info_get_storage_type(ii),
-					     GI_TRANSFER_NOTHING, val);
-		break;
-
-	      case GI_INFO_TYPE_STRUCT:
-	      case GI_INFO_TYPE_OBJECT:
-		/* Create/Get compound object. */
-		vals = compound_store(L, ii, &val->v_pointer, transfer);
-		break;
-
-	      default:
-		vals = 0;
-	      }
-	    g_base_info_unref(ii);
-	  }
-	  break;
-
-	case GI_TYPE_TAG_ARRAY:
-	  vals = lgi_array_to_lua(L, ti, transfer, val);
-	  break;
-
-	default:
-	  vals = 0;
-	}
-    }
-
-  return vals;
-}
-
-static int
-lgi_simple_val_from_lua(lua_State* L, int index, GITypeTag tag,
-			GIArgument* val, gboolean optional)
-{
-  int vals = 1;
-  switch (tag)
-    {
-#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup,	\
-		 valtype, valget, valset, ffitype)              \
-      case tag :						\
-	val->argf = (ctype)((optional &&			\
-			      lua_isnoneornil(L, index)) ?	\
-			    0 : check(L, index));		\
-	break;
-#include "decltype.h"
-
-    default:
-      vals = 0;
-    }
-
-  return vals;
-}
-
-static int
-lgi_val_from_lua(lua_State* L, int index, GITypeInfo* ti, GIArgument* val,
-		 gboolean optional)
-{
-  GITypeTag tag = g_type_info_get_tag(ti);
-  int vals = lgi_simple_val_from_lua(L, index, tag, val, optional);
-  if (vals == 0 && tag == GI_TYPE_TAG_INTERFACE)
-    {
-      /* Interface types.  Get the interface type and switch according to
-	 the real type. */
-      GIBaseInfo* ii = g_type_info_get_interface(ti);
-      switch (g_base_info_get_type(ii))
-	{
-	case GI_INFO_TYPE_ENUM:
-	case GI_INFO_TYPE_FLAGS:
-	  /* Resolve Lua-number to enum value. */
-	  vals = lgi_simple_val_from_lua(L, index,
-					 g_enum_info_get_storage_type(ii),
-					 val, optional);
-	  break;
-
-	case GI_INFO_TYPE_STRUCT:
-	case GI_INFO_TYPE_OBJECT:
-	  val->v_pointer = compound_load(L, index, ii, optional);
-	  vals = 1;
-	  break;
-
-	default:
-	  break;
-	}
-      g_base_info_unref(ii);
-    }
-
-  return vals;
-}
-
 /* Retrieves gtype for specified baseinfo. */
 static GType
 repo_get_gtype(lua_State* L, GIBaseInfo* ii)
@@ -335,6 +116,7 @@ value_init(lua_State* L, GValue* val, GITypeInfo* ti)
 	  case GI_INFO_TYPE_ENUM:
 	  case GI_INFO_TYPE_FLAGS:
 	  case GI_INFO_TYPE_OBJECT:
+	  case GI_INFO_TYPE_STRUCT:
 	    g_value_init(val, repo_get_gtype(L, ii));
 	    break;
 
@@ -649,24 +431,26 @@ compound_element_field(lua_State* L, gpointer addr, GIFieldInfo* fi, int newval)
     {
       if ((flags & GI_FIELD_IS_READABLE) == 0)
 	{
-	  g_base_info_unref(ti);
-	  return luaL_argerror(L, 2, "not readable");
+	  g_base_info_unref (ti);
+	  return luaL_argerror (L, 2, "not readable");
 	}
 
-      vals = lgi_val_to_lua(L, ti, GI_TRANSFER_NOTHING, val);
+      vals = lgi_marshal_2lua (L, ti, val, GI_TRANSFER_NOTHING, NULL, NULL) ?
+	1 : 0;
     }
   else
     {
       if ((flags & GI_FIELD_IS_WRITABLE) == 0)
 	{
-	  g_base_info_unref(ti);
-	  return luaL_argerror(L, 2, "not writable");
+	  g_base_info_unref (ti);
+	  return luaL_argerror (L, 2, "not writable");
 	}
 
-      vals = lgi_val_from_lua(L, newval, ti, val, FALSE);
+      lua_pop (L, lgi_marshal_2c (L, ti, NULL, GI_TRANSFER_NOTHING, val,
+				  newval, NULL, NULL));
     }
 
-  g_base_info_unref(ti);
+  g_base_info_unref (ti);
   return vals;
 }
 
