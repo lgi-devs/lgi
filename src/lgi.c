@@ -130,10 +130,7 @@ lgi_get (lua_State* L)
       break;
 
     case GI_INFO_TYPE_OBJECT:
-      {
-        res = g_object_new (g_registered_type_info_get_g_type (ii), NULL);
-        vals = lgi_compound_create (L, ii, res, TRUE);
-      }
+      vals = lgi_compound_create_object (L, ii, 2, &res);
       break;
 
     case GI_INFO_TYPE_CONSTANT:

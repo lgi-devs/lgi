@@ -270,6 +270,77 @@ lgi_compound_create_struct(lua_State* L, GIBaseInfo* ii, gpointer* addr)
   return compound_store (L, ii, addr, GI_TRANSFER_CONTAINER);
 }
 
+gboolean
+lgi_compound_create_object (lua_State *L, GIObjectInfo *oi, int argtable,
+			    gpointer *addr)
+{
+  gint n_params = 0;
+  GParameter *params = NULL, *param;
+  GIPropertyInfo *pi;
+  GITypeInfo *ti;
+
+  /* Check, whether 2nd argument is table containing construction-time
+     properties. */
+  if (!lua_isnoneornil (L, argtable))
+    {
+      luaL_checktype (L, argtable, LUA_TTABLE);
+
+      /* Find out how many parameters we have. */
+      lua_pushnil (L);
+      for (lua_pushnil (L); lua_next (L, 2) != 0; lua_pop (L, 1))
+	n_params++;
+
+      if (n_params > 0)
+	{
+	  /* Get table of the repo class table for the object. */
+	  lua_rawgeti(L, LUA_REGISTRYINDEX, lgi_regkey);
+	  lua_rawgeti(L, -1, LGI_REG_REPO);
+	  lua_getfield(L, -1, g_base_info_get_namespace(oi));
+	  lua_getfield(L, -1, g_base_info_get_name(oi));
+	  lua_replace(L, -4);
+	  lua_pop(L, 2);
+
+	  /* Allocate GParameter array (on the stack) and fill it
+	     with parameters. */
+	  param = params = g_newa (GParameter, n_params);
+	  for (lua_pushnil (L); lua_next (L, 2) != 0; lua_pop (L, 1), param++)
+	    {
+	      /* Extract property name. */
+	      param->name = luaL_checkstring (L, -2);
+
+	      /* Get property info from the repo table. */
+	      lua_pushvalue (L, -2);
+	      lua_gettable (L, -4);
+	      pi = lua_touserdata (L, -1);
+	      ti = g_property_info_get_type (pi);
+
+	      /* Initialize and load parameter value from the table
+		 contents. */
+	      value_init (L, &param->value, ti);
+	      value_load (L, &param->value, -2, ti);
+
+	      /* Cleanup property info. */
+	      g_base_info_unref (ti);
+	      lua_pop (L, 1);
+	    }
+
+	  /* Pop the repo class table. */
+	}
+    }
+
+  /* Create the object. */
+  *addr = g_object_newv (g_registered_type_info_get_g_type (oi), n_params,
+			 params);
+
+  /* We do not want any floating references, so convert them if we
+     have them. */
+  if (g_object_is_floating (*addr))
+    g_object_ref_sink (*addr);
+
+  /* And wrap a nice userdata around it. */
+  return compound_store (L, oi, addr, GI_TRANSFER_EVERYTHING);
+}
+
 static int
 compound_store (lua_State* L, GIBaseInfo* info, gpointer* addr,
 		GITransfer transfer)

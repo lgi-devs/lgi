@@ -106,6 +106,10 @@ gboolean lgi_compound_create(lua_State* L, GIBaseInfo* ii, gpointer addr,
 /* Creates new struct including allocated place for it. */
 int lgi_compound_create_struct(lua_State* L, GIBaseInfo* ii, gpointer* addr);
 
+/* Creates new object, initializes with specified properties. */
+gboolean lgi_compound_create_object (lua_State *L, GIObjectInfo *ii, 
+				     int argtable, gpointer *addr);
+
 /* Retrieves compound-type parameter from given Lua-stack position, checks,
    whether it is suitable for requested ii type.  Returns pointer to the
    compound object, returns NULL if Lua-stack value is nil and optional is

@@ -59,8 +59,10 @@ end
 
 -- Metatable for compound repo objects.
 local compound_mt = { __index = find_in_compound }
-local struct_mt = { __index = find_in_compound }
 
+-- Metatable for structs, allowing to 'call' structure, which is
+-- translating to creating new structure instance (i.e. constructor).
+local struct_mt = { __index = find_in_compound }
 function struct_mt.__call(type, fields)
    local struct = core.get(type[0].info)
    for name, value in pairs(fields or {}) do
@@ -69,6 +71,12 @@ function struct_mt.__call(type, fields)
    return struct
 end
 
+-- Similar metatable for objects, again implementing object
+-- construction on __call.
+local class_mt = { __index = find_in_compound }
+function class_mt.__call(type, fields)
+   return assert(core.get(type[0].info, fields))
+end
 
 -- Metatable for bitflags tables, resolving arbitrary number to the
 -- table containing symbolic names of contained bits.
@@ -437,7 +445,7 @@ local function load_class(namespace, into, info)
 			  local ns = gi.BaseInfo.get_namespace(i)
 			  c[ns .. '.' .. n] = repo[ns][n]
 		       end },
-      }, compound_mt)
+      }, class_mt)
 
    -- Add parent (if any) into _inherits table.
    local parent = gi.object_info_get_parent(info)
