@@ -35,52 +35,6 @@ lgi_throw(lua_State* L, GError* err)
   return luaL_error(L, "%s", lua_tostring(L, -1));
 }
 
-/* Allocates/initializes specified object (if applicable), stores it
-   on the stack. */
-static int
-lgi_type_new(lua_State* L, GIBaseInfo* ii, GIArgument* val)
-{
-  int vals = 0;
-  switch (g_base_info_get_type(ii))
-    {
-    case GI_INFO_TYPE_FUNCTION:
-      vals = lgi_callable_create(L, ii);
-      break;
-
-    case GI_INFO_TYPE_STRUCT:
-      vals = lgi_compound_create_struct(L, ii, &val->v_pointer);
-      break;
-
-    case GI_INFO_TYPE_OBJECT:
-      val->v_pointer = g_object_new(g_registered_type_info_get_g_type(ii),
-				    NULL);
-      vals = lgi_compound_create(L, ii, val->v_pointer, TRUE);
-      break;
-
-    case GI_INFO_TYPE_CONSTANT:
-      {
-	GITypeInfo* ti = g_constant_info_get_type(ii);
-	GIArgument val;
-	g_constant_info_get_value(ii, &val);
-	vals = lgi_marshal_2lua(L, ti, &val, GI_TRANSFER_NOTHING, NULL, NULL)
-	  ? 1 : 0;
-	g_base_info_unref(ti);
-      }
-      break;
-
-    default:
-      lua_pushfstring(L, "failing to create unknown type %d (%s.%s)",
-		      g_base_info_get_type(ii),
-		      g_base_info_get_namespace(ii),
-		      g_base_info_get_name(ii));
-      g_warning("%s", lua_tostring(L, -1));
-      lua_error(L);
-      break;
-    }
-
-  return vals;
-}
-
 /* Puts parts of the name to the stack, to be concatenated by lua_concat.
    Returns number of pushed elements. */
 int
@@ -158,12 +112,52 @@ lgi_find(lua_State* L)
 }
 
 static int
-lgi_get(lua_State* L)
+lgi_get (lua_State* L)
 {
   /* Create new instance based on the embedded typeinfo. */
-  GIArgument unused;
-  return lgi_type_new(L, lgi_compound_get(L, 1, lgi_baseinfo_info, FALSE),
-		      &unused);
+  gpointer res;
+  int vals = 0;
+  GIBaseInfo* ii = lgi_compound_get (L, 1, lgi_baseinfo_info, FALSE);
+
+  switch (g_base_info_get_type (ii))
+    {
+    case GI_INFO_TYPE_FUNCTION:
+      vals = lgi_callable_create (L, ii);
+      break;
+
+    case GI_INFO_TYPE_STRUCT:
+      vals = lgi_compound_create_struct (L, ii, &res);
+      break;
+
+    case GI_INFO_TYPE_OBJECT:
+      {
+        res = g_object_new (g_registered_type_info_get_g_type (ii), NULL);
+        vals = lgi_compound_create (L, ii, res, TRUE);
+      }
+      break;
+
+    case GI_INFO_TYPE_CONSTANT:
+      {
+	GITypeInfo* ti = g_constant_info_get_type (ii);
+	GIArgument val;
+	g_constant_info_get_value (ii, &val);
+	vals = lgi_marshal_2lua (L, ti, &val, GI_TRANSFER_NOTHING, NULL, NULL)
+	  ? 1 : 0;
+	g_base_info_unref (ti);
+      }
+      break;
+
+    default:
+      lua_pushfstring (L, "failing to create unknown type %d (%s.%s)",
+		      g_base_info_get_type (ii),
+		      g_base_info_get_namespace (ii),
+		      g_base_info_get_name (ii));
+      g_warning ("%s", lua_tostring (L, -1));
+      lua_error (L);
+      break;
+    }
+
+  return vals;
 }
 
 static int
