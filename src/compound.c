@@ -7,6 +7,7 @@
  * into single Lua userdata blcok called 'compound'.
  */
 
+#include <string.h>
 #include "lgi.h"
 
 /* Creates new userdata representing instance of struct/object
@@ -292,39 +293,39 @@ lgi_compound_create_object (lua_State *L, GIObjectInfo *oi, int argtable,
 
       if (n_params > 0)
 	{
-	  /* Get table of the repo class table for the object. */
-	  lua_rawgeti(L, LUA_REGISTRYINDEX, lgi_regkey);
-	  lua_rawgeti(L, -1, LGI_REG_REPO);
-	  lua_getfield(L, -1, g_base_info_get_namespace(oi));
-	  lua_getfield(L, -1, g_base_info_get_name(oi));
-	  lua_replace(L, -4);
-	  lua_pop(L, 2);
-
 	  /* Allocate GParameter array (on the stack) and fill it
 	     with parameters. */
 	  param = params = g_newa (GParameter, n_params);
+	  memset (params, 0, sizeof (GParameter) * n_params);
 	  for (lua_pushnil (L); lua_next (L, 2) != 0; lua_pop (L, 1), param++)
 	    {
-	      /* Extract property name. */
-	      param->name = luaL_checkstring (L, -2);
+	      /* Get property info. */
+	      Compound *compound = lua_touserdata (L, -2);
+	      if (G_UNLIKELY (compound == NULL ||
+			      (pi = compound->addr) == NULL))
+		{
+		  lua_pushfstring (L, "bad ctor property for %s.%s",
+				   g_base_info_get_namespace (oi),
+				   g_base_info_get_name (oi));
+		  luaL_argerror (L, argtable, lua_tostring (L, -1));
+		}
+	      else
+		{
+		  /* Extract property name. */
+		  param->name = g_base_info_get_name (pi);
+		  g_debug ("processing property %s", param->name);
 
-	      /* Get property info from the repo table. */
-	      lua_pushvalue (L, -2);
-	      lua_gettable (L, -4);
-	      pi = lua_touserdata (L, -1);
-	      ti = g_property_info_get_type (pi);
-
-	      /* Initialize and load parameter value from the table
-		 contents. */
-	      value_init (L, &param->value, ti);
-	      value_load (L, &param->value, -2, ti);
-
-	      /* Cleanup property info. */
-	      g_base_info_unref (ti);
-	      lua_pop (L, 1);
+		  /* Initialize and load parameter value from the table
+		     contents. */
+		  ti = g_property_info_get_type (pi);
+		  value_init (L, &param->value, ti);
+		  value_load (L, &param->value, -1, ti);
+		  g_base_info_unref (ti);
+		}
 	    }
 
 	  /* Pop the repo class table. */
+	  lua_pop (L, 1);
 	}
     }
 

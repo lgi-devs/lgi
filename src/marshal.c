@@ -167,6 +167,21 @@ lgi_marshal_2c(lua_State* L, GITypeInfo* ti, GIArgInfo* ai, GITransfer transfer,
 	  }
 	  break;
 
+	case GI_TYPE_TAG_ARRAY:
+	  {
+	    GIArrayType atype = g_type_info_get_array_type(ti);
+	    switch (atype)
+	      {
+	      case GI_ARRAY_TYPE_C:
+		val->v_pointer = NULL;
+		break;
+
+	      default:
+		g_warning("bad array type %d", atype);
+	      }
+	  }
+	  break;
+
 	default:
 	  g_warning("unable to marshal2c type with tag `%d'", (int) tag);
 	}
@@ -325,6 +340,7 @@ lgi_marshal_2lua(lua_State* L, GITypeInfo* ti, GIArgument* val,
 	      }
 	  }
 	  break;
+
 	default:
 	  g_warning("unable to marshal2lua type with tag `%d'", (int) tag);
 	}

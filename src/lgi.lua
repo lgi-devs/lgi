@@ -64,7 +64,7 @@ local compound_mt = { __index = find_in_compound }
 -- translating to creating new structure instance (i.e. constructor).
 local struct_mt = { __index = find_in_compound }
 function struct_mt.__call(type, fields)
-   local struct = core.get(type[0].info)
+   local struct = assert(core.get(type[0].info))
    for name, value in pairs(fields or {}) do
       struct[name] = value
    end
@@ -74,8 +74,17 @@ end
 -- Similar metatable for objects, again implementing object
 -- construction on __call.
 local class_mt = { __index = find_in_compound }
-function class_mt.__call(type, fields)
-   return assert(core.get(type[0].info, fields))
+function class_mt.__call(class, fields)
+   local params = {}
+   for name, value in pairs(fields or {}) do
+      local prop = class[name]
+      if not prop then
+	 error(string.format("creating '%s': unknown property '%s'",
+			     class[0].name, name))
+      end
+      params[prop] = value
+   end
+   return assert(core.get(class[0].info, params))
 end
 
 -- Metatable for bitflags tables, resolving arbitrary number to the
@@ -564,6 +573,9 @@ load_class(gi, gi._classes.Repository,
 load_class(gi, gi._classes.Typelib,
 	    gi.Repository.find_by_name(nil, gi[0].name, 'Typelib'))
 gi.BaseInfo[0].info = assert(core.find('BaseInfo'))
+
+-- Remove GObject.Object methods; they are not useful in Lgi environment.
+repo.GObject.Object._methods = nil
 
 -- Install new loader which will load lgi packages on-demand using 'repo'
 -- table.
