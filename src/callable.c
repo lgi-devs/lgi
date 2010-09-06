@@ -495,9 +495,11 @@ closure_callback(ffi_cif* cif, void* ret, void** args, void* closure_arg)
       }
 
   /* Call it. */
+#ifndef NDEBUG
   g_debug("invoking closure %s.%s/%p/(%d args), stack=%s",
           g_base_info_get_namespace(callable->info),
           g_base_info_get_name(callable->info), closure, npos, lgi_sd(L));
+#endif
   res = lua_pcall(L, npos, LUA_MULTRET, 0);
   npos = 1;
 
