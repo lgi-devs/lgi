@@ -61,6 +61,15 @@ end
 local compound_mt = { __index = find_in_compound }
 local struct_mt = { __index = find_in_compound }
 
+function struct_mt.__call(type, fields)
+   local struct = core.get(type[0].info)
+   for name, value in pairs(fields or {}) do
+      struct[name] = value
+   end
+   return struct
+end
+
+
 -- Metatable for bitflags tables, resolving arbitrary number to the
 -- table containing symbolic names of contained bits.
 local bitflags_mt = {}
@@ -293,14 +302,6 @@ local function load_compound(into, info, loads, mt)
 	 pcall(gets[3], into[name], gi.BaseInfo.get_name(mi), mi)
       end
    end
-end
-
-function struct_mt.__call(type, fields)
-   local struct = core.get(type[0].info)
-   for name, value in pairs(fields or {}) do
-      struct[name] = value
-   end
-   return struct
 end
 
 -- Loads structure information into table representing the structure
@@ -554,7 +555,7 @@ load_class(gi, gi._classes.Repository,
 	   gi.Repository.find_by_name(nil, gi[0].name, 'Repository'))
 load_class(gi, gi._classes.Typelib,
 	    gi.Repository.find_by_name(nil, gi[0].name, 'Typelib'))
-gi.BaseInfo[0].info = core.get(assert(core.find('BaseInfo')))
+gi.BaseInfo[0].info = assert(core.find('BaseInfo'))
 
 -- Install new loader which will load lgi packages on-demand using 'repo'
 -- table.
