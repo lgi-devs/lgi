@@ -3,7 +3,7 @@
     Lgi bootstrapper.
 
     Copyright (c) 2010 Pavel Holejsovsky
-    Licensed under the MIT license: 
+    Licensed under the MIT license:
     http://www.opensource.org/licenses/mit-license.php
 
 --]]--
@@ -399,7 +399,7 @@ typeloader[gi.InfoType.INTERFACE] =
 			 gi.interface_info_get_signal,
 			 function(c, n, i)
 			    check_callable(i)
-			    c[n] = i
+			    c['on_' .. string.gsub(n, '%-', '_')] = i
 			 end },
 	    _constants = { gi.interface_info_get_n_constants,
 			   gi.interface_info_get_constant,
@@ -440,7 +440,7 @@ local function load_class(namespace, into, info)
 		      gi.object_info_get_signal,
 		      function(c, n, i)
 			 check_callable(i)
-			 c[n] = i
+			 c['on_' .. string.gsub(n, '%-', '_')] = i
 		      end },
 	 _constants = { gi.object_info_get_n_constants,
 			gi.object_info_get_constant,
@@ -523,8 +523,7 @@ local function load_namespace(into, name)
    -- Create _meta table containing auxiliary information
    -- and data for the namespace.  This table also serves as metatable for the
    -- namespace, providing __index method for retrieveing namespace content.
-   into[0] = { name = name, type = 'NAMESPACE', dependencies = {},
-	       __index = get_symbol }
+   into[0] = { name = name, dependencies = {}, __index = get_symbol }
    setmetatable(into, into[0])
 
    -- Load override into the namespace hook, if the override exists.
@@ -574,8 +573,10 @@ load_class(gi, gi._classes.Typelib,
 	    gi.Repository.find_by_name(nil, gi[0].name, 'Typelib'))
 gi.BaseInfo[0].info = assert(core.find('BaseInfo'))
 
--- Remove GObject.Object methods; they are not useful in Lgi environment.
-repo.GObject.Object._methods = nil
+-- Helper, safe repo dereferencing.
+local function get_namespace(name) 
+   return pcall(function() return repo[name] end)
+end
 
 -- Install new loader which will load lgi packages on-demand using 'repo'
 -- table.
@@ -584,8 +585,11 @@ package.loaders[#package.loaders + 1] =
    function(name)
       local prefix, name = string.match(name, '^(%w+)%.(%w+)$')
       if prefix == 'lgi' then
-	 local ok, result = pcall(function() return repo[name] end)
+	 local ok, result = get_namespace(name)
 	 if not ok or not result then return result end
 	 return function() return result end
       end
    end
+
+-- Access to module proxies the whole repo, for convenience.
+setmetatable(_M, { __index = function(_, name) return get_namespace(name) end })
