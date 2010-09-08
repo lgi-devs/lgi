@@ -2,7 +2,7 @@
  * Dynamic Lua binding to GObject using dynamic gobject-introspection.
  *
  * Copyright (c) 2010 Pavel Holejsovsky
- * Licensed under the MIT license: 
+ * Licensed under the MIT license:
  * http://www.opensource.org/licenses/mit-license.php
  *
  * Management of compounds, i.e. structs, unions, objects interfaces, wrapped
@@ -11,15 +11,6 @@
 
 #include <string.h>
 #include "lgi.h"
-
-/* Creates new userdata representing instance of struct/object
-   described by 'ii'.  Transfer describes, whether the
-   ownership is transferred and gc method releases the object.	The
-   special transfer value is GI_TRANSFER_CONTAINER, which means that
-   the structure is allocated and its address is put into addr
-   (i.e. addr parameter is output in this case). */
-static int compound_store(lua_State* L, GIBaseInfo* ii, gpointer* addr,
-			  GITransfer transfer);
 
 /* Retrieves compound-type parameter from given Lua-stack position, checks,
    whether it is suitable for requested ii type.  Returns pointer to the
@@ -43,39 +34,6 @@ typedef struct _Compound
   /* If the structure is allocated 'on the stack', its data is here. */
   gchar data[1];
 } Compound;
-
-/* Stores object represented by specified gpointer from the cache to
-   the stack.  If not found in the cache, returns 0 and stores
-   nothing. */
-static int
-lgi_get_cached(lua_State* L, gpointer obj)
-{
-  lua_rawgeti(L, LUA_REGISTRYINDEX, lgi_regkey);
-  lua_rawgeti(L, -1, LGI_REG_CACHE);
-  lua_pushlightuserdata(L, obj);
-  lua_rawget(L, -2);
-  lua_replace(L, -3);
-  lua_pop(L, 1);
-  if (lua_isnil(L, -1))
-    {
-      lua_pop(L, 1);
-      return 0;
-    }
-
-  return 1;
-}
-
-/* Stores object into specified cache. */
-static void
-lgi_set_cached(lua_State* L, gpointer obj)
-{
-  lua_rawgeti(L, LUA_REGISTRYINDEX, lgi_regkey);
-  lua_rawgeti(L, -1, LGI_REG_CACHE);
-  lua_pushlightuserdata(L, obj);
-  lua_pushvalue(L, -4);
-  lua_rawset(L, -3);
-  lua_pop(L, 2);
-}
 
 /* Initializes type of GValue to specified ti. */
 static void
@@ -168,45 +126,43 @@ value_load(lua_State* L, GValue* val, int narg, GITypeInfo* ti)
 
 /* Pushes GValue content to stack, assumes that value is of ii type. */
 static int
-value_store(lua_State* L, GValue* val, GITypeInfo* ti)
+value_store (lua_State *L, GValue *val, GITypeInfo *ti)
 {
   int vals = 1;
-  switch (g_type_info_get_tag(ti))
+  switch (g_type_info_get_tag (ti))
     {
 #define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup,	\
 		 val_type, val_get, val_set, ffitype)           \
       case tag:							\
-	push(L, val_get(val));					\
+	push (L, val_get (val));                                \
 	break;
 #include "decltype.h"
 
     case GI_TYPE_TAG_INTERFACE:
       {
-	GIBaseInfo* ii = g_type_info_get_interface(ti);
-	switch (g_base_info_get_type(ii))
+	GIBaseInfo* ii = g_type_info_get_interface (ti);
+	switch (g_base_info_get_type (ii))
 	  {
 	  case GI_INFO_TYPE_ENUM:
-	    lua_pushinteger(L, g_value_get_enum(val));
+	    lua_pushinteger (L, g_value_get_enum (val));
 	    break;
 
 	  case GI_INFO_TYPE_FLAGS:
-	    lua_pushinteger(L, g_value_get_flags(val));
+	    lua_pushinteger (L, g_value_get_flags (val));
 	    break;
 
 	  case GI_INFO_TYPE_OBJECT:
-	    {
-	      gpointer addr = g_value_dup_object(val);
-	      vals = compound_store(L, ii, &addr, GI_TRANSFER_EVERYTHING);
-	    }
+            vals = lgi_compound_create (L, ii, g_value_dup_object (val), TRUE) ?
+              1 : 0;
 	    break;
 
 	  case GI_INFO_TYPE_STRUCT:
-	    return luaL_error(L, "don't know how to handle GValue->struct");
+	    return luaL_error (L, "don't know how to handle GValue->struct");
 
 	  default:
 	    vals = 0;
 	  }
-	g_base_info_unref(ii);
+	g_base_info_unref (ii);
       }
       break;
 
@@ -218,40 +174,108 @@ value_store(lua_State* L, GValue* val, GITypeInfo* ti)
 }
 
 /* Loads reg_typeinfo and ref_repo elements for compound arg on the stack.  */
-static Compound*
-compound_prepare(lua_State* L, int arg)
+static Compound *
+compound_prepare (lua_State *L, int arg)
 {
-  Compound* compound = luaL_checkudata(L, arg, LGI_COMPOUND);
-  lua_rawgeti(L, LUA_REGISTRYINDEX, lgi_regkey);
-  lua_rawgeti(L, -1, LGI_REG_TYPEINFO);
-  lua_replace(L, -2);
-  lua_rawgeti(L, -1, compound->ref_repo);
-  g_assert(!lua_isnil(L, -1));
+  Compound *compound = luaL_checkudata (L, arg, LGI_COMPOUND);
+  lua_rawgeti (L, LUA_REGISTRYINDEX, lgi_regkey);
+  lua_rawgeti (L, -1, LGI_REG_TYPEINFO);
+  lua_replace (L, -2);
+  lua_rawgeti (L, -1, compound->ref_repo);
+  g_assert (!lua_isnil (L, -1));
   return compound;
 }
 
-gboolean
-lgi_compound_create(lua_State* L, GIBaseInfo* ii, gpointer addr,
-		    gboolean own)
+static gboolean
+compound_register (lua_State *L, GIBaseInfo* info, gpointer *addr,
+                   gboolean owns, gboolean alloc_struct)
 {
-  return compound_store(L, ii, &addr,
-			own ? GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING);
-}
+  Compound *compound;
+  g_assert (addr != NULL);
 
-int
-lgi_compound_create_struct(lua_State* L, GIBaseInfo* ii, gpointer* addr)
-{
-  /* Avoid creating non-boxed structures, because we do not know how
-     to destroy them. */
-  if (!g_type_is_a (g_registered_type_info_get_g_type (ii), G_TYPE_BOXED))
+  /* Prepare access to registry and cache. */
+  lua_rawgeti (L, LUA_REGISTRYINDEX, lgi_regkey);
+  lua_rawgeti (L, -1, LGI_REG_CACHE);
+
+  /* NULL pointer results in 'nil' compound, unless 'allocate' is requested. */
+  if (*addr == NULL)
     {
-      lua_pushfstring (L, "unable to create `%s.%s': non-boxed struct",
-		       g_base_info_get_namespace (ii),
-		       g_base_info_get_name (ii));
-      lua_error (L);
+      if (!alloc_struct)
+        {
+          lua_pushnil (L);
+          return TRUE;
+        }
+    }
+  else
+    {
+      /* Check, whether the compound is not already in the cache. */
+      lua_pushlightuserdata (L, *addr);
+      lua_rawget (L, -2);
+      if (!lua_isnil (L, -1))
+        {
+          lua_replace (L, -3);
+          lua_pop (L, 1);
+          return TRUE;
+        }
+      else
+        lua_pop (L, 1);
     }
 
-  return compound_store (L, ii, addr, GI_TRANSFER_CONTAINER);
+  /* Create and initialize new userdata instance. */
+  compound = lua_newuserdata (L, G_STRUCT_OFFSET (Compound, data) +
+                              alloc_struct ? g_struct_info_get_size (info) : 0);
+  luaL_getmetatable (L, LGI_COMPOUND);
+  lua_setmetatable (L, -2);
+  if (alloc_struct)
+    *addr = compound->data;
+
+  /* Load ref_repo reference to repo table of the object. */
+  compound->ref_repo = LUA_REFNIL;
+  lua_rawgeti (L, -3, LGI_REG_REPO);
+  lua_getfield (L, -1, g_base_info_get_namespace(info));
+  lua_getfield (L, -1, g_base_info_get_name(info));
+  lua_replace (L, -3);
+  lua_pop (L, 1);
+
+  /* Store it to the typeinfo. */
+  lua_rawgeti (L, -4, LGI_REG_TYPEINFO);
+  lua_pushvalue (L, -2);
+  compound->ref_repo = luaL_ref (L, -2);
+  lua_pop (L, 2);
+  compound->addr = *addr;
+  compound->owns = owns;
+
+  /* If we are storing owned gobject, make sure that we fully sink them.  We
+     are not interested in floating refs. */
+  if (g_base_info_get_type (info) == GI_INFO_TYPE_OBJECT &&
+      g_object_is_floating (*addr))
+    g_object_ref_sink (*addr);
+
+  /* Store newly created compound to the cache. */
+  lua_pushlightuserdata (L, compound);
+  lua_pushvalue (L, -2);
+  lua_rawset (L, -4);
+
+  /* Clean up the stack; we still have 'registry' and 'cache' tables above our
+     requested compound, so remove them. */
+  lua_replace (L, -3);
+  lua_pop (L, 1);
+  return TRUE;
+}
+
+gboolean
+lgi_compound_create (lua_State* L, GIBaseInfo* ii, gpointer addr, gboolean own)
+{
+  return compound_register (L, ii, &addr, own, FALSE);
+}
+
+gboolean
+lgi_compound_create_struct (lua_State* L, GIBaseInfo* ii, gpointer* addr)
+{
+  /* Register struct, allocate space for it inside compound.  Mark is
+     non-owned, because we do not need to free it in any way; its space will be
+     reclaimed with compound itself. */
+  return compound_register (L, ii, addr, FALSE, TRUE);
 }
 
 gboolean
@@ -316,87 +340,9 @@ lgi_compound_create_object (lua_State *L, GIObjectInfo *oi, int argtable,
   *addr = g_object_newv (g_registered_type_info_get_g_type (oi), n_params,
 			 params);
 
-  /* We do not want any floating references, so convert them if we
-     have them. */
-  if (g_object_is_floating (*addr))
-    g_object_ref_sink (*addr);
-
   /* And wrap a nice userdata around it. */
-  return compound_store (L, oi, addr, GI_TRANSFER_EVERYTHING);
+  return compound_register (L, oi, addr, TRUE, FALSE);
 }
-
-static int
-compound_store (lua_State* L, GIBaseInfo* info, gpointer* addr,
-		GITransfer transfer)
-{
-  int vals;
-  Compound* compound;
-  g_assert(addr != NULL);
-
-  /* NULL pointer results in 'nil' compound. */
-  if (transfer != GI_TRANSFER_CONTAINER && *addr == NULL)
-    {
-      lua_pushnil(L);
-      vals = 1;
-    }
-  /* Check, whether struct is already in the cache. */
-  else
-    vals = lgi_get_cached(L, *addr);
-
-  if (vals != 0)
-    return vals;
-
-  /* Find out how big data should be allocated. */
-  size_t size = G_STRUCT_OFFSET(Compound, data);
-  if (transfer == GI_TRANSFER_CONTAINER)
-    size += g_struct_info_get_size(info);
-
-  /* Create and initialize new userdata instance. */
-  compound = lua_newuserdata(L, size);
-  luaL_getmetatable(L, LGI_COMPOUND);
-  lua_setmetatable(L, -2);
-
-  /* Load ref_repo reference to repo table of the object. */
-  compound->ref_repo = LUA_REFNIL;
-  lua_rawgeti(L, LUA_REGISTRYINDEX, lgi_regkey);
-  lua_rawgeti(L, -1, LGI_REG_REPO);
-  lua_getfield(L, -1, g_base_info_get_namespace(info));
-  lua_getfield(L, -1, g_base_info_get_name(info));
-  lua_replace(L, -3);
-  lua_pop(L, 1);
-
-  /* Store it to the typeinfo. */
-  lua_rawgeti(L, -2, LGI_REG_TYPEINFO);
-  lua_pushvalue(L, -2);
-  compound->ref_repo = luaL_ref(L, -2);
-
-  if (transfer == GI_TRANSFER_CONTAINER)
-    *addr = compound->data;
-  else if (transfer == GI_TRANSFER_NOTHING)
-    {
-      /* Try to acquire ownership if possible, because we are not sure
-	 how long the object will be alive. */
-      switch (g_base_info_get_type(info))
-	{
-	case GI_INFO_TYPE_OBJECT:
-	  /* This is simple, ref the object. */
-	  g_object_ref(*addr);
-	  transfer = GI_TRANSFER_EVERYTHING;
-	  break;
-
-	default:
-	  break;
-	}
-    }
-
-  compound->addr = *addr;
-  compound->owns = (transfer == GI_TRANSFER_EVERYTHING);
-  lua_pop(L, 3);
-
-  /* Store newly created compound to the cache. */
-  lgi_set_cached(L, compound);
-  return 1;
-};
 
 static int
 compound_gc (lua_State* L)
