@@ -275,7 +275,6 @@ typeloader[gi.InfoType.CONSTANT] =
 local function add_compound_meta(compound, info)
    compound[0] = compound[0] or {}
    compound[0].info = info
-   compound[0].type = gi.base_info_get_type(info)
    compound[0].gtype = gi.registered_type_info_get_g_type(info)
    compound[0].name = gi.BaseInfo.get_namespace(info) .. '.' ..
    gi.BaseInfo.get_name(info)

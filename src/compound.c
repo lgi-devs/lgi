@@ -4,7 +4,7 @@
  * License: MIT.
  *
  * Management of compounds, i.e. structs, unions, objects interfaces, wrapped
- * into single Lua userdata blcok called 'compound'.
+ * into single Lua userdata block called 'compound'.
  */
 
 #include <string.h>
@@ -75,62 +75,43 @@ lgi_set_cached(lua_State* L, gpointer obj)
   lua_pop(L, 2);
 }
 
-/* Retrieves gtype for specified baseinfo. */
-static GType
-repo_get_gtype(lua_State* L, GIBaseInfo* ii)
-{
-  GType type;
-  lua_rawgeti(L, LUA_REGISTRYINDEX, lgi_regkey);
-  lua_rawgeti(L, -1, LGI_REG_REPO);
-  lua_getfield(L, -1, g_base_info_get_namespace(ii));
-  lua_getfield(L, -1, g_base_info_get_name(ii));
-  if (lua_isnil(L, -1))
-    luaL_error(L, "`%s.%s' not present in repo", g_base_info_get_namespace(ii),
-	       g_base_info_get_name(ii));
-  lua_rawgeti(L, -1, 0);
-  lua_getfield(L, -1, "gtype");
-  type = (GType)luaL_checkinteger(L, -1);
-  lua_pop(L, 6);
-  return type;
-}
-
 /* Initializes type of GValue to specified ti. */
 static void
-value_init(lua_State* L, GValue* val, GITypeInfo* ti)
+value_init (lua_State *L, GValue *val, GITypeInfo *ti)
 {
-  GITypeTag tag = g_type_info_get_tag(ti);
+  GITypeTag tag = g_type_info_get_tag (ti);
   switch (tag)
     {
-#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup,	\
-		 val_type, val_get, val_set, ffitype)           \
-      case tag:							\
-	g_value_init(val, val_type);				\
-	break;
+#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup, \
+                 val_type, val_get, val_set, ffitype)           \
+    case tag:                                                   \
+      g_value_init (val, val_type);                             \
+      break;
 #include "decltype.h"
 
     case GI_TYPE_TAG_INTERFACE:
       {
-	GIBaseInfo* ii = g_type_info_get_interface(ti);
-	GIInfoType type = g_base_info_get_type(ii);
+	GIBaseInfo* ii = g_type_info_get_interface (ti);
+	GIInfoType type = g_base_info_get_type (ii);
 	switch (type)
 	  {
 	  case GI_INFO_TYPE_ENUM:
 	  case GI_INFO_TYPE_FLAGS:
 	  case GI_INFO_TYPE_OBJECT:
 	  case GI_INFO_TYPE_STRUCT:
-	    g_value_init(val, repo_get_gtype(L, ii));
+            g_value_init (val, g_registered_type_info_get_g_type (ii));
 	    break;
 
 	  default:
-	    g_base_info_unref(ii);
-	    luaL_error(L, "value_init: bad ti.iface.type=%d", (int)type);
+	    g_base_info_unref (ii);
+	    luaL_error (L, "value_init: bad ti.iface.type=%d", (int) type);
 	  }
-	g_base_info_unref(ii);
+	g_base_info_unref (ii);
       }
       break;
 
     default:
-      luaL_error(L, "value_init: bad ti.tag=%d", (int)tag);
+      luaL_error (L, "value_init: bad ti.tag=%d", (int) tag);
     }
 }
 

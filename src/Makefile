@@ -3,8 +3,8 @@ OUTPUT = lgi.so
 
 OBJS = lgi.o marshal.o compound.o callable.o
 
-CFLAGS = -c -pipe -Wall `pkg-config --cflags $(PKG_PACKAGES)`
-LDFLAGS = -shared `pkg-config --libs $(PKG_PACKAGES)`
+CFLAGS = -c -pipe -Wall $(shell pkg-config --cflags $(PKG_PACKAGES))
+LDFLAGS = -shared $(shell pkg-config --libs $(PKG_PACKAGES))
 
 ifdef DEBUG
 	CFLAGS += -g -O0
@@ -22,10 +22,10 @@ all : $(OUTPUT)
 $(OUTPUT) : $(OBJS)
 	$(CC) -o $@ $^ $(LDFLAGS)
 
-lgi.o : lgi.c lgi.h decltype.h
-callable.o : callable.c lgi.h decltype.h
-marshal.o : marshal.c lgi.h decltype.h
-compound.o : compound.c lgi.h decltype.h
+lgi.o : lgi.c lgi.h decltype.h Makefile
+callable.o : callable.c lgi.h decltype.h Makefile
+marshal.o : marshal.c lgi.h decltype.h Makefile
+compound.o : compound.c lgi.h decltype.h Makefile
 
 clean :
-	rm -f $(OBJS) $(OUTPUT)
+	rm -f $(OBJS) $(OUTPUT) *.stackdump *~
