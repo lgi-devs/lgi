@@ -12,13 +12,6 @@
 #include <string.h>
 #include "lgi.h"
 
-/* Retrieves compound-type parameter from given Lua-stack position, checks,
-   whether it is suitable for requested ii type.  Returns pointer to the
-   compound object, returns NULL if Lua-stack value is nil and optional is
-   TRUE. */
-static gpointer compound_load(lua_State* L, int arg, GIBaseInfo* ii,
-			      gboolean optional);
-
 /* 'compound' userdata: wraps compound with reference to its repo table. */
 typedef struct _Compound
 {
@@ -78,42 +71,42 @@ value_init (lua_State *L, GValue *val, GITypeInfo *ti)
 /* Loads GValue contents from specified stack position, expects ii type.
    Assumes that val is already inited by value_init(). */
 static int
-value_load(lua_State* L, GValue* val, int narg, GITypeInfo* ti)
+value_load (lua_State *L, GValue *val, int narg, GITypeInfo *ti)
 {
   int vals = 1;
-  switch (g_type_info_get_tag(ti))
+  switch (g_type_info_get_tag (ti))
     {
 #define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup,	\
 		 val_type, val_get, val_set, ffitype)           \
       case tag:							\
-	val_set(val, check(L, narg));				\
+	val_set (val, check (L, narg));				\
 	break;
 #include "decltype.h"
 
     case GI_TYPE_TAG_INTERFACE:
       {
-	GIBaseInfo* ii = g_type_info_get_interface(ti);
-	switch (g_base_info_get_type(ii))
+	GIBaseInfo* ii = g_type_info_get_interface (ti);
+	switch (g_base_info_get_type (ii))
 	  {
 	  case GI_INFO_TYPE_ENUM:
-	    g_value_set_enum(val, luaL_checkinteger(L, narg));
+	    g_value_set_enum (val, luaL_checkinteger (L, narg));
 	    break;
 
 	  case GI_INFO_TYPE_FLAGS:
-	    g_value_set_flags(val, luaL_checkinteger(L, narg));
+	    g_value_set_flags (val, luaL_checkinteger (L, narg));
 	    break;
 
 	  case GI_INFO_TYPE_OBJECT:
-	    g_value_set_object(val, compound_load(L, narg, ii, FALSE));
+	    g_value_set_object (val, lgi_compound_get (L, narg, ii, FALSE));
 	    break;
 
 	  case GI_INFO_TYPE_STRUCT:
-	    return luaL_error(L, "don't know how to handle struct->GValue");
+	    return luaL_error (L, "don't know how to handle struct->GValue");
 
 	  default:
 	    vals = 0;
 	  }
-	g_base_info_unref(ii);
+	g_base_info_unref (ii);
       }
       break;
 
@@ -222,8 +215,9 @@ compound_register (lua_State *L, GIBaseInfo* info, gpointer *addr,
     }
 
   /* Create and initialize new userdata instance. */
-  compound = lua_newuserdata (L, G_STRUCT_OFFSET (Compound, data) +
-                              alloc_struct ? g_struct_info_get_size (info) : 0);
+  compound = 
+    lua_newuserdata (L, G_STRUCT_OFFSET (Compound, data) +
+		     (alloc_struct ? g_struct_info_get_size (info) : 0));
   luaL_getmetatable (L, LGI_COMPOUND);
   lua_setmetatable (L, -2);
   if (alloc_struct)
@@ -264,13 +258,13 @@ compound_register (lua_State *L, GIBaseInfo* info, gpointer *addr,
 }
 
 gboolean
-lgi_compound_create (lua_State* L, GIBaseInfo* ii, gpointer addr, gboolean own)
+lgi_compound_create (lua_State *L, GIBaseInfo *ii, gpointer addr, gboolean own)
 {
   return compound_register (L, ii, &addr, own, FALSE);
 }
 
 gboolean
-lgi_compound_create_struct (lua_State* L, GIBaseInfo* ii, gpointer* addr)
+lgi_compound_create_struct (lua_State *L, GIBaseInfo *ii, gpointer *addr)
 {
   /* Register struct, allocate space for it inside compound.  Mark is
      non-owned, because we do not need to free it in any way; its space will be
@@ -345,9 +339,9 @@ lgi_compound_create_object (lua_State *L, GIObjectInfo *oi, int argtable,
 }
 
 static int
-compound_gc (lua_State* L)
+compound_gc (lua_State *L)
 {
-  Compound* compound = compound_prepare (L, 1);
+  Compound *compound = compound_prepare (L, 1);
   if (compound->owns)
     {
       /* Check the gtype of the compound. */
@@ -370,63 +364,59 @@ compound_gc (lua_State* L)
 }
 
 static int
-compound_tostring(lua_State* L)
+compound_tostring (lua_State *L)
 {
-  Compound* compound = compound_prepare(L, 1);
-  lua_pushfstring(L, "lgi %p:", compound);
-  lua_rawgeti(L, -2, 0);
-  lua_getfield(L, -1, "name");
-  lua_replace(L, -2);
-  lua_concat(L, 2);
+  Compound *compound = compound_prepare (L, 1);
+  lua_pushfstring (L, "lgi %p:", compound);
+  lua_rawgeti (L, -2, 0);
+  lua_getfield (L, -1, "name");
+  lua_replace (L, -2);
+  lua_concat (L, 2);
   return 1;
 }
 
 /* Reports error related to given compound element. Expects
    compound_prepared' stack layout.*/
 static int
-compound_error(lua_State* L, const char* errmsg, int element)
+compound_error (lua_State *L, const char *errmsg, int element)
 {
   /* Prepare name of the compound. */
-  lua_rawgeti(L, -2, 0);
-  lua_getfield(L, -1, "name");
-  return luaL_error(L, errmsg, lua_tostring(L, -1), lua_tostring(L, element));
+  lua_rawgeti (L, -2, 0);
+  lua_getfield (L, -1, "name");
+  return luaL_error (L, errmsg, lua_tostring (L, -1), 
+		     lua_tostring (L, element));
 }
 
 gpointer
-lgi_compound_get(lua_State* L, int arg, GIBaseInfo* ii, gboolean optional)
+lgi_compound_get (lua_State *L, int index, GIBaseInfo *ii, gboolean optional)
 {
-  return compound_load(L, arg, ii, optional);
-}
-
-static gpointer
-compound_load(lua_State* L, int index, GIBaseInfo* ii, gboolean optional)
-{
-  Compound* compound;
+  Compound *compound;
   GType requested_type, real_type;
 
-  if (optional && lua_isnoneornil(L, index))
+  if (optional && lua_isnoneornil (L, index))
     return NULL;
 
   /* Check for type ancestry. */
-  compound = compound_prepare(L, index);
-  lua_rawgeti(L, -1, 0);
-  lua_getfield(L, -1, "gtype");
-  real_type = lua_tointeger(L, -1);
-  requested_type = g_registered_type_info_get_g_type(ii);
-  if (!g_type_is_a(real_type, requested_type))
-    luaL_argerror(L, index, g_type_name(requested_type));
+  compound = compound_prepare (L, index);
+  lua_rawgeti (L, -1, 0);
+  lua_getfield (L, -1, "gtype");
+  real_type = lua_tointeger (L, -1);
+  requested_type = g_registered_type_info_get_g_type (ii);
+  if (!g_type_is_a (real_type, requested_type))
+    luaL_argerror (L, index, g_type_name (requested_type));
 
-  lua_pop(L, 4);
+  lua_pop (L, 4);
   return compound->addr;
 }
 
 /* Processes compound element of 'field' type. */
 static int
-compound_element_field(lua_State* L, gpointer addr, GIFieldInfo* fi, int newval)
+compound_element_field (lua_State* L, gpointer addr, GIFieldInfo* fi, 
+			int newval)
 {
-  GIArgument* val = G_STRUCT_MEMBER_P(addr, g_field_info_get_offset(fi));
-  GITypeInfo* ti = g_field_info_get_type(fi);
-  int flags = g_field_info_get_flags(fi);
+  GIArgument *val = G_STRUCT_MEMBER_P (addr, g_field_info_get_offset (fi));
+  GITypeInfo *ti = g_field_info_get_type (fi);
+  int flags = g_field_info_get_flags (fi);
   int vals;
   if (newval == -1)
     {
@@ -457,40 +447,40 @@ compound_element_field(lua_State* L, gpointer addr, GIFieldInfo* fi, int newval)
 
 /* Processes compound element of 'property' type. */
 static int
-compound_element_property(lua_State* L, gpointer addr, GIPropertyInfo* pi,
+compound_element_property(lua_State *L, gpointer addr, GIPropertyInfo *pi,
 			  int newval)
 {
-  int vals = 0, flags = g_property_info_get_flags(pi);
-  GITypeInfo* ti = g_property_info_get_type(pi);
-  const gchar* name = g_base_info_get_name(pi);
+  int vals = 0, flags = g_property_info_get_flags (pi);
+  GITypeInfo *ti = g_property_info_get_type (pi);
+  const gchar *name = g_base_info_get_name (pi);
   GValue val = {0};
 
-  value_init(L, &val, ti);
+  value_init (L, &val, ti);
 
   if (newval == -1)
     {
       if ((flags & G_PARAM_READABLE) == 0)
 	{
-	  g_base_info_unref(ti);
-	  return luaL_argerror(L, 2, "not readable");
+	  g_base_info_unref (ti);
+	  return luaL_argerror (L, 2, "not readable");
 	}
 
-      g_object_get_property((GObject*)addr, name, &val);
-      vals = value_store(L, &val, ti);
+      g_object_get_property ((GObject *) addr, name, &val);
+      vals = value_store (L, &val, ti);
     }
   else
     {
       if ((flags & G_PARAM_WRITABLE) == 0)
 	{
-	  g_base_info_unref(ti);
-	  return luaL_argerror(L, 2, "not writable");
+	  g_base_info_unref (ti);
+	  return luaL_argerror (L, 2, "not writable");
 	}
 
-      vals = value_load(L, &val, 3, ti);
-      g_object_set_property((GObject*)addr, name, &val);
+      vals = value_load (L, &val, 3, ti);
+      g_object_set_property ((GObject *) addr, name, &val);
     }
 
-  g_value_unset(&val);
+  g_value_unset (&val);
   return vals;
 }
 
@@ -498,32 +488,32 @@ compound_element_property(lua_State* L, gpointer addr, GIPropertyInfo* pi,
    it; either reads it to stack (newval = -1) or sets it to value at
    newval stack. */
 static int
-compound_element(lua_State* L, int newval)
+compound_element (lua_State *L, int newval)
 {
   /* Load compound and element. */
   int vals = 0, type;
-  Compound* compound = compound_prepare(L, 1);
-  lua_pushvalue(L, 2);
-  lua_gettable(L, -2);
-  type = lua_type(L, -1);
+  Compound *compound = compound_prepare (L, 1);
+  lua_pushvalue (L, 2);
+  lua_gettable (L, -2);
+  type = lua_type (L, -1);
   if (type == LUA_TNIL)
       /* Not found. */
-    return compound_error(L, "%s: no `%s'", 2);
+    return compound_error (L, "%s: no `%s'", 2);
   else
     {
       /* Special handling is for compound-userdata, which contain some
 	 kind of baseinfo. */
-      GIBaseInfo* ei = compound_load(L, -1, lgi_baseinfo_info, TRUE);
+      GIBaseInfo *ei = lgi_compound_get (L, -1, lgi_baseinfo_info, TRUE);
       if (ei != NULL)
 	{
-	  switch (g_base_info_get_type(ei))
+	  switch (g_base_info_get_type (ei))
 	    {
 	    case GI_INFO_TYPE_FIELD:
-	      vals = compound_element_field(L, compound->addr, ei, newval);
+	      vals = compound_element_field (L, compound->addr, ei, newval);
 	      break;
 
 	    case GI_INFO_TYPE_PROPERTY:
-	      vals = compound_element_property(L, compound->addr, ei, newval);
+	      vals = compound_element_property (L, compound->addr, ei, newval);
 	      break;
 
 	    default:
@@ -538,8 +528,8 @@ compound_element(lua_State* L, int newval)
 	     for newindex. */
 	  if (newval != -1)
 	    {
-	      lua_pop(L, 1);
-	      return compound_error(L, "%s: `%s' not writable", 2);
+	      lua_pop (L, 1);
+	      return compound_error (L, "%s: `%s' not writable", 2);
 	    }
 	  else
 	    vals = 1;
@@ -550,15 +540,15 @@ compound_element(lua_State* L, int newval)
 }
 
 static int
-compound_index(lua_State* L)
+compound_index (lua_State *L)
 {
-  return compound_element(L, -1);
+  return compound_element (L, -1);
 }
 
 static int
-compound_newindex(lua_State* L)
+compound_newindex (lua_State *L)
 {
-  return compound_element(L, 3);
+  return compound_element (L, 3);
 }
 
 const struct luaL_reg lgi_compound_reg[] = {
