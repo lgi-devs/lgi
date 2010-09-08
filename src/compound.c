@@ -318,7 +318,6 @@ lgi_compound_create_object (lua_State *L, GIObjectInfo *oi, int argtable,
 		{
 		  /* Extract property name. */
 		  param->name = g_base_info_get_name (pi);
-		  g_debug ("processing property %s", param->name);
 
 		  /* Initialize and load parameter value from the table
 		     contents. */
