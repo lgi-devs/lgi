@@ -1,9 +1,13 @@
 /*
  * Dynamic Lua binding to GObject using dynamic gobject-introspection.
  *
- * Author: Pavel Holejsovsky (pavel.holejsovsky@gmail.com)
+ * Copyright (c) 2010 Pavel Holejsovsky
+ * Licensed under the MIT license:
+ * http://www.opensource.org/licenses/mit-license.php
  *
- * License: MIT.
+ * Contains declaration of types, associated with assorted information
+ * belonging to the type.  To be included multiple time as needed with suitable
+ * DECLTYPE macro definition.
  */
 
 /* File is meant to be included multiple times, include guard is missing. */

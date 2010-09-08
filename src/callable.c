@@ -1,7 +1,9 @@
 /*
  * Dynamic Lua binding to GObject using dynamic gobject-introspection.
- * Author: Pavel Holejsovsky (pavel.holejsovsky@gmail.com)
- * License: MIT.
+ *
+ * Copyright (c) 2010 Pavel Holejsovsky
+ * Licensed under the MIT license: 
+ * http://www.opensource.org/licenses/mit-license.php
  *
  * This code deals with calling from Lua to C and vice versa, using
  * gobject-introspection information and libffi machinery.

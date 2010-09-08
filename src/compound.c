@@ -1,7 +1,9 @@
 /*
  * Dynamic Lua binding to GObject using dynamic gobject-introspection.
- * Author: Pavel Holejsovsky (pavel.holejsovsky@gmail.com)
- * License: MIT.
+ *
+ * Copyright (c) 2010 Pavel Holejsovsky
+ * Licensed under the MIT license: 
+ * http://www.opensource.org/licenses/mit-license.php
  *
  * Management of compounds, i.e. structs, unions, objects interfaces, wrapped
  * into single Lua userdata block called 'compound'.

@@ -2,8 +2,9 @@
 
     Lgi bootstrapper.
 
-    Author: Pavel Holejsovsky
-    Licence: MIT
+    Copyright (c) 2010 Pavel Holejsovsky
+    Licensed under the MIT license: 
+    http://www.opensource.org/licenses/mit-license.php
 
 --]]--
 
