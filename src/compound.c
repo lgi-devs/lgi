@@ -185,6 +185,7 @@ compound_register (lua_State *L, GIBaseInfo* info, gpointer *addr,
 {
   Compound *compound;
   g_assert (addr != NULL);
+  gsize size;
 
   /* Prepare access to registry and cache. */
   lua_rawgeti (L, LUA_REGISTRYINDEX, lgi_regkey);
@@ -215,13 +216,15 @@ compound_register (lua_State *L, GIBaseInfo* info, gpointer *addr,
     }
 
   /* Create and initialize new userdata instance. */
-  compound = 
-    lua_newuserdata (L, G_STRUCT_OFFSET (Compound, data) +
-		     (alloc_struct ? g_struct_info_get_size (info) : 0));
+  size = alloc_struct ? g_struct_info_get_size (info) : 0;
+  compound = lua_newuserdata (L, G_STRUCT_OFFSET (Compound, data) + size);
   luaL_getmetatable (L, LGI_COMPOUND);
   lua_setmetatable (L, -2);
   if (alloc_struct)
-    *addr = compound->data;
+    {
+      *addr = compound->data;
+      memset (compound->data, 0, size);
+    }
 
   /* Load ref_repo reference to repo table of the object. */
   compound->ref_repo = LUA_REFNIL;
@@ -269,6 +272,7 @@ lgi_compound_create_struct (lua_State *L, GIBaseInfo *ii, gpointer *addr)
   /* Register struct, allocate space for it inside compound.  Mark is
      non-owned, because we do not need to free it in any way; its space will be
      reclaimed with compound itself. */
+  *addr = NULL;
   return compound_register (L, ii, addr, FALSE, TRUE);
 }
 
@@ -501,9 +505,19 @@ compound_element (lua_State *L, int newval)
     return compound_error (L, "%s: no `%s'", 2);
   else
     {
+      GIBaseInfo *ei = NULL;
+
+      /* Try to extract BaseInfo from given field, if possible. */
+      if (type == LUA_TUSERDATA && lua_getmetatable (L, -1))
+	{
+	  lua_getfield (L, LUA_REGISTRYINDEX, LGI_COMPOUND);
+	  if (lua_rawequal (L, -1, -2))
+	    ei = lgi_compound_get (L, -3, lgi_baseinfo_info, FALSE);
+	  lua_pop (L, 2);
+	}
+
       /* Special handling is for compound-userdata, which contain some
 	 kind of baseinfo. */
-      GIBaseInfo *ei = lgi_compound_get (L, -1, lgi_baseinfo_info, TRUE);
       if (ei != NULL)
 	{
 	  switch (g_base_info_get_type (ei))
@@ -519,7 +533,6 @@ compound_element (lua_State *L, int newval)
 	    default:
 	      break;
 	    }
-
 	  /* Don't unref ei, its lifetime is controlled by userdata. */
 	}
       else
