@@ -128,24 +128,24 @@ lgi_compound_create (lua_State *L, GIBaseInfo *ii, gpointer addr, gboolean own)
   return compound_register (L, ii, &addr, own, FALSE);
 }
 
-gboolean
-lgi_compound_create_struct (lua_State *L, GIBaseInfo *ii, gpointer *addr)
+gpointer
+lgi_compound_struct_new (lua_State *L, GIBaseInfo *ii)
 {
   /* Register struct, allocate space for it inside compound.  Mark is
      non-owned, because we do not need to free it in any way; its space will be
      reclaimed with compound itself. */
-  *addr = NULL;
-  return compound_register (L, ii, addr, FALSE, TRUE);
+  gpointer addr = NULL;
+  return compound_register (L, ii, &addr, FALSE, TRUE) ? addr : NULL;
 }
 
-gboolean
-lgi_compound_create_object (lua_State *L, GIObjectInfo *oi, int argtable,
-			    gpointer *addr)
+gpointer
+lgi_compound_object_new (lua_State *L, GIObjectInfo *oi, int argtable)
 {
   gint n_params = 0;
   GParameter *params = NULL, *param;
   GIPropertyInfo *pi;
   GITypeInfo *ti;
+  gpointer addr;
 
   /* Check, whether 2nd argument is table containing construction-time
      properties. */
@@ -196,15 +196,15 @@ lgi_compound_create_object (lua_State *L, GIObjectInfo *oi, int argtable,
     }
 
   /* Create the object. */
-  *addr = g_object_newv (g_registered_type_info_get_g_type (oi), n_params,
-			 params);
+  addr = g_object_newv (g_registered_type_info_get_g_type (oi), n_params,
+                        params);
 
   /* Free all parameters from params array. */
   for (param = params; n_params > 0; param++, n_params--)
     g_value_unset (&param->value);
 
   /* And wrap a nice userdata around it. */
-  return compound_register (L, oi, addr, TRUE, FALSE);
+  return compound_register (L, oi, &addr, TRUE, FALSE) ? addr : NULL;
 }
 
 static int

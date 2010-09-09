@@ -126,11 +126,13 @@ lgi_get (lua_State* L)
       break;
 
     case GI_INFO_TYPE_STRUCT:
-      vals = lgi_compound_create_struct (L, ii, &res);
+      res = lgi_compound_struct_new (L, ii);
+      vals = 1;
       break;
 
     case GI_INFO_TYPE_OBJECT:
-      vals = lgi_compound_create_object (L, ii, 2, &res);
+      res = lgi_compound_object_new (L, ii, 2);
+      vals = 1;
       break;
 
     case GI_INFO_TYPE_CONSTANT:

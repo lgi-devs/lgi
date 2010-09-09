@@ -370,14 +370,13 @@ lgi_callable_call(lua_State* L, gpointer addr, int func_index, int args_index)
           {
             /* Special handling for out/caller-alloc structures; we have to
                manually pre-create them and store them on the stack. */
-            if (g_arg_info_is_caller_allocates(&param->ai) &&
-                g_type_info_get_tag(&param->ti) == GI_TYPE_TAG_INTERFACE)
+            if (g_arg_info_is_caller_allocates (&param->ai) &&
+                g_type_info_get_tag (&param->ti) == GI_TYPE_TAG_INTERFACE)
               {
-                GIBaseInfo* ii = g_type_info_get_interface(&param->ti);
-                if (g_base_info_get_type(ii) == GI_INFO_TYPE_STRUCT)
-                  lgi_compound_create_struct(L, ii,
-                                             &call->args[argi].v_pointer);
-                g_base_info_unref(ii);
+                GIBaseInfo *ii = g_type_info_get_interface (&param->ti);
+                if (g_base_info_get_type (ii) == GI_INFO_TYPE_STRUCT)
+                  call->args[argi].v_pointer = lgi_compound_struct_new (L, ii);
+                g_base_info_unref (ii);
               }
           }
       }
