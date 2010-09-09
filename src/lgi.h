@@ -116,3 +116,13 @@ gboolean lgi_compound_create_object (lua_State *L, GIObjectInfo *ii,
    TRUE. */
 gpointer lgi_compound_get(lua_State* L, int arg, GIBaseInfo* ii,
                           gboolean optional);
+
+/* Initializes type of GValue to specified ti. */
+void lgi_value_init (lua_State *L, GValue *val, GITypeInfo *ti);
+
+/* Loads GValue contents from specified stack position, expects ii type.
+   Assumes that val is already inited by value_init(). */
+int lgi_value_load (lua_State *L, GValue *val, int narg, GITypeInfo *ti);
+
+/* Pushes GValue content to stack, assumes that value is of ii type. */
+int lgi_value_store (lua_State *L, GValue *val, GITypeInfo *ti);

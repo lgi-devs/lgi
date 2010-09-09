@@ -28,144 +28,6 @@ typedef struct _Compound
   gchar data[1];
 } Compound;
 
-/* Initializes type of GValue to specified ti. */
-static void
-value_init (lua_State *L, GValue *val, GITypeInfo *ti)
-{
-  GITypeTag tag = g_type_info_get_tag (ti);
-  switch (tag)
-    {
-#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup, \
-                 val_type, val_get, val_set, ffitype)           \
-    case tag:                                                   \
-      g_value_init (val, val_type);                             \
-      break;
-#include "decltype.h"
-
-    case GI_TYPE_TAG_INTERFACE:
-      {
-	GIBaseInfo* ii = g_type_info_get_interface (ti);
-	GIInfoType type = g_base_info_get_type (ii);
-	switch (type)
-	  {
-	  case GI_INFO_TYPE_ENUM:
-	  case GI_INFO_TYPE_FLAGS:
-	  case GI_INFO_TYPE_OBJECT:
-	  case GI_INFO_TYPE_STRUCT:
-            g_value_init (val, g_registered_type_info_get_g_type (ii));
-	    break;
-
-	  default:
-	    g_base_info_unref (ii);
-	    luaL_error (L, "value_init: bad ti.iface.type=%d", (int) type);
-	  }
-	g_base_info_unref (ii);
-      }
-      break;
-
-    default:
-      luaL_error (L, "value_init: bad ti.tag=%d", (int) tag);
-    }
-}
-
-/* Loads GValue contents from specified stack position, expects ii type.
-   Assumes that val is already inited by value_init(). */
-static int
-value_load (lua_State *L, GValue *val, int narg, GITypeInfo *ti)
-{
-  int vals = 1;
-  switch (g_type_info_get_tag (ti))
-    {
-#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup,	\
-		 val_type, val_get, val_set, ffitype)           \
-      case tag:							\
-	val_set (val, check (L, narg));				\
-	break;
-#include "decltype.h"
-
-    case GI_TYPE_TAG_INTERFACE:
-      {
-	GIBaseInfo* ii = g_type_info_get_interface (ti);
-	switch (g_base_info_get_type (ii))
-	  {
-	  case GI_INFO_TYPE_ENUM:
-	    g_value_set_enum (val, luaL_checkinteger (L, narg));
-	    break;
-
-	  case GI_INFO_TYPE_FLAGS:
-	    g_value_set_flags (val, luaL_checkinteger (L, narg));
-	    break;
-
-	  case GI_INFO_TYPE_OBJECT:
-	    g_value_set_object (val, lgi_compound_get (L, narg, ii, FALSE));
-	    break;
-
-	  case GI_INFO_TYPE_STRUCT:
-	    return luaL_error (L, "don't know how to handle struct->GValue");
-
-	  default:
-	    vals = 0;
-	  }
-	g_base_info_unref (ii);
-      }
-      break;
-
-    default:
-      vals = 0;
-    }
-
-  return vals;
-}
-
-/* Pushes GValue content to stack, assumes that value is of ii type. */
-static int
-value_store (lua_State *L, GValue *val, GITypeInfo *ti)
-{
-  int vals = 1;
-  switch (g_type_info_get_tag (ti))
-    {
-#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup,	\
-		 val_type, val_get, val_set, ffitype)           \
-      case tag:							\
-	push (L, val_get (val));                                \
-	break;
-#include "decltype.h"
-
-    case GI_TYPE_TAG_INTERFACE:
-      {
-	GIBaseInfo* ii = g_type_info_get_interface (ti);
-	switch (g_base_info_get_type (ii))
-	  {
-	  case GI_INFO_TYPE_ENUM:
-	    lua_pushinteger (L, g_value_get_enum (val));
-	    break;
-
-	  case GI_INFO_TYPE_FLAGS:
-	    lua_pushinteger (L, g_value_get_flags (val));
-	    break;
-
-	  case GI_INFO_TYPE_OBJECT:
-            vals = lgi_compound_create (L, ii, g_value_dup_object (val), TRUE) ?
-              1 : 0;
-	    break;
-
-	  case GI_INFO_TYPE_STRUCT:
-	    return luaL_error (L, "don't know how to handle GValue->struct");
-
-	  default:
-	    vals = 0;
-	  }
-	g_base_info_unref (ii);
-      }
-      break;
-
-    default:
-      vals = 0;
-    }
-
-  return vals;
-}
-
 /* Loads reg_typeinfo and ref_repo elements for compound arg on the stack.  */
 static Compound *
 compound_prepare (lua_State *L, int arg)
@@ -322,8 +184,8 @@ lgi_compound_create_object (lua_State *L, GIObjectInfo *oi, int argtable,
 		  /* Initialize and load parameter value from the table
 		     contents. */
 		  ti = g_property_info_get_type (pi);
-		  value_init (L, &param->value, ti);
-		  value_load (L, &param->value, -1, ti);
+		  lgi_value_init (L, &param->value, ti);
+		  lgi_value_load (L, &param->value, -1, ti);
 		  g_base_info_unref (ti);
 		}
 	    }
@@ -418,8 +280,7 @@ lgi_compound_get (lua_State *L, int index, GIBaseInfo *ii, gboolean optional)
 
 /* Processes compound element of 'field' type. */
 static int
-compound_element_field (lua_State* L, gpointer addr, GIFieldInfo* fi, 
-			int newval)
+process_field (lua_State* L, gpointer addr, GIFieldInfo* fi, int newval)
 {
   GIArgument *val = G_STRUCT_MEMBER_P (addr, g_field_info_get_offset (fi));
   GITypeInfo *ti = g_field_info_get_type (fi);
@@ -454,15 +315,14 @@ compound_element_field (lua_State* L, gpointer addr, GIFieldInfo* fi,
 
 /* Processes compound element of 'property' type. */
 static int
-compound_element_property(lua_State *L, gpointer addr, GIPropertyInfo *pi,
-			  int newval)
+process_property (lua_State *L, gpointer addr, GIPropertyInfo *pi, int newval)
 {
   int vals = 0, flags = g_property_info_get_flags (pi);
   GITypeInfo *ti = g_property_info_get_type (pi);
   const gchar *name = g_base_info_get_name (pi);
   GValue val = {0};
 
-  value_init (L, &val, ti);
+  lgi_value_init (L, &val, ti);
 
   if (newval == -1)
     {
@@ -473,7 +333,7 @@ compound_element_property(lua_State *L, gpointer addr, GIPropertyInfo *pi,
 	}
 
       g_object_get_property ((GObject *) addr, name, &val);
-      vals = value_store (L, &val, ti);
+      vals = lgi_value_store (L, &val, ti);
     }
   else
     {
@@ -483,7 +343,7 @@ compound_element_property(lua_State *L, gpointer addr, GIPropertyInfo *pi,
 	  return luaL_argerror (L, 2, "not writable");
 	}
 
-      vals = value_load (L, &val, 3, ti);
+      vals = lgi_value_load (L, &val, 3, ti);
       g_object_set_property ((GObject *) addr, name, &val);
     }
 
@@ -491,11 +351,18 @@ compound_element_property(lua_State *L, gpointer addr, GIPropertyInfo *pi,
   return vals;
 }
 
+/* Processes compound element of 'signal' type. */
+static int
+assign_signal (lua_State *L, GObject *obj, GISignalInfo *pi, int target)
+{
+  return 0;
+}
+
 /* Calls compound_prepare(arg1), checks element (arg2), and processes
    it; either reads it to stack (newval = -1) or sets it to value at
    newval stack. */
 static int
-compound_element (lua_State *L, int newval)
+process_element (lua_State *L, int newval)
 {
   /* Load compound and element. */
   int vals = 0, type;
@@ -526,12 +393,17 @@ compound_element (lua_State *L, int newval)
 	  switch (g_base_info_get_type (ei))
 	    {
 	    case GI_INFO_TYPE_FIELD:
-	      vals = compound_element_field (L, compound->addr, ei, newval);
+	      vals = process_field (L, compound->addr, ei, newval);
 	      break;
 
 	    case GI_INFO_TYPE_PROPERTY:
-	      vals = compound_element_property (L, compound->addr, ei, newval);
+	      vals = process_property (L, compound->addr, ei, newval);
 	      break;
+
+            case GI_INFO_TYPE_SIGNAL:
+              if (newval != -1)
+                assign_signal (L, compound->addr, ei, newval);
+              break;
 
 	    default:
 	      break;
@@ -558,13 +430,13 @@ compound_element (lua_State *L, int newval)
 static int
 compound_index (lua_State *L)
 {
-  return compound_element (L, -1);
+  return process_element (L, -1);
 }
 
 static int
 compound_newindex (lua_State *L)
 {
-  return compound_element (L, 3);
+  return process_element (L, 3);
 }
 
 const struct luaL_reg lgi_compound_reg[] = {
