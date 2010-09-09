@@ -592,4 +592,7 @@ package.loaders[#package.loaders + 1] =
    end
 
 -- Access to module proxies the whole repo, for convenience.
-setmetatable(_M, { __index = function(_, name) return get_namespace(name) end })
+setmetatable(_M, { __index = function(_, name) 
+				local ok, namespace = get_namespace(name)
+				return ok and namespace
+			     end })
