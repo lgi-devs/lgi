@@ -337,6 +337,10 @@ lgi_compound_create_object (lua_State *L, GIObjectInfo *oi, int argtable,
   *addr = g_object_newv (g_registered_type_info_get_g_type (oi), n_params,
 			 params);
 
+  /* Free all parameters from params array. */
+  for (param = params; n_params > 0; param++, n_params--)
+    g_value_unset (&param->value);
+
   /* And wrap a nice userdata around it. */
   return compound_register (L, oi, addr, TRUE, FALSE);
 }
