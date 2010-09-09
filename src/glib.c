@@ -35,6 +35,7 @@ lgi_value_init (lua_State *L, GValue *val, GITypeInfo *ti)
 	  case GI_INFO_TYPE_FLAGS:
 	  case GI_INFO_TYPE_OBJECT:
 	  case GI_INFO_TYPE_STRUCT:
+          case GI_INFO_TYPE_UNION:
             g_value_init (val, g_registered_type_info_get_g_type (ii));
 	    break;
 
@@ -84,6 +85,7 @@ lgi_value_load (lua_State *L, GValue *val, int narg, GITypeInfo *ti)
 	    break;
 
 	  case GI_INFO_TYPE_STRUCT:
+          case GI_INFO_TYPE_UNION:
 	    return luaL_error (L, "don't know how to handle struct->GValue");
 
 	  default:
@@ -133,6 +135,7 @@ lgi_value_store (lua_State *L, GValue *val, GITypeInfo *ti)
 	    break;
 
 	  case GI_INFO_TYPE_STRUCT:
+          case GI_INFO_TYPE_UNION:
 	    return luaL_error (L, "don't know how to handle GValue->struct");
 
 	  default:

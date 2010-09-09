@@ -374,7 +374,8 @@ lgi_callable_call(lua_State* L, gpointer addr, int func_index, int args_index)
                 g_type_info_get_tag (&param->ti) == GI_TYPE_TAG_INTERFACE)
               {
                 GIBaseInfo *ii = g_type_info_get_interface (&param->ti);
-                if (g_base_info_get_type (ii) == GI_INFO_TYPE_STRUCT)
+                GIInfoType type = g_base_info_get_type (ii);
+                if (type == GI_INFO_TYPE_STRUCT || type == GI_INFO_TYPE_UNION)
                   call->args[argi].v_pointer = lgi_compound_struct_new (L, ii);
                 g_base_info_unref (ii);
               }
@@ -497,9 +498,10 @@ closure_callback(ffi_cif* cif, void* ret, void** args, void* closure_arg)
 
   /* Call it. */
 #ifndef NDEBUG
-  g_debug("invoking closure %s.%s/%p/(%d args), stack=%s",
-          g_base_info_get_namespace(callable->info),
-          g_base_info_get_name(callable->info), closure, npos, lgi_sd(L));
+  lua_concat (L, lgi_type_get_name (L, callable->info));
+  g_debug ("invoking closure %s/%p/(%d args), stack=%s",
+           lua_tostring (L, -1), closure, npos, lgi_sd (L));
+  lua_pop (L, 1);
 #endif
   res = lua_pcall(L, npos, LUA_MULTRET, 0);
   npos = 1;

@@ -48,6 +48,7 @@ compound_register (lua_State *L, GIBaseInfo* info, gpointer *addr,
   Compound *compound;
   g_assert (addr != NULL);
   gsize size;
+  GIInfoType info_type;
 
   /* Prepare access to registry and cache. */
   lua_rawgeti (L, LUA_REGISTRYINDEX, lgi_regkey);
@@ -78,7 +79,15 @@ compound_register (lua_State *L, GIBaseInfo* info, gpointer *addr,
     }
 
   /* Create and initialize new userdata instance. */
-  size = alloc_struct ? g_struct_info_get_size (info) : 0;
+  size = 0;
+  if (alloc_struct)
+    {
+      info_type = g_base_info_get_type (info);
+      if (info_type == GI_INFO_TYPE_STRUCT)
+        size = g_struct_info_get_size (info);
+      else if (info_type == GI_INFO_TYPE_UNION)
+        size = g_union_info_get_size (info);
+    }
   compound = lua_newuserdata (L, G_STRUCT_OFFSET (Compound, data) + size);
   luaL_getmetatable (L, LGI_COMPOUND);
   lua_setmetatable (L, -2);

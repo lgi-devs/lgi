@@ -153,6 +153,7 @@ lgi_marshal_2c(lua_State* L, GITypeInfo* ti, GIArgInfo* ai, GITransfer transfer,
 		break;
 
 	      case GI_INFO_TYPE_STRUCT:
+              case GI_INFO_TYPE_UNION:
 	      case GI_INFO_TYPE_OBJECT:
 	      case GI_INFO_TYPE_INTERFACE:
 		val->v_pointer = lgi_compound_get(L, narg, ii, optional);
@@ -316,6 +317,7 @@ lgi_marshal_2lua(lua_State* L, GITypeInfo* ti, GIArgument* val,
 		break;
 
 	      case GI_INFO_TYPE_STRUCT:
+              case GI_INFO_TYPE_UNION:
 	      case GI_INFO_TYPE_OBJECT:
 	      case GI_INFO_TYPE_INTERFACE:
 		handled = lgi_compound_create(L, ii, val->v_pointer, own);

@@ -3,7 +3,7 @@
 require 'lgi'
 local GLib = require 'lgi.GLib'
 local Gio = require 'lgi.Gio'
-local Gtk = require 'lgi.Gtk'
+local Gtk = lgi.Gtk
 
 tests = {}
 
@@ -11,7 +11,7 @@ tests[1] =
    function()
       local stream
       local main = GLib.MainLoop.new(nil, false)
-      file = Gio.file_new_for_path('test.lua')
+      local file = Gio.file_new_for_path('test.lua')
       file:read_async(GLib.PRIORITY_DEFAULT, nil,
 		      function(o, asr)
 			 print(string.format(
@@ -31,18 +31,19 @@ tests[2] =
       local window = Gtk.Window {
 	 title = 'window',
 	 default_width = 400,
-	 default_height = 300
+	 default_height = 300,
+	 on_delete_event = Gtk.main_quit
       }
       local status_bar = Gtk.Statusbar { has_resize_grip = true }
       local toolbar = Gtk.Toolbar()
       local vbox = Gtk.VBox()
       local ctx = status_bar:get_context_id('default')
       status_bar:push(ctx, 'This is statusbar message.')
-      toolbar:insert(Gtk.ToolButton { 
+      toolbar:insert(Gtk.ToolButton {
 			stock_id = 'gtk-quit',
 			on_clicked = Gtk.main_quit
 		     }, -1)
-      toolbar:insert(Gtk.ToolButton { 
+      toolbar:insert(Gtk.ToolButton {
 			stock_id = 'gtk-about',
 			on_clicked = function()
 					local dlg = Gtk.AboutDialog {

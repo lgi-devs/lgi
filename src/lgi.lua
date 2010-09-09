@@ -107,6 +107,7 @@ gi._enums = { InfoType = setmetatable({
 					 OBJECT = 7,
 					 INTERFACE = 8,
 					 CONSTANT = 9,
+					 UNION = 11,
 					 SIGNAL = 13,
 					 PROPERTY = 15,
 					 TYPE = 18,
@@ -378,6 +379,30 @@ typeloader[gi.InfoType.STRUCT] =
       local value = {}
       load_struct(namespace, value, info)
       return value, '_structs'
+   end
+
+typeloader[gi.InfoType.UNION] =
+   function(namespace, info)
+      local value = {}
+      load_compound(
+	 value, info,
+	 {
+	    _methods = {
+	       gi.union_info_get_n_methods,
+	       gi.union_info_get_method,
+	       function(c, n, i)
+		  check_callable(i)
+		  c[n] = core.get(i)
+	       end },
+	    _fields = {
+	       gi.union_info_get_n_fields,
+	       gi.union_info_get_field,
+	       function(c, n, i)
+		  check_type(gi.field_info_get_type(i));
+		  c[n] = i
+	       end },
+	 }, struct_mt)
+      return value, '_unions'
    end
 
 -- Removes accessor methods for properties.  Properties should be accessed as
