@@ -33,13 +33,27 @@ tests[2] =
 	 default_width = 400,
 	 default_height = 300
       }
-      status_bar = Gtk.Statusbar { has_resize_grip = true }
-      toolbar = Gtk.Toolbar()
-      vbox = Gtk.VBox()
-      ctx = status_bar:get_context_id('default')
+      local status_bar = Gtk.Statusbar { has_resize_grip = true }
+      local toolbar = Gtk.Toolbar()
+      local vbox = Gtk.VBox()
+      local ctx = status_bar:get_context_id('default')
       status_bar:push(ctx, 'This is statusbar message.')
-      toolbar:insert(Gtk.ToolButton { stock_id = 'gtk-quit'  }, -1)
-      toolbar:insert(Gtk.ToolButton { stock_id = 'gtk-about' }, -1)
+      toolbar:insert(Gtk.ToolButton { 
+			stock_id = 'gtk-quit',
+			on_clicked = Gtk.main_quit
+		     }, -1)
+      toolbar:insert(Gtk.ToolButton { 
+			stock_id = 'gtk-about',
+			on_clicked = function()
+					local dlg = Gtk.AboutDialog {
+					   program_name = 'LGI Demo',
+					   title = 'About...',
+					   license = 'MIT'
+					}
+					dlg:run()
+					dlg:hide()
+				     end
+		     }, -1)
       vbox:pack_start(toolbar, false, false, 0)
       vbox:pack_start(Gtk.Label { label = 'Contents' }, true, true, 0)
       vbox:pack_end(status_bar, false, false, 0)
