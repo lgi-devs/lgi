@@ -72,22 +72,6 @@ function struct_mt.__call(type, fields)
    return struct
 end
 
--- Similar metatable for objects, again implementing object
--- construction on __call.
-local class_mt = { __index = find_in_compound }
-function class_mt.__call(class, fields)
-   local params = {}
-   for name, value in pairs(fields or {}) do
-      local prop = class[name]
-      if not prop then
-	 error(string.format("creating '%s': unknown property '%s'",
-			     class[0].name, name))
-      end
-      params[prop] = value
-   end
-   return assert(core.get(class[0].info, params))
-end
-
 -- Metatable for bitflags tables, resolving arbitrary number to the
 -- table containing symbolic names of contained bits.
 local bitflags_mt = {}
@@ -123,6 +107,8 @@ gi._enums = { InfoType = setmetatable({
 					 OBJECT = 7,
 					 INTERFACE = 8,
 					 CONSTANT = 9,
+					 SIGNAL = 13,
+					 PROPERTY = 15,
 					 TYPE = 18,
 				      }, enum_mt),
 	      TypeTag = setmetatable({
@@ -158,15 +144,51 @@ local function get_symbols(into, symbols, container)
    end
 end
 
+-- Metatable for classes, again implementing object
+-- construction on __call.
+local class_mt = { __index = find_in_compound }
+function class_mt.__call(class, fields)
+   local params = {}
+   local sigs = {}
+
+   -- Process 'fields' table, create constructor property table and signals
+   -- table.
+   for name, value in pairs(fields or {}) do
+      local info, proptype = class[name]
+      if info then
+	 proptype = gi.base_info_get_type(info)
+	 if proptype == gi.InfoType.SIGNAL then
+	    sigs[name] = value
+	 elseif proptype == gi.InfoType.PROPERTY then
+	    params[info] = value
+	 else
+	    info = nil
+	 end
+      end
+      if not info then
+	 error(string.format("creating '%s': unknown property '%s'",
+			     class[0].name, name))
+      end
+   end
+
+   -- Create the object.
+   local obj = assert(core.get(class[0].info, params))
+
+   -- Attach signals previously filtered out from creation.
+   for name, func in pairs(sigs) do obj[name] = func end
+
+   return obj
+end
+
 gi._classes = {
-   Repository = setmetatable({ _methods = {} }, compound_mt),
+   Repository = setmetatable({ _methods = {} }, class_mt),
    Typelib = setmetatable(
       { [0] = { name = 'GIRepository.Typelib',
 		type = gi.InfoType.OBJECT,
 		gtype = assert(core.gtype('Typelib'))
 	     },
 	_methods = {}
-     }, compound_mt),
+     }, class_mt),
 }
 get_symbols(gi._classes.Repository._methods,
 	    { 'require', 'find_by_name', 'get_n_infos',
@@ -574,7 +596,7 @@ load_class(gi, gi._classes.Typelib,
 gi.BaseInfo[0].info = assert(core.find('BaseInfo'))
 
 -- Helper, safe repo dereferencing.
-local function get_namespace(name) 
+local function get_namespace(name)
    return pcall(function() return repo[name] end)
 end
 
@@ -592,7 +614,7 @@ package.loaders[#package.loaders + 1] =
    end
 
 -- Access to module proxies the whole repo, for convenience.
-setmetatable(_M, { __index = function(_, name) 
+setmetatable(_M, { __index = function(_, name)
 				local ok, namespace = get_namespace(name)
 				return ok and namespace
 			     end })

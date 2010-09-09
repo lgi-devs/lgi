@@ -351,11 +351,29 @@ process_property (lua_State *L, gpointer addr, GIPropertyInfo *pi, int newval)
   return vals;
 }
 
-/* Processes compound element of 'signal' type. */
-static int
-assign_signal (lua_State *L, GObject *obj, GISignalInfo *pi, int target)
+static void
+lgi_g_closure_destroy (gpointer user_data, GClosure *closure)
 {
-  return 0;
+  lgi_closure_destroy (user_data);
+}
+
+/* Connects new handler for specified signal. */
+static gulong
+assign_signal (lua_State *L, GObject *obj, GISignalInfo *pi, int target,
+               GQuark detail, gboolean after)
+{
+  gpointer lgi_closure, call_addr;
+  GClosure *g_closure;
+  gulong handler_id;
+  guint signal_id;
+
+  lgi_closure = lgi_closure_create (L, pi, target, FALSE, &call_addr);
+  g_closure = g_cclosure_new (call_addr, lgi_closure, lgi_g_closure_destroy);
+  signal_id = g_signal_lookup (g_base_info_get_name (pi),
+                               G_TYPE_FROM_INSTANCE (obj));
+  handler_id = g_signal_connect_closure_by_id (obj, signal_id, detail,
+                                               g_closure, after);
+  return handler_id;
 }
 
 /* Calls compound_prepare(arg1), checks element (arg2), and processes
@@ -402,7 +420,7 @@ process_element (lua_State *L, int newval)
 
             case GI_INFO_TYPE_SIGNAL:
               if (newval != -1)
-                assign_signal (L, compound->addr, ei, newval);
+                assign_signal (L, compound->addr, ei, newval, 0, FALSE);
               break;
 
 	    default:

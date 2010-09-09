@@ -555,7 +555,9 @@ lgi_closure_destroy(gpointer user_data)
   lua_State* L = lgi_main_thread_state;
   Closure* closure = user_data;
 
+#ifndef NDEBUG
   g_debug("destroying closure %p", closure);
+#endif
   luaL_unref(L, LUA_REGISTRYINDEX, closure->callable_ref);
   luaL_unref(L, LUA_REGISTRYINDEX, closure->target_ref);
   ffi_closure_free(closure);
@@ -595,6 +597,11 @@ lgi_closure_create(lua_State* L, GICallableInfo* ci, int target,
       return NULL;
     }
 
+#ifndef NDEBUG
+  lua_concat (L, lgi_type_get_name (L, ci));
+  g_debug("created closure %p(%s)", closure, lua_tostring (L, -1));
+  lua_pop (L, 1);
+#endif
   return closure;
 }
 
