@@ -231,6 +231,9 @@ get_symbols(
       'field_info_get_type',
       })
 
+-- Remember default repository.
+local ir = gi.Repository.get_default()
+
 loginfo 'repo.GIRepository pre-populated'
 
 -- Weak table containing symbols which currently being loaded.	These
@@ -531,7 +534,7 @@ local function get_symbol(namespace, symbol)
    if value then return value end
 
    -- Lookup baseinfo of requested symbol in the repo.
-   local info = gi.Repository.find_by_name(nil, namespace[0].name, symbol)
+   local info = ir:find_by_name(namespace[0].name, symbol)
 
    -- Store the symbol into the in-load table, because we have to
    -- avoid infinte recursion which might happen during type
@@ -578,11 +581,11 @@ local function load_namespace(into, name)
    if ok and override then into[0].hook = override.hook end
 
    -- Load the typelibrary for the namespace.
-   into[0].typelib = assert(gi.Repository.require(nil, name, nil, 0))
-   into[0].version = gi.Repository.get_version(nil, name)
+   into[0].typelib = assert(ir:require(name, nil, 0))
+   into[0].version = ir:get_version(name)
 
    -- Load all namespace dependencies.
-   for _, name in pairs(gi.Repository.get_dependencies(nil, name) or {}) do
+   for _, name in pairs(ir:get_dependencies(name) or {}) do
       into[0].dependencies[name] = repo[string.match(name, '(.+)-.+')]
    end
 
@@ -594,8 +597,8 @@ local function load_namespace(into, name)
 	 -- Iterate through all items in the namespace and dereference them,
 	 -- which causes them to be loaded in and cached inside the namespace
 	 -- table.
-	 for i = 0, gi.Repository.get_n_infos(nil, name) - 1 do
-	    local info = gi.Repository.get_info(nil, name, i)
+	 for i = 0, ir:get_n_infos(name) - 1 do
+	    local info = ir:get_info(name, i)
 	    pcall(get_symbol, into, gi.BaseInfo.get_name(info))
 	 end
       end
@@ -615,9 +618,9 @@ gi._enums.ArrayType = nil
 gi._enums.FunctionInfoFlags = nil
 load_namespace(gi, 'GIRepository')
 load_class(gi, gi._classes.Repository,
-	   gi.Repository.find_by_name(nil, gi[0].name, 'Repository'))
+	   ir:find_by_name(gi[0].name, 'Repository'))
 load_struct(gi, gi._structs.Typelib,
-	    gi.Repository.find_by_name(nil, gi[0].name, 'Typelib'))
+	    ir:find_by_name(gi[0].name, 'Typelib'))
 gi.BaseInfo[0].info = assert(core.find('BaseInfo'))
 
 -- Helper, safe repo dereferencing.
