@@ -78,4 +78,5 @@ end
 
 -- Run all tests from commandline, or all tests sequentially, if not
 -- commandline is given.
-for _, name in ipairs(#arg > 0 and arg or tests) do runtest(name) end
+local args = {...}
+for _, name in ipairs(#args > 0 and args or tests) do runtest(name) end

@@ -132,10 +132,14 @@ gi._enums = { InfoType = setmetatable({
 gi._structs = {
    BaseInfo = setmetatable(
       { [0] = { name = 'GIRepository.BaseInfo',
-		type = gi.InfoType.STRUCT,
 		gtype = assert(core.gtype('BaseInfo')) },
 	_methods = {}
-     }, struct_mt)
+     }, struct_mt),
+   Typelib = setmetatable(
+      { [0] = { name = 'GIRepository.Typelib',
+		gtype = assert(core.gtype('Typelib')) },
+	_methods = {}
+     }, struct_mt),
 }
 
 -- Loads given set of symbols into table.
@@ -182,22 +186,18 @@ function class_mt.__call(class, fields)
 end
 
 gi._classes = {
-   Repository = setmetatable({ _methods = {} }, class_mt),
-   Typelib = setmetatable(
-      { [0] = { name = 'GIRepository.Typelib',
-		type = gi.InfoType.OBJECT,
-		gtype = assert(core.gtype('Typelib'))
+   Repository = setmetatable(
+      { [0] = { name = 'GIRepository.Repository',
+		gtype = assert(core.gtype('Repository'))
 	     },
-	_methods = {}
+	_methods = {} 
      }, class_mt),
 }
 get_symbols(gi._classes.Repository._methods,
-	    { 'require', 'find_by_name', 'get_n_infos',
-	      'get_info', 'get_dependencies',
-	      'get_version', }, 'Repository')
+	    { 'get_default', 'require', 'find_by_name', 'get_n_infos',
+	      'get_info', 'get_dependencies', 'get_version', }, 'Repository')
 get_symbols(gi._structs.BaseInfo._methods,
-	    { 'is_deprecated', 'get_name',
-	      'get_namespace', }, 'BaseInfo')
+	    { 'is_deprecated', 'get_name', 'get_namespace', }, 'BaseInfo')
 gi._functions = {}
 get_symbols(
    gi._functions, {
@@ -616,7 +616,7 @@ gi._enums.FunctionInfoFlags = nil
 load_namespace(gi, 'GIRepository')
 load_class(gi, gi._classes.Repository,
 	   gi.Repository.find_by_name(nil, gi[0].name, 'Repository'))
-load_class(gi, gi._classes.Typelib,
+load_struct(gi, gi._structs.Typelib,
 	    gi.Repository.find_by_name(nil, gi[0].name, 'Typelib'))
 gi.BaseInfo[0].info = assert(core.find('BaseInfo'))
 
