@@ -114,7 +114,7 @@ gpointer lgi_compound_object_new (lua_State *L, GIObjectInfo *ii, int argtable);
    compound object, returns NULL if Lua-stack value is nil and optional is
    TRUE. */
 gpointer lgi_compound_get (lua_State *L, int arg, GIBaseInfo *ii,
-                          gboolean optional);
+                           gboolean optional);
 
 /* Initializes type of GValue to specified ti. */
 void lgi_value_init (lua_State *L, GValue *val, GITypeInfo *ti);

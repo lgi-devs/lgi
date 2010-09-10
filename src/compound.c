@@ -30,15 +30,35 @@ typedef struct _Compound
 
 /* Loads reg_typeinfo and ref_repo elements for compound arg on the stack.  */
 static Compound *
-compound_prepare (lua_State *L, int arg)
+compound_prepare (lua_State *L, int arg, gboolean throw)
 {
-  Compound *compound = luaL_checkudata (L, arg, LGI_COMPOUND);
-  lua_rawgeti (L, LUA_REGISTRYINDEX, lgi_regkey);
-  lua_rawgeti (L, -1, LGI_REG_TYPEINFO);
-  lua_replace (L, -2);
-  lua_rawgeti (L, -1, compound->ref_repo);
-  g_assert (!lua_isnil (L, -1));
-  return compound;
+  /* Check metatable.  Don't use luaL_checkudata, because we want better type
+     specified in the error message in case of type mismatch. */
+  if (lua_getmetatable (L, arg))
+    {
+      lua_getfield (L, LUA_REGISTRYINDEX, LGI_COMPOUND);
+      int equal = lua_equal (L, -1, -2);
+      lua_pop (L, 2);
+
+      if (equal)
+        {
+          /* Type is fine, clean metatables from stack and do real
+             preparation. */
+          Compound *compound = lua_touserdata (L, arg);
+          lua_rawgeti (L, LUA_REGISTRYINDEX, lgi_regkey);
+          lua_rawgeti (L, -1, LGI_REG_TYPEINFO);
+          lua_replace (L, -2);
+          lua_rawgeti (L, -1, compound->ref_repo);
+          g_assert (!lua_isnil (L, -1));
+          return compound;
+        }
+    }
+
+  /* Report error if requested. */
+  if (throw)
+    luaL_typerror (L, arg, "lgi.Object");
+
+  return NULL;
 }
 
 static gboolean
@@ -219,7 +239,7 @@ lgi_compound_object_new (lua_State *L, GIObjectInfo *oi, int argtable)
 static int
 compound_gc (lua_State *L)
 {
-  Compound *compound = compound_prepare (L, 1);
+  Compound *compound = compound_prepare (L, 1, TRUE);
   if (compound->owns)
     {
       /* Check the gtype of the compound. */
@@ -244,7 +264,7 @@ compound_gc (lua_State *L)
 static int
 compound_tostring (lua_State *L)
 {
-  Compound *compound = compound_prepare (L, 1);
+  Compound *compound = compound_prepare (L, 1, TRUE);
   lua_pushfstring (L, "lgi %p:", compound);
   lua_rawgeti (L, -2, 0);
   lua_getfield (L, -1, "name");
@@ -270,21 +290,35 @@ lgi_compound_get (lua_State *L, int index, GIBaseInfo *ii, gboolean optional)
 {
   Compound *compound;
   GType requested_type, real_type;
+  int vals, gottype;
 
   if (optional && lua_isnoneornil (L, index))
     return NULL;
 
   /* Check for type ancestry. */
-  compound = compound_prepare (L, index);
-  lua_rawgeti (L, -1, 0);
-  lua_getfield (L, -1, "gtype");
-  real_type = lua_tointeger (L, -1);
-  requested_type = g_registered_type_info_get_g_type (ii);
-  if (!g_type_is_a (real_type, requested_type))
-    luaL_argerror (L, index, g_type_name (requested_type));
+  compound = compound_prepare (L, index, FALSE);
+  if (compound != NULL)
+    {
+      lua_rawgeti (L, -1, 0);
+      lua_getfield (L, -1, "gtype");
+      real_type = lua_tointeger (L, -1);
+      requested_type = g_registered_type_info_get_g_type (ii);
+      lua_pop (L, 4);
+      if (g_type_is_a (real_type, requested_type))
+        return compound->addr;
+    }
+  else
+    /* Remove items stored by compound_prepare(). */
+    lua_pop (L, 2);
 
-  lua_pop (L, 4);
-  return compound->addr;
+  /* Put exact requested type into the error message. */
+  gottype = lua_type (L, index);
+  vals = lgi_type_get_name (L, ii);
+  lua_pushstring (L, " expected, got ");
+  lua_pushstring (L, lua_typename (L, gottype));
+  lua_concat (L, vals + 2);
+  luaL_argerror (L, index - 1, lua_tostring (L, -1));
+  return NULL;
 }
 
 /* Processes compound element of 'field' type. */
@@ -393,7 +427,7 @@ process_element (lua_State *L, int newval)
 {
   /* Load compound and element. */
   int vals = 0, type;
-  Compound *compound = compound_prepare (L, 1);
+  Compound *compound = compound_prepare (L, 1, TRUE);
   lua_pushvalue (L, 2);
   lua_gettable (L, -2);
   type = lua_type (L, -1);

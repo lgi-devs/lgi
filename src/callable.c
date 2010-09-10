@@ -330,7 +330,7 @@ lgi_callable_call(lua_State* L, gpointer addr, int func_index, int args_index)
     {
       call->args[0].v_pointer =
 	lgi_compound_get(L, args_index,
-			 g_base_info_get_container(callable->info), TRUE);
+			 g_base_info_get_container(callable->info), FALSE);
       call->ffi_args[0] = &call->args[0];
       lua_argi++;
     }

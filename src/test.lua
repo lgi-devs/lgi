@@ -19,7 +19,7 @@ function tests.asyncread()
 		      stream = file:read_finish(asr)
 		      main:quit()
 		   end)
-   main.run()
+   main:run()
    assert(stream)
 end
 
