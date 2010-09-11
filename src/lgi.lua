@@ -65,7 +65,11 @@ local compound_mt = { __index = find_in_compound }
 -- translating to creating new structure instance (i.e. constructor).
 local struct_mt = { __index = find_in_compound }
 function struct_mt.__call(type, fields)
-   local struct = assert(core.get(type[0].info))
+   -- Create the structure instance.
+   local info = assert(ri:find_by_gtype(type[0].gtype))
+   local struct = assert(core.get(info))
+
+   -- Set values of fields.
    for name, value in pairs(fields or {}) do
       struct[name] = value
    end
@@ -93,10 +97,14 @@ function enum_mt.__index(enum, value)
    end
 end
 
+-- G_TYPE_NONE constant.
+local G_TYPE_NONE = 4 -- (1 << 2)
+
 -- Namespace table for GIRepository, populated with basic methods
 -- manually.  Later it will be converted to full-featured repo namespace.
 local gi = setmetatable({}, compound_mt)
 core.repo.GIRepository = gi
+local ir
 
 gi._enums = { InfoType = setmetatable({
 					 FUNCTION = 1,
@@ -139,7 +147,7 @@ gi._structs = {
       { [0] = { name = 'GIRepository.Typelib',
 		gtype = assert(core.gtype('Typelib')) },
 	_methods = {}
-     }, struct_mt),
+     }, compound_mt),
 }
 
 -- Loads given set of symbols into table.
@@ -155,6 +163,9 @@ local class_mt = { __index = find_in_compound }
 function class_mt.__call(class, fields)
    local params = {}
    local sigs = {}
+
+   -- Get BaseInfo from gtype.
+   local info = assert(ir:find_by_gtype(class[0].gtype))
 
    -- Process 'fields' table, create constructor property table and signals
    -- table.
@@ -177,7 +188,7 @@ function class_mt.__call(class, fields)
    end
 
    -- Create the object.
-   local obj = assert(core.get(class[0].info, params))
+   local obj = assert(core.get(info, params))
 
    -- Attach signals previously filtered out from creation.
    for name, func in pairs(sigs) do obj[name] = func end
@@ -194,8 +205,9 @@ gi._classes = {
      }, class_mt),
 }
 get_symbols(gi._classes.Repository._methods,
-	    { 'get_default', 'require', 'find_by_name', 'get_n_infos',
-	      'get_info', 'get_dependencies', 'get_version', }, 'Repository')
+	    { 'get_default', 'require', 'find_by_name', 'find_by_gtype',
+	      'get_n_infos', 'get_info', 'get_dependencies', 'get_version', }, 
+	    'Repository')
 get_symbols(gi._structs.BaseInfo._methods,
 	    { 'is_deprecated', 'get_name', 'get_namespace', }, 'BaseInfo')
 gi._functions = {}
@@ -232,7 +244,7 @@ get_symbols(
       })
 
 -- Remember default repository.
-local ir = gi.Repository.get_default()
+ir = gi.Repository.get_default()
 
 loginfo 'repo.GIRepository pre-populated'
 
@@ -298,15 +310,6 @@ typeloader[gi.InfoType.CONSTANT] =
       return core.get(info), '_constants'
    end
 
--- Installs _meta table into given compound according to specified info.
-local function add_compound_meta(compound, info)
-   compound[0] = compound[0] or {}
-   compound[0].info = info
-   compound[0].gtype = gi.registered_type_info_get_g_type(info)
-   compound[0].name = gi.BaseInfo.get_namespace(info) .. '.' ..
-   gi.BaseInfo.get_name(info)
-end
-
 local function load_enum(info, meta)
    local value = {}
 
@@ -335,14 +338,23 @@ typeloader[gi.InfoType.FLAGS] =
 
 -- Loads all fields, consts, properties, methods and interfaces of given
 -- object.
-local function load_compound(into, info, loads, mt)
-   setmetatable(into, mt)
-   add_compound_meta(into, info)
+local function load_compound(compound, info, loads, mt)
+   -- Fill in meta of the compound.
+   compound[0] = compound[0] or {}
+   compound[0].gtype = gi.registered_type_info_get_g_type(info)
+   compound[0].name = gi.BaseInfo.get_namespace(info) .. '.' ..
+   gi.BaseInfo.get_name(info)
+
+   -- Avoid installing tables with constructor into foreign structures.
+   setmetatable(compound, 
+		compound[0].gtype == G_TYPE_NONE and compound_mt or mt)
+
+   -- Iterate and load all groups.
    for name, gets in pairs(loads) do
       for i = 0, gets[1](info) - 1 do
-	 into[name] = into[name] or {}
+	 compound[name] = rawget(compound, name) or {}
 	 local mi = gets[2](info, i)
-	 pcall(gets[3], into[name], gi.BaseInfo.get_name(mi), mi)
+	 pcall(gets[3], compound[name], gi.BaseInfo.get_name(mi), mi)
       end
    end
 end
