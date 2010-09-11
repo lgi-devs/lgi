@@ -250,10 +250,10 @@ lgi_callable_create(lua_State* L, GICallableInfo* info)
          fields as internal. */
       arg = g_arg_info_get_closure(&param->ai);
       if (arg > 0 && arg < nargs)
-        callable->params[arg - 1].internal = TRUE;
+        callable->params[arg].internal = TRUE;
       arg = g_arg_info_get_destroy(&param->ai);
       if (arg > 0 && arg < nargs)
-        callable->params[arg - 1].internal = TRUE;
+        callable->params[arg].internal = TRUE;
 
       /* Similarly for array length field. */
       if (g_type_info_get_tag(&param->ti) == GI_TYPE_TAG_ARRAY &&
