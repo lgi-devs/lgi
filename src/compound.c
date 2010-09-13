@@ -135,7 +135,7 @@ compound_register (lua_State *L, GIBaseInfo* info, gpointer *addr,
 
   /* If we are storing owned gobject, make sure that we fully sink them.  We
      are not interested in floating refs. */
-  if (g_base_info_get_type (info) == GI_INFO_TYPE_OBJECT &&
+  if (owns && g_base_info_get_type (info) == GI_INFO_TYPE_OBJECT &&
       g_object_is_floating (*addr))
     g_object_ref_sink (*addr);
 
