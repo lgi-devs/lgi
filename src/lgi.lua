@@ -125,6 +125,7 @@ gi._enums = { InfoType = setmetatable({
 					INTERFACE = 16,
 					GLIST = 17,
 					GSLIST = 18,
+					GHASH = 19,
 				     }, enum_mt),
 	      ArrayType = setmetatable({
 					  C = 0,
@@ -272,6 +273,8 @@ local function check_type(typeinfo)
       if atype ~= gi.ArrayType.C and atype ~= gi.ArrayType.ARRAY then
 	 error("dependent type array bad type " .. atype)
       end
+      bi = gi.type_info_get_param_type(typeinfo, 0)
+   elseif tag == gi.TypeTag.GLIST or tag == gi.TypeTag.GSLIST then
       bi = gi.type_info_get_param_type(typeinfo, 0)
    elseif tag == gi.TypeTag.INTERFACE then
       bi = gi.type_info_get_interface(typeinfo)

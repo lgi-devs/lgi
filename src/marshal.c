@@ -2,7 +2,7 @@
  * Dynamic Lua binding to GObject using dynamic gobject-introspection.
  *
  * Copyright (c) 2010 Pavel Holejsovsky
- * Licensed under the MIT license: 
+ * Licensed under the MIT license:
  * http://www.opensource.org/licenses/mit-license.php
  *
  * Implements marshalling, i.e. transferring values between Lua and GLib/C.
@@ -93,7 +93,7 @@ marshal_2c_callable(lua_State* L, GICallableInfo* ci, GIArgInfo* ai,
 {
   int nret = 0;
   GIScopeType scope = g_arg_info_get_scope(ai);
-  
+
   /* Create the closure. */
   gpointer closure = lgi_closure_create(L, ci, narg,
                                         scope == GI_SCOPE_TYPE_ASYNC,
@@ -218,7 +218,7 @@ marshal_2lua_simple(lua_State* L, GITypeTag tag, GIArgument* val, gboolean own)
 }
 
 static gboolean
-marshal_2lua_carray(lua_State* L, GITypeInfo* ti, GIArgument* val, 
+marshal_2lua_carray(lua_State* L, GITypeInfo* ti, GIArgument* val,
 		    GITransfer xfer, GICallableInfo* ci, GIArgument** args)
 {
   gint len, index;
@@ -267,7 +267,7 @@ marshal_2lua_carray(lua_State* L, GITypeInfo* ti, GIArgument* val,
 	    break;
 
 	  /* Store value into the table. */
-	  if (lgi_marshal_2lua(L, eti, eval, 
+	  if (lgi_marshal_2lua(L, eti, eval,
 			       (xfer == GI_TRANSFER_EVERYTHING) ?
 			       GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING,
 			       NULL, NULL))
@@ -280,6 +280,35 @@ marshal_2lua_carray(lua_State* L, GITypeInfo* ti, GIArgument* val,
 
       /* Free element's typeinfo. */
       g_base_info_unref(eti);
+    }
+
+  return TRUE;
+}
+
+static gboolean
+marshal_2lua_list (lua_State* L, GITypeInfo* ti, GIArgument* val,
+                   GITransfer xfer)
+{
+  GSList *list;
+  GITypeInfo *eti = g_type_info_get_param_type (ti, 0);
+  int index;
+
+  /* Create table to which we will deserialize the list. */
+  lua_createtable(L, 0, 0);
+
+  /* Go through the list and push elements into the table. */
+  for (list = (GSList *) val->v_pointer, index = 0; list != NULL;
+       list = g_slist_next (list))
+    {
+      /* Get access to list item. */
+      GIArgument *eval = list->data;
+
+      /* Store it into the table. */
+      if (lgi_marshal_2lua (L, eti, eval,
+                            (xfer == GI_TRANSFER_EVERYTHING) ?
+                            GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING,
+                            NULL, NULL))
+        lua_rawseti(L, -2, ++index);
     }
 
   return TRUE;
@@ -311,7 +340,7 @@ lgi_marshal_2lua(lua_State* L, GITypeInfo* ti, GIArgument* val,
 	      case GI_INFO_TYPE_ENUM:
 	      case GI_INFO_TYPE_FLAGS:
 		/* Directly store underlying value. */
-		handled = 
+		handled =
 		  marshal_2lua_simple(L, g_enum_info_get_storage_type(ii),
 				      val, own);
 		break;
@@ -344,6 +373,11 @@ lgi_marshal_2lua(lua_State* L, GITypeInfo* ti, GIArgument* val,
 	      }
 	  }
 	  break;
+
+        case GI_TYPE_TAG_GSLIST:
+        case GI_TYPE_TAG_GLIST:
+          handled = marshal_2lua_list (L, ti, val, xfer);
+          break;
 
 	default:
 	  g_warning("unable to marshal2lua type with tag `%d'", (int) tag);
