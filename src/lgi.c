@@ -175,8 +175,34 @@ lgi_gtype(lua_State* L)
     }
 
   /* Create new IBaseInfo structure and return it. */
-  lua_pushinteger(L, g_registered_type_info_get_g_type(info));
+  lua_pushnumber(L, g_registered_type_info_get_g_type(info));
   g_base_info_unref(info);
+  return 1;
+}
+
+/* Checks, whether given compound is object which can be cast to requested
+   gtype, and if yes, creates new compound of requested type. */
+static int
+lgi_cast (lua_State *L)
+{
+  /* Get the source object. */
+  GObject *obj = lgi_compound_get (L, 1, NULL, FALSE);
+  GType gtype = luaL_checknumber (L, 2);
+
+  /* Check, that casting is possible. */
+  if (g_type_is_a (G_TYPE_FROM_INSTANCE (obj), gtype))
+    {
+      GIBaseInfo *info = g_irepository_find_by_gtype (NULL, gtype);
+      if (info != NULL)
+        {
+          lgi_compound_create (L, info, g_object_ref (obj), TRUE);
+          g_base_info_unref (info);
+          return 1;
+        }
+    }
+
+  /* Failed somehow, avoid casting. */
+  lua_pushnil (L);
   return 1;
 }
 
@@ -233,6 +259,7 @@ static const struct luaL_reg lgi_reg[] = {
   { "find", lgi_find },
   { "get", lgi_get },
   { "gtype", lgi_gtype },
+  { "cast", lgi_cast },
 #ifndef NDEBUG
   { "log", lgi_log },
 #endif

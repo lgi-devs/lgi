@@ -312,7 +312,8 @@ lgi_compound_get (lua_State *L, int index, GIBaseInfo *ii, gboolean optional)
       lua_rawgeti (L, -1, 0);
       lua_getfield (L, -1, "gtype");
       real_type = lua_tointeger (L, -1);
-      requested_type = g_registered_type_info_get_g_type (ii);
+      requested_type = (ii != NULL) ?
+        g_registered_type_info_get_g_type (ii) : G_TYPE_OBJECT;
       lua_pop (L, 4);
       if (g_type_is_a (real_type, requested_type))
         return compound->addr;
@@ -323,7 +324,13 @@ lgi_compound_get (lua_State *L, int index, GIBaseInfo *ii, gboolean optional)
 
   /* Put exact requested type into the error message. */
   gottype = lua_type (L, index);
-  vals = lgi_type_get_name (L, ii);
+  if (ii != NULL)
+    vals = lgi_type_get_name (L, ii);
+  else
+    {
+      lua_pushstring (L, "GObject.Object");
+      vals = 1;
+    }
   lua_pushstring (L, " expected, got ");
   lua_pushstring (L, lua_typename (L, gottype));
   lua_concat (L, vals + 2);

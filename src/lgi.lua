@@ -158,41 +158,52 @@ local function get_symbols(into, symbols, container)
 end
 
 -- Metatable for classes, again implementing object
--- construction on __call.
+-- construction or casting on __call.
 local class_mt = { __index = find_in_compound }
-function class_mt.__call(class, fields)
-   local params = {}
-   local sigs = {}
+function class_mt.__call(class, param)
+   local obj
+   if type(param) == 'userdata' then
+      -- Cast operator, 'param' is source object which should be cast.
+      obj = core.cast(param, class[0].gtype)
+      if not obj then
+	 error(string.format("`%s' cannot be cast to `%s'", tostring(param),
+			     class[0].name));
+      end
+   else
+      -- Constructor, 'param' contains table with properties/signals to
+      -- initialize.
+      local params = {}
+      local sigs = {}
 
-   -- Get BaseInfo from gtype.
-   local info = assert(ir:find_by_gtype(class[0].gtype))
+      -- Get BaseInfo from gtype.
+      local info = assert(ir:find_by_gtype(class[0].gtype))
 
-   -- Process 'fields' table, create constructor property table and signals
-   -- table.
-   for name, value in pairs(fields or {}) do
-      local info, proptype = class[name]
-      if info then
-	 proptype = gi.base_info_get_type(info)
-	 if proptype == gi.InfoType.SIGNAL then
-	    sigs[name] = value
-	 elseif proptype == gi.InfoType.PROPERTY then
-	    params[info] = value
-	 else
-	    info = nil
+      -- Process 'param' table, create constructor property table and signals
+      -- table.
+      for name, value in pairs(param or {}) do
+	 local info, proptype = class[name]
+	 if info then
+	    proptype = gi.base_info_get_type(info)
+	    if proptype == gi.InfoType.SIGNAL then
+	       sigs[name] = value
+	    elseif proptype == gi.InfoType.PROPERTY then
+	       params[info] = value
+	    else
+	       info = nil
+	    end
+	 end
+	 if not info then
+	    error(string.format("creating '%s': unknown property '%s'",
+				class[0].name, name))
 	 end
       end
-      if not info then
-	 error(string.format("creating '%s': unknown property '%s'",
-			     class[0].name, name))
-      end
+
+      -- Create the object.
+      obj = assert(core.get(info, params))
+
+      -- Attach signals previously filtered out from creation.
+      for name, func in pairs(sigs) do obj[name] = func end
    end
-
-   -- Create the object.
-   local obj = assert(core.get(info, params))
-
-   -- Attach signals previously filtered out from creation.
-   for name, func in pairs(sigs) do obj[name] = func end
-
    return obj
 end
 
