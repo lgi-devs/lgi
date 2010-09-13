@@ -134,10 +134,12 @@ compound_register (lua_State *L, GIBaseInfo* info, gpointer *addr,
   compound->owns = owns;
 
   /* If we are storing owned gobject, make sure that we fully sink them.  We
-     are not interested in floating refs. */
+     are not interested in floating refs. Note that there is ugly exception;
+     GtkWindow's constructor returns non-floating object, but it keeps the
+     reference to window internally, so we want acquire one extra reference. */
   if (owns && g_base_info_get_type (info) == GI_INFO_TYPE_OBJECT &&
-      g_object_is_floating (*addr))
-    g_object_ref_sink (*addr);
+      (G_IS_INITIALLY_UNOWNED(*addr) || g_object_is_floating (*addr)))
+      g_object_ref_sink (*addr);
 
   /* Store newly created compound to the cache. */
   lua_pushlightuserdata (L, compound);
@@ -289,7 +291,7 @@ compound_error (lua_State *L, const char *errmsg, int element)
   /* Prepare name of the compound. */
   lua_rawgeti (L, -2, 0);
   lua_getfield (L, -1, "name");
-  return luaL_error (L, errmsg, lua_tostring (L, -1), 
+  return luaL_error (L, errmsg, lua_tostring (L, -1),
 		     lua_tostring (L, element));
 }
 
