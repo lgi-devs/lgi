@@ -5,12 +5,27 @@ local GLib = require 'lgi.GLib'
 local Gio = require 'lgi.Gio'
 local Gtk = lgi.Gtk
 
-local tests = { 'gioloadfile', 'gtkhello' }
+local tests = { 'gioloadfile', 'gioloadfile_async', 'gtkhello' }
 
 function tests.gioloadfile()
    local file = Gio.file_new_for_path('test.lua')
    local ok, contents, length, etag = file:load_contents()
-   print(ok, #contents, length, etag)
+   assert(ok and type(contents) == 'string' and type(length) == 'number' and
+    type(etag) == 'string')
+end
+
+function tests.gioloadfile_async()
+   local file = Gio.file_new_for_path('test.lua')
+   local ok, contents, length, etag 
+   local main = GLib.MainLoop.new()
+   file:load_contents_async(nil, function(_, result)
+				    ok, contents, length, etag = 
+				       file:load_contents_finish(result)
+				    main:quit()
+				 end)
+   main:run()
+   assert(ok and type(contents) == 'string' and type(length) == 'number' and
+    type(etag) == 'string')
 end
 
 function tests.gtkhello()
