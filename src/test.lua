@@ -35,7 +35,10 @@ function tests.gtkhello()
       title = 'window',
       default_width = 400,
       default_height = 300,
-      on_delete_event = Gtk.main_quit
+      on_delete_event = function(window) 
+			   window:destroy() 
+			   Gtk.main_quit() 
+			end
    }
    local status_bar = Gtk.Statusbar { has_resize_grip = true }
    local toolbar = Gtk.Toolbar()
@@ -44,7 +47,10 @@ function tests.gtkhello()
    status_bar:push(ctx, 'This is statusbar message.')
    toolbar:insert(Gtk.ToolButton {
 		     stock_id = 'gtk-quit',
-		     on_clicked = Gtk.main_quit
+		     on_clicked = function()
+				     window:destroy()
+				     Gtk.main_quit()
+				  end,
 		  }, -1)
    toolbar:insert(Gtk.ToolButton {
 		     stock_id = 'gtk-about',

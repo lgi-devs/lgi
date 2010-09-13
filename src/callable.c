@@ -187,6 +187,10 @@ lgi_callable_create (lua_State *L, GICallableInfo *info)
 	return luaL_error (L, "could not locate %s(%s): %s",
                            lua_tostring (L, -3), symbol, g_module_error ());
     }
+  else if (GI_IS_SIGNAL_INFO (info))
+    /* Signals always have 'self', i.e. the object on which they are
+       emitted. */
+    callable->has_self = 1;
 
   /* Clear all 'internal' flags inside callable parameters, parameters are then
      marked as internal during processing of their parents. */
@@ -462,12 +466,6 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
       }
 
   /* Call it. */
-#ifndef NDEBUG
-  lua_concat (L, lgi_type_get_name (L, callable->info));
-  g_debug ("invoking closure %s/%p/(%d args), stack=%s",
-           lua_tostring (L, -1), closure, npos, lgi_sd (L));
-  lua_pop (L, 1);
-#endif
   res = lua_pcall (L, npos, LUA_MULTRET, 0);
   npos = 1;
 
@@ -522,9 +520,6 @@ lgi_closure_destroy (gpointer user_data)
   lua_State* L = lgi_main_thread_state;
   Closure* closure = user_data;
 
-#ifndef NDEBUG
-  g_debug ("destroying closure %p", closure);
-#endif
   luaL_unref (L, LUA_REGISTRYINDEX, closure->callable_ref);
   luaL_unref (L, LUA_REGISTRYINDEX, closure->target_ref);
   ffi_closure_free (closure);
@@ -564,11 +559,6 @@ lgi_closure_create (lua_State *L, GICallableInfo *ci, int target,
       return NULL;
     }
 
-#ifndef NDEBUG
-  lua_concat (L, lgi_type_get_name (L, ci));
-  g_debug("created closure %p(%s)", closure, lua_tostring (L, -1));
-  lua_pop (L, 1);
-#endif
   return closure;
 }
 
