@@ -138,7 +138,7 @@ compound_register (lua_State *L, GIBaseInfo* info, gpointer *addr,
      GtkWindow's constructor returns non-floating object, but it keeps the
      reference to window internally, so we want acquire one extra reference. */
   if (owns && g_base_info_get_type (info) == GI_INFO_TYPE_OBJECT &&
-      (G_IS_INITIALLY_UNOWNED(*addr) || g_object_is_floating (*addr)))
+      G_IS_INITIALLY_UNOWNED(*addr))
       g_object_ref_sink (*addr);
 
   /* Store newly created compound to the cache. */
