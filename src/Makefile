@@ -1,7 +1,7 @@
 PKG_PACKAGES = gobject-introspection-1.0 lua5.1
 OUTPUT = lgi.so
 
-OBJS = lgi.o marshal.o compound.o callable.o glib.o
+OBJS = core.o marshal.o compound.o callable.o glib.o
 
 CFLAGS = -c -pipe -Wall $(shell pkg-config --cflags $(PKG_PACKAGES))
 LDFLAGS = -shared $(shell pkg-config --libs $(PKG_PACKAGES))
@@ -22,7 +22,7 @@ all : $(OUTPUT)
 $(OUTPUT) : $(OBJS)
 	$(CC) -o $@ $^ $(LDFLAGS)
 
-lgi.o : lgi.c lgi.h decltype.h
+core.o : core.c lgi.h
 callable.o : callable.c lgi.h decltype.h
 marshal.o : marshal.c lgi.h decltype.h
 compound.o : compound.c lgi.h

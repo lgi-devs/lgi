@@ -9,17 +9,17 @@
 #include "lgi.h"
 
 int lgi_regkey;
-GIBaseInfo* lgi_baseinfo_info;
+GIBaseInfo *lgi_baseinfo_info;
 
 int
-lgi_error(lua_State* L, GError* err)
+lgi_error (lua_State *L, GError *err)
 {
-  lua_pushboolean(L, 0);
+  lua_pushboolean (L, 0);
   if (err != NULL)
     {
-      lua_pushstring(L, err->message);
-      lua_pushinteger(L, err->code);
-      g_error_free(err);
+      lua_pushstring (L, err->message);
+      lua_pushinteger (L, err->code);
+      g_error_free (err);
       return 3;
     }
   else
@@ -27,90 +27,90 @@ lgi_error(lua_State* L, GError* err)
 }
 
 static int
-lgi_throw(lua_State* L, GError* err)
+lgi_throw (lua_State *L, GError *err)
 {
-  g_assert(err != NULL);
-  lua_pushfstring(L, "%s (%d)", err->message, err->code);
-  g_error_free(err);
-  return luaL_error(L, "%s", lua_tostring(L, -1));
+  g_assert (err != NULL);
+  lua_pushfstring (L, "%s (%d)", err->message, err->code);
+  g_error_free (err);
+  return luaL_error (L, "%s", lua_tostring (L, -1));
 }
 
 /* Puts parts of the name to the stack, to be concatenated by lua_concat.
    Returns number of pushed elements. */
 int
-lgi_type_get_name(lua_State* L, GIBaseInfo* info)
+lgi_type_get_name (lua_State *L, GIBaseInfo *info)
 {
-  GSList* list = NULL, *i;
+  GSList *list = NULL, *i;
   int n = 1;
-  lua_pushstring(L, g_base_info_get_namespace(info));
+  lua_pushstring (L, g_base_info_get_namespace (info));
 
   /* Add names on the whole path, but in reverse order. */
-  for (; info != NULL; info = g_base_info_get_container(info))
-    list = g_slist_prepend(list, info);
+  for (; info != NULL; info = g_base_info_get_container (info))
+    list = g_slist_prepend (list, info);
 
-  for (i = list; i != NULL; i = g_slist_next(i))
+  for (i = list; i != NULL; i = g_slist_next (i))
     {
       if (g_base_info_get_type (i->data) != GI_INFO_TYPE_TYPE)
         {
-          lua_pushstring(L, ".");
-          lua_pushstring(L, g_base_info_get_name(i->data));
+          lua_pushstring (L, ".");
+          lua_pushstring (L, g_base_info_get_name (i->data));
           n += 2;
         }
     }
 
-  g_slist_free(list);
+  g_slist_free (list);
   return n;
 }
 
 static int
-lgi_find(lua_State* L)
+lgi_find (lua_State *L)
 {
-  const gchar* symbol = luaL_checkstring(L, 1);
-  const gchar* container = luaL_optstring(L, 2, NULL);
+  const gchar *symbol = luaL_checkstring (L, 1);
+  const gchar *container = luaL_optstring (L, 2, NULL);
   GIBaseInfo *info, *fi;
   int vals = 0;
 
   /* Get information about the symbol. */
-  info = g_irepository_find_by_name(NULL, "GIRepository",
-				    container != NULL ? container : symbol);
+  info = g_irepository_find_by_name (NULL, "GIRepository",
+                                     container != NULL ? container : symbol);
 
   /* In case that container was specified, look the symbol up in it. */
   if (container != NULL && info != NULL)
     {
-      switch (g_base_info_get_type(info))
+      switch (g_base_info_get_type (info))
 	{
 	case GI_INFO_TYPE_OBJECT:
-	  fi = g_object_info_find_method(info, symbol);
+	  fi = g_object_info_find_method (info, symbol);
 	  break;
 
 	case GI_INFO_TYPE_INTERFACE:
-	  fi = g_interface_info_find_method(info, symbol);
+	  fi = g_interface_info_find_method (info, symbol);
 	  break;
 
 	case GI_INFO_TYPE_STRUCT:
-	  fi = g_struct_info_find_method(info, symbol);
+	  fi = g_struct_info_find_method (info, symbol);
 	  break;
 
 	default:
 	  fi = NULL;
 	}
 
-      g_base_info_unref(info);
+      g_base_info_unref (info);
       info = fi;
     }
 
   if (info == NULL)
     {
-      lua_pushboolean(L, 0);
-      lua_pushfstring(L, "unable to resolve GIRepository.%s%s%s",
-		      container != NULL ? container : "",
-		      container != NULL ? ":" : "",
-		      symbol);
+      lua_pushboolean (L, 0);
+      lua_pushfstring (L, "unable to resolve GIRepository.%s%s%s",
+                       container != NULL ? container : "",
+                       container != NULL ? ":" : "",
+                       symbol);
       return 2;
     }
 
   /* Create new IBaseInfo structure and return it. */
-  vals = lgi_compound_create(L, lgi_baseinfo_info, info, TRUE) ? 1 : 0;
+  vals = lgi_compound_create (L, lgi_baseinfo_info, info, TRUE) ? 1 : 0;
   return vals;
 }
 
@@ -163,23 +163,22 @@ lgi_get (lua_State* L)
 }
 
 static int
-lgi_gtype(lua_State* L)
+lgi_gtype (lua_State *L)
 {
-  const gchar* name = luaL_checkstring(L, 1);
+  const gchar *name = luaL_checkstring (L, 1);
   GIBaseInfo *info;
 
   /* Get information about the name. */
-  info = g_irepository_find_by_name(NULL, "GIRepository", name);
+  info = g_irepository_find_by_name (NULL, "GIRepository", name);
   if (info == NULL)
     {
-      lua_pushboolean(L, 0);
-      lua_pushfstring(L, "unable to resolve GIRepository.%s", name);
+      lua_pushboolean (L, 0);
+      lua_pushfstring (L, "unable to resolve GIRepository.%s", name);
       return 2;
     }
 
-  /* Create new IBaseInfo structure and return it. */
-  lua_pushnumber(L, g_registered_type_info_get_g_type(info));
-  g_base_info_unref(info);
+  lua_pushnumber (L, g_registered_type_info_get_g_type (info));
+  g_base_info_unref (info);
   return 1;
 }
 
@@ -213,47 +212,50 @@ lgi_cast (lua_State *L)
 static const char* lgi_log_levels[] =
   { "error", "critical", "warning", "message", "info", "debug", NULL };
 static int
-lgi_log(lua_State* L)
+lgi_log (lua_State *L)
 {
-  const char* message = luaL_checkstring(L, 1);
-  int level = 1 << (luaL_checkoption(L, 2, lgi_log_levels[5],
-				     lgi_log_levels) + 2);
-  g_log(G_LOG_DOMAIN, level, "%s", message);
+  const char *message = luaL_checkstring (L, 1);
+  int level = 1 << (luaL_checkoption (L, 2, lgi_log_levels[5],
+                                      lgi_log_levels) + 2);
+  g_log (G_LOG_DOMAIN, level, "%s", message);
   return 0;
 }
 
-const char* lgi_sd(lua_State *L)
+const char *lgi_sd (lua_State *L)
 {
   int i;
-  static gchar* msg = 0;
-  g_free(msg);
-  msg = g_strdup("");
-  int top = lua_gettop(L);
-  for (i = 1; i <= top; i++) {	/* repeat for each level */
-    int t = lua_type(L, i);
-    gchar* item, *nmsg;
-    switch (t) {
-    case LUA_TSTRING:  /* strings */
-      item = g_strdup_printf("`%s'", lua_tostring(L, i));
-      break;
+  static gchar *msg = 0;
+  g_free (msg);
+  msg = g_strdup ("");
+  int top = lua_gettop (L);
+  for (i = 1; i <= top; i++)
+    {
+      int t = lua_type (L, i);
+      gchar *item, *nmsg;
+      switch (t)
+        {
+        case LUA_TSTRING:
+          item = g_strdup_printf ("`%s'", lua_tostring (L, i));
+          break;
 
-    case LUA_TBOOLEAN:	/* booleans */
-      item = g_strdup_printf(lua_toboolean(L, i) ? "true" : "false");
-      break;
+        case LUA_TBOOLEAN:
+          item = g_strdup_printf (lua_toboolean (L, i) ? "true" : "false");
+          break;
 
-    case LUA_TNUMBER:  /* numbers */
-      item = g_strdup_printf("%g", lua_tonumber(L, i));
-      break;
+        case LUA_TNUMBER:
+          item = g_strdup_printf ("%g", lua_tonumber (L, i));
+          break;
 
-    default:  /* other values */
-      item = g_strdup_printf("%s(%p)", lua_typename(L, t), lua_topointer(L, i));
-      break;
+        default:
+          item = g_strdup_printf ("%s(%p)", lua_typename (L, t),
+                                  lua_topointer (L, i));
+          break;
+        }
+      nmsg = g_strconcat (msg, " ", item, NULL);
+      g_free (msg);
+      g_free (item);
+      msg = nmsg;
     }
-    nmsg = g_strconcat(msg, " ", item, NULL);
-    g_free(msg);
-    g_free(item);
-    msg = nmsg;
-  }
   return msg;
 }
 #endif
