@@ -26,15 +26,6 @@ lgi_error (lua_State *L, GError *err)
     return 1;
 }
 
-static int
-lgi_throw (lua_State *L, GError *err)
-{
-  g_assert (err != NULL);
-  lua_pushfstring (L, "%s (%d)", err->message, err->code);
-  g_error_free (err);
-  return luaL_error (L, "%s", lua_tostring (L, -1));
-}
-
 /* Puts parts of the name to the stack, to be concatenated by lua_concat.
    Returns number of pushed elements. */
 int
@@ -68,7 +59,6 @@ lgi_find (lua_State *L)
   const gchar *symbol = luaL_checkstring (L, 1);
   const gchar *container = luaL_optstring (L, 2, NULL);
   GIBaseInfo *info, *fi;
-  int vals = 0;
 
   /* Get information about the symbol. */
   info = g_irepository_find_by_name (NULL, "GIRepository",
@@ -100,18 +90,13 @@ lgi_find (lua_State *L)
     }
 
   if (info == NULL)
-    {
-      lua_pushboolean (L, 0);
-      lua_pushfstring (L, "unable to resolve GIRepository.%s%s%s",
+    return luaL_error (L, "unable to resolve GIRepository.%s%s%s",
                        container != NULL ? container : "",
                        container != NULL ? ":" : "",
                        symbol);
-      return 2;
-    }
 
   /* Create new IBaseInfo structure and return it. */
-  vals = lgi_compound_create (L, lgi_baseinfo_info, info, TRUE) ? 1 : 0;
-  return vals;
+  return lgi_compound_create (L, lgi_baseinfo_info, info, TRUE) ? 1 : 0;
 }
 
 static int
@@ -171,11 +156,7 @@ lgi_gtype (lua_State *L)
   /* Get information about the name. */
   info = g_irepository_find_by_name (NULL, "GIRepository", name);
   if (info == NULL)
-    {
-      lua_pushboolean (L, 0);
-      lua_pushfstring (L, "unable to resolve GIRepository.%s", name);
-      return 2;
-    }
+    return luaL_error (L, "unable to resolve GIRepository.%s", name);
 
   lua_pushnumber (L, g_registered_type_info_get_g_type (info));
   g_base_info_unref (info);
@@ -204,8 +185,9 @@ lgi_cast (lua_State *L)
     }
 
   /* Failed somehow, avoid casting. */
-  lua_pushnil (L);
-  return 1;
+  return luaL_error (L, "`%s': failed to cast to `%s'",
+                     g_type_name (G_TYPE_FROM_INSTANCE (obj)),
+                     g_type_name (gtype));
 }
 
 #ifndef NDEBUG
@@ -312,7 +294,11 @@ luaopen_lgi__core (lua_State* L)
   g_type_init ();
   g_irepository_require (NULL, "GIRepository", NULL, 0, &err);
   if (err != NULL)
-    lgi_throw (L, err);
+    {
+      lua_pushfstring (L, "%s (%d)", err->message, err->code);
+      g_error_free (err);
+      return luaL_error (L, "%s", lua_tostring (L, -1));
+    }
   lgi_baseinfo_info =
     g_irepository_find_by_name (NULL, "GIRepository", "BaseInfo");
 

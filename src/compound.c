@@ -236,6 +236,12 @@ lgi_compound_object_new (lua_State *L, GIObjectInfo *oi, int argtable)
     g_value_unset (&param->value);
 
   /* And wrap a nice userdata around it. */
+  if (addr == NULL)
+    {
+      lua_concat (L, lgi_type_get_name (L, oi));
+      luaL_error (L, "failed to create instance of `%s'", lua_tostring (L, -1));
+    }
+  
   return compound_register (L, oi, &addr, TRUE, FALSE) ? addr : NULL;
 }
 

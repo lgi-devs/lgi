@@ -67,7 +67,7 @@ local struct_mt = { __index = find_in_compound }
 function struct_mt.__call(type, fields)
    -- Create the structure instance.
    local info = assert(ri:find_by_gtype(type[0].gtype))
-   local struct = assert(core.get(info))
+   local struct = core.get(info)
 
    -- Set values of fields.
    for name, value in pairs(fields or {}) do
@@ -141,12 +141,12 @@ gi._enums = { InfoType = setmetatable({
 gi._structs = {
    BaseInfo = setmetatable(
       { [0] = { name = 'GIRepository.BaseInfo',
-		gtype = assert(core.gtype('BaseInfo')) },
+		gtype = core.gtype('BaseInfo') },
 	_methods = {}
      }, struct_mt),
    Typelib = setmetatable(
       { [0] = { name = 'GIRepository.Typelib',
-		gtype = assert(core.gtype('Typelib')) },
+		gtype = core.gtype('Typelib') },
 	_methods = {}
      }, compound_mt),
 }
@@ -154,7 +154,7 @@ gi._structs = {
 -- Loads given set of symbols into table.
 local function get_symbols(into, symbols, container)
    for _, symbol in pairs(symbols) do
-      into[symbol] = core.get(assert(core.find(symbol, container)))
+      into[symbol] = core.get(core.find(symbol, container))
    end
 end
 
@@ -165,7 +165,7 @@ function class_mt.__call(class, param)
    local obj
    if type(param) == 'userdata' then
       -- Cast operator, 'param' is source object which should be cast.
-      obj = core.cast(param, class[0].gtype)
+      obj = param and core.cast(param, class[0].gtype)
       if not obj then
 	 error(string.format("`%s' cannot be cast to `%s'", tostring(param),
 			     class[0].name));
@@ -200,7 +200,7 @@ function class_mt.__call(class, param)
       end
 
       -- Create the object.
-      obj = assert(core.get(info, params))
+      obj = core.get(info, params)
 
       -- Attach signals previously filtered out from creation.
       for name, func in pairs(sigs) do obj[name] = func end
@@ -211,7 +211,7 @@ end
 gi._classes = {
    Repository = setmetatable(
       { [0] = { name = 'GIRepository.Repository',
-		gtype = assert(core.gtype('Repository'))
+		gtype = core.gtype('Repository')
 	     },
 	_methods = {} 
      }, class_mt),
@@ -576,11 +576,14 @@ local function get_symbol(namespace, symbol)
       local loader = typeloader[infotype]
       if loader then
 	 local category
-	 value, category = assert(loader(namespace, info))
+	 value, category = loader(namespace, info)
 
-	 -- Cache the symbol in specified category in the namespace.
-	 namespace[category] = rawget(namespace, category) or {}
-	 namespace[category][symbol] = value
+	 if value then
+	    -- Cache the symbol in specified category in the namespace.
+	    local cat = rawget(namespace, category) or {}
+	    namespace[category] = cat
+	    cat[symbol] = value
+	 end
       end
    end
 
@@ -648,7 +651,7 @@ load_class(gi, gi._classes.Repository,
 	   ir:find_by_name(gi[0].name, 'Repository'))
 load_struct(gi, gi._structs.Typelib,
 	    ir:find_by_name(gi[0].name, 'Typelib'))
-gi.BaseInfo[0].info = assert(core.find('BaseInfo'))
+gi.BaseInfo[0].info = core.find('BaseInfo')
 
 -- GObject.Object massaging
 do
