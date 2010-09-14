@@ -27,6 +27,7 @@ typedef struct _Compound
   /* If the structure is allocated 'on the stack', its data is here. */
   gchar data[1];
 } Compound;
+#define UD_COMPOUND "lgi.compound"
 
 /* Loads reg_typeinfo and ref_repo elements for compound arg on the stack.  */
 static Compound *
@@ -36,7 +37,7 @@ compound_prepare (lua_State *L, int arg, gboolean throw)
      specified in the error message in case of type mismatch. */
   if (lua_getmetatable (L, arg))
     {
-      lua_getfield (L, LUA_REGISTRYINDEX, LGI_COMPOUND);
+      lua_getfield (L, LUA_REGISTRYINDEX, UD_COMPOUND);
       int equal = lua_equal (L, -1, -2);
       lua_pop (L, 2);
 
@@ -109,7 +110,7 @@ compound_register (lua_State *L, GIBaseInfo* info, gpointer *addr,
         size = g_union_info_get_size (info);
     }
   compound = lua_newuserdata (L, G_STRUCT_OFFSET (Compound, data) + size);
-  luaL_getmetatable (L, LGI_COMPOUND);
+  luaL_getmetatable (L, UD_COMPOUND);
   lua_setmetatable (L, -2);
   if (alloc_struct)
     {
@@ -487,7 +488,7 @@ process_element (lua_State *L, int newval)
       /* Try to extract BaseInfo from given field, if possible. */
       if (type == LUA_TUSERDATA && lua_getmetatable (L, -1))
 	{
-	  lua_getfield (L, LUA_REGISTRYINDEX, LGI_COMPOUND);
+	  lua_getfield (L, LUA_REGISTRYINDEX, UD_COMPOUND);
 	  if (lua_rawequal (L, -1, -2))
 	    ei = lgi_compound_get (L, -3, lgi_baseinfo_info, FALSE);
 	  lua_pop (L, 2);
@@ -548,10 +549,19 @@ compound_newindex (lua_State *L)
   return process_element (L, 3);
 }
 
-const struct luaL_reg lgi_compound_reg[] = {
+static const struct luaL_reg compound_reg[] = {
   { "__gc", compound_gc },
   { "__tostring", compound_tostring },
   { "__index", compound_index },
   { "__newindex", compound_newindex },
   { NULL, NULL }
 };
+
+void
+lgi_compound_init (lua_State *L)
+{
+  /* Register compound metatable. */
+  luaL_newmetatable (L, UD_COMPOUND);
+  luaL_register (L, NULL, compound_reg);
+  lua_pop (L, 1);
+}

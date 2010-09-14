@@ -30,7 +30,7 @@ int lgi_error (lua_State *L, GError *err);
 
 /* Puts parts of the name to the stack, to be concatenated by lua_concat.
    Returns number of pushed elements. */
-int lgi_type_get_name(lua_State *L, GIBaseInfo *info);
+int lgi_type_get_name (lua_State *L, GIBaseInfo *info);
 
 /* Key in registry, containing table with all our private data. */
 extern int lgi_regkey;
@@ -48,15 +48,9 @@ typedef enum lgi_reg
   LGI_REG__LAST
 } LgiRegType;
 
-/* Lua LgiCallable string name identification. */
-#define LGI_CALLABLE "lgi.callable"
-extern const struct luaL_reg lgi_callable_reg[];
-
-#define LGI_CLOSUREGUARD "lgi.closureguard"
-extern const struct luaL_reg lgi_closureguard_reg[];
-
-#define LGI_COMPOUND "lgi.compound"
-extern const struct luaL_reg lgi_compound_reg[];
+/* Initialization of modules. */
+void lgi_compound_init (lua_State *L);
+void lgi_callable_init (lua_State *L);
 
 /* GIBaseInfo of GIBaseInfo type itself.  Leaks, never freed. */
 extern GIBaseInfo *lgi_baseinfo_info;

@@ -57,6 +57,7 @@ typedef struct _Callable
   /* ffi_type* array here, contains ffi_type[nargs + 2] entries. */
   /* params points here, contains Param[nargs] entries. */
 } Callable;
+#define UD_CALLABLE "lgi.callable"
 
 /* Structure containing closure data. */
 typedef struct _Closure
@@ -158,7 +159,7 @@ lgi_callable_create (lua_State *L, GICallableInfo *info)
   callable = lua_newuserdata (L, sizeof (Callable) +
                               sizeof (ffi_type) * (nargs + 2) +
                               sizeof (Param) * nargs);
-  luaL_getmetatable (L, LGI_CALLABLE);
+  luaL_getmetatable (L, UD_CALLABLE);
   lua_setmetatable (L, -2);
 
   /* Fill in callable with proper contents. */
@@ -273,7 +274,7 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
   GIArgument *args;
   void **ffi_args, **redirect_out;
   GError *err = NULL;
-  Callable *callable = luaL_checkudata (L, func_index, LGI_CALLABLE);
+  Callable *callable = luaL_checkudata (L, func_index, UD_CALLABLE);
 
   /* We cannot push more stuff than count of arguments we have. */
   luaL_checkstack (L, callable->nargs, "");
@@ -392,7 +393,7 @@ static int
 callable_gc (lua_State *L)
 {
   /* Just unref embedded 'info' field. */
-  Callable *callable = luaL_checkudata (L, 1, LGI_CALLABLE);
+  Callable *callable = luaL_checkudata (L, 1, UD_CALLABLE);
   g_base_info_unref (callable->info);
   return 0;
 }
@@ -400,7 +401,7 @@ callable_gc (lua_State *L)
 static int
 callable_tostring (lua_State *L)
 {
-  Callable *callable = luaL_checkudata (L, 1, LGI_CALLABLE);
+  Callable *callable = luaL_checkudata (L, 1, UD_CALLABLE);
   lua_pushfstring (L, "lgi.%s (%p): ",
                    (GI_IS_FUNCTION_INFO (callable->info) ? "fun" :
                     (GI_IS_SIGNAL_INFO (callable->info) ? "sig" :
@@ -416,7 +417,7 @@ callable_call (lua_State *L)
   return lgi_callable_call (L, NULL, 1, 2);
 }
 
-const struct luaL_reg lgi_callable_reg[] = {
+static const struct luaL_reg callable_reg[] = {
   { "__gc", callable_gc },
   { "__tostring", callable_tostring },
   { "__call", callable_call },
@@ -570,7 +571,8 @@ closureguard_gc(lua_State *L)
   return 0;
 }
 
-const struct luaL_reg lgi_closureguard_reg[] = {
+#define UD_CLOSUREGUARD "lgi.closureguard"
+static const struct luaL_reg closureguard_reg[] = {
   { "__gc", closureguard_gc },
   { NULL, NULL }
 };
@@ -582,6 +584,20 @@ lgi_closure_guard (lua_State *L, gpointer user_data)
   luaL_checkstack (L, 1, "");
   closureguard = lua_newuserdata (L, sizeof (gpointer));
   *closureguard = user_data;
-  luaL_getmetatable (L, LGI_CLOSUREGUARD);
+  luaL_getmetatable (L, UD_CLOSUREGUARD);
   lua_setmetatable (L, -2);
+}
+
+void
+lgi_callable_init (lua_State *L)
+{
+  /* Register callable metatable. */
+  luaL_newmetatable (L, UD_CALLABLE);
+  luaL_register (L, NULL, callable_reg);
+  lua_pop (L, 1);
+
+  /* Register closureguard metatable. */
+  luaL_newmetatable (L, UD_CLOSUREGUARD);
+  luaL_register (L, NULL, closureguard_reg);
+  lua_pop (L, 1);
 }

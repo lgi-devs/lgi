@@ -267,44 +267,36 @@ static const struct luaL_reg lgi_reg[] = {
 };
 
 static void
-lgi_reg_udata(lua_State* L, const struct luaL_reg* reg, const char* meta)
-{
-  luaL_newmetatable(L, meta);
-  luaL_register(L, NULL, reg);
-  lua_pop(L, 1);
-}
-
-static void
-lgi_create_reg(lua_State* L, enum lgi_reg reg, const char* exportname,
-	       gboolean withmeta)
+lgi_create_reg (lua_State* L, enum lgi_reg reg, const char* exportname,
+                gboolean withmeta)
 {
   /* Create the table. */
-  lua_newtable(L);
+  lua_newtable (L);
 
   /* Assign the metatable, if requested. */
   if (withmeta)
     {
-      lua_pushvalue(L, -2);
-      lua_setmetatable(L, -2);
-      lua_replace(L, -2);
+      lua_pushvalue (L, -2);
+      lua_setmetatable (L, -2);
+      lua_replace (L, -2);
     }
 
   /* Assign table into the exported package table. */
   if (exportname != NULL)
     {
-      lua_pushstring(L, exportname);
-      lua_pushvalue(L, -2);
-      lua_rawset(L, -5);
+      lua_pushstring (L, exportname);
+      lua_pushvalue (L, -2);
+      lua_rawset (L, -5);
     }
 
   /* Assign new table into registry and leave it out from stack. */
-  lua_rawseti(L, -2, reg);
+  lua_rawseti (L, -2, reg);
 }
 
 lua_State* lgi_main_thread_state;
 
 int
-luaopen_lgi__core(lua_State* L)
+luaopen_lgi__core (lua_State* L)
 {
   GError* err = NULL;
 
@@ -312,47 +304,46 @@ luaopen_lgi__core(lua_State* L)
   lgi_main_thread_state = L;
 
   /* GLib initializations. */
-  g_type_init();
-  g_irepository_require(NULL, "GIRepository", NULL, 0, &err);
+  g_type_init ();
+  g_irepository_require (NULL, "GIRepository", NULL, 0, &err);
   if (err != NULL)
-    lgi_throw(L, err);
-  lgi_baseinfo_info = g_irepository_find_by_name(NULL, "GIRepository",
-						 "BaseInfo");
-
-  /* Register userdata types. */
-  lgi_reg_udata(L, lgi_compound_reg, LGI_COMPOUND);
-  lgi_reg_udata(L, lgi_callable_reg, LGI_CALLABLE);
-  lgi_reg_udata(L, lgi_closureguard_reg, LGI_CLOSUREGUARD);
+    lgi_throw (L, err);
+  lgi_baseinfo_info =
+    g_irepository_find_by_name (NULL, "GIRepository", "BaseInfo");
 
   /* Register _core interface. */
-  luaL_register(L, "lgi._core", lgi_reg);
+  luaL_register (L, "lgi._core", lgi_reg);
 
   /* Prepare registry table (avoid polluting global registry, make
      private table in it instead.*/
-  lua_newtable(L);
-  lua_pushvalue(L, -1);
-  lgi_regkey = luaL_ref(L, LUA_REGISTRYINDEX);
+  lua_newtable (L);
+  lua_pushvalue (L, -1);
+  lgi_regkey = luaL_ref (L, LUA_REGISTRYINDEX);
 
   /* Create object cache, which has weak values. */
-  lua_newtable(L);
-  lua_pushstring(L, "v");
-  lua_setfield(L, -2, "__mode");
-  lgi_create_reg(L, LGI_REG_CACHE, NULL, TRUE);
+  lua_newtable (L);
+  lua_pushstring (L, "v");
+  lua_setfield (L, -2, "__mode");
+  lgi_create_reg (L, LGI_REG_CACHE, NULL, TRUE);
 
   /* Create typeinfo table. */
-  lgi_create_reg(L, LGI_REG_TYPEINFO, NULL, FALSE);
+  lgi_create_reg (L, LGI_REG_TYPEINFO, NULL, FALSE);
 
   /* Create repo table. */
-  lgi_create_reg(L, LGI_REG_REPO, "repo", FALSE);
+  lgi_create_reg (L, LGI_REG_REPO, "repo", FALSE);
 
   /* In debug version, make our private registry browsable. */
 #ifndef NDEBUG
-  lua_pushstring(L, "reg");
-  lua_pushvalue(L, -2);
-  lua_rawset(L, -4);
+  lua_pushstring (L, "reg");
+  lua_pushvalue (L, -2);
+  lua_rawset (L, -4);
 #endif
 
+  /* Initialize modules. */
+  lgi_compound_init (L);
+  lgi_callable_init (L);
+
   /* Pop the registry table, return registration table. */
-  lua_pop(L, 1);
+  lua_pop (L, 1);
   return 1;
 }
