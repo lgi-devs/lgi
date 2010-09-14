@@ -611,7 +611,7 @@ local function load_namespace(into, name)
    if ok and override then into[0].hook = override.hook end
 
    -- Load the typelibrary for the namespace.
-   into[0].typelib = assert(ir:require(name, nil, 0))
+   if not ir:require(name, nil, 0) then return nil end
    into[0].version = ir:get_version(name)
 
    -- Load all namespace dependencies.
@@ -674,11 +674,6 @@ do
    end
 end
 
--- Helper, safe repo dereferencing.
-local function get_namespace(name)
-   return pcall(function() return repo[name] end)
-end
-
 -- Install new loader which will load lgi packages on-demand using 'repo'
 -- table.
 loginfo 'installing custom Lua package loader'
@@ -686,14 +681,9 @@ package.loaders[#package.loaders + 1] =
    function(name)
       local prefix, name = string.match(name, '^(%w+)%.(%w+)$')
       if prefix == 'lgi' then
-	 local ok, result = get_namespace(name)
-	 if not ok or not result then return result end
-	 return function() return result end
+	 return function() return repo[name] end
       end
    end
 
 -- Access to module proxies the whole repo, for convenience.
-setmetatable(_M, { __index = function(_, name)
-				local ok, namespace = get_namespace(name)
-				return ok and namespace
-			     end })
+setmetatable(_M, { __index = function(_, name) return repo[name] end })
