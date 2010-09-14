@@ -158,6 +158,18 @@ local function get_symbols(into, symbols, container)
    end
 end
 
+-- Metatable for interfaces, implementing casting on __call.
+local interface_mt = { __index = find_in_compound }
+function interface_mt.__call(iface, obj)
+   -- Cast operator, 'param' is source object which should be cast.
+   local res = iface and core.cast(obj, iface[0].gtype)
+   if not res then
+      error(string.format("`%s' cannot be cast to `%s'", tostring(obj),
+			  iface[0].name));
+   end
+   return res
+end
+
 -- Metatable for classes, again implementing object
 -- construction or casting on __call.
 local class_mt = { __index = find_in_compound }
@@ -490,7 +502,7 @@ typeloader[gi.InfoType.INTERFACE] =
 			     local ns = gi.BaseInfo.get_namespace(i)
 			     c[ns .. '.' .. n] = repo[ns][n]
 			  end },
-	 }, compound_mt)
+	 }, interface_mt)
       remove_property_accessors(value)
       return value, '_interfaces'
    end
