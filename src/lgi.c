@@ -50,9 +50,12 @@ lgi_type_get_name(lua_State* L, GIBaseInfo* info)
 
   for (i = list; i != NULL; i = g_slist_next(i))
     {
-      lua_pushstring(L, ".");
-      lua_pushstring(L, g_base_info_get_name(i->data));
-      n += 2;
+      if (g_base_info_get_type (i->data) != GI_INFO_TYPE_TYPE)
+        {
+          lua_pushstring(L, ".");
+          lua_pushstring(L, g_base_info_get_name(i->data));
+          n += 2;
+        }
     }
 
   g_slist_free(list);

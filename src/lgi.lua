@@ -442,6 +442,7 @@ local function remove_property_accessors(compound)
       for propname in pairs(compound._properties or {}) do
 	 compound._methods['get_' .. propname] = nil
 	 compound._methods['set_' .. propname] = nil
+	 compound._methods[propname] = nil
       end
    end
 end
@@ -648,6 +649,27 @@ load_class(gi, gi._classes.Repository,
 load_struct(gi, gi._structs.Typelib,
 	    ir:find_by_name(gi[0].name, 'Typelib'))
 gi.BaseInfo[0].info = assert(core.find('BaseInfo'))
+
+-- GObject.Object massaging
+do
+   local obj = repo.GObject.Object
+
+   -- No methods are needed (yet).
+   obj._methods = nil
+
+   -- Install 'notify' signal.
+   local obj_struct = ir:find_by_name('GObject', 'ObjectClass')
+   for i = 0, gi.struct_info_get_n_fields(obj_struct) - 1 do
+      local field = gi.struct_info_get_field(obj_struct, i)
+      if field:get_name() == 'notify' then
+	 obj._signals = { 
+	    on_notify = gi.type_info_get_interface(
+	       gi.field_info_get_type(field)) 
+	 }
+	 break
+      end
+   end
+end
 
 -- Helper, safe repo dereferencing.
 local function get_namespace(name)

@@ -425,29 +425,51 @@ connect_signal (lua_State *L, GObject *obj, GISignalInfo *si, int target,
 {
   gpointer lgi_closure, call_addr;
   GClosure *g_closure;
-  gulong handler_id;
   guint signal_id;
 
   lgi_closure = lgi_closure_create (L, si, target, FALSE, &call_addr);
   g_closure = g_cclosure_new (call_addr, lgi_closure, lgi_g_closure_destroy);
   signal_id = g_signal_lookup (g_base_info_get_name (si),
                                G_TYPE_FROM_INSTANCE (obj));
-  handler_id = g_signal_connect_closure_by_id (obj, signal_id, detail,
-                                               g_closure, after);
-  return handler_id;
+  return g_signal_connect_closure_by_id (obj, signal_id, detail, g_closure,
+                                         after);
 }
 
 /* 'connect' member of signal pad, closure for detailed signal
-   connecting. */
+   connecting. Serves also as __newindex for detailed signal pad. */
 static int
 signal_pad_connect (lua_State *L)
 {
-  GObject *obj = lgi_compound_get (L, lua_upvalueindex (1), NULL, FALSE);
-  GISignalInfo *si = lgi_compound_get (L, lua_upvalueindex (2), 
-				       lgi_baseinfo_info, FALSE);
-  lua_pushnumber (L, connect_signal (L, obj, si, 3, 
-				     g_quark_from_string (lua_tostring (L, 1)), 
-				     lua_toboolean (L, 2)));
+  GObject *obj;
+  GISignalInfo *si;
+  const gchar *detail = NULL;
+  gulong handler_id;
+
+  /* Get obj and si from signal pad's indices 1 and 2 (see
+     create_signal_pad). */
+  lua_rawgeti (L, 1, 1);
+  obj = lgi_compound_get (L, -1, NULL, FALSE);
+  lua_rawgeti (L, 1, 2);
+  si = lgi_compound_get (L, -1, lgi_baseinfo_info, FALSE);
+  lua_pop (L, 2);
+
+  /* Get detail field, if present. */
+  if (lua_type (L, 2) == LUA_TSTRING)
+    detail = lua_tostring (L, 2);
+  else
+    {
+      /* We accept also property as detail field, for common usage with notify
+         signal. */
+      GIBaseInfo *bi = lgi_compound_get (L, 2, lgi_baseinfo_info, FALSE);
+      detail = g_base_info_get_name (bi);
+    }
+
+  /* Signal connection. */
+  handler_id = connect_signal (L, obj, si, 3, g_quark_from_string (detail),
+                               lua_toboolean (L, 4));
+
+  /* Return create signal id */
+  lua_pushnumber (L, handler_id);
   return 1;
 }
 
@@ -455,14 +477,29 @@ signal_pad_connect (lua_State *L)
    'connect', 'disconnect' and 'emit' methods. Expects that signal's
    compound is at the top of the stack. */
 static int
-create_signal_pad (lua_State *L, int compound_index)
+create_signal_pad (lua_State *L, GISignalInfo *si, int compound_index)
 {
-  /* Create the table and fill in closures. */
-  lua_createtable (L, 0, 0);
+  /* Create the table and fill [1] = obj, [2] = si. */
+  lua_newtable (L);
   lua_pushvalue (L, compound_index);
-  lua_pushvalue (L, -3);
-  lua_pushcclosure (L, signal_pad_connect, 2);
+  lua_rawseti (L, -2, 1);
+  lua_pushvalue (L, -2);
+  lua_rawseti (L, -2, 2);
+
+  lua_pushcfunction (L, signal_pad_connect);
   lua_setfield (L, -2, "connect");
+
+  /* Check, whether signal supports details. */
+  if (g_base_info_get_type (si) == GI_INFO_TYPE_CALLBACK ||
+      g_signal_info_get_flags (si) & G_SIGNAL_DETAILED)
+    {
+      /* Add metatable implementing __newindex. */
+      lua_newtable (L);
+      lua_pushcfunction (L, signal_pad_connect);
+      lua_setfield (L, -2, "__newindex");
+      lua_setmetatable (L, -2);
+    }
+
   return 1;
 }
 
@@ -509,10 +546,11 @@ process_element (lua_State *L, int newval)
 	      break;
 
             case GI_INFO_TYPE_SIGNAL:
+            case GI_INFO_TYPE_CALLBACK:
               if (newval != -1)
                 connect_signal (L, compound->addr, ei, newval, 0, FALSE);
 	      else
-		vals = create_signal_pad (L, 1);
+		vals = create_signal_pad (L, ei, 1);
               break;
 
 	    default:

@@ -52,17 +52,18 @@ function tests.gtkhello()
 				     Gtk.main_quit()
 				  end,
 		  }, -1)
-   local about = Gtk.ToolButton { stock_id = 'gtk-about' }
-   about.on_clicked.connect(nil, false, function()
-					   local dlg = Gtk.AboutDialog {
-					      program_name = 'LGI Demo',
-					      title = 'About...',
-					      license = 'MIT'
-					   }
-					   dlg:run()
-					   dlg:destroy()
-					end)
-   toolbar:insert(about, -1)
+   toolbar:insert(Gtk.ToolButton { 
+		     stock_id = 'gtk-about',
+		     on_clicked = function()
+				     local dlg = Gtk.AboutDialog {
+					program_name = 'LGI Demo',
+					title = 'About...',
+					license = 'MIT'
+				     }
+				     dlg:run()
+				     dlg:destroy()
+				  end
+		  }, -1)
    vbox:pack_start(toolbar, false, false, 0)
    vbox:pack_start(Gtk.Label { label = 'Contents' }, true, true, 0)
    vbox:pack_end(status_bar, false, false, 0)
