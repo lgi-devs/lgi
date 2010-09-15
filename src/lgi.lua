@@ -117,6 +117,7 @@ gi._enums = { InfoType = setmetatable({
 					 CONSTANT = 9,
 					 UNION = 11,
 					 SIGNAL = 13,
+					 VFUNC = 14,
 					 PROPERTY = 15,
 					 TYPE = 18,
 				      }, enum_mt),
@@ -225,15 +226,15 @@ gi._classes = {
       { [0] = { name = 'GIRepository.Repository',
 		gtype = core.gtype('Repository')
 	     },
-	_methods = {} 
+	_methods = {}
      }, class_mt),
 }
 get_symbols(gi._classes.Repository._methods,
 	    { 'get_default', 'require', 'find_by_name', 'find_by_gtype',
-	      'get_n_infos', 'get_info', 'get_dependencies', 'get_version', }, 
+	      'get_n_infos', 'get_info', 'get_dependencies', 'get_version', },
 	    'Repository')
 get_symbols(gi._structs.BaseInfo._methods,
-	    { 'is_deprecated', 'get_name', 'get_namespace', 
+	    { 'is_deprecated', 'get_name', 'get_namespace',
 	      'get_container' }, 'BaseInfo')
 gi._functions = {}
 get_symbols(
@@ -277,61 +278,55 @@ loginfo 'repo.GIRepository pre-populated'
 -- symbols are not typeinfo-checked to avoid infinite recursion.
 local in_load = setmetatable({}, { __mode = 'v' })
 
--- Returns fully qualified name of the info, incl. all parents.
-local function get_full_name(info)
-   local names = {}
-   while info do
-      if gi.base_info_get_type(info) ~= gi.InfoType.TYPE then
-	 table.insert(names, 1, info:get_name())
-      end
-      info = info:get_container()
-   end
-   return table.concat(names, '.')
-end
-
--- Checks that type represented by ITypeInfo can be handled.
-local function check_type(typeinfo)
-   local tag, bi = gi.type_info_get_tag(typeinfo)
-   if tag < gi.TypeTag.ARRAY then return true
-   elseif tag == gi.TypeTag.ARRAY then
-      local atype = gi.type_info_get_array_type(typeinfo)
-      if atype ~= gi.ArrayType.C and atype ~= gi.ArrayType.ARRAY then
-	 return false
-      end
-      bi = gi.type_info_get_param_type(typeinfo, 0)
-   elseif tag == gi.TypeTag.GLIST or tag == gi.TypeTag.GSLIST then
-      bi = gi.type_info_get_param_type(typeinfo, 0)
-   elseif tag == gi.TypeTag.INTERFACE then
-      bi = gi.type_info_get_interface(typeinfo)
-   end
-   assert(bi, "dependent type " .. tag .. " can't be handled")
-   local type = gi.base_info_get_type(bi)
+-- Checks that type represented by 'info' can be handled.
+local function check_type(info)
+   local type = gi.base_info_get_type(info)
    if type == gi.InfoType.TYPE then
-      return check_type(bi)
-   else
-      local ns, name  = gi.BaseInfo.get_namespace(bi),
-      gi.BaseInfo.get_name(bi)
-      if not in_load[get_full_name(bi)] then
-	 return ns and name and repo[ns][name]
+      local tag = gi.type_info_get_tag(info)
+      if tag < gi.TypeTag.ARRAY then
+	 return true
+      elseif tag == gi.TypeTag.ARRAY then
+	 -- Array support is still limited in core.
+	 local atype = gi.type_info_get_array_type(info)
+	 if atype == gi.ArrayType.C or atype == gi.ArrayType.ARRAY then
+	    return check_type(gi.type_info_get_param_type(info, 0))
+	 end
+	 return false
+      elseif tag == gi.TypeTag.GLIST or tag == gi.TypeTag.GSLIST then
+	 return check_type(gi.type_info_get_param_type(info, 0))
+      elseif tag == gi.TypeTag.INTERFACE then
+	 return check_type(gi.type_info_get_interface(info))
+      elseif tag == gi.TypeTag.GHASH then
+	 -- No support for hashtables yet.
+	 loginfo('refusing hashtable')
+	 return false
       else
-	 loginfo("%s - found in_load", get_full_name(typeinfo))
-      end
-   end
-end
-
--- Checks all arguments and return type of specified ICallableInfo.
-local function check_callable(info)
-   if not check_type(gi.callable_info_get_return_type(info)) then
-      loginfo("%s: bad rettype", get_full_name(info))
-      return false
-   end
-   for i = 0, gi.callable_info_get_n_args(info) - 1 do
-      local ai = gi.callable_info_get_arg(info, i)
-      if not check_type(gi.arg_info_get_type(ai)) then
-	 loginfo("bad param %s", get_full_name(ai))
+	 loginfo('refusing bad typeinfo %d', tag)
 	 return false
       end
+   elseif type == gi.InfoType.FUNCTION or type == gi.InfoType.CALLBACK or
+      type == gi.InfoType.SIGNAL or type == gi.InfoType.VFUNC then
+      if not check_type(gi.callable_info_get_return_type(info)) then
+	 return false
+      end
+      for i = 0, gi.callable_info_get_n_args(info) - 1 do
+	 local ai = gi.callable_info_get_arg(info, i)
+	 if not check_type(gi.arg_info_get_type(ai)) then
+	    return false
+	 end
+      end
+   else
+      -- Check 'in_load' table.
+      if not info:get_container() then
+	 local ns, name  = gi.BaseInfo.get_namespace(info),
+	 gi.BaseInfo.get_name(info)
+	 if not in_load[ns .. '.' .. name] and not repo[ns][name] then
+	    loginfo('refusing %s.%s', ns, name)
+	    return false
+	 end
+      end
    end
+   return true
 end
 
 -- Table containing loaders for various GI types, indexed by
@@ -340,18 +335,18 @@ local typeloader = {}
 
 typeloader[gi.InfoType.FUNCTION] =
    function(namespace, info)
-      return check_callable(info) and core.get(info), '_functions'
+      return check_type(info) and core.get(info), '_functions'
    end
 
 typeloader[gi.InfoType.CALLBACK] =
    function(namespace, info)
-      
-      return check_callable(info) and info, '_callbacks'
+
+      return check_type(info) and info, '_callbacks'
    end
 
 typeloader[gi.InfoType.CONSTANT] =
    function(namespace, info)
-      return check_type(gi.constant_info_get_type(info)) and core.get(info), 
+      return check_type(gi.constant_info_get_type(info)) and core.get(info),
       '_constants'
    end
 
@@ -391,7 +386,7 @@ local function load_compound(compound, info, loads, mt)
    gi.BaseInfo.get_name(info)
 
    -- Avoid installing tables with constructor into foreign structures.
-   setmetatable(compound, 
+   setmetatable(compound,
 		compound[0].gtype == G_TYPE_NONE and compound_mt or mt)
 
    -- Iterate and load all groups.
@@ -419,7 +414,7 @@ local function load_struct(namespace, into, info)
 		  if bit.band(
 		     flags, bit.bor(gi.FunctionInfoFlags.IS_GETTER,
 				    gi.FunctionInfoFlags.IS_SETTER)) == 0 then
-		     if check_callable(i) then c[n] = core.get(i) end
+		     if check_type(i) then c[n] = core.get(i) end
 		  end
 	       end },
 	    _fields = {
@@ -449,7 +444,7 @@ typeloader[gi.InfoType.UNION] =
 	       gi.union_info_get_n_methods,
 	       gi.union_info_get_method,
 	       function(c, n, i)
-		  if check_callable(i) then c[n] = core.get(i) end
+		  if check_type(i) then c[n] = core.get(i) end
 	       end },
 	    _fields = {
 	       gi.union_info_get_n_fields,
@@ -496,7 +491,7 @@ typeloader[gi.InfoType.INTERFACE] =
 		  if bit.band(
 		     flags, bit.bor(gi.FunctionInfoFlags.IS_GETTER,
 				    gi.FunctionInfoFlags.IS_SETTER)) == 0 then
-		     if check_callable(i) then
+		     if check_type(i) then
 			c[n] = core.get(i)
 		     end
 		  end
@@ -504,7 +499,7 @@ typeloader[gi.InfoType.INTERFACE] =
 	    _signals = { gi.interface_info_get_n_signals,
 			 gi.interface_info_get_signal,
 			 function(c, n, i)
-			    if check_callable(i) then
+			    if check_type(i) then
 			       c['on_' .. string.gsub(n, '%-', '_')] = i
 			    end
 			 end },
@@ -542,14 +537,14 @@ local function load_class(namespace, into, info)
 	 _methods = { gi.object_info_get_n_methods,
 		      gi.object_info_get_method,
 		      function(c, n, i)
-			 if check_callable(i) then
+			 if check_type(i) then
 			    c[n] = core.get(i)
 			 end
 		      end },
 	 _signals = { gi.object_info_get_n_signals,
 		      gi.object_info_get_signal,
 		      function(c, n, i)
-			 if check_callable(i) then
+			 if check_type(i) then
 			    c['on_' .. string.gsub(n, '%-', '_')] = i
 			 end
 		      end },
@@ -618,6 +613,8 @@ local function get_symbol(namespace, symbol)
 	    local cat = rawget(namespace, category) or {}
 	    namespace[category] = cat
 	    cat[symbol] = value
+	 else
+	    loginfo('symbol %s refused', fullname)
 	 end
       end
    end
@@ -682,7 +679,8 @@ load_class(gi, gi._classes.Repository,
 	   ir:find_by_name(gi[0].name, 'Repository'))
 load_struct(gi, gi._structs.Typelib,
 	    ir:find_by_name(gi[0].name, 'Typelib'))
-gi.BaseInfo[0].info = core.find('BaseInfo')
+load_struct(gi, gi._structs.BaseInfo,
+	    ir:find_by_name(gi[0].name, 'BaseInfo'))
 
 -- GObject.Object massaging
 do
@@ -696,9 +694,9 @@ do
    for i = 0, gi.struct_info_get_n_fields(obj_struct) - 1 do
       local field = gi.struct_info_get_field(obj_struct, i)
       if field:get_name() == 'notify' then
-	 obj._signals = { 
+	 obj._signals = {
 	    on_notify = gi.type_info_get_interface(
-	       gi.field_info_get_type(field)) 
+	       gi.field_info_get_type(field))
 	 }
 	 break
       end
