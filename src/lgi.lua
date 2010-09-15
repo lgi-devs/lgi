@@ -31,39 +31,51 @@ loginfo 'starting Lgi bootstrap'
 -- loading on-demand.  Created by C-side bootstrap.
 local repo = core.repo
 
--- Table with all categories which should be looked up when searching
--- for symbol.
-local categories = {
-   ['_classes'] = true, ['_structs'] = true, ['_enums'] = true,
-   ['_functions'] = true, ['_constants'] = true, ['_callbacks'] = true,
-   ['_methods'] = true, ['_fields'] = true, ['_properties'] = true,
-   ['_signals'] = true,
-}
-
 -- Loads symbol from specified compound (object, struct or interface).
 -- Recursively looks up inherited elements.
-local function find_in_compound(compound, symbol, inherited)
+local function find_in_compound(compound, symbol, categories)
+   -- Tries to get symbol from specified category.
+   local function from_category(compound, category, symbol)
+      local cat = rawget(compound, category)
+      return cat and cat[symbol]
+   end
+
    -- Check fields of this compound.
-   for name, container in pairs(compound) do
-      if categories[name] then
-	 local val = container[symbol]
+   local prefix, name = string.match(symbol, '^(_.-)_(.*)$')
+   if prefix and name then
+      -- Look in specified category.
+      local val = from_category(compound, prefix, name)
+      if val then return val end
+   else
+      -- Check all available categories.
+      for i = 1, #categories do
+	 local val = from_category(compound, categories[i], symbol)
 	 if val then return val end
       end
    end
 
    -- Check all inherited compounds.
    for _, inherited in pairs(rawget(compound, '_inherits') or {}) do
-      local val = find_in_compound(inherited, symbol, true)
+      local val = find_in_compound(inherited, symbol, categories)
       if val then return val end
    end
 end
 
--- Metatable for compound repo objects.
-local compound_mt = { __index = find_in_compound }
+-- Metatable for namespaces.
+local namespace_mt = {}
+function namespace_mt.__index(namespace, symbol)
+   return find_in_compound(namespace, symbol,
+			   { '_classes', '_structs', '_unions', '_enums',
+			     '_functions', '_constants', })
+end
 
 -- Metatable for structs, allowing to 'call' structure, which is
 -- translating to creating new structure instance (i.e. constructor).
-local struct_mt = { __index = find_in_compound }
+local struct_mt = {}
+function struct_mt.__index(struct, symbol)
+   return find_in_compound(struct, symbol, { '_methods', '_fields' })
+end
+
 function struct_mt.__call(type, fields)
    -- Create the structure instance.
    local info = assert(ri:find_by_gtype(type[0].gtype))
@@ -89,7 +101,7 @@ function bitflags_mt.__index(bitflags, value)
    return t
 end
 
--- Similar metatable for enum tables.
+-- Metatable for enum type tables.
 local enum_mt = {}
 function enum_mt.__index(enum, value)
    for name, val in pairs(enum) do
@@ -97,12 +109,9 @@ function enum_mt.__index(enum, value)
    end
 end
 
--- G_TYPE_NONE constant.
-local G_TYPE_NONE = 4 -- (1 << 2)
-
 -- Namespace table for GIRepository, populated with basic methods
 -- manually.  Later it will be converted to full-featured repo namespace.
-local gi = setmetatable({}, compound_mt)
+local gi = setmetatable({ [0] = { name = 'GIRepository' } }, namespace_mt)
 core.repo.GIRepository = gi
 local ir
 
@@ -149,7 +158,7 @@ gi._structs = {
       { [0] = { name = 'GIRepository.Typelib',
 		gtype = core.gtype('Typelib') },
 	_methods = {}
-     }, compound_mt),
+     }, struct_mt),
 }
 
 -- Loads given set of symbols into table.
@@ -160,7 +169,11 @@ local function get_symbols(into, symbols, container)
 end
 
 -- Metatable for interfaces, implementing casting on __call.
-local interface_mt = { __index = find_in_compound }
+local interface_mt = {}
+function interface_mt.__index(iface, symbol)
+   return find_in_compound(iface, symbol, { '_properties', '_methods',
+					    '_signals', '_constants' })
+end
 function interface_mt.__call(iface, obj)
    -- Cast operator, 'param' is source object which should be cast.
    local res = iface and core.cast(obj, iface[0].gtype)
@@ -171,9 +184,14 @@ function interface_mt.__call(iface, obj)
    return res
 end
 
--- Metatable for classes, again implementing object
--- construction or casting on __call.
-local class_mt = { __index = find_in_compound }
+-- Metatable for classes, implementing object construction or casting
+-- on __call.
+local class_mt = {}
+function class_mt.__index(class, symbol)
+   return find_in_compound(class, symbol, {
+			      '_properties', '_methods',
+			      '_signals', '_constants', '_fields' })
+end
 function class_mt.__call(class, param)
    local obj
    if type(param) == 'userdata' then
@@ -271,6 +289,7 @@ get_symbols(
 
 -- Remember default repository.
 ir = gi.Repository.get_default()
+gir = ir
 
 loginfo 'repo.GIRepository pre-populated'
 
@@ -330,12 +349,8 @@ local function load_compound(compound, info, loads, mt)
    -- Fill in meta of the compound.
    compound[0] = compound[0] or {}
    compound[0].gtype = gi.registered_type_info_get_g_type(info)
-   compound[0].name = gi.BaseInfo.get_namespace(info) .. '.' ..
-   gi.BaseInfo.get_name(info)
-
-   -- Avoid installing tables with constructor into foreign structures.
-   setmetatable(compound,
-		compound[0].gtype == G_TYPE_NONE and compound_mt or mt)
+   compound[0].name = (info:get_namespace() .. '.'  .. info:get_name())
+   setmetatable(compound, mt)
 
    -- Iterate and load all groups.
    for name, gets in pairs(loads) do
@@ -511,9 +526,10 @@ typeloader[gi.InfoType.OBJECT] =
 
 -- Gets symbol of the specified namespace, if not present yet, tries to load it
 -- on-demand.
-local function get_symbol(namespace, symbol)
+local namespace_lookup = namespace_mt.__index
+function namespace_mt.__index(namespace, symbol)
    -- Check, whether symbol is already loaded.
-   local value = find_in_compound(namespace, symbol)
+   local value = namespace_lookup(namespace, symbol)
    if value then return value end
 
    -- Lookup baseinfo of requested symbol in the repo.
@@ -549,16 +565,16 @@ end
 -- represents it (usable as package table for Lua package loader).
 local function load_namespace(into, name)
    -- If package does not exist yet, create and store it into packages.
+   assert(name ~= 'val')
    if not into then
       into = {}
       repo[name] = into
    end
 
    -- Create _meta table containing auxiliary information
-   -- and data for the namespace.  This table also serves as metatable for the
-   -- namespace, providing __index method for retrieveing namespace content.
-   into[0] = { name = name, dependencies = {}, __index = get_symbol }
-   setmetatable(into, into[0])
+   -- and data for the namespace.
+   into[0] = { name = name, dependencies = {} }
+   setmetatable(into, namespace_mt)
 
    -- Load the typelibrary for the namespace.
    if not ir:require(name, nil, 0) then return nil end
@@ -578,8 +594,7 @@ local function load_namespace(into, name)
 	 -- which causes them to be loaded in and cached inside the namespace
 	 -- table.
 	 for i = 0, ir:get_n_infos(name) - 1 do
-	    local info = ir:get_info(name, i)
-	    get_symbol(into, gi.BaseInfo.get_name(info))
+	    local _ = into[ir:get_info(name, i):get_name()]
 	 end
       end
    return into
