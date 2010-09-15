@@ -296,14 +296,14 @@ marshal_2lua_list (lua_State *L, GITypeInfo *ti, GIArgument *val,
   int index;
 
   /* Create table to which we will deserialize the list. */
-  lua_createtable(L, 0, 0);
+  lua_newtable (L);
 
   /* Go through the list and push elements into the table. */
   for (list = (GSList *) val->v_pointer, index = 0; list != NULL;
        list = g_slist_next (list))
     {
       /* Get access to list item. */
-      GIArgument *eval = list->data;
+      GIArgument *eval = (GIArgument *) &list->data;
 
       /* Store it into the table. */
       if (lgi_marshal_2lua (L, eti, eval,
@@ -312,6 +312,10 @@ marshal_2lua_list (lua_State *L, GITypeInfo *ti, GIArgument *val,
                             NULL, NULL))
         lua_rawseti(L, -2, ++index);
     }
+
+  /* Free the list, if requested. */
+  if (xfer != GI_TRANSFER_NOTHING)
+      g_slist_free (val->v_pointer);
 
   return TRUE;
 }
