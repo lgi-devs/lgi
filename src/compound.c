@@ -63,7 +63,7 @@ compound_prepare (lua_State *L, int arg, gboolean throw)
 }
 
 static gboolean
-compound_register (lua_State *L, GIBaseInfo* info, gpointer *addr,
+compound_register (lua_State *L, GIBaseInfo *info, gpointer *addr,
                    gboolean owns, gboolean alloc_struct)
 {
   Compound *compound;
@@ -122,7 +122,17 @@ compound_register (lua_State *L, GIBaseInfo* info, gpointer *addr,
   compound->ref_repo = LUA_REFNIL;
   lua_rawgeti (L, -3, LGI_REG_REPO);
   lua_getfield (L, -1, g_base_info_get_namespace(info));
+  if (lua_isnil (L, -1))
+    {
+      lua_pop (L, 5);
+      return FALSE;
+    }
   lua_getfield (L, -1, g_base_info_get_name(info));
+  if (lua_isnil (L, -1))
+    {
+      lua_pop (L, 6);
+      return FALSE;
+    }
   lua_replace (L, -3);
   lua_pop (L, 1);
 
@@ -241,7 +251,7 @@ lgi_compound_object_new (lua_State *L, GIObjectInfo *oi, int argtable)
       lua_concat (L, lgi_type_get_name (L, oi));
       luaL_error (L, "failed to create instance of `%s'", lua_tostring (L, -1));
     }
-  
+
   return compound_register (L, oi, &addr, TRUE, FALSE) ? addr : NULL;
 }
 
@@ -341,7 +351,7 @@ lgi_compound_get (lua_State *L, int index, GIBaseInfo *ii, gboolean optional)
   lua_pushstring (L, " expected, got ");
   lua_pushstring (L, lua_typename (L, gottype));
   lua_concat (L, vals + 2);
-  luaL_argerror (L, index - 1, lua_tostring (L, -1));
+  luaL_argerror (L, index, lua_tostring (L, -1));
   return NULL;
 }
 
