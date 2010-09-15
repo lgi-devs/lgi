@@ -67,9 +67,12 @@ compound_register (lua_State *L, GIBaseInfo *info, gpointer *addr,
                    gboolean owns, gboolean alloc_struct)
 {
   Compound *compound;
-  g_assert (addr != NULL);
   gsize size;
   GIInfoType info_type;
+  GType gtype, leaf_gtype;
+
+  g_assert (addr != NULL);
+  luaL_checkstack (L, 7, "");
 
   /* Prepare access to registry and cache. */
   lua_rawgeti (L, LUA_REGISTRYINDEX, lgi_regkey);
@@ -110,6 +113,8 @@ compound_register (lua_State *L, GIBaseInfo *info, gpointer *addr,
         size = g_union_info_get_size (info);
     }
   compound = lua_newuserdata (L, G_STRUCT_OFFSET (Compound, data) + size);
+  compound->owns = 0;
+  compound->ref_repo = LUA_REFNIL;
   luaL_getmetatable (L, UD_COMPOUND);
   lua_setmetatable (L, -2);
   if (alloc_struct)
@@ -118,23 +123,61 @@ compound_register (lua_State *L, GIBaseInfo *info, gpointer *addr,
       memset (compound->data, 0, size);
     }
 
-  /* Load ref_repo reference to repo table of the object. */
-  compound->ref_repo = LUA_REFNIL;
+  /* Load ref_repo reference to repo table of the object.  This is a bit
+     complicated, because we try to find the most specialized object for which
+     we still have repo type installed, so that e.g. API marked as returning
+     GObject, and returns instance of Gtk.Window returns object Gtk.Window
+     without need to explicitely cast. */
   lua_rawgeti (L, -3, LGI_REG_REPO);
-  lua_getfield (L, -1, g_base_info_get_namespace(info));
-  if (lua_isnil (L, -1))
+  gtype = g_registered_type_info_get_g_type (info);
+  leaf_gtype = g_base_info_get_type (info) == GI_INFO_TYPE_OBJECT
+    ? G_TYPE_FROM_INSTANCE (*addr) : gtype;
+  g_base_info_ref (info);
+  lua_pushnil (L);
+  for (; gtype != G_TYPE_INVALID; gtype = g_type_next_base (leaf_gtype, gtype))
+    {
+      /* Try to find type in the repo. */
+      if (info == NULL)
+        info = g_irepository_find_by_gtype (NULL, gtype);
+      if (!G_UNLIKELY (info == NULL))
+        {
+          lua_getfield (L, -2, g_base_info_get_namespace (info));
+          if (!G_UNLIKELY (lua_isnil (L, -1)))
+            {
+              lua_getfield (L, -1, g_base_info_get_name (info));
+              if (!G_UNLIKELY (lua_isnil (L, -1)))
+                {
+                  /* Replace the best result we've found so far. */
+                  lua_replace (L, -3);
+                  lua_pop (L, 1);
+                }
+              else
+                /* pop (namespace, nil) pair. */
+                lua_pop (L, 2);
+            }
+          else
+            /* pop nil-namespace */
+            lua_pop (L, 1);
+
+          /* Reset info for the next round, if it will come. */
+          g_base_info_unref (info);
+          info = NULL;
+        }
+    }
+
+  /* If we failed to find suitable type in the repo, fail. */
+  if (G_UNLIKELY (lua_isnil (L, -1)))
     {
       lua_pop (L, 5);
       return FALSE;
     }
-  lua_getfield (L, -1, g_base_info_get_name(info));
-  if (lua_isnil (L, -1))
-    {
-      lua_pop (L, 6);
-      return FALSE;
-    }
-  lua_replace (L, -3);
-  lua_pop (L, 1);
+
+  lua_rawgeti (L, -1, 0);
+  lua_getfield (L, -1, "gtype");
+  lua_pop (L, 2);
+
+  /* Replace now unneded stack space of LGI_REG_REPO with found type. */
+  lua_replace (L, -2);
 
   /* Store it to the typeinfo. */
   lua_rawgeti (L, -4, LGI_REG_TYPEINFO);
@@ -148,8 +191,8 @@ compound_register (lua_State *L, GIBaseInfo *info, gpointer *addr,
      are not interested in floating refs. Note that there is ugly exception;
      GtkWindow's constructor returns non-floating object, but it keeps the
      reference to window internally, so we want acquire one extra reference. */
-  if (owns && g_base_info_get_type (info) == GI_INFO_TYPE_OBJECT &&
-      G_IS_INITIALLY_UNOWNED(*addr))
+  if (owns && g_type_is_a (leaf_gtype, G_TYPE_OBJECT) &&
+      (G_IS_INITIALLY_UNOWNED (*addr) || g_object_is_floating (*addr)))
       g_object_ref_sink (*addr);
 
   /* Store newly created compound to the cache. */
