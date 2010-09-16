@@ -214,7 +214,7 @@ function class_mt.__call(class, param)
       -- table.
       for name, value in pairs(param or {}) do
 	 local paramtype = class[name]
-	 if (type(paramtype) == 'userdata' and 
+	 if (type(paramtype) == 'userdata' and
 	  gi.base_info_get_type(paramtype) == gi.InfoType.PROPERTY) then
 	    params[paramtype] = value
 	 else
@@ -426,7 +426,7 @@ local function remove_property_accessors(compound)
 end
 
 local function load_signal(into, name, info)
-   into['on_' .. string.gsub(name, '%-', '_')] = 
+   into['on_' .. string.gsub(name, '%-', '_')] =
    function(obj, _, newval)
       if newval then
 	 -- Assignment means 'connect signal without detail'.
@@ -446,7 +446,7 @@ local function load_signal(into, name, info)
 	  bit.band(gi.signal_info_get_flags(info), 16) ~= 0) then
 	    setmetatable(pad, {
 			    __newindex = function(obj, detail, target)
-					    core.connect(obj, info:get_name(), 
+					    core.connect(obj, info:get_name(),
 							 info, newval, detail)
 					 end
 			 })
@@ -641,21 +641,72 @@ load_struct(gi, gi._structs.Typelib,
 load_struct(gi, gi._structs.BaseInfo,
 	    ir:find_by_name(gi[0].name, 'BaseInfo'))
 
--- GObject.Object massaging
+-- GObject.Object modifications.
 do
    local obj = repo.GObject.Object
 
    -- No methods are needed (yet).
    obj._methods = nil
 
-   -- Install 'notify' signal.
+   -- Install 'on_notify' signal.  There are a few gotchas causing that the
+   -- signal is handled separately from common signal handling above:
+   -- 1) There is no declaration of this signal in the typelib.
+   -- 2) Real notify works with glib-style property names as details.  We use
+   --    real type properties (e.g. Gtk.Window.has_focus) instead.
+   -- 3) notify handler gets pspec, but we pass Lgi-mangled property name
+   --    instead.
+
+   -- Real on_notify handler, converts its parameter from pspec to Lgi-style
+   -- property name.
+   local function get_notifier(target)
+      return function(obj, pspec)
+		return target(obj, (string.gsub(pspec.name, '%-', '_')))
+	     end
+   end
+
+   -- Implementation of on_notify worker function.
+   local function on_notify(obj, info, newval)
+      if newval then
+	 -- Assignment means 'connect signal for all properties'.
+	 core.connect(obj, info:get_name(), info, get_notifier(newval))
+      else
+	 -- Reading yields table with signal operations.
+	 local pad = {
+	    connect = function(_, target, property)
+			 return core.connect(obj, info:get_name(), info,
+					     get_notifier(target),
+					     property:get_name())
+		      end,
+	 }
+
+	 -- Add metatable allowing connection on specified detail.  Detail is
+	 -- always specified as a property for this signal.
+	 setmetatable(pad, {
+			 __newindex = function(_, property, target)
+					 core.connect(obj, info:get_name(),
+						      info,
+						      get_notifier(target),
+						      property:get_name())
+				      end
+			 })
+
+	 -- Return created signal pad.
+	 return pad
+      end
+   end
+
+   -- Install 'notify' signal.  Unfortunately typelib does not contain its
+   -- declaration, so we borrow it from callback GObject.ObjectClass.notify.
    local obj_struct = ir:find_by_name('GObject', 'ObjectClass')
    for i = 0, gi.struct_info_get_n_fields(obj_struct) - 1 do
       local field = gi.struct_info_get_field(obj_struct, i)
       if field:get_name() == 'notify' then
 	 obj._signals = {
-	    on_notify = gi.type_info_get_interface(
-	       gi.field_info_get_type(field))
+	    on_notify = function(obj, _, newval)
+			   return on_notify(obj, gi.type_info_get_interface(
+					       gi.field_info_get_type(field)),
+					    newval)
+			end,
 	 }
 	 break
       end
