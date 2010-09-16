@@ -355,6 +355,59 @@ local function load_compound(compound, info, loads, mt)
    end
 end
 
+-- Gets table for category of compound (i.e. _fields of struct or _properties
+-- for class etc).  Installs metatable which performs on-demand lookup of
+-- symbols.
+local function get_category_table(info, get_n_infos, get_info, get_value)
+   local count, free_index = get_n_infos(info)
+
+   -- Check, whether category contain at least something. If not, there is
+   -- nothing to do, table does not need to exist.
+   if count == 0 then return nil end
+
+   -- Helper method, fully loads the rest of possibly not-loaded yet category
+   -- table.
+   local function load_rest(category_table)
+      for i = 1, free_index and #free_index or count do
+	 local idx = free_index and free_index[i] or i
+	 local val, name = get_value(get_info(info, idx - 1))
+	 if val then category_table[name] = val end
+      end
+      return setmetatable(category_table, nil)
+   end
+
+   -- In case that less than 5 entries are present, load them immediatelly and
+   -- don't bother with on-demand lookup.
+   if count < 5 then return load_rest({}) end
+
+   -- Otherwise install metatable which resolves needed values at runtime.
+   free_index = {}
+   for i = 1, count do free_index[i] = i end
+   return setmetatable(
+      {}, {
+	 __index = 
+	    function(category_table, name)
+	       for i = 1, #free_index do
+		  local val, name = get_value(
+		     get_info(info, free_index[i] - 1), name)
+		  if val then
+		     -- Value found, store (cache) it in category table and
+		     -- remove from free_index table (no need to get_info() it
+		     -- next time).
+		     table.remove(free_index, i)
+		     category_table[name] = val
+		     if #free_index == 0 then
+			-- There is nothing else left, so remove the metatable
+			-- from this category table.
+			setmetatable(category_table, nil) 
+		     end
+		     return val
+		  end
+	       end
+	    end
+      })
+end
+
 -- Loads structure information into table representing the structure
 local function load_struct(namespace, into, info)
    -- Avoid exposing internal structs created for object implementations.
@@ -380,6 +433,17 @@ local function load_struct(namespace, into, info)
 		  c[n] = i
 	       end },
 	 }, struct_mt)
+
+      into._fields = get_category_table(
+	 info, gi.struct_info_get_n_fields, gi.struct_info_get_field,
+	 function(info, name)
+	    local realname = info:get_name()
+	    if name then
+	       return name == realname and info, realname
+	    else
+	       return info, realname
+	    end
+	 end)
    end
 end
 
