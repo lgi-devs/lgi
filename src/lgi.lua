@@ -205,7 +205,7 @@ function class_mt.__call(class, param)
       -- Constructor, 'param' contains table with properties/signals to
       -- initialize.
       local params = {}
-      local sigs = {}
+      local others = {}
 
       -- Get BaseInfo from gtype.
       local info = assert(ir:find_by_gtype(class[0].gtype))
@@ -213,20 +213,12 @@ function class_mt.__call(class, param)
       -- Process 'param' table, create constructor property table and signals
       -- table.
       for name, value in pairs(param or {}) do
-	 local info, proptype = class[name]
-	 if info then
-	    proptype = gi.base_info_get_type(info)
-	    if proptype == gi.InfoType.SIGNAL then
-	       sigs[name] = value
-	    elseif proptype == gi.InfoType.PROPERTY then
-	       params[info] = value
-	    else
-	       info = nil
-	    end
-	 end
-	 if not info then
-	    error(string.format("creating '%s': unknown property '%s'",
-				class[0].name, name))
+	 local paramtype = class[name]
+	 if (type(paramtype) == 'userdata' and 
+	  gi.base_info_get_type(paramtype) == gi.InfoType.PROPERTY) then
+	    params[paramtype] = value
+	 else
+	    others[name] = value
 	 end
       end
 
@@ -234,7 +226,7 @@ function class_mt.__call(class, param)
       obj = core.get(info, params)
 
       -- Attach signals previously filtered out from creation.
-      for name, func in pairs(sigs) do obj[name] = func end
+      for name, func in pairs(others) do obj[name] = func end
    end
    return obj
 end
@@ -281,6 +273,7 @@ get_symbols(
       'callable_info_get_return_type', 'callable_info_get_n_args',
       'callable_info_get_arg',
       'function_info_get_flags',
+      'signal_info_get_flags',
       'arg_info_get_type',
       'constant_info_get_type',
       'property_info_get_type',
@@ -432,6 +425,39 @@ local function remove_property_accessors(compound)
    end
 end
 
+local function load_signal(into, name, info)
+   into['on_' .. string.gsub(name, '%-', '_')] = 
+   function(obj, _, newval)
+      if newval then
+	 -- Assignment means 'connect signal without detail'.
+	 core.connect(obj, info:get_name(), info, newval)
+      else
+	 -- Reading yields table with signal operations.
+	 local pad = {
+	    connect = function(_, target, detail, after)
+			 return core.connect(obj, info:get_name(), info, target,
+					     detail, after)
+		      end,
+	 }
+
+	 -- If signal supports details, add metatable implementing __newindex
+	 -- for connecting in the 'on_signal['detail'] = handler' form.
+	 if (gi.base_info_get_type(info) == gi.InfoType.SIGNAL and
+	  bit.band(gi.signal_info_get_flags(info), 16) ~= 0) then
+	    setmetatable(pad, {
+			    __newindex = function(obj, detail, target)
+					    core.connect(obj, info:get_name(), 
+							 info, newval, detail)
+					 end
+			 })
+	 end
+
+	 -- Return created signal pad.
+	 return pad
+      end
+   end
+end
+
 typeloader[gi.InfoType.INTERFACE] =
    function(namespace, info)
       -- Load all components of the interface.
@@ -457,9 +483,7 @@ typeloader[gi.InfoType.INTERFACE] =
 	       end },
 	    _signals = { gi.interface_info_get_n_signals,
 			 gi.interface_info_get_signal,
-			 function(c, n, i)
-			    c['on_' .. string.gsub(n, '%-', '_')] = i
-			 end },
+			 load_signal },
 	    _constants = { gi.interface_info_get_n_constants,
 			   gi.interface_info_get_constant,
 			   function(c, n, i)
@@ -488,9 +512,7 @@ local function load_class(namespace, into, info)
 		      end },
 	 _signals = { gi.object_info_get_n_signals,
 		      gi.object_info_get_signal,
-		      function(c, n, i)
-			 c['on_' .. string.gsub(n, '%-', '_')] = i
-		      end },
+		      load_signal },
 	 _constants = { gi.object_info_get_n_constants,
 			gi.object_info_get_constant,
 			function(c, n, i)
