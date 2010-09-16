@@ -282,12 +282,12 @@ get_symbols(
 
 -- Remember default repository.
 ir = gi.Repository.get_default()
-gir = ir
 
 loginfo 'repo.GIRepository pre-populated'
 
--- Weak table containing symbols which currently being loaded.	These
--- symbols are not typeinfo-checked to avoid infinite recursion.
+-- Weak table containing symbols which currently being loaded. It is used
+-- mainly to avoid assorted kinds of infinite recursion which might happen
+-- during symbol dependencies loading.
 local in_load = setmetatable({}, { __mode = 'v' })
 
 -- Table containing loaders for various GI types, indexed by
@@ -489,7 +489,19 @@ typeloader[gi.InfoType.INTERFACE] =
 			   function(c, n, i)
 			      c[n] = core.get(i)
 			   end },
-	 }, interface_mt)
+	    _inherits = { gi.interface_info_get_n_prerequisites,
+			  gi.interface_info_get_prerequisite,
+			  function(c, n, i)
+			     local ns = gi.BaseInfo.get_namespace(i)
+			     local fullname = ns .. '.' .. n
+			     -- Avoid circular dependencies; in case that
+			     -- prerequisity is to some type which is currently
+			     -- being loaded, disregard it.
+			     if not in_load[fullname] then
+				c[fullname] = repo[ns][n]
+			     end
+			  end },
+ 	 }, interface_mt)
       remove_property_accessors(value)
       return value, '_interfaces'
    end
@@ -558,9 +570,9 @@ function namespace_mt.__index(namespace, symbol)
    local info = ir:find_by_name(namespace[0].name, symbol)
 
    -- Store the symbol into the in-load table, because we have to
-   -- avoid infinte recursion which might happen during type
-   -- validation if there are cycles in type definitions (e.g. struct
-   -- defining method having as an argument pointer to the struct).
+   -- avoid infinte recursion which might happen during symbol loading (mainly
+   -- when prerequisity of the interface is the class which implements said
+   -- interface).
    local fullname = namespace[0].name .. '.' .. symbol
    in_load[fullname] = info
 

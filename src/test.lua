@@ -16,10 +16,10 @@ end
 
 function tests.gioloadfile_async()
    local file = Gio.file_new_for_path('test.lua')
-   local ok, contents, length, etag 
+   local ok, contents, length, etag
    local main = GLib.MainLoop.new()
    file:load_contents_async(nil, function(_, result)
-				    ok, contents, length, etag = 
+				    ok, contents, length, etag =
 				       file:load_contents_finish(result)
 				    main:quit()
 				 end)
@@ -35,9 +35,9 @@ function tests.gtkhello()
       title = 'window',
       default_width = 400,
       default_height = 300,
-      on_delete_event = function(window) 
-			   window:destroy() 
-			   Gtk.main_quit() 
+      on_delete_event = function(window)
+			   window:destroy()
+			   Gtk.main_quit()
 			end
    }
    local status_bar = Gtk.Statusbar { has_resize_grip = true }
@@ -52,7 +52,7 @@ function tests.gtkhello()
 				     Gtk.main_quit()
 				  end,
 		  }, -1)
-   toolbar:insert(Gtk.ToolButton { 
+   toolbar:insert(Gtk.ToolButton {
 		     stock_id = 'gtk-about',
 		     on_clicked = function()
 				     local dlg = Gtk.AboutDialog {
