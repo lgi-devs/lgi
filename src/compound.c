@@ -577,6 +577,24 @@ process_element (lua_State *L, int newval)
   if (type == LUA_TNIL)
       /* Not found. */
     return compound_error (L, "%s: no `%s'", 2);
+  else if (type == LUA_TFUNCTION)
+    {
+      /* Custom function, so call it. */
+      lua_pushvalue (L, 1);
+      lua_pushvalue (L, 2);
+      if (newval == -1)
+        {
+          /* Getting value, signature is res = func(obj, fieldname). */
+          vals = 1;
+          lua_call (L, 2, 1);
+        }
+      else
+        {
+          /* Setting value, signature is func(obj, fieldname, newval). */
+          lua_pushvalue (L, newval);
+          lua_call (L, 3, 0);
+        }
+    }
   else
     {
       GIBaseInfo *ei = NULL;
