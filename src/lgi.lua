@@ -336,161 +336,146 @@ typeloader[gi.InfoType.FLAGS] =
       return load_enum(info, bitflags_mt), '_enums'
    end
 
+-- Gets table for category of compound (i.e. _fields of struct or _properties
+-- for class etc).  Installs metatable which performs on-demand lookup of
+-- symbols.
+local function get_category(info, count, get_item, xform_value, xform_name,
+			    xform_name_reverse, original_table)
+   -- Early shortcircuit; no elements, no table needed at all.
+   if count == 0 then return original_table end
+
+   -- Index contains array of indices which were still not retrieved
+   -- by get_info method, and table part contains name->index mapping.
+   local index = {}
+   for i = 1, count do index[i] = i - 1 end
+   local cached_names = 0
+   return setmetatable(
+      original_table or {}, { __index =
+	    function(category, name)
+	       -- Transform name by transform function.
+	       if xform_name then name = xform_name(name) end
+	       if not name then return end
+
+	       -- Querying index 0 has special semantics; makes the
+	       -- whole table fully loaded.
+	       if name == 0 then
+		  local en, val
+
+		  -- Load al values from unknown indices.
+		  while #index > 0 do
+		     val = get_item(info, table.remove(index))
+		     en = val:get_name()
+		     if xform_value then val = xform_value(val) end
+		     if val then
+			if xform_name_reverse then
+			   en = xform_name_reverse(en, val)
+			end
+			if en then category[en] = val end
+		     end
+		  end
+
+		  -- Load all known indices.
+		  for en, idx in pairs(index) do
+		     val = get_item(info, idx)
+		     if xform_value then val = xform_value(val) end
+		     category[en] = val
+		  end
+
+		  -- Metatable is no longer needed, disconnect it.
+		  setmetatable(category, nil)
+		  return nil
+	       end
+
+	       -- Check, whether we already know its index.
+	       local idx, val = index[name]
+	       if idx then
+		  -- We know at least the index, so get info directly.
+		  val = get_item(info, idx)
+		  index[name] = nil
+		  cached_names = cached_names - 1
+	       else
+		  -- Not yet, go through unknown indices and try to
+		  -- find the name.
+		  while #index > 0 do
+		     idx = table.remove(index)
+		     val = get_item(info, idx)
+		     local en = val:get_name()
+		     if en == name then break end
+		     val = nil
+		     index[en] = idx
+		     cached_names = cached_names + 1
+		  end
+		  if not val then return nil end
+	       end
+
+	       -- If there is nothing in the index, we can disconnect
+	       -- metatable, because everything is already loaded.
+	       if #index == 0 and cached_names == 0 then
+		  setmetatable(category, nil)
+	       end
+
+	       -- Transform found value and store it into the category table.
+	       if xform_value then val = xform_value(val) end
+	       if not val then return nil end
+	       category[name] = val
+	       return val
+	    end
+      })
+end
+
 -- Loads all fields, consts, properties, methods and interfaces of given
 -- object.
-local function load_compound(compound, info, loads, mt)
+local function load_compound(compound, info, mt)
    -- Fill in meta of the compound.
    compound[0] = compound[0] or {}
    compound[0].gtype = gi.registered_type_info_get_g_type(info)
    compound[0].name = (info:get_namespace() .. '.'  .. info:get_name())
    setmetatable(compound, mt)
-
-   -- Iterate and load all groups.
-   for name, gets in pairs(loads) do
-      for i = 0, gets[1](info) - 1 do
-	 compound[name] = rawget(compound, name) or {}
-	 local mi = gets[2](info, i)
-	 gets[3](compound[name], gi.BaseInfo.get_name(mi), mi)
-      end
-   end
-end
-
--- Gets table for category of compound (i.e. _fields of struct or _properties
--- for class etc).  Installs metatable which performs on-demand lookup of
--- symbols.
-local function get_category_table(info, get_n_infos, get_info, get_value)
-   local count, free_index = get_n_infos(info)
-
-   -- Check, whether category contain at least something. If not, there is
-   -- nothing to do, table does not need to exist.
-   if count == 0 then return nil end
-
-   -- Helper method, fully loads the rest of possibly not-loaded yet category
-   -- table.
-   local function load_rest(category_table)
-      for i = 1, free_index and #free_index or count do
-	 local idx = free_index and free_index[i] or i
-	 local val, name = get_value(get_info(info, idx - 1))
-	 if val then category_table[name] = val end
-      end
-      return setmetatable(category_table, nil)
-   end
-
-   -- In case that less than 5 entries are present, load them immediatelly and
-   -- don't bother with on-demand lookup.
-   if count < 5 then return load_rest({}) end
-
-   -- Otherwise install metatable which resolves needed values at runtime.
-   free_index = {}
-   for i = 1, count do free_index[i] = i end
-   return setmetatable(
-      {}, {
-	 __index = 
-	    function(category_table, name)
-	       for i = 1, #free_index do
-		  local val, name = get_value(
-		     get_info(info, free_index[i] - 1), name)
-		  if val then
-		     -- Value found, store (cache) it in category table and
-		     -- remove from free_index table (no need to get_info() it
-		     -- next time).
-		     table.remove(free_index, i)
-		     category_table[name] = val
-		     if #free_index == 0 then
-			-- There is nothing else left, so remove the metatable
-			-- from this category table.
-			setmetatable(category_table, nil) 
-		     end
-		     return val
-		  end
-	       end
-	    end
-      })
 end
 
 -- Loads structure information into table representing the structure
-local function load_struct(namespace, into, info)
+local function load_struct(namespace, struct, info)
    -- Avoid exposing internal structs created for object implementations.
    if not gi.struct_info_is_gtype_struct(info) then
-      load_compound(
-	 into, info,
-	 {
-	    _methods = {
-	       gi.struct_info_get_n_methods,
-	       gi.struct_info_get_method,
-	       function(c, n, i)
-		  local flags = gi.function_info_get_flags(i)
-		  if bit.band(
-		     flags, bit.bor(gi.FunctionInfoFlags.IS_GETTER,
-				    gi.FunctionInfoFlags.IS_SETTER)) == 0 then
-		     c[n] = core.get(i)
-		  end
-	       end },
-	    _fields = {
-	       gi.struct_info_get_n_fields,
-	       gi.struct_info_get_field,
-	       function(c, n, i)
-		  c[n] = i
-	       end },
-	 }, struct_mt)
-
-      into._fields = get_category_table(
-	 info, gi.struct_info_get_n_fields, gi.struct_info_get_field,
-	 function(info, name)
-	    local realname = info:get_name()
-	    if name then
-	       return name == realname and info, realname
-	    else
-	       return info, realname
-	    end
-	 end)
+      load_compound(struct, info, struct_mt)
+      struct._methods = get_category(
+	 info, gi.struct_info_get_n_methods(info), gi.struct_info_get_method,
+	 core.get, nil, nil, rawget(struct, '_methods'))
+      struct._fields = get_category(
+	 info, gi.struct_info_get_n_fields(info), gi.struct_info_get_field)
    end
 end
 
 typeloader[gi.InfoType.STRUCT] =
    function(namespace, info)
-      local value = {}
-      load_struct(namespace, value, info)
-      return value, '_structs'
+      local struct = {}
+      load_struct(namespace, struct, info)
+      return struct, '_structs'
    end
 
 typeloader[gi.InfoType.UNION] =
    function(namespace, info)
-      local value = {}
-      load_compound(
-	 value, info,
-	 {
-	    _methods = {
-	       gi.union_info_get_n_methods,
-	       gi.union_info_get_method,
-	       function(c, n, i)
-		  c[n] = core.get(i)
-	       end },
-	    _fields = {
-	       gi.union_info_get_n_fields,
-	       gi.union_info_get_field,
-	       function(c, n, i)
-		  c[n] = i
-	       end },
-	 }, struct_mt)
-      return value, '_unions'
+      local union = {}
+      load_compound(union, info, struct_mt)
+      union._methods = get_category(
+	 info, gi.union_info_get_n_methods(info), gi.union_info_get_method,
+	 core.get)
+      union._fields = get_category(
+	 info, gi.union_info_get_n_fields(info), gi.union_info_get_field)
+      return union, '_unions'
    end
 
--- Removes accessor methods for properties.  Properties should be accessed as
--- properties, not by function calls, and this removes some clutter and memory
--- overhead.
-local function remove_property_accessors(compound)
-   if compound._methods then
-      for propname in pairs(compound._properties or {}) do
-	 compound._methods['get_' .. propname] = nil
-	 compound._methods['set_' .. propname] = nil
-	 compound._methods[propname] = nil
-      end
-   end
+local function load_signal_name(name)
+   name = string.match(name, '^on_(.+)$')
+   return name and string.gsub(name, '_', '%-')
 end
 
-local function load_signal(into, name, info)
-   into['on_' .. string.gsub(name, '%-', '_')] =
+local function load_signal_name_reverse(name)
+   return 'on_' .. string.gsub(name, '%-', '_')
+end
+
+local function load_signal(info)
+   return
    function(obj, _, newval)
       if newval then
 	 -- Assignment means 'connect signal without detail'.
@@ -525,82 +510,81 @@ end
 typeloader[gi.InfoType.INTERFACE] =
    function(namespace, info)
       -- Load all components of the interface.
-      local value = {}
-      load_compound(
-	 value, info,
-	 {
-	    _properties = { gi.interface_info_get_n_properties,
-			    gi.interface_info_get_property,
-			    function(c, n, i)
-			       c[string.gsub(n, '%-', '_')] = i
-			    end },
-	    _methods = {
-	       gi.interface_info_get_n_methods,
-	       gi.interface_info_get_method,
-	       function(c, n, i)
-		  local flags = gi.function_info_get_flags(i)
-		  if bit.band(
-		     flags, bit.bor(gi.FunctionInfoFlags.IS_GETTER,
-				    gi.FunctionInfoFlags.IS_SETTER)) == 0 then
-		     c[n] = core.get(i)
-		  end
-	       end },
-	    _signals = { gi.interface_info_get_n_signals,
-			 gi.interface_info_get_signal,
-			 load_signal },
-	    _constants = { gi.interface_info_get_n_constants,
-			   gi.interface_info_get_constant,
-			   function(c, n, i)
-			      c[n] = core.get(i)
-			   end },
-	    _inherits = { gi.interface_info_get_n_prerequisites,
-			  gi.interface_info_get_prerequisite,
-			  function(c, n, i)
-			     local ns = gi.BaseInfo.get_namespace(i)
-			     local fullname = ns .. '.' .. n
-			     -- Avoid circular dependencies; in case that
-			     -- prerequisity is to some type which is currently
-			     -- being loaded, disregard it.
-			     if not in_load[fullname] then
-				c[fullname] = repo[ns][n]
-			     end
-			  end },
- 	 }, interface_mt)
-      remove_property_accessors(value)
-      return value, '_interfaces'
+      local interface = {}
+      load_compound(value, info, interface_mt)
+      interface._properties = get_category(
+	 info, gi.interface_info_get_n_properties(info),
+	 gi.interface_info_get_property, nil,
+	 function(name) return string.gsub(name, '_', '%-') end)
+      interface._methods = get_category(
+	 info, gi.interface_info_get_n_methods(info),
+	 gi.interface_info_get_method,
+	 function(ii)
+	    local flags = gi.function_info_get_flags(ii)
+	    if bit.band(flags, gi.FunctionInfoFlags.IS_GETTER
+			+ gi.FunctionInfoFlags.IS_SETTER) == 0 then
+	       return core.get(ii)
+	    end
+	 end)
+      interface._signals = get_category(
+	 info, gi.interface_info_get_n_signals(info),
+	 gi.interface_info_get_signal, load_signal, load_signal_name,
+	 load_signal_name_reverse)
+      interface._constants = get_category(
+	 info, gi.interface_info_get_n_constants(info),
+	 gi.interface_info_get_constant, core.get)
+      interface._inherits = get_category(
+	 info, gi.interface_info_get_n_prerequisites(info),
+	 gi.interface_info_get_prerequisite,
+	 function(ii)
+	    local ns = gi.BaseInfo.get_namespace(ii)
+	    local fullname = ns .. '.' .. n
+	    -- Avoid circular dependencies; in case that prerequisity
+	    -- is to some type which is currently being loaded,
+	    -- disregard it.
+	    if not in_load[fullname] then return repo[ns][n] end
+	 end,
+	 nil,
+	 function(info_name, ii)
+	    return gi.BaseInfo.get_namespace(ii) .. '.' .. info_name
+	 end)
+      -- Immediatelly fully resolve the table.
+      local _ = interface._inherits and interface._inherits[0]
+      return interface, '_interfaces'
    end
 
 -- Loads structure information into table representing the structure
-local function load_class(namespace, into, info)
+local function load_class(namespace, class, info)
    -- Load components of the object.
-   load_compound(
-      into, info,
-      {
-	 _properties = { gi.object_info_get_n_properties,
-			 gi.object_info_get_property,
-			 function(c, n, i)
-			    c[string.gsub(n, '%-', '_')] = i
-			 end },
-	 _methods = { gi.object_info_get_n_methods,
-		      gi.object_info_get_method,
-		      function(c, n, i)
-			 c[n] = core.get(i)
-		      end },
-	 _signals = { gi.object_info_get_n_signals,
-		      gi.object_info_get_signal,
-		      load_signal },
-	 _constants = { gi.object_info_get_n_constants,
-			gi.object_info_get_constant,
-			function(c, n, i)
-			   c[n] = core.get(i)
-			end },
-	 _inherits = { gi.object_info_get_n_interfaces,
-		       gi.object_info_get_interface,
-		       function(c, n, i)
-			  local ns = gi.BaseInfo.get_namespace(i)
-			  c[ns .. '.' .. n] = repo[ns][n]
-		       end },
-      }, class_mt)
+   load_compound(class, info, class_mt)
+   class._properties = get_category(
+      info, gi.object_info_get_n_properties(info), gi.object_info_get_property,
+      nil,
+      function(n) return (string.gsub(n, '_', '%-')) end,
+      function(n) return (string.gsub(n, '%-', '_')) end)
+   class._methods = get_category(
+      info, gi.object_info_get_n_methods(info), gi.object_info_get_method,
+      function(mi)
+	 local flags = gi.function_info_get_flags(mi)
+	 if bit.band( flags, (gi.FunctionInfoFlags.IS_GETTER
+			      + gi.FunctionInfoFlags.IS_SETTER)) == 0 then
+	    return core.get(mi)
+	 end
+      end, nil, nil, rawget(class, '_methods'))
+   class._signals = get_category(
+      info, gi.object_info_get_n_signals(info), gi.object_info_get_signal,
+      load_signal, load_signal_name, load_signal_name_reverse)
+   class._constants = get_category(
+      info, gi.object_info_get_n_constants(info), gi.object_info_get_constant,
+      core.get)
+   class._inherits = get_category(
+      info, gi.object_info_get_n_interfaces(info), gi.object_info_get_interface,
+      function(ii) return repo[gi.BaseInfo.get_namespace(ii)][n] end,
+      nil,
+      function(info_name, ii)
+	 return gi.BaseInfo.get_namespace(ii) .. '.' .. info_name
+      end)
+   local _ = class._inherits and class._inherits[0]
 
    -- Add parent (if any) into _inherits table.
    local parent = gi.object_info_get_parent(info)
@@ -608,18 +592,17 @@ local function load_class(namespace, into, info)
       local ns, name = gi.BaseInfo.get_namespace(parent),
       gi.BaseInfo.get_name(parent)
       if ns ~= namespace[0].name or name ~= gi.BaseInfo.get_name(info) then
-	 into._inherits = into._inherits or {}
-	 into._inherits[ns .. '.' .. name] = repo[ns][name]
+	 class._inherits = class._inherits or {}
+	 class._inherits[ns .. '.' .. name] = repo[ns][name]
       end
    end
-   remove_property_accessors(into)
 end
 
 typeloader[gi.InfoType.OBJECT] =
    function(namespace, info)
-      local value = {}
-      load_class(namespace, value, info)
-      return value, '_classes'
+      local class = {}
+      load_class(namespace, class, info)
+      return class, '_classes'
    end
 
 -- Gets symbol of the specified namespace, if not present yet, tries to load it
