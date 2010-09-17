@@ -59,9 +59,9 @@ int lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
                     GITransfer xfer,  GIArgument *val, int narg,
                     GICallableInfo *ci, GIArgument **args);
 
-/* Marshalls single value from GLib/C to Lua.  Returns TRUE if
-   something was pushed to the stack. */
-gboolean lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIArgument *val,
+/* Marshalls single value from GLib/C to Lua.  Returns 1 if something
+   was pushed to the stack (temporary), 0 otherwise. */
+int lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIArgument *val,
                            GITransfer xfer,
                            GICallableInfo *ci, GIArgument **args);
 
@@ -90,9 +90,9 @@ void lgi_closure_destroy (gpointer user_data);
 void lgi_closure_guard (lua_State *L, gpointer user_data);
 
 /* Creates new compound of given address and type, pushes its userdata on the
- * lua stack. */
-gboolean lgi_compound_create (lua_State *L, GIBaseInfo *ii, gpointer addr,
-                              gboolean own);
+ * lua stack. Returns 1 if successful, 0 otherwise. */
+int lgi_compound_create (lua_State *L, GIBaseInfo *ii, gpointer addr,
+			 gboolean own);
 
 /* Creates new struct including allocated place for it. */
 gpointer lgi_compound_struct_new (lua_State *L, GIBaseInfo *ii);

@@ -12,7 +12,7 @@
 
 /* Returns int value of specified parameter.  If specified parameter does not
    exist or its value cannot be converted to int, FALSE is returned. */
-static gboolean
+static int
 get_int_param (GICallableInfo *ci, GIArgument **args, int param, int *val)
 {
   if (param >= 0 && param < g_callable_info_get_n_args (ci))
@@ -27,7 +27,7 @@ get_int_param (GICallableInfo *ci, GIArgument **args, int param, int *val)
 		 valtype, valget, valset, ffitype)		\
 	  case tag:                                             \
 	    *val = (int) args[param]->argf;			\
-	    return TRUE;
+	    return 1;
 #define DECLTYPE_NUMERIC_ONLY
 #include "decltype.h"
 
@@ -36,7 +36,7 @@ get_int_param (GICallableInfo *ci, GIArgument **args, int param, int *val)
 	}
     }
 
-  return FALSE;
+  return 0;
 }
 
 /* Retrieves sizeof() specified type. */
@@ -61,11 +61,11 @@ get_type_size (GITypeTag tag)
 }
 
 /* Marshals simple types to C.  Simple are number and strings. */
-static gboolean
+static int
 marshal_2c_simple (lua_State *L, GITypeTag tag, GITransfer transfer,
                    GIArgument *val, int narg, gboolean optional)
 {
-  gboolean handled = TRUE;
+  int vals = 1;
   switch (tag)
     {
 #define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup,	\
@@ -79,10 +79,10 @@ marshal_2c_simple (lua_State *L, GITypeTag tag, GITransfer transfer,
 #include "decltype.h"
 
     default:
-      handled = FALSE;
+      vals = 0;
     }
 
-  return handled;
+  return vals;
 }
 
 /* Marshalls given callable from Lua to C. */
@@ -196,11 +196,11 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 
 /* Marshals simple types to Lua.  Simple are number and
    strings. Returns TRUE if value was handled, 0 otherwise. */
-static gboolean
+static int
 marshal_2lua_simple (lua_State *L, GITypeTag tag, GIArgument *val,
                      gboolean own)
 {
-  gboolean handled = TRUE;
+  int vals = 1;
   switch (tag)
     {
 #define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup,	\
@@ -213,13 +213,13 @@ marshal_2lua_simple (lua_State *L, GITypeTag tag, GIArgument *val,
 #include "decltype.h"
 
     default:
-      handled = FALSE;
+      vals = 0;
     }
 
-  return handled;
+  return vals;
 }
 
-static gboolean
+static int
 marshal_2lua_carray (lua_State *L, GITypeInfo *ti, GIArgument *val,
 		    GITransfer xfer, GICallableInfo *ci, GIArgument **args)
 {
@@ -235,11 +235,11 @@ marshal_2lua_carray (lua_State *L, GITypeInfo *ti, GIArgument *val,
 	{
 	  /* Length of the array is dynamic, get it from other argument. */
 	  if (ci == NULL)
-	    return FALSE;
+	    return 0;
 
 	  len = g_type_info_get_array_length (ti);
 	  if (!get_int_param (ci, args, len, &len))
-	    return FALSE;
+	    return 0;
 	}
     }
 
@@ -284,10 +284,10 @@ marshal_2lua_carray (lua_State *L, GITypeInfo *ti, GIArgument *val,
       g_base_info_unref (eti);
     }
 
-  return TRUE;
+  return 1;
 }
 
-static gboolean
+static int
 marshal_2lua_list (lua_State *L, GITypeInfo *ti, GIArgument *val,
                    GITransfer xfer)
 {
@@ -317,20 +317,20 @@ marshal_2lua_list (lua_State *L, GITypeInfo *ti, GIArgument *val,
   if (xfer != GI_TRANSFER_NOTHING)
       g_slist_free (val->v_pointer);
 
-  return TRUE;
+  return 1;
 }
 
 /* Marshalls single value from GLib/C to Lua.  Returns 1 if something
    was pushed to the stack. */
-gboolean
+int
 lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIArgument *val,
 		 GITransfer xfer,
 		 GICallableInfo *ci, GIArgument **args)
 {
   gboolean own = (xfer != GI_TRANSFER_NOTHING);
   GITypeTag tag = g_type_info_get_tag (ti);
-  gboolean handled = marshal_2lua_simple (L, tag, val, own);
-  if (!handled)
+  int vals = marshal_2lua_simple (L, tag, val, own);
+  if (vals == 0)
     {
       switch (tag)
 	{
@@ -346,7 +346,7 @@ lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIArgument *val,
 	      case GI_INFO_TYPE_ENUM:
 	      case GI_INFO_TYPE_FLAGS:
 		/* Directly store underlying value. */
-		handled =
+		vals =
 		  marshal_2lua_simple (L, g_enum_info_get_storage_type (ii),
                                        val, own);
 		break;
@@ -355,7 +355,7 @@ lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIArgument *val,
               case GI_INFO_TYPE_UNION:
 	      case GI_INFO_TYPE_OBJECT:
 	      case GI_INFO_TYPE_INTERFACE:
-		handled = lgi_compound_create (L, ii, val->v_pointer, own);
+		vals = lgi_compound_create (L, ii, val->v_pointer, own);
 		break;
 
 	      default:
@@ -371,7 +371,7 @@ lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIArgument *val,
 	    switch (atype)
 	      {
 	      case GI_ARRAY_TYPE_C:
-		handled = marshal_2lua_carray (L, ti, val, xfer, ci, args);
+		vals = marshal_2lua_carray (L, ti, val, xfer, ci, args);
 		break;
 
 	      default:
@@ -382,7 +382,7 @@ lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIArgument *val,
 
         case GI_TYPE_TAG_GSLIST:
         case GI_TYPE_TAG_GLIST:
-          handled = marshal_2lua_list (L, ti, val, xfer);
+          vals = marshal_2lua_list (L, ti, val, xfer);
           break;
 
 	default:
@@ -390,5 +390,5 @@ lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIArgument *val,
 	}
     }
 
-  return handled;
+  return vals;
 }

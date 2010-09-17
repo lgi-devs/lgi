@@ -62,7 +62,7 @@ compound_prepare (lua_State *L, int arg, gboolean throw)
   return NULL;
 }
 
-static gboolean
+static int
 compound_register (lua_State *L, GIBaseInfo *info, gpointer *addr,
                    gboolean owns, gboolean alloc_struct)
 {
@@ -84,7 +84,7 @@ compound_register (lua_State *L, GIBaseInfo *info, gpointer *addr,
       if (!alloc_struct)
         {
           lua_pushnil (L);
-          return TRUE;
+          return 1;
         }
     }
   else
@@ -96,7 +96,7 @@ compound_register (lua_State *L, GIBaseInfo *info, gpointer *addr,
         {
           lua_replace (L, -3);
           lua_pop (L, 1);
-          return TRUE;
+          return 1;
         }
       else
         lua_pop (L, 1);
@@ -169,7 +169,7 @@ compound_register (lua_State *L, GIBaseInfo *info, gpointer *addr,
   if (G_UNLIKELY (lua_isnil (L, -1)))
     {
       lua_pop (L, 5);
-      return FALSE;
+      return 0;
     }
 
   lua_rawgeti (L, -1, 0);
@@ -204,10 +204,10 @@ compound_register (lua_State *L, GIBaseInfo *info, gpointer *addr,
      requested compound, so remove them. */
   lua_replace (L, -3);
   lua_pop (L, 1);
-  return TRUE;
+  return 1;
 }
 
-gboolean
+int
 lgi_compound_create (lua_State *L, GIBaseInfo *ii, gpointer addr, gboolean own)
 {
   return compound_register (L, ii, &addr, own, FALSE);
@@ -414,8 +414,7 @@ process_field (lua_State* L, gpointer addr, GIFieldInfo* fi, int newval)
 	  return luaL_argerror (L, 2, "not readable");
 	}
 
-      vals = lgi_marshal_2lua (L, ti, val, GI_TRANSFER_NOTHING, NULL, NULL) ?
-	1 : 0;
+      vals = lgi_marshal_2lua (L, ti, val, GI_TRANSFER_NOTHING, NULL, NULL);
     }
   else
     {
