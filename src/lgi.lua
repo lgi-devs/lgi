@@ -128,6 +128,7 @@ gi._enums = { InfoType = setmetatable({
 					 SIGNAL = 13,
 					 VFUNC = 14,
 					 PROPERTY = 15,
+					 FIELD = 16,
 					 TYPE = 18,
 				      }, enum_mt),
 	      TypeTag = setmetatable({
@@ -294,20 +295,81 @@ local in_load = setmetatable({}, { __mode = 'v' })
 -- gi.InfoType constants.
 local typeloader = {}
 
+-- Loads the type and all dependent subtypes.  Returns nil if it cannot be
+-- loaded or the type itself if it is ok.
+local function check_type(info)
+   if not info then return nil end
+   local type = gi.base_info_get_type(info)
+   if type == gi.InfoType.TYPE then
+      -- Check the embedded typeinfo.
+      local tag = gi.type_info_get_tag(info)
+      if tag < gi.TypeTag.ARRAY then return info
+      elseif tag == gi.TypeTag.ARRAY then
+	 return check_type(gi.type_info_get_param_type(info, 0)) and info
+      elseif tag == gi.TypeTag.INTERFACE then
+	 return check_type(gi.type_info_get_interface(info)) and info
+      elseif tag == gi.TypeTag.GLIST or tag == gi.TypeTag.GSLIST then
+	 return check_type(gi.type_info_get_param_type(info, 0)) and info
+      elseif tag == gi.TypeTag.GHASH then
+	 return (check_type(gi.type_info_get_param_type(info, 0)) and
+	      check_type(gi.type_info_get_param_type(info, 1))) and info
+      else
+	 loginfo('unknown typetag %s(%d)', tostring(gi.TypeTag[tag]), tag)
+	 return nil
+      end
+   elseif (type == gi.InfoType.FUNCTION or type == gi.InfoType.CALLBACK or
+	   type == gi.InfoType.SIGNAL or type == gi.InfoType.VFUNC) then
+      -- Check all callable arguments and return value.
+      if not check_type(gi.callable_info_get_return_type(info)) then
+	 return nil
+      end
+      for i = 0, gi.callable_info_get_n_args(info) - 1 do
+	 local ai = gi.callable_info_get_arg(info, i)
+	 if not check_type(gi.arg_info_get_type(ai)) then
+	    return nil
+	 end
+      end
+      return info
+   elseif type == gi.InfoType.CONSTANT then
+      return check_type(gi.constant_info_get_type(info)) and info
+   elseif type == gi.InfoType.PROPERTY then
+      return check_type(gi.property_info_get_type(info)) and info
+   elseif type == gi.InfoType.FIELD then
+      return check_type(gi.field_info_get_type(info)) and info
+   elseif (type == gi.InfoType.STRUCT or type == gi.InfoType.ENUM or
+	   type == gi.InfoType.FLAGS or type == gi.InfoType.OBJECT or
+	   type == gi.InfoType.INTERFACE or type == gi.InfoType.UNION) then
+      -- Check, whether we can reach the symbol in the repo.
+      local ns, n = info:get_namespace(), info:get_name()
+      return (in_load[ns .. '.' .. n] or repo[ns][n]) and info
+   else
+      local name = {}
+      while info do
+	 if gi.base_info_get_type(info) ~= gi.InfoType.TYPE then
+	    table.insert(name, 1, info:get_name())
+	 end
+	 info = info:get_container()
+      end
+      loginfo("unknown type %s of %s", gi.InfoType[type],
+	      table.concat(name, '.'))
+      return nil
+   end
+end
+
+-- Similar to core.get(), but checks the type first before allowing to be
+-- instantiated.
+local function checked_get(info)
+   return check_type(info) and core.get(info)
+end
+
 typeloader[gi.InfoType.FUNCTION] =
    function(namespace, info)
-      return core.get(info), '_functions'
-   end
-
-typeloader[gi.InfoType.CALLBACK] =
-   function(namespace, info)
-
-      return info, '_callbacks'
+      return checked_get(info), '_functions'
    end
 
 typeloader[gi.InfoType.CONSTANT] =
    function(namespace, info)
-      return core.get(info), '_constants'
+      return checked_get(info), '_constants'
    end
 
 local function load_enum(info, meta)
@@ -359,14 +421,14 @@ local function get_category(info, count, get_item, xform_value, xform_name,
 	       -- Querying index 0 has special semantics; makes the
 	       -- whole table fully loaded.
 	       if name == 0 then
-		  local en, val
+		  local ei, en, val
 
 		  -- Load al values from unknown indices.
 		  while #index > 0 do
-		     local ei = get_item(info, table.remove(index))
-		     en = ei:get_name()
+		     ei = check_type(get_item(info, table.remove(index)))
 		     val = not xform_value and ei or xform_value(ei)
 		     if val then
+			en = ei:get_name()
 			if xform_name_reverse then
 			   en = xform_name_reverse(en, ei)
 			end
@@ -376,8 +438,8 @@ local function get_category(info, count, get_item, xform_value, xform_name,
 
 		  -- Load all known indices.
 		  for en, idx in pairs(index) do
-		     val = get_item(info, idx)
-		     if xform_value then val = xform_value(val) end
+		     val = check_type(get_item(info, idx))
+		     val = not xform_value and val or xform_value(val)
 		     category[en] = val
 		  end
 
@@ -415,6 +477,7 @@ local function get_category(info, count, get_item, xform_value, xform_name,
 	       end
 
 	       -- Transform found value and store it into the category table.
+	       if not check_type(val) then return nil end
 	       if xform_value then val = xform_value(val) end
 	       if not val then return nil end
 	       category[req_name] = val
