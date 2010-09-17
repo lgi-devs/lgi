@@ -316,7 +316,7 @@ local function load_enum(info, meta)
    -- Load all enum values.
    for i = 0, gi.enum_info_get_n_values(info) - 1 do
       local mi = gi.enum_info_get_value(info, i)
-      local name = string.upper(gi.BaseInfo.get_name(mi))
+      local name = string.upper(mi:get_name())
       value[name] = gi.value_info_get_value(mi)
    end
 
@@ -351,9 +351,9 @@ local function get_category(info, count, get_item, xform_value, xform_name,
    local cached_names = 0
    return setmetatable(
       original_table or {}, { __index =
-	    function(category, name)
+	    function(category, req_name)
 	       -- Transform name by transform function.
-	       if xform_name then name = xform_name(name) end
+	       local name = not xform_name and req_name or xform_name(req_name)
 	       if not name then return end
 
 	       -- Querying index 0 has special semantics; makes the
@@ -363,12 +363,12 @@ local function get_category(info, count, get_item, xform_value, xform_name,
 
 		  -- Load al values from unknown indices.
 		  while #index > 0 do
-		     val = get_item(info, table.remove(index))
-		     en = val:get_name()
-		     if xform_value then val = xform_value(val) end
+		     local ei = get_item(info, table.remove(index))
+		     en = ei:get_name()
+		     val = not xform_value and ei or xform_value(ei)
 		     if val then
 			if xform_name_reverse then
-			   en = xform_name_reverse(en, val)
+			   en = xform_name_reverse(en, ei)
 			end
 			if en then category[en] = val end
 		     end
@@ -417,7 +417,7 @@ local function get_category(info, count, get_item, xform_value, xform_name,
 	       -- Transform found value and store it into the category table.
 	       if xform_value then val = xform_value(val) end
 	       if not val then return nil end
-	       category[name] = val
+	       category[req_name] = val
 	       return val
 	    end
       })
@@ -511,7 +511,7 @@ typeloader[gi.InfoType.INTERFACE] =
    function(namespace, info)
       -- Load all components of the interface.
       local interface = {}
-      load_compound(value, info, interface_mt)
+      load_compound(interface, info, interface_mt)
       interface._properties = get_category(
 	 info, gi.interface_info_get_n_properties(info),
 	 gi.interface_info_get_property, nil,
@@ -537,16 +537,15 @@ typeloader[gi.InfoType.INTERFACE] =
 	 info, gi.interface_info_get_n_prerequisites(info),
 	 gi.interface_info_get_prerequisite,
 	 function(ii)
-	    local ns = gi.BaseInfo.get_namespace(ii)
-	    local fullname = ns .. '.' .. n
+	    local ns, n = ii:get_namespace(), ii:get_name()
 	    -- Avoid circular dependencies; in case that prerequisity
 	    -- is to some type which is currently being loaded,
 	    -- disregard it.
-	    if not in_load[fullname] then return repo[ns][n] end
+	    if not in_load[ns .. '.' .. n] then return repo[ns][n] end
 	 end,
 	 nil,
 	 function(info_name, ii)
-	    return gi.BaseInfo.get_namespace(ii) .. '.' .. info_name
+	    return ii:get_namespace() .. '.' .. info_name
 	 end)
       -- Immediatelly fully resolve the table.
       local _ = interface._inherits and interface._inherits[0]
@@ -579,19 +578,16 @@ local function load_class(namespace, class, info)
       core.get)
    class._inherits = get_category(
       info, gi.object_info_get_n_interfaces(info), gi.object_info_get_interface,
-      function(ii) return repo[gi.BaseInfo.get_namespace(ii)][n] end,
+      function(ii) return repo[ii:get_namespace(ii)][ii:get_name()] end,
       nil,
-      function(info_name, ii)
-	 return gi.BaseInfo.get_namespace(ii) .. '.' .. info_name
-      end)
+      function(n, ii) return ii:get_namespace() .. '.' .. n end)
    local _ = class._inherits and class._inherits[0]
 
    -- Add parent (if any) into _inherits table.
    local parent = gi.object_info_get_parent(info)
    if parent then
-      local ns, name = gi.BaseInfo.get_namespace(parent),
-      gi.BaseInfo.get_name(parent)
-      if ns ~= namespace[0].name or name ~= gi.BaseInfo.get_name(info) then
+      local ns, name = parent:get_namespace(), parent:get_name()
+      if ns ~= namespace[0].name or name ~= info:get_name() then
 	 class._inherits = class._inherits or {}
 	 class._inherits[ns .. '.' .. name] = repo[ns][name]
       end
@@ -624,7 +620,7 @@ function namespace_mt.__index(namespace, symbol)
    in_load[fullname] = info
 
    -- Decide according to symbol type what to do.
-   if info and not gi.BaseInfo.is_deprecated(info) then
+   if info and not info:is_deprecated() then
       local infotype = gi.base_info_get_type(info)
       local loader = typeloader[infotype]
       if loader then
