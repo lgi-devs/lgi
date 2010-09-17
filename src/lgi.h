@@ -21,9 +21,6 @@
 const char *lgi_sd (lua_State* L);
 #endif
 
-/* Global context of main thread, usable for callbacks to work with. */
-extern lua_State *lgi_main_thread_state;
-
 /* Reports specified GLib error as function return.  Returns number of items
  * pushed to the stack.  err instance is automatically freed. */
 int lgi_error (lua_State *L, GError *err);
@@ -64,7 +61,7 @@ int lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 
 /* Marshalls single value from GLib/C to Lua.  Returns TRUE if
    something was pushed to the stack. */
-gboolean lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIArgument *val, 
+gboolean lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIArgument *val,
                            GITransfer xfer,
                            GICallableInfo *ci, GIArgument **args);
 

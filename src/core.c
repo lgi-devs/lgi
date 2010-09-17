@@ -330,15 +330,10 @@ lgi_create_reg (lua_State* L, enum lgi_reg reg, const char* exportname,
   lua_rawseti (L, -2, reg);
 }
 
-lua_State* lgi_main_thread_state;
-
 int
 luaopen_lgi__core (lua_State* L)
 {
   GError* err = NULL;
-
-  /* Remember state of the main thread. */
-  lgi_main_thread_state = L;
 
   /* GLib initializations. */
   g_type_init ();

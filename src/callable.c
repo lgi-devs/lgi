@@ -68,6 +68,13 @@ typedef struct _Closure
   /* Lua reference to associated callable. */
   int callable_ref;
 
+  /* Thread which created closure and Lua reference to it (so that it is not
+     garbage-collected in the meantime).  Note that the closure is executed
+     either in this thread, or in newly-created one if this thread is
+     yielded. */
+  int thread_ref;
+  lua_State *L;
+
   /* Lua reference to target function to be invoked. */
   int target_ref;
 
@@ -435,7 +442,29 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   Param *param;
 
   /* Get access to proper Lua context. */
-  lua_State *L = lgi_main_thread_state;
+  lua_State *L = closure->L;
+  lua_pushthread (L);
+  lua_pop (L, 1);
+  lua_rawgeti (L, LUA_REGISTRYINDEX, closure->thread_ref);
+  if (lua_isthread (L, -1))
+    {
+      L = lua_tothread (L, -1);
+      if (lua_status (L) != 0)
+        {
+          /* Thread is not in usable state for us, it is suspended, we cannot
+             afford to resume it, because it is possible that the routine we
+             are about to call is actually going to resume it.  Create new
+             thread instead and switch closure to its context. */
+          L = lua_newthread (L);
+          luaL_unref (L, LUA_REGISTRYINDEX, closure->thread_ref);
+          closure->thread_ref = luaL_ref (closure->L, LUA_REGISTRYINDEX);
+        }
+    }
+  lua_pop (closure->L, 1);
+  closure->L = L;
+
+  lua_pushthread (L);
+  lua_pop (L, 1);
 
   /* Get access to Callable structure. */
   lua_rawgeti (L, LUA_REGISTRYINDEX, closure->callable_ref);
@@ -518,11 +547,11 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 void
 lgi_closure_destroy (gpointer user_data)
 {
-  lua_State* L = lgi_main_thread_state;
   Closure* closure = user_data;
 
-  luaL_unref (L, LUA_REGISTRYINDEX, closure->callable_ref);
-  luaL_unref (L, LUA_REGISTRYINDEX, closure->target_ref);
+  luaL_unref (closure->L, LUA_REGISTRYINDEX, closure->callable_ref);
+  luaL_unref (closure->L, LUA_REGISTRYINDEX, closure->target_ref);
+  luaL_unref (closure->L, LUA_REGISTRYINDEX, closure->thread_ref);
   ffi_closure_free (closure);
 }
 
@@ -545,6 +574,11 @@ lgi_closure_create (lua_State *L, GICallableInfo *ci, int target,
   /* Store reference to target Lua function. */
   lua_pushvalue (L, target);
   closure->target_ref = luaL_ref (L, LUA_REGISTRYINDEX);
+
+  /* Store reference to target Lua thread. */
+  closure->L = L;
+  lua_pushthread (L);
+  closure->thread_ref = luaL_ref (L, LUA_REGISTRYINDEX);
 
   /* Remember whether closure should destroy itself automatically after being
      invoked. */
