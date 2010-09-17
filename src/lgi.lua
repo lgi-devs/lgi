@@ -61,12 +61,21 @@ local function find_in_compound(compound, symbol, categories)
    end
 end
 
+-- Fully resolves the whole compound, i.e. load all symbols normally loaded
+-- on-demand at once.
+local function resolve_compound(compound_meta)
+   local ns, name = string.match(compound_meta.name, '(.+)%.(.+)')
+   for _, category in pairs(repo[ns][name]) do
+      if type(category) == 'table' then local _ = category[0] end
+   end
+end
+
 -- Metatable for namespaces.
 local namespace_mt = {}
 function namespace_mt.__index(namespace, symbol)
    return find_in_compound(namespace, symbol,
-			   { '_classes', '_structs', '_unions', '_enums',
-			     '_functions', '_constants', })
+			   { '_classes', '_interfaces', '_structs', '_unions',
+			     '_enums', '_functions', '_constants', })
 end
 
 -- Metatable for structs, allowing to 'call' structure, which is
@@ -403,6 +412,8 @@ typeloader[gi.InfoType.FLAGS] =
 -- symbols.
 local function get_category(info, count, get_item, xform_value, xform_name,
 			    xform_name_reverse, original_table)
+   assert(not xform_name or xform_name_reverse)
+
    -- Early shortcircuit; no elements, no table needed at all.
    if count == 0 then return original_table end
 
@@ -414,13 +425,9 @@ local function get_category(info, count, get_item, xform_value, xform_name,
    return setmetatable(
       original_table or {}, { __index =
 	    function(category, req_name)
-	       -- Transform name by transform function.
-	       local name = not xform_name and req_name or xform_name(req_name)
-	       if not name then return end
-
 	       -- Querying index 0 has special semantics; makes the
 	       -- whole table fully loaded.
-	       if name == 0 then
+	       if req_name == 0 then
 		  local ei, en, val
 
 		  -- Load al values from unknown indices.
@@ -447,6 +454,10 @@ local function get_category(info, count, get_item, xform_value, xform_name,
 		  setmetatable(category, nil)
 		  return nil
 	       end
+
+	       -- Transform name by transform function.
+	       local name = not xform_name and req_name or xform_name(req_name)
+	       if not name then return end
 
 	       -- Check, whether we already know its index.
 	       local idx, val = index[name]
@@ -493,6 +504,7 @@ local function load_compound(compound, info, mt)
    compound[0] = compound[0] or {}
    compound[0].gtype = gi.registered_type_info_get_g_type(info)
    compound[0].name = (info:get_namespace() .. '.'  .. info:get_name())
+   compound[0].resolve = resolve_compound
    setmetatable(compound, mt)
 end
 
@@ -578,7 +590,8 @@ typeloader[gi.InfoType.INTERFACE] =
       interface._properties = get_category(
 	 info, gi.interface_info_get_n_properties(info),
 	 gi.interface_info_get_property, nil,
-	 function(name) return string.gsub(name, '_', '%-') end)
+	 function(name) return string.gsub(name, '_', '%-') end,
+	 function(name) return string.gsub(name, '%-', '_') end)
       interface._methods = get_category(
 	 info, gi.interface_info_get_n_methods(info),
 	 gi.interface_info_get_method,
@@ -611,7 +624,7 @@ typeloader[gi.InfoType.INTERFACE] =
 	    return ii:get_namespace() .. '.' .. info_name
 	 end)
       -- Immediatelly fully resolve the table.
-      local _ = interface._inherits and interface._inherits[0]
+      local _ = rawget(interface, '_inherits') and interface._inherits[0]
       return interface, '_interfaces'
    end
 
@@ -644,14 +657,14 @@ local function load_class(namespace, class, info)
       function(ii) return repo[ii:get_namespace(ii)][ii:get_name()] end,
       nil,
       function(n, ii) return ii:get_namespace() .. '.' .. n end)
-   local _ = class._inherits and class._inherits[0]
+   local _ = rawget(class, '_inherits') and class._inherits[0]
 
    -- Add parent (if any) into _inherits table.
    local parent = gi.object_info_get_parent(info)
    if parent then
       local ns, name = parent:get_namespace(), parent:get_name()
       if ns ~= namespace[0].name or name ~= info:get_name() then
-	 class._inherits = class._inherits or {}
+	 class._inherits = rawget(class, '_inherits') or {}
 	 class._inherits[ns .. '.' .. name] = repo[ns][name]
       end
    end
@@ -701,6 +714,18 @@ function namespace_mt.__index(namespace, symbol)
    return value
 end
 
+-- Resolves everything in the namespace by iterating through it.
+local function resolve_namespace(ns_meta)
+   -- Iterate through all items in the namespace and dereference them,
+   -- which causes them to be loaded in and cached inside the namespace
+   -- table.
+   local name = ns_meta.name
+   local ns = repo[name]
+   for i = 0, ir:get_n_infos(name) - 1 do
+      local _ = ns[ir:get_info(name, i):get_name()]
+   end
+end
+
 -- Loads namespace, optionally with specified version and returns table which
 -- represents it (usable as package table for Lua package loader).
 local function load_namespace(into, name)
@@ -728,15 +753,7 @@ local function load_namespace(into, name)
    -- Install 'resolve' closure, which forces loading this namespace.
    -- Useful when someone wants to inspect what's inside (e.g. some
    -- kind of source browser or smart editor).
-   into[0].resolve =
-      function()
-	 -- Iterate through all items in the namespace and dereference them,
-	 -- which causes them to be loaded in and cached inside the namespace
-	 -- table.
-	 for i = 0, ir:get_n_infos(name) - 1 do
-	    local _ = into[ir:get_info(name, i):get_name()]
-	 end
-      end
+   into[0].resolve = resolve_namespace
    return into
 end
 
