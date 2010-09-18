@@ -15,7 +15,7 @@ local builder = Gtk.Builder()
 builder:add_from_file('demo.ui')
 
 -- Get top-level window from the builder.
-local window = Gtk.Window(builder:get_object('window1'))
+local window = builder:get_object('window1')
 
 -- Connect 'quit' and 'about' signals.
 builder:get_object('Quit').on_activate = function(action) window:destroy() end
@@ -26,8 +26,8 @@ function(action)
    about_dlg:hide()
 end
 
--- Connect 'destroy' signal of the main window.
-window.on_destroy = function() Gtk.main_quit() end
+-- Connect 'destroy' signal of the main window, terminates the main loop.
+window.on_destroy = Gtk.main_quit
 
 -- Make sure that main window is visible.
 window:show_all()
