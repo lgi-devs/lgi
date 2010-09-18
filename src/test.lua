@@ -122,14 +122,118 @@ function tests.t01_gireg_09_uint64()
    checkv(R.test_uint64(1.1), 1, 'number')
    checkv(R.test_uint64(-1.1), 0xffffffffffffffff, 'number')
 
-   checkv(R.test_int64(0x80000000), 0x80000000, 'number')
-   checkv(R.test_int64(0xffffffff), 0xffffffff, 'number')
-   checkv(R.test_int64(0x100000000), 0x100000000, 'number')
+   checkv(R.test_uint64(0x80000000), 0x80000000, 'number')
+   checkv(R.test_uint64(0xffffffff), 0xffffffff, 'number')
+   checkv(R.test_uint64(0x100000000), 0x100000000, 'number')
    checkv(R.test_uint64(0x8000000000000000), 0x8000000000000000, 'number')
    checkv(R.test_uint64(0x10000000000000000), 0, 'number')
 
 -- See comment above about lossy conversions.
 -- checkv(R.test_uint64(0xffffffffffffffff), 0xffffffffffffffff, 'number')
+end
+
+function tests.t01_gireg_10_short()
+   local R = lgi.Regress
+   checkv(R.test_short(0), 0, 'number')
+   checkv(R.test_short(1), 1, 'number')
+   checkv(R.test_short(-1), -1, 'number')
+   checkv(R.test_short(1.1), 1, 'number')
+   checkv(R.test_short(-1.1), -1, 'number')
+end
+
+function tests.t01_gireg_11_ushort()
+   local R = lgi.Regress
+   checkv(R.test_ushort(0), 0, 'number')
+   checkv(R.test_ushort(1), 1, 'number')
+   checkv(R.test_ushort(1.1), 1, 'number')
+   checkv(R.test_ushort(32768), 32768, 'number')
+   checkv(R.test_ushort(65535), 65535, 'number')
+end
+
+function tests.t01_gireg_12_int()
+   local R = lgi.Regress
+   checkv(R.test_int(0), 0, 'number')
+   checkv(R.test_int(1), 1, 'number')
+   checkv(R.test_int(-1), -1, 'number')
+   checkv(R.test_int(1.1), 1, 'number')
+   checkv(R.test_int(-1.1), -1, 'number')
+end
+
+function tests.t01_gireg_13_uint()
+   local R = lgi.Regress
+   checkv(R.test_uint(0), 0, 'number')
+   checkv(R.test_uint(1), 1, 'number')
+   checkv(R.test_uint(1.1), 1, 'number')
+   checkv(R.test_uint(0x80000000), 0x80000000, 'number')
+   checkv(R.test_uint(0xffffffff), 0xffffffff, 'number')
+end
+
+function tests.t01_gireg_14_ssize()
+   local R = lgi.Regress
+   checkv(R.test_ssize(0), 0, 'number')
+   checkv(R.test_ssize(1), 1, 'number')
+   checkv(R.test_ssize(-1), -1, 'number')
+   checkv(R.test_ssize(1.1), 1, 'number')
+   checkv(R.test_ssize(-1.1), -1, 'number')
+end
+
+function tests.t01_gireg_15_size()
+   local R = lgi.Regress
+   checkv(R.test_size(0), 0, 'number')
+   checkv(R.test_size(1), 1, 'number')
+   checkv(R.test_size(1.1), 1, 'number')
+   checkv(R.test_size(0x80000000), 0x80000000, 'number')
+   checkv(R.test_size(0xffffffff), 0xffffffff, 'number')
+end
+
+-- Helper, checks that given value has requested type and value.
+local function checkvf(val, exp, tolerance)
+   assert(type(val) == 'number', string.format(
+	     "got type `%s', expected `number'", type(val)))
+   assert(math.abs(val - exp) <= tolerance, 
+	  string.format("got value `%s', expected `%s'",
+			tostring(val), tostring(exp)))
+end
+
+function tests.t01_gireg_16_float()
+   local R = lgi.Regress
+   local t = 0.000001
+   checkvf(R.test_float(0), 0, t)
+   checkvf(R.test_float(1), 1, t)
+   checkvf(R.test_float(1.1), 1.1, t)
+   checkvf(R.test_float(-1), -1, t)
+   checkvf(R.test_float(-1.1), -1.1, t)
+   checkvf(R.test_float(0x8000), 0x8000, t)
+   checkvf(R.test_float(0xffff), 0xffff, t)
+   checkvf(R.test_float(-0x8000), -0x8000, t)
+   checkvf(R.test_float(-0xffff), -0xffff, t)
+end
+
+function tests.t01_gireg_17_double()
+   local R = lgi.Regress
+   checkv(R.test_double(0), 0, 'number')
+   checkv(R.test_double(1), 1, 'number')
+   checkv(R.test_double(1.1), 1.1, 'number')
+   checkv(R.test_double(-1), -1, 'number')
+   checkv(R.test_double(-1.1), -1.1, 'number')
+   checkv(R.test_double(0x80000000), 0x80000000, 'number')
+   checkv(R.test_double(0xffffffff), 0xffffffff, 'number')
+   checkv(R.test_double(-0x80000000), -0x80000000, 'number')
+   checkv(R.test_double(-0xffffffff), -0xffffffff, 'number')
+end
+
+function tests.t01_gireg_18_timet()
+   local R = lgi.Regress
+   checkv(R.test_timet(0), 0, 'number')
+   checkv(R.test_timet(1), 1, 'number')
+   checkv(R.test_timet(10000), 10000, 'number')
+end
+
+function tests.t01_gireg_19_gtype()
+   local R = lgi.Regress
+   checkv(R.test_gtype(0), 0, 'number')
+   checkv(R.test_gtype(1), 1, 'number')
+   checkv(R.test_gtype(10000), 10000, 'number')
 end
 
 function tests.t02_gio_01_loadfile_sync()
