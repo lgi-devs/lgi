@@ -236,6 +236,16 @@ function tests.t01_gireg_19_gtype()
    checkv(R.test_gtype(10000), 10000, 'number')
 end
 
+function tests.t01_gireg_20_closure()
+   local R = lgi.Regress
+   checkv(R.test_closure(function() return 42 end), 42, 'number')
+end
+
+function tests.t01_gireg_21_closure_arg()
+   local R = lgi.Regress
+   checkv(R.test_closure(function(int) return int end, 43), 43, 'number')
+end
+
 function tests.t02_gio_01_loadfile_sync()
    local file = Gio.file_new_for_path('test.lua')
    local ok, contents, length, etag = file:load_contents()
