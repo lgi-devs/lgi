@@ -378,9 +378,6 @@ lgi_compound_get (lua_State *L, int index, GIBaseInfo *ii, gboolean optional)
       if (g_type_is_a (real_type, requested_type))
         return compound->addr;
     }
-  else
-    /* Remove items stored by compound_prepare(). */
-    lua_pop (L, 2);
 
   /* Put exact requested type into the error message. */
   gottype = lua_type (L, index);
