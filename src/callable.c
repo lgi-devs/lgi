@@ -164,8 +164,8 @@ lgi_callable_create (lua_State *L, GICallableInfo *info)
   /* Allocate Callable userdata. */
   nargs = g_callable_info_get_n_args (info);
   callable = lua_newuserdata (L, sizeof (Callable) +
-                              sizeof (ffi_type) * (nargs + 2) +
-                              sizeof (Param) * nargs);
+			      sizeof (ffi_type) * (nargs + 2) +
+			      sizeof (Param) * nargs);
   luaL_getmetatable (L, UD_CALLABLE);
   lua_setmetatable (L, -2);
 
@@ -190,10 +190,10 @@ lgi_callable_create (lua_State *L, GICallableInfo *info)
       /* Resolve symbol (function address). */
       symbol = g_function_info_get_symbol (info);
       if (!g_typelib_symbol (g_base_info_get_typelib (info), symbol,
-                             &callable->address))
+			     &callable->address))
 	/* Fail with the error message. */
 	return luaL_error (L, "could not locate %s(%s): %s",
-                           lua_tostring (L, -3), symbol, g_module_error ());
+			   lua_tostring (L, -3), symbol, g_module_error ());
     }
   else if (GI_IS_SIGNAL_INFO (info))
     /* Signals always have 'self', i.e. the object on which they are
@@ -229,13 +229,13 @@ lgi_callable_create (lua_State *L, GICallableInfo *info)
 	get_ffi_type(param) : &ffi_type_pointer;
 
       /* Mark closure-related user_data fields and possibly destroy_notify
-         fields as internal. */
+	 fields as internal. */
       arg = g_arg_info_get_closure (&param->ai);
       if (arg > 0 && arg < nargs)
-        callable->params[arg].internal = TRUE;
+	callable->params[arg].internal = TRUE;
       arg = g_arg_info_get_destroy (&param->ai);
       if (arg > 0 && arg < nargs)
-        callable->params[arg].internal = TRUE;
+	callable->params[arg].internal = TRUE;
 
       /* Similarly for array length field. */
       if (g_type_info_get_tag (&param->ti) == GI_TYPE_TAG_ARRAY &&
@@ -253,12 +253,12 @@ lgi_callable_create (lua_State *L, GICallableInfo *info)
 
   /* Create ffi_cif. */
   if (ffi_prep_cif (&callable->cif, FFI_DEFAULT_ABI,
-                    callable->has_self + nargs + callable->throws,
-                    ffi_retval, ffi_args) != FFI_OK)
+		    callable->has_self + nargs + callable->throws,
+		    ffi_retval, ffi_args) != FFI_OK)
     {
       lua_concat (L, lgi_type_get_name (L, callable->info));
       return luaL_error (L, "ffi_prep_cif for `%s' failed",
-                         lua_tostring (L, -1));
+			 lua_tostring (L, -1));
     }
 
   /* Store callable object to the cache. */
@@ -294,7 +294,7 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
 	{
 	  lua_concat (L, lgi_type_get_name (L, callable->info));
 	  return luaL_error (L, "`%s': no native addr to call",
-                             lua_tostring (L, -1));
+			     lua_tostring (L, -1));
 	}
     }
 
@@ -308,8 +308,8 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
   if (callable->has_self)
     {
       args[0].v_pointer =
-          lgi_compound_get (L, args_index,
-                            g_base_info_get_container (callable->info), FALSE);
+	  lgi_compound_get (L, args_index,
+			    g_base_info_get_container (callable->info), FALSE);
       ffi_args[0] = &args[0];
       lua_argi++;
     }
@@ -337,28 +337,28 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
   for (i = 0; i < callable->nargs; i++, param++)
     if (!param->internal)
       {
-        int argi = i + callable->has_self;
-        if (param->dir != GI_DIRECTION_OUT)
-          /* Convert parameter from Lua stack to C. */
-          nret += lgi_marshal_2c (L, &param->ti, &param->ai, param->transfer,
-                                  &args[argi], lua_argi++,
-                                  callable->info,
-                                  (GIArgument **) (ffi_args +
-                                                   callable->has_self));
-        else
-          {
-            /* Special handling for out/caller-alloc structures; we have to
-               manually pre-create them and store them on the stack. */
-            if (g_arg_info_is_caller_allocates (&param->ai) &&
-                g_type_info_get_tag (&param->ti) == GI_TYPE_TAG_INTERFACE)
-              {
-                GIBaseInfo *ii = g_type_info_get_interface (&param->ti);
-                GIInfoType type = g_base_info_get_type (ii);
-                if (type == GI_INFO_TYPE_STRUCT || type == GI_INFO_TYPE_UNION)
-                  args[argi].v_pointer = lgi_compound_struct_new (L, ii);
-                g_base_info_unref (ii);
-              }
-          }
+	int argi = i + callable->has_self;
+	if (param->dir != GI_DIRECTION_OUT)
+	  /* Convert parameter from Lua stack to C. */
+	  nret += lgi_marshal_2c (L, &param->ti, &param->ai, GI_TRANSFER_NONE,
+				  &args[argi], lua_argi++,
+				  callable->info,
+				  (GIArgument **) (ffi_args +
+						   callable->has_self));
+	else
+	  {
+	    /* Special handling for out/caller-alloc structures; we have to
+	       manually pre-create them and store them on the stack. */
+	    if (g_arg_info_is_caller_allocates (&param->ai) &&
+		g_type_info_get_tag (&param->ti) == GI_TYPE_TAG_INTERFACE)
+	      {
+		GIBaseInfo *ii = g_type_info_get_interface (&param->ti);
+		GIInfoType type = g_base_info_get_type (ii);
+		if (type == GI_INFO_TYPE_STRUCT || type == GI_INFO_TYPE_UNION)
+		  args[argi].v_pointer = lgi_compound_struct_new (L, ii);
+		g_base_info_unref (ii);
+	      }
+	  }
       }
 
   /* Add error for 'throws' type function. */
@@ -380,8 +380,8 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
   nret = 0;
   if (g_type_info_get_tag (&callable->retval.ti) != GI_TYPE_TAG_VOID)
     nret = lgi_marshal_2lua (L, &callable->retval.ti, &retval,
-                             callable->retval.transfer, callable->info, NULL)
-        ? 1 : 0;
+			     callable->retval.transfer, callable->info, NULL)
+	? 1 : 0;
 
   /* Process output parameters. */
   param = &callable->params[0];
@@ -389,8 +389,8 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
     if (!param->internal && param->dir != GI_DIRECTION_IN)
       if (lgi_marshal_2lua (L, &param->ti, &args[i + callable->has_self],
 			   param->transfer, callable->info,
-                           (GIArgument**) (ffi_args +
-                                           callable->has_self)))
+			   (GIArgument**) (ffi_args +
+					   callable->has_self)))
 	nret++;
 
   return nret;
@@ -410,9 +410,9 @@ callable_tostring (lua_State *L)
 {
   Callable *callable = luaL_checkudata (L, 1, UD_CALLABLE);
   lua_pushfstring (L, "lgi.%s (%p): ",
-                   (GI_IS_FUNCTION_INFO (callable->info) ? "fun" :
-                    (GI_IS_SIGNAL_INFO (callable->info) ? "sig" :
-                     (GI_IS_VFUNC_INFO (callable->info) ? "vfn" : "cbk"))),
+		   (GI_IS_FUNCTION_INFO (callable->info) ? "fun" :
+		    (GI_IS_SIGNAL_INFO (callable->info) ? "sig" :
+		     (GI_IS_VFUNC_INFO (callable->info) ? "vfn" : "cbk"))),
 		  callable->address);
   lua_concat (L, lgi_type_get_name (L, callable->info) + 1);
   return 1;
@@ -450,15 +450,15 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
     {
       L = lua_tothread (L, -1);
       if (lua_status (L) != 0)
-        {
-          /* Thread is not in usable state for us, it is suspended, we cannot
-             afford to resume it, because it is possible that the routine we
-             are about to call is actually going to resume it.  Create new
-             thread instead and switch closure to its context. */
-          L = lua_newthread (L);
-          luaL_unref (L, LUA_REGISTRYINDEX, closure->thread_ref);
-          closure->thread_ref = luaL_ref (closure->L, LUA_REGISTRYINDEX);
-        }
+	{
+	  /* Thread is not in usable state for us, it is suspended, we cannot
+	     afford to resume it, because it is possible that the routine we
+	     are about to call is actually going to resume it.  Create new
+	     thread instead and switch closure to its context. */
+	  L = lua_newthread (L);
+	  luaL_unref (L, LUA_REGISTRYINDEX, closure->thread_ref);
+	  closure->thread_ref = luaL_ref (closure->L, LUA_REGISTRYINDEX);
+	}
     }
   lua_pop (closure->L, 1);
   closure->L = L;
@@ -479,8 +479,8 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   if (callable->has_self)
     {
       if (lgi_compound_create (L, g_base_info_get_container(callable->info),
-                               ((GIArgument*) args[0])->v_pointer, FALSE))
-        npos++;
+			       ((GIArgument*) args[0])->v_pointer, FALSE))
+	npos++;
     }
 
   /* Marshal input arguments to lua. */
@@ -488,11 +488,11 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   for (i = 0; i < callable->nargs; ++i, ++param)
     if (!param->internal && param->dir != GI_DIRECTION_OUT)
       {
-        if (lgi_marshal_2lua (L, &param->ti,
-                              (GIArgument *) args[i + callable->has_self],
-                              param->transfer, callable->info,
-                              (GIArgument **) &args[callable->has_self]))
-            npos++;
+	if (lgi_marshal_2lua (L, &param->ti,
+			      (GIArgument *) args[i + callable->has_self],
+			      param->transfer, callable->info,
+			      (GIArgument **) &args[callable->has_self]))
+	    npos++;
       }
 
   /* Call it. */
@@ -503,31 +503,51 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   if (res == 0)
     {
       /* Marshal return value from Lua. */
+      int to_pop;
       if (g_type_info_get_tag (&callable->retval.ti) != GI_TYPE_TAG_VOID)
 	{
-	  lgi_marshal_2c (L, &callable->retval.ti, NULL,
-                          callable->retval.transfer, ret, npos, NULL, NULL);
+	  to_pop = lgi_marshal_2c (L, &callable->retval.ti, NULL,
+				   callable->retval.transfer, ret, npos,
+				   NULL, NULL);
+	  if (to_pop != 0)
+	    {
+	      g_warning ("cbk `%s.%s': return (transfer none) %d, unsafe!",
+			 g_base_info_get_namespace (callable->info),
+			 g_base_info_get_name (callable->info), to_pop);
+	      lua_pop (L, to_pop);
+	    }
+
 	  npos++;
 	}
 
       /* Marshal output arguments from Lua. */
       param = callable->params;
       for (i = 0; i < callable->nargs; ++i, ++param)
-        if (!param->internal && param->dir != GI_DIRECTION_IN)
-          {
-            lgi_marshal_2c (L, &param->ti, &param->ai, param->transfer,
-                            (GIArgument *)args[i + callable->has_self], npos,
-                            callable->info,
-                            (GIArgument **)(args + callable->has_self));
-            npos++;
-          }
+	if (!param->internal && param->dir != GI_DIRECTION_IN)
+	  {
+	    to_pop =
+	      lgi_marshal_2c (L, &param->ti, &param->ai, param->transfer,
+			      (GIArgument *)args[i + callable->has_self], npos,
+			      callable->info,
+			      (GIArgument **)(args + callable->has_self));
+	    if (to_pop != 0)
+	      {
+		g_warning ("cbk %s.%s: arg `%s' (transfer none) %d, unsafe!",
+			   g_base_info_get_namespace (callable->info),
+			   g_base_info_get_name (callable->info),
+			   g_base_info_get_name (&param->ai), to_pop);
+		lua_pop (L, to_pop);
+	      }
+
+	    npos++;
+	  }
     }
   else if (callable->throws)
     {
       /* If the function is expected to return errors, create proper error. */
       GQuark q = g_quark_from_static_string ("lgi-callback-error-quark");
       GError **err = ((GIArgument *) args[callable->has_self +
-                                          callable->nargs])->v_pointer;
+					  callable->nargs])->v_pointer;
       g_set_error_literal (err, q, 1, lua_tostring(L, -1));
       lua_pop (L, 1);
     }
@@ -558,7 +578,7 @@ lgi_closure_destroy (gpointer user_data)
 /* Creates closure from Lua function to be passed to C. */
 gpointer
 lgi_closure_create (lua_State *L, GICallableInfo *ci, int target,
-                    gboolean autodestroy, gpointer *call_addr)
+		    gboolean autodestroy, gpointer *call_addr)
 {
   Closure *closure;
   Callable *callable;
@@ -586,7 +606,7 @@ lgi_closure_create (lua_State *L, GICallableInfo *ci, int target,
 
   /* Create closure. */
   if (ffi_prep_closure_loc (&closure->ffi_closure, &callable->cif,
-                            closure_callback, closure, *call_addr) != FFI_OK)
+			    closure_callback, closure, *call_addr) != FFI_OK)
     {
       lgi_closure_destroy (closure);
       lua_concat (L, lgi_type_get_name (L, ci));

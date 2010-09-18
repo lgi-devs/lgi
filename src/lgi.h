@@ -48,6 +48,7 @@ typedef enum lgi_reg
 /* Initialization of modules. */
 void lgi_compound_init (lua_State *L);
 void lgi_callable_init (lua_State *L);
+void lgi_marshal_init (lua_State *L);
 
 /* GIBaseInfo of GIBaseInfo type itself.  Leaks, never freed. */
 extern GIBaseInfo *lgi_baseinfo_info;
