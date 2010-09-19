@@ -440,7 +440,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 {
   Callable *callable;
   Closure *closure = closure_arg;
-  gint res, npos, i;
+  gint res, npos, i, stacktop;
   Param *param;
 
   /* Get access to proper Lua context. */
@@ -450,6 +450,10 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   lua_rawgeti (L, LUA_REGISTRYINDEX, closure->callable_ref);
   callable = lua_touserdata (L, -1);
   lua_pop (L, 1);
+
+  /* Remember stacktop, this is the position on which we should expect
+     return values. */
+  stacktop = lua_gettop (L);
 
   /* Push function (target) to be called to the stack. */
   lua_rawgeti (L, LUA_REGISTRYINDEX, closure->target_ref);
@@ -477,7 +481,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 
   /* Call it. */
   res = lua_pcall (L, npos, LUA_MULTRET, 0);
-  npos = 1;
+  npos = stacktop;
 
   /* Check, whether we can report an error here. */
   if (res == 0)
@@ -541,6 +545,10 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
       lgi_closure_guard (L, closure);
       lua_pop (L, 1);
     }
+
+  /* This is NOT called by Lua, so we better leave the Lua stack we
+     used pretty much tidied. */
+  lua_settop (L, stacktop);
 }
 
 /* Destroys specified closure. */
