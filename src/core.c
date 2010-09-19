@@ -53,6 +53,32 @@ lgi_type_get_name (lua_State *L, GIBaseInfo *info)
   return n;
 }
 
+lua_State *
+lgi_get_callback_state (lua_State **state, int *thread_ref)
+{
+  /* Get access to proper Lua context. */
+  lua_State *L = *state;
+  lua_rawgeti (L, LUA_REGISTRYINDEX, *thread_ref);
+  if (lua_isthread (L, -1))
+    {
+      L = lua_tothread (L, -1);
+      if (lua_status (L) != 0)
+	{
+	  /* Thread is not in usable state for us, it is suspended, we
+	     cannot afford to resume it, because it is possible that
+	     the routine we are about to call is actually going to
+	     resume it.  Create new thread instead and switch closure
+	     to its context. */
+	  L = lua_newthread (L);
+	  luaL_unref (L, LUA_REGISTRYINDEX, *thread_ref);
+	  *thread_ref = luaL_ref (*state, LUA_REGISTRYINDEX);
+	}
+    }
+  lua_pop (*state, 1);
+  *state = L;
+  return L;
+}
+
 static int
 lgi_find (lua_State *L)
 {

@@ -442,29 +442,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   Param *param;
 
   /* Get access to proper Lua context. */
-  lua_State *L = closure->L;
-  lua_pushthread (L);
-  lua_pop (L, 1);
-  lua_rawgeti (L, LUA_REGISTRYINDEX, closure->thread_ref);
-  if (lua_isthread (L, -1))
-    {
-      L = lua_tothread (L, -1);
-      if (lua_status (L) != 0)
-	{
-	  /* Thread is not in usable state for us, it is suspended, we cannot
-	     afford to resume it, because it is possible that the routine we
-	     are about to call is actually going to resume it.  Create new
-	     thread instead and switch closure to its context. */
-	  L = lua_newthread (L);
-	  luaL_unref (L, LUA_REGISTRYINDEX, closure->thread_ref);
-	  closure->thread_ref = luaL_ref (closure->L, LUA_REGISTRYINDEX);
-	}
-    }
-  lua_pop (closure->L, 1);
-  closure->L = L;
-
-  lua_pushthread (L);
-  lua_pop (L, 1);
+  lua_State *L = lgi_get_callback_state (&closure->L, &closure->thread_ref);
 
   /* Get access to Callable structure. */
   lua_rawgeti (L, LUA_REGISTRYINDEX, closure->callable_ref);

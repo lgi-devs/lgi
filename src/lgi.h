@@ -29,6 +29,14 @@ int lgi_error (lua_State *L, GError *err);
    Returns number of pushed elements. */
 int lgi_type_get_name (lua_State *L, GIBaseInfo *info);
 
+/* Returns Lua context to use in the callback.  This is useful to
+   avoid calling callbacks in the context of Lua thread which is
+   currently suspended, so if this state is detected, a new thread is
+   created instead. It is assumed that callback stores state and
+   thread-ref of the Lua thread in which was callback registered.
+   These are passed as arguments to this function. */
+lua_State *lgi_get_callback_state (lua_State **state, int *thread_ref);
+
 /* Key in registry, containing table with all our private data. */
 extern int lgi_regkey;
 typedef enum lgi_reg
