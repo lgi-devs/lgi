@@ -134,7 +134,10 @@ lgi_get (lua_State* L)
   /* Create new instance based on the embedded typeinfo. */
   gpointer res;
   int vals = 0;
-  GIBaseInfo* ii = lgi_compound_get (L, 1, GI_TYPE_BASE_INFO, FALSE);
+  GIBaseInfo *ii;
+
+  if (lgi_compound_get (L, 1, GI_TYPE_BASE_INFO, (gpointer *) &ii, FALSE))
+    g_assert_not_reached ();
 
   switch (g_base_info_get_type (ii))
     {
@@ -197,9 +200,11 @@ lgi_gtype (lua_State *L)
 static int
 lgi_cast (lua_State *L)
 {
-  /* Get the source object. */
-  GObject *obj = lgi_compound_get (L, 1, G_TYPE_OBJECT, FALSE);
+  GObject *obj;
   GType gtype = luaL_checknumber (L, 2);
+
+  /* Get the source object. */
+  lgi_compound_get (L, 1, G_TYPE_OBJECT, (gpointer *) &obj, FALSE);
 
   /* Check, that casting is possible. */
   if (g_type_is_a (G_TYPE_FROM_INSTANCE (obj), gtype))
@@ -231,14 +236,19 @@ gclosure_destroy (gpointer user_data, GClosure *closure)
 static int
 lgi_connect (lua_State *L)
 {
-  gpointer obj = lgi_compound_get (L, 1, G_TYPE_OBJECT, FALSE);
+  gpointer obj;
   const char *signame = luaL_checkstring (L, 2);
-  GICallableInfo *ci = lgi_compound_get (L, 3, GI_TYPE_BASE_INFO, FALSE);
+  GICallableInfo *ci;
   const char *detail = lua_tostring (L, 5);
   gpointer call_addr, lgi_closure;
   GClosure *gclosure;
   guint signal_id;
   gulong handler_id;
+
+  /* Get target objects. */
+  if (lgi_compound_get (L, 1, G_TYPE_OBJECT, &obj, FALSE)
+      || lgi_compound_get (L, 3, GI_TYPE_BASE_INFO, (gpointer *) &ci, FALSE))
+      g_assert_not_reached ();
 
   /* Create GClosure instance to be used.  This is fast'n'dirty method; it
      requires less lines of code to write, but a lot of code to execute when

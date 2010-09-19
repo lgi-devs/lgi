@@ -106,12 +106,13 @@ gpointer lgi_compound_struct_new (lua_State *L, GIBaseInfo *ii);
 /* Creates new object, initializes with specified properties. */
 gpointer lgi_compound_object_new (lua_State *L, GIObjectInfo *ii, int argtable);
 
-/* Retrieves compound-type parameter from given Lua-stack position, checks,
-   whether it is suitable for requested gtype.  Returns pointer to the
-   compound object, returns NULL if Lua-stack value is nil and optional is
-   TRUE. */
-gpointer lgi_compound_get (lua_State *L, int arg, GType req_gtype, 
-			   gboolean optional);
+/* Retrieves compound-type parameter from given Lua-stack position,
+   checks, whether it is suitable for requested gtype.  Fills in
+   pointer to the compound object, returns NULL if Lua-stack value is
+   nil and optional is TRUE.  Returns number of temporary Lua objects
+   pushed to the stack. */
+int lgi_compound_get (lua_State *L, int arg, GType req_gtype, gpointer *addr, 
+		      gboolean optional);
 
 /* Initializes type of GValue to specified ti. */
 void lgi_value_init (lua_State *L, GValue *val, GITypeInfo *ti);

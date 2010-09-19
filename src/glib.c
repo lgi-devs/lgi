@@ -55,7 +55,10 @@ lgi_value_init (lua_State *L, GValue *val, GITypeInfo *ti)
 int
 lgi_value_load (lua_State *L, GValue *val, int narg)
 {
+  gpointer obj;
+  int vals;
   GType type = G_VALUE_TYPE (val);
+
   if (type == G_TYPE_NONE)
     return 0;
 #define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup,	\
@@ -80,12 +83,20 @@ lgi_value_load (lua_State *L, GValue *val, int narg)
       return 1;
 
     case G_TYPE_OBJECT:
-      g_value_set_object (val, lgi_compound_get (L, narg, type, FALSE));
-      return 1;
+      {
+	vals = lgi_compound_get (L, narg, type, &obj, FALSE);
+	g_value_set_object (val, obj);
+	lua_pop (L, vals);
+	return 1;
+      }
 
     case G_TYPE_BOXED:
-      g_value_set_boxed (val, lgi_compound_get (L, narg, type, FALSE));
-      return 1;
+      {
+	vals = lgi_compound_get (L, narg, type, &obj, FALSE);
+	g_value_set_boxed (val, obj);
+	lua_pop (L, vals);
+	return 1;
+      }
 
     default:
       break;

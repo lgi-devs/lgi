@@ -355,16 +355,18 @@ compound_error (lua_State *L, const char *errmsg, int element)
 		     lua_tostring (L, element));
 }
 
-gpointer
-lgi_compound_get (lua_State *L, int index, GType req_gtype, gboolean optional)
+int
+lgi_compound_get (lua_State *L, int index, GType req_gtype, gpointer *addr,
+		  gboolean optional)
 {
   Compound *compound;
   GType real_type;
   int vals, gottype;
   GIBaseInfo *req_typeinfo;
 
+  *addr = NULL;
   if (optional && lua_isnoneornil (L, index))
-    return NULL;
+    return 0;
 
   /* Check for type ancestry. */
   compound = compound_prepare (L, index, FALSE);
@@ -375,7 +377,10 @@ lgi_compound_get (lua_State *L, int index, GType req_gtype, gboolean optional)
       real_type = lua_tointeger (L, -1);
       lua_pop (L, 4);
       if (g_type_is_a (real_type, req_gtype))
-        return compound->addr;
+	{
+	  *addr = compound->addr;
+	  return 0;
+	}
     }
 
   /* Put exact requested type into the error message. */
@@ -393,7 +398,7 @@ lgi_compound_get (lua_State *L, int index, GType req_gtype, gboolean optional)
   lua_pushstring (L, lua_typename (L, gottype));
   lua_concat (L, vals + 2);
   luaL_argerror (L, index, lua_tostring (L, -1));
-  return NULL;
+  return 0;
 }
 
 /* Processes compound element of 'field' type. */
@@ -508,10 +513,11 @@ process_element (lua_State *L, int newval)
       /* Try to extract BaseInfo from given field, if possible. */
       if (type == LUA_TUSERDATA && lua_getmetatable (L, -1))
 	{
+	  int to_pop = 2;
 	  lua_getfield (L, LUA_REGISTRYINDEX, UD_COMPOUND);
 	  if (lua_rawequal (L, -1, -2))
-	    ei = lgi_compound_get (L, -3, GI_TYPE_BASE_INFO, FALSE);
-	  lua_pop (L, 2);
+	    to_pop += lgi_compound_get (L, -3, GI_TYPE_BASE_INFO, &ei, FALSE);
+	  lua_pop (L, to_pop);
 	}
 
       /* Special handling is for compound-userdata, which contain some
