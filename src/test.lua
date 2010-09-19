@@ -190,7 +190,7 @@ end
 local function checkvf(val, exp, tolerance)
    assert(type(val) == 'number', string.format(
 	     "got type `%s', expected `number'", type(val)))
-   assert(math.abs(val - exp) <= tolerance, 
+   assert(math.abs(val - exp) <= tolerance,
 	  string.format("got value `%s', expected `%s'",
 			tostring(val), tostring(exp)))
 end
@@ -243,7 +243,8 @@ end
 
 function tests.t01_gireg_21_closure_arg()
    local R = lgi.Regress
-   checkv(R.test_closure(function(int) return int end, 43), 43, 'number')
+   checkv(R.test_closure_one_arg(function(int) return int end, 43), 43,
+	  'number')
 end
 
 function tests.t02_gio_01_loadfile_sync()

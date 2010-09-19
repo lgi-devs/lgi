@@ -157,3 +157,76 @@ lgi_value_store (lua_State *L, const GValue *val)
 		     g_type_name (type),
 		     g_type_name (G_TYPE_FUNDAMENTAL (type)));
 }
+
+typedef struct _LgiClosure
+{
+  GClosure closure;
+
+  /* Context in which should be the closure called. */
+  lua_State *L;
+  int thread_ref;
+
+  /* Reference to target Lua callable, which will be invoked. */
+  int target_ref;
+} LgiClosure;
+
+static void
+lgi_closure_finalize (gpointer notify_data, GClosure *closure)
+{
+  LgiClosure *c = (LgiClosure *) closure;
+  luaL_unref (c->L, LUA_REGISTRYINDEX, c->thread_ref);
+  luaL_unref (c->L, LUA_REGISTRYINDEX, c->target_ref);
+}
+
+static void
+lgi_gclosure_marshal (GClosure *closure, GValue *return_value,
+		      guint n_param_values, const GValue *param_values,
+		      gpointer invocation_hint, gpointer marshal_data)
+{
+  LgiClosure *c = (LgiClosure *) closure;
+  int vals = 0, res;
+
+  /* Prepare context in which will everything happen. */
+  lua_State *L = lgi_get_callback_state (&c->L, &c->thread_ref);
+  luaL_checkstack (L, n_param_values + 1, "");
+
+  /* Store target to be invoked. */
+  lua_rawgeti (L, LUA_REGISTRYINDEX, c->target_ref);
+
+  /* Push parameters. */
+  while (n_param_values--)
+    vals += lgi_value_store (L, param_values++);
+
+  /* Invoke the function. */
+  res = lua_pcall (L, vals, 1, 0);
+  if (res == 0)
+    lgi_value_load (L, return_value, -1);
+}
+
+GClosure *
+lgi_gclosure_create (lua_State *L, int target)
+{
+  /* Create new closure instance. */
+  LgiClosure *c = (LgiClosure *) g_closure_new_simple (sizeof (LgiClosure),
+						       NULL);
+
+  /* Initialize callback thread to be used. */
+  c->L = L;
+  lua_pushthread (L);
+  c->thread_ref = luaL_ref (L, LUA_REGISTRYINDEX);
+
+  /* Store target into the closure. */
+  lua_pushvalue (L, target);
+  c->target_ref = luaL_ref (L, LUA_REGISTRYINDEX);
+
+  /* Set marshaller for the closure. */
+  g_closure_set_marshal (&c->closure, lgi_gclosure_marshal);
+
+  /* Add destruction notifier. */
+  g_closure_add_finalize_notifier (&c->closure, NULL, lgi_closure_finalize);
+
+  /* Remove floating ref from the closure, it is useless for us. */
+  g_closure_ref (&c->closure);
+  g_closure_sink (&c->closure);
+  return &c->closure;
+}

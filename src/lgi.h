@@ -123,3 +123,6 @@ int lgi_value_load (lua_State *L, GValue *val, int narg);
 
 /* Pushes GValue content to stack. */
 int lgi_value_store (lua_State *L, const GValue *val);
+
+/* Creates GClosure which invokes specified target. */
+GClosure *lgi_gclosure_create (lua_State *L, int target);

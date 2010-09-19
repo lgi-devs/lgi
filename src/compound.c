@@ -42,17 +42,17 @@ compound_prepare (lua_State *L, int arg, gboolean throw)
       lua_pop (L, 2);
 
       if (equal)
-        {
-          /* Type is fine, clean metatables from stack and do real
-             preparation. */
-          Compound *compound = lua_touserdata (L, arg);
-          lua_rawgeti (L, LUA_REGISTRYINDEX, lgi_regkey);
-          lua_rawgeti (L, -1, LGI_REG_TYPEINFO);
-          lua_replace (L, -2);
-          lua_rawgeti (L, -1, compound->ref_repo);
-          g_assert (!lua_isnil (L, -1));
-          return compound;
-        }
+	{
+	  /* Type is fine, clean metatables from stack and do real
+	     preparation. */
+	  Compound *compound = lua_touserdata (L, arg);
+	  lua_rawgeti (L, LUA_REGISTRYINDEX, lgi_regkey);
+	  lua_rawgeti (L, -1, LGI_REG_TYPEINFO);
+	  lua_replace (L, -2);
+	  lua_rawgeti (L, -1, compound->ref_repo);
+	  g_assert (!lua_isnil (L, -1));
+	  return compound;
+	}
     }
 
   /* Report error if requested. */
@@ -64,7 +64,7 @@ compound_prepare (lua_State *L, int arg, gboolean throw)
 
 static int
 compound_register (lua_State *L, GIBaseInfo *info, gpointer *addr,
-                   gboolean owns, gboolean alloc_struct)
+		   gboolean owns, gboolean alloc_struct)
 {
   Compound *compound;
   gsize size;
@@ -82,10 +82,10 @@ compound_register (lua_State *L, GIBaseInfo *info, gpointer *addr,
   if (*addr == NULL)
     {
       if (!alloc_struct)
-        {
-          lua_pushnil (L);
-          return 1;
-        }
+	{
+	  lua_pushnil (L);
+	  return 1;
+	}
     }
   else
     {
@@ -93,13 +93,13 @@ compound_register (lua_State *L, GIBaseInfo *info, gpointer *addr,
       lua_pushlightuserdata (L, *addr);
       lua_rawget (L, -2);
       if (!lua_isnil (L, -1))
-        {
-          lua_replace (L, -3);
-          lua_pop (L, 1);
-          return 1;
-        }
+	{
+	  lua_replace (L, -3);
+	  lua_pop (L, 1);
+	  return 1;
+	}
       else
-        lua_pop (L, 1);
+	lua_pop (L, 1);
     }
 
   /* Create and initialize new userdata instance. */
@@ -108,9 +108,9 @@ compound_register (lua_State *L, GIBaseInfo *info, gpointer *addr,
     {
       info_type = g_base_info_get_type (info);
       if (info_type == GI_INFO_TYPE_STRUCT)
-        size = g_struct_info_get_size (info);
+	size = g_struct_info_get_size (info);
       else if (info_type == GI_INFO_TYPE_UNION)
-        size = g_union_info_get_size (info);
+	size = g_union_info_get_size (info);
     }
   compound = lua_newuserdata (L, G_STRUCT_OFFSET (Compound, data) + size);
   compound->owns = 0;
@@ -138,31 +138,31 @@ compound_register (lua_State *L, GIBaseInfo *info, gpointer *addr,
     {
       /* Try to find type in the repo. */
       if (info == NULL)
-        info = g_irepository_find_by_gtype (NULL, gtype);
+	info = g_irepository_find_by_gtype (NULL, gtype);
       if (!G_UNLIKELY (info == NULL))
-        {
-          lua_getfield (L, -2, g_base_info_get_namespace (info));
-          if (!G_UNLIKELY (lua_isnil (L, -1)))
-            {
-              lua_getfield (L, -1, g_base_info_get_name (info));
-              if (!G_UNLIKELY (lua_isnil (L, -1)))
-                {
-                  /* Replace the best result we've found so far. */
-                  lua_replace (L, -3);
-                  lua_pop (L, 1);
-                }
-              else
-                /* pop (namespace, nil) pair. */
-                lua_pop (L, 2);
-            }
-          else
-            /* pop nil-namespace */
-            lua_pop (L, 1);
+	{
+	  lua_getfield (L, -2, g_base_info_get_namespace (info));
+	  if (!G_UNLIKELY (lua_isnil (L, -1)))
+	    {
+	      lua_getfield (L, -1, g_base_info_get_name (info));
+	      if (!G_UNLIKELY (lua_isnil (L, -1)))
+		{
+		  /* Replace the best result we've found so far. */
+		  lua_replace (L, -3);
+		  lua_pop (L, 1);
+		}
+	      else
+		/* pop (namespace, nil) pair. */
+		lua_pop (L, 2);
+	    }
+	  else
+	    /* pop nil-namespace */
+	    lua_pop (L, 1);
 
-          /* Reset info for the next round, if it will come. */
-          g_base_info_unref (info);
-          info = NULL;
-        }
+	  /* Reset info for the next round, if it will come. */
+	  g_base_info_unref (info);
+	  info = NULL;
+	}
     }
 
   /* If we failed to find suitable type in the repo, fail. */
@@ -171,10 +171,6 @@ compound_register (lua_State *L, GIBaseInfo *info, gpointer *addr,
       lua_pop (L, 5);
       return 0;
     }
-
-  lua_rawgeti (L, -1, 0);
-  lua_getfield (L, -1, "gtype");
-  lua_pop (L, 2);
 
   /* Replace now unneded stack space of LGI_REG_REPO with found type. */
   lua_replace (L, -2);
@@ -282,7 +278,7 @@ lgi_compound_object_new (lua_State *L, GIObjectInfo *oi, int argtable)
 
   /* Create the object. */
   addr = g_object_newv (g_registered_type_info_get_g_type (oi), n_params,
-                        params);
+			params);
 
   /* Free all parameters from params array. */
   for (param = params; n_params > 0; param++, n_params--)
@@ -313,15 +309,15 @@ compound_gc (lua_State *L)
 
       /* Decide what to do according to the type. */
       if (G_TYPE_IS_OBJECT (gtype))
-        {
-          GType realgtype = G_TYPE_FROM_INSTANCE (compound->addr);
-          if (!g_type_is_a (realgtype, gtype))
-            {
-              g_debug ("BAD! %p (is %s, claims %s)", compound->addr,
-                       g_type_name (realgtype), g_type_name (gtype));
-            }
-          g_object_unref (compound->addr);
-        }
+	{
+	  GType realgtype = G_TYPE_FROM_INSTANCE (compound->addr);
+	  if (!g_type_is_a (realgtype, gtype))
+	    {
+	      g_debug ("BAD! %p (is %s, claims %s)", compound->addr,
+		       g_type_name (realgtype), g_type_name (gtype));
+	    }
+	  g_object_unref (compound->addr);
+	}
       else if (G_TYPE_IS_BOXED (gtype))
 	g_boxed_free (gtype, compound->addr);
     }
@@ -383,6 +379,26 @@ lgi_compound_get (lua_State *L, int index, GType req_gtype, gpointer *addr,
 	}
     }
 
+  /* Check for closures; we can create closure from any function,
+     table or userdata (the latter two can be also callable). */
+  if (g_type_is_a (req_gtype, G_TYPE_CLOSURE))
+    {
+      /* Create GClosure for requested target. */
+      int vals = 0;
+      *addr = lgi_gclosure_create (L, index);
+
+      /* Wrap it into new boxed value on the stack. */
+      GIBaseInfo *closure_info = g_irepository_find_by_gtype (NULL,
+							      G_TYPE_CLOSURE);
+      if (closure_info != NULL)
+	{
+	  vals = lgi_compound_create (L, closure_info, *addr, TRUE);
+	  g_base_info_unref (closure_info);
+	}
+
+      return vals;
+    }
+
   /* Put exact requested type into the error message. */
   gottype = lua_type (L, index);
   req_typeinfo = g_irepository_find_by_gtype (NULL, req_gtype);
@@ -392,7 +408,10 @@ lgi_compound_get (lua_State *L, int index, GType req_gtype, gpointer *addr,
       g_base_info_unref (req_typeinfo);
     }
   else
-    lua_pushfstring (L, "(?gtype %sd)", g_type_name (req_gtype));
+    {
+      lua_pushfstring (L, "(%s)", g_type_name (req_gtype));
+      vals = 1;
+    }
 
   lua_pushstring (L, " expected, got ");
   lua_pushstring (L, lua_typename (L, gottype));
@@ -494,17 +513,17 @@ process_element (lua_State *L, int newval)
       lua_pushvalue (L, 1);
       lua_pushvalue (L, 2);
       if (newval == -1)
-        {
-          /* Getting value, signature is res = func(obj, fieldname). */
-          vals = 1;
-          lua_call (L, 2, 1);
-        }
+	{
+	  /* Getting value, signature is res = func(obj, fieldname). */
+	  vals = 1;
+	  lua_call (L, 2, 1);
+	}
       else
-        {
-          /* Setting value, signature is func(obj, fieldname, newval). */
-          lua_pushvalue (L, newval);
-          lua_call (L, 3, 0);
-        }
+	{
+	  /* Setting value, signature is func(obj, fieldname, newval). */
+	  lua_pushvalue (L, newval);
+	  lua_call (L, 3, 0);
+	}
     }
   else
     {
@@ -516,7 +535,8 @@ process_element (lua_State *L, int newval)
 	  int to_pop = 2;
 	  lua_getfield (L, LUA_REGISTRYINDEX, UD_COMPOUND);
 	  if (lua_rawequal (L, -1, -2))
-	    to_pop += lgi_compound_get (L, -3, GI_TYPE_BASE_INFO, &ei, FALSE);
+	    to_pop += lgi_compound_get (L, -3, GI_TYPE_BASE_INFO,
+					(gpointer *) &ei, FALSE);
 	  lua_pop (L, to_pop);
 	}
 
