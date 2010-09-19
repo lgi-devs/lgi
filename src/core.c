@@ -9,7 +9,6 @@
 #include "lgi.h"
 
 int lgi_regkey;
-GIBaseInfo *lgi_baseinfo_info;
 
 int
 lgi_error (lua_State *L, GError *err)
@@ -42,11 +41,11 @@ lgi_type_get_name (lua_State *L, GIBaseInfo *info)
   for (i = list; i != NULL; i = g_slist_next (i))
     {
       if (g_base_info_get_type (i->data) != GI_INFO_TYPE_TYPE)
-        {
-          lua_pushstring (L, ".");
-          lua_pushstring (L, g_base_info_get_name (i->data));
-          n += 2;
-        }
+	{
+	  lua_pushstring (L, ".");
+	  lua_pushstring (L, g_base_info_get_name (i->data));
+	  n += 2;
+	}
     }
 
   g_slist_free (list);
@@ -84,11 +83,12 @@ lgi_find (lua_State *L)
 {
   const gchar *symbol = luaL_checkstring (L, 1);
   const gchar *container = luaL_optstring (L, 2, NULL);
-  GIBaseInfo *info, *fi;
+  GIBaseInfo *info, *fi, *baseinfo;
+  int vals;
 
   /* Get information about the symbol. */
   info = g_irepository_find_by_name (NULL, "GIRepository",
-                                     container != NULL ? container : symbol);
+				     container != NULL ? container : symbol);
 
   /* In case that container was specified, look the symbol up in it. */
   if (container != NULL && info != NULL)
@@ -117,12 +117,15 @@ lgi_find (lua_State *L)
 
   if (info == NULL)
     return luaL_error (L, "unable to resolve GIRepository.%s%s%s",
-                       container != NULL ? container : "",
-                       container != NULL ? ":" : "",
-                       symbol);
+		       container != NULL ? container : "",
+		       container != NULL ? ":" : "",
+		       symbol);
 
   /* Create new IBaseInfo structure and return it. */
-  return lgi_compound_create (L, lgi_baseinfo_info, info, TRUE) ? 1 : 0;
+  baseinfo = g_irepository_find_by_name (NULL, "GIRepository", "BaseInfo");
+  vals = lgi_compound_create (L, baseinfo, info, TRUE);
+  g_base_info_unref (baseinfo);
+  return vals;
 }
 
 static int
@@ -131,7 +134,7 @@ lgi_get (lua_State* L)
   /* Create new instance based on the embedded typeinfo. */
   gpointer res;
   int vals = 0;
-  GIBaseInfo* ii = lgi_compound_get (L, 1, lgi_baseinfo_info, FALSE);
+  GIBaseInfo* ii = lgi_compound_get (L, 1, GI_TYPE_BASE_INFO, FALSE);
 
   switch (g_base_info_get_type (ii))
     {
@@ -195,7 +198,7 @@ static int
 lgi_cast (lua_State *L)
 {
   /* Get the source object. */
-  GObject *obj = lgi_compound_get (L, 1, NULL, FALSE);
+  GObject *obj = lgi_compound_get (L, 1, G_TYPE_OBJECT, FALSE);
   GType gtype = luaL_checknumber (L, 2);
 
   /* Check, that casting is possible. */
@@ -203,17 +206,17 @@ lgi_cast (lua_State *L)
     {
       GIBaseInfo *info = g_irepository_find_by_gtype (NULL, gtype);
       if (info != NULL)
-        {
-          lgi_compound_create (L, info, g_object_ref (obj), TRUE);
-          g_base_info_unref (info);
-          return 1;
-        }
+	{
+	  lgi_compound_create (L, info, g_object_ref (obj), TRUE);
+	  g_base_info_unref (info);
+	  return 1;
+	}
     }
 
   /* Failed somehow, avoid casting. */
   return luaL_error (L, "`%s': failed to cast to `%s'",
-                     g_type_name (G_TYPE_FROM_INSTANCE (obj)),
-                     g_type_name (gtype));
+		     g_type_name (G_TYPE_FROM_INSTANCE (obj)),
+		     g_type_name (gtype));
 }
 
 static void
@@ -228,9 +231,9 @@ gclosure_destroy (gpointer user_data, GClosure *closure)
 static int
 lgi_connect (lua_State *L)
 {
-  gpointer obj = lgi_compound_get (L, 1, NULL, FALSE);
+  gpointer obj = lgi_compound_get (L, 1, G_TYPE_OBJECT, FALSE);
   const char *signame = luaL_checkstring (L, 2);
-  GICallableInfo *ci = lgi_compound_get (L, 3, lgi_baseinfo_info, FALSE);
+  GICallableInfo *ci = lgi_compound_get (L, 3, GI_TYPE_BASE_INFO, FALSE);
   const char *detail = lua_tostring (L, 5);
   gpointer call_addr, lgi_closure;
   GClosure *gclosure;
@@ -252,15 +255,15 @@ lgi_connect (lua_State *L)
 
      1) emitter prepares params as an array of GValues.
      2) LGI custom marshaller marshalls then to Lua stack and calls Lua
-        function. */
+	function. */
   lgi_closure = lgi_closure_create (L, ci, 4, FALSE, &call_addr);
   gclosure = g_cclosure_new (call_addr, lgi_closure, gclosure_destroy);
 
   /* Connect closure to the signal. */
   signal_id = g_signal_lookup (signame, G_OBJECT_TYPE (obj));
   handler_id =  g_signal_connect_closure_by_id (obj, signal_id,
-                                                g_quark_from_string (detail),
-                                                gclosure, lua_toboolean (L, 6));
+						g_quark_from_string (detail),
+						gclosure, lua_toboolean (L, 6));
   lua_pushnumber (L, handler_id);
   return 1;
 }
@@ -273,7 +276,7 @@ lgi_log (lua_State *L)
 {
   const char *message = luaL_checkstring (L, 1);
   int level = 1 << (luaL_checkoption (L, 2, lgi_log_levels[5],
-                                      lgi_log_levels) + 2);
+				      lgi_log_levels) + 2);
   g_log (G_LOG_DOMAIN, level, "%s", message);
   return 0;
 }
@@ -290,24 +293,24 @@ const char *lgi_sd (lua_State *L)
       int t = lua_type (L, i);
       gchar *item, *nmsg;
       switch (t)
-        {
-        case LUA_TSTRING:
-          item = g_strdup_printf ("`%s'", lua_tostring (L, i));
-          break;
+	{
+	case LUA_TSTRING:
+	  item = g_strdup_printf ("`%s'", lua_tostring (L, i));
+	  break;
 
-        case LUA_TBOOLEAN:
-          item = g_strdup_printf (lua_toboolean (L, i) ? "true" : "false");
-          break;
+	case LUA_TBOOLEAN:
+	  item = g_strdup_printf (lua_toboolean (L, i) ? "true" : "false");
+	  break;
 
-        case LUA_TNUMBER:
-          item = g_strdup_printf ("%g", lua_tonumber (L, i));
-          break;
+	case LUA_TNUMBER:
+	  item = g_strdup_printf ("%g", lua_tonumber (L, i));
+	  break;
 
-        default:
-          item = g_strdup_printf ("%s(%p)", lua_typename (L, t),
-                                  lua_topointer (L, i));
-          break;
-        }
+	default:
+	  item = g_strdup_printf ("%s(%p)", lua_typename (L, t),
+				  lua_topointer (L, i));
+	  break;
+	}
       nmsg = g_strconcat (msg, " ", item, NULL);
       g_free (msg);
       g_free (item);
@@ -331,7 +334,7 @@ static const struct luaL_reg lgi_reg[] = {
 
 static void
 lgi_create_reg (lua_State* L, enum lgi_reg reg, const char* exportname,
-                gboolean withmeta)
+		gboolean withmeta)
 {
   /* Create the table. */
   lua_newtable (L);
@@ -370,8 +373,6 @@ luaopen_lgi__core (lua_State* L)
       g_error_free (err);
       return luaL_error (L, "%s", lua_tostring (L, -1));
     }
-  lgi_baseinfo_info =
-    g_irepository_find_by_name (NULL, "GIRepository", "BaseInfo");
 
   /* Register _core interface. */
   luaL_register (L, "lgi._core", lgi_reg);

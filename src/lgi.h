@@ -58,9 +58,6 @@ void lgi_compound_init (lua_State *L);
 void lgi_callable_init (lua_State *L);
 void lgi_marshal_init (lua_State *L);
 
-/* GIBaseInfo of GIBaseInfo type itself.  Leaks, never freed. */
-extern GIBaseInfo *lgi_baseinfo_info;
-
 /* Marshalls single value from Lua to GLib/C. Returns number of temporary
    entries pushed to Lua stack, which should be popped before function call
    returns. */
@@ -110,18 +107,18 @@ gpointer lgi_compound_struct_new (lua_State *L, GIBaseInfo *ii);
 gpointer lgi_compound_object_new (lua_State *L, GIObjectInfo *ii, int argtable);
 
 /* Retrieves compound-type parameter from given Lua-stack position, checks,
-   whether it is suitable for requested ii type.  Returns pointer to the
+   whether it is suitable for requested gtype.  Returns pointer to the
    compound object, returns NULL if Lua-stack value is nil and optional is
    TRUE. */
-gpointer lgi_compound_get (lua_State *L, int arg, GIBaseInfo *ii,
-                           gboolean optional);
+gpointer lgi_compound_get (lua_State *L, int arg, GType req_gtype, 
+			   gboolean optional);
 
 /* Initializes type of GValue to specified ti. */
 void lgi_value_init (lua_State *L, GValue *val, GITypeInfo *ti);
 
-/* Loads GValue contents from specified stack position, expects ii type.
-   Assumes that val is already inited by value_init(). */
-int lgi_value_load (lua_State *L, GValue *val, int narg, GITypeInfo *ti);
+/* Loads GValue contents from specified stack position.  Value must
+   already have assigned correct type. */
+int lgi_value_load (lua_State *L, GValue *val, int narg);
 
-/* Pushes GValue content to stack, assumes that value is of ii type. */
-int lgi_value_store (lua_State *L, GValue *val, GITypeInfo *ti);
+/* Pushes GValue content to stack. */
+int lgi_value_store (lua_State *L, const GValue *val);

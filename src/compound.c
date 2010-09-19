@@ -270,7 +270,7 @@ lgi_compound_object_new (lua_State *L, GIObjectInfo *oi, int argtable)
 		     contents. */
 		  ti = g_property_info_get_type (pi);
 		  lgi_value_init (L, &param->value, ti);
-		  lgi_value_load (L, &param->value, -1, ti);
+		  lgi_value_load (L, &param->value, -1);
 		  g_base_info_unref (ti);
 		}
 	    }
@@ -356,11 +356,12 @@ compound_error (lua_State *L, const char *errmsg, int element)
 }
 
 gpointer
-lgi_compound_get (lua_State *L, int index, GIBaseInfo *ii, gboolean optional)
+lgi_compound_get (lua_State *L, int index, GType req_gtype, gboolean optional)
 {
   Compound *compound;
-  GType requested_type, real_type;
+  GType real_type;
   int vals, gottype;
+  GIBaseInfo *req_typeinfo;
 
   if (optional && lua_isnoneornil (L, index))
     return NULL;
@@ -372,22 +373,22 @@ lgi_compound_get (lua_State *L, int index, GIBaseInfo *ii, gboolean optional)
       lua_rawgeti (L, -1, 0);
       lua_getfield (L, -1, "gtype");
       real_type = lua_tointeger (L, -1);
-      requested_type = (ii != NULL) ?
-        g_registered_type_info_get_g_type (ii) : G_TYPE_OBJECT;
       lua_pop (L, 4);
-      if (g_type_is_a (real_type, requested_type))
+      if (g_type_is_a (real_type, req_gtype))
         return compound->addr;
     }
 
   /* Put exact requested type into the error message. */
   gottype = lua_type (L, index);
-  if (ii != NULL)
-    vals = lgi_type_get_name (L, ii);
-  else
+  req_typeinfo = g_irepository_find_by_gtype (NULL, req_gtype);
+  if (req_typeinfo != NULL)
     {
-      lua_pushstring (L, "GObject.Object");
-      vals = 1;
+      vals = lgi_type_get_name (L, req_typeinfo);
+      g_base_info_unref (req_typeinfo);
     }
+  else
+    lua_pushfstring (L, "(?gtype %sd)", g_type_name (req_gtype));
+
   lua_pushstring (L, " expected, got ");
   lua_pushstring (L, lua_typename (L, gottype));
   lua_concat (L, vals + 2);
@@ -449,7 +450,7 @@ process_property (lua_State *L, gpointer addr, GIPropertyInfo *pi, int newval)
 	}
 
       g_object_get_property ((GObject *) addr, name, &val);
-      vals = lgi_value_store (L, &val, ti);
+      vals = lgi_value_store (L, &val);
     }
   else
     {
@@ -459,7 +460,7 @@ process_property (lua_State *L, gpointer addr, GIPropertyInfo *pi, int newval)
 	  return luaL_argerror (L, 2, "not writable");
 	}
 
-      vals = lgi_value_load (L, &val, 3, ti);
+      vals = lgi_value_load (L, &val, 3);
       g_object_set_property ((GObject *) addr, name, &val);
     }
 
@@ -509,7 +510,7 @@ process_element (lua_State *L, int newval)
 	{
 	  lua_getfield (L, LUA_REGISTRYINDEX, UD_COMPOUND);
 	  if (lua_rawequal (L, -1, -2))
-	    ei = lgi_compound_get (L, -3, lgi_baseinfo_info, FALSE);
+	    ei = lgi_compound_get (L, -3, GI_TYPE_BASE_INFO, FALSE);
 	  lua_pop (L, 2);
 	}
 

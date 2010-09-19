@@ -74,6 +74,7 @@ DECLTYPE(GI_TYPE_TAG_UINT8,
          g_value_set_uchar,
          ffi_type_uint8)
 
+#ifndef DECLTYPE_KEY_BY_GTYPE
 DECLTYPE(GI_TYPE_TAG_INT16,
          gint16,
          v_int16,
@@ -99,6 +100,7 @@ DECLTYPE(GI_TYPE_TAG_UINT16,
          g_value_get_uint,
          g_value_set_uint,
          ffi_type_uint16)
+#endif /* DECLTYPE_KEY_BY_GTYPE */
 
 DECLTYPE(GI_TYPE_TAG_INT32,
          gint32,
@@ -125,6 +127,34 @@ DECLTYPE(GI_TYPE_TAG_UINT32,
          g_value_get_uint,
          g_value_set_uint,
          ffi_type_uint32)
+
+#ifdef DECLTYPE_KEY_BY_GTYPE
+DECLTYPE(DECLTYPE_UNUSABLE_ERROR,
+         glong,
+         DECLTYPE_UNUSABLE_ERROR,
+         DECLTYPE_NOP,
+         lua_pushnumber,
+         luaL_checklong,
+         luaL_optlong,
+         DECLTYPE_IDENTITY,
+         G_TYPE_LONG,
+         g_value_get_long,
+         g_value_set_long,
+         DECLTYPE_UNUSABLE_ERROR)
+
+DECLTYPE(DECLTYPE_UNUSABLE_ERROR,
+         gulong,
+         DECLTYPE_UNUSABLE_ERROR,
+         DECLTYPE_NOP,
+         lua_pushnumber,
+         luaL_checknumber,
+         luaL_optnumber,
+         DECLTYPE_IDENTITY,
+         G_TYPE_ULONG,
+         g_value_get_ulong,
+         g_value_set_ulong,
+         DECLTYPE_UNUSABLE_ERROR)
+#endif /* DECLTYPE_KEY_BY_GTYPE */
 
 DECLTYPE(GI_TYPE_TAG_INT64,
          gint64,
@@ -220,6 +250,7 @@ DECLTYPE(GI_TYPE_TAG_UTF8,
          g_value_set_string,
          ffi_type_pointer)
 
+#ifndef DECLTYPE_KEY_BY_GTYPE
 DECLTYPE(GI_TYPE_TAG_FILENAME,
          gchar*,
          v_string,
@@ -232,9 +263,11 @@ DECLTYPE(GI_TYPE_TAG_FILENAME,
          (gchar*)g_value_get_string,
          g_value_set_string,
          ffi_type_pointer)
-#endif
+#endif /* DECLTYPE_KEY_BY_GTYPE */
+#endif /* DECLTYPE_NUMERIC_ONLY */
 
 #undef DECLTYPE
 #undef DECLTYPE_NOP
 #undef DECLTYPE_IDENTITY
 #undef DECLTYPE_NUMERIC_ONLY
+#undef DECLTYPE_KEY_BY_GTYPE

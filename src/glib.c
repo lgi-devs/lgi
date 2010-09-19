@@ -11,15 +11,18 @@
 
 #include "lgi.h"
 
-/* Initializes type of GValue to specified ti. */
 void
 lgi_value_init (lua_State *L, GValue *val, GITypeInfo *ti)
 {
   GITypeTag tag = g_type_info_get_tag (ti);
   switch (tag)
     {
+    case GI_TYPE_TAG_VOID:
+      g_value_init (val, G_TYPE_NONE);
+      break;
+
 #define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup, \
-                 val_type, val_get, val_set, ffitype)           \
+		 val_type, val_get, val_set, ffitype)           \
     case tag:                                                   \
       g_value_init (val, val_type);                             \
       break;
@@ -28,126 +31,118 @@ lgi_value_init (lua_State *L, GValue *val, GITypeInfo *ti)
     case GI_TYPE_TAG_INTERFACE:
       {
 	GIBaseInfo* ii = g_type_info_get_interface (ti);
-	GIInfoType type = g_base_info_get_type (ii);
-	switch (type)
+	if (GI_IS_REGISTERED_TYPE_INFO (ii))
 	  {
-	  case GI_INFO_TYPE_ENUM:
-	  case GI_INFO_TYPE_FLAGS:
-	  case GI_INFO_TYPE_OBJECT:
-	  case GI_INFO_TYPE_STRUCT:
-          case GI_INFO_TYPE_UNION:
-            g_value_init (val, g_registered_type_info_get_g_type (ii));
-	    break;
-
-	  default:
+	    g_value_init (val, g_registered_type_info_get_g_type (ii));
 	    g_base_info_unref (ii);
-	    luaL_error (L, "value_init: bad ti.iface.type=%d", (int) type);
 	  }
-	g_base_info_unref (ii);
+	else
+	  {
+	    int type = g_base_info_get_type (ii);
+	    g_base_info_unref (ii);
+	    luaL_error (L, "value_init: bad ti.iface.type=%d", type);
+	  }
       }
       break;
+
+      /* TODO: Handle arrays. */
 
     default:
       luaL_error (L, "value_init: bad ti.tag=%d", (int) tag);
     }
 }
 
-/* Loads GValue contents from specified stack position, expects ii type.
-   Assumes that val is already inited by value_init(). */
 int
-lgi_value_load (lua_State *L, GValue *val, int narg, GITypeInfo *ti)
+lgi_value_load (lua_State *L, GValue *val, int narg)
 {
-  int vals = 1;
-  switch (g_type_info_get_tag (ti))
-    {
+  GType type = G_VALUE_TYPE (val);
+  if (type == G_TYPE_NONE)
+    return 0;
 #define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup,	\
-		 val_type, val_get, val_set, ffitype)           \
-      case tag:							\
-	val_set (val, check (L, narg));				\
-	break;
+		 gtype, val_get, val_set, ffitype)		\
+  else if (type == gtype)					\
+    {								\
+      val_set (val, check (L, narg));				\
+      return 1;							\
+    }
+#define DECLTYPE_KEY_BY_GTYPE
 #include "decltype.h"
 
-    case GI_TYPE_TAG_INTERFACE:
-      {
-	GIBaseInfo* ii = g_type_info_get_interface (ti);
-	switch (g_base_info_get_type (ii))
-	  {
-	  case GI_INFO_TYPE_ENUM:
-	    g_value_set_enum (val, luaL_checkinteger (L, narg));
-	    break;
+  /* Handle other cases. */
+  switch (G_TYPE_FUNDAMENTAL (type))
+    {
+    case G_TYPE_ENUM:
+      g_value_set_enum (val, luaL_checkinteger (L, narg));
+      return 1;
 
-	  case GI_INFO_TYPE_FLAGS:
-	    g_value_set_flags (val, luaL_checkinteger (L, narg));
-	    break;
+    case G_TYPE_FLAGS:
+      g_value_set_flags (val, luaL_checkinteger (L, narg));
+      return 1;
 
-	  case GI_INFO_TYPE_OBJECT:
-	    g_value_set_object (val, lgi_compound_get (L, narg, ii, FALSE));
-	    break;
+    case G_TYPE_OBJECT:
+      g_value_set_object (val, lgi_compound_get (L, narg, type, FALSE));
+      return 1;
 
-	  case GI_INFO_TYPE_STRUCT:
-          case GI_INFO_TYPE_UNION:
-	    return luaL_error (L, "don't know how to handle struct->GValue");
-
-	  default:
-	    vals = 0;
-	  }
-	g_base_info_unref (ii);
-      }
-      break;
+    case G_TYPE_BOXED:
+      g_value_set_boxed (val, lgi_compound_get (L, narg, type, FALSE));
+      return 1;
 
     default:
-      vals = 0;
+      break;
     }
 
-  return vals;
+  return luaL_error (L, "g_value_set: no handling of %s(%s))",
+		     g_type_name (type),
+		     g_type_name (G_TYPE_FUNDAMENTAL (type)));
 }
 
-/* Pushes GValue content to stack, assumes that value is of ii type. */
 int
-lgi_value_store (lua_State *L, GValue *val, GITypeInfo *ti)
+lgi_value_store (lua_State *L, const GValue *val)
 {
-  int vals = 1;
-  switch (g_type_info_get_tag (ti))
-    {
+  GType type = G_VALUE_TYPE (val);
+  if (type == G_TYPE_NONE)
+    return 0;
 #define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup,	\
-		 val_type, val_get, val_set, ffitype)           \
-      case tag:							\
-	push (L, val_get (val));                                \
-	break;
+		 gtype, val_get, val_set, ffitype)		\
+  else if (type == gtype)					\
+    {								\
+      push (L, val_get (val));					\
+      return 1;							\
+    }
+#define DECLTYPE_KEY_BY_GTYPE
 #include "decltype.h"
 
-    case GI_TYPE_TAG_INTERFACE:
+  /* Handle other cases. */
+  switch (G_TYPE_FUNDAMENTAL (type))
+    {
+    case G_TYPE_ENUM:
+      lua_pushinteger (L, g_value_get_enum (val));
+      return 1;
+
+    case G_TYPE_FLAGS:
+      lua_pushinteger (L, g_value_get_flags (val));
+      return 1;
+
+    case G_TYPE_OBJECT:
+    case G_TYPE_BOXED:
       {
-	GIBaseInfo* ii = g_type_info_get_interface (ti);
-	switch (g_base_info_get_type (ii))
+	GIBaseInfo *bi = g_irepository_find_by_gtype (NULL, type);
+	if (bi != NULL)
 	  {
-	  case GI_INFO_TYPE_ENUM:
-	    lua_pushinteger (L, g_value_get_enum (val));
-	    break;
-
-	  case GI_INFO_TYPE_FLAGS:
-	    lua_pushinteger (L, g_value_get_flags (val));
-	    break;
-
-	  case GI_INFO_TYPE_OBJECT:
-            vals = lgi_compound_create (L, ii, g_value_dup_object (val), TRUE) ?
-              1 : 0;
-	    break;
-
-	  case GI_INFO_TYPE_STRUCT:
-          case GI_INFO_TYPE_UNION:
-	    return luaL_error (L, "don't know how to handle GValue->struct");
-
-	  default:
-	    vals = 0;
+	    gpointer obj = GI_IS_OBJECT_INFO (bi) ?
+	      g_value_dup_object (val) : g_value_dup_boxed (val);
+	    int vals = lgi_compound_create (L, bi, obj, TRUE);
+	    g_base_info_unref (bi);
+	    return vals;
 	  }
-	g_base_info_unref (ii);
+	break;
       }
-      break;
 
     default:
-      vals = 0;
+      break;
     }
 
-  return vals;
+  return luaL_error (L, "g_value_get: no handling or  %s(%s)",
+		     g_type_name (type),
+		     g_type_name (G_TYPE_FUNDAMENTAL (type)));
 }

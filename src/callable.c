@@ -307,9 +307,9 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
   lua_argi = args_index;
   if (callable->has_self)
     {
-      args[0].v_pointer =
-	  lgi_compound_get (L, args_index,
-			    g_base_info_get_container (callable->info), FALSE);
+      GIBaseInfo *parent = g_base_info_get_container (callable->info);
+      GType parent_gtype = g_registered_type_info_get_g_type (parent);
+      args[0].v_pointer = lgi_compound_get (L, args_index, parent_gtype, FALSE);
       ffi_args[0] = &args[0];
       lua_argi++;
     }
