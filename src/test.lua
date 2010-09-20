@@ -247,6 +247,17 @@ function tests.t01_gireg_21_closure_arg()
 	  'number')
 end
 
+function tests.t01_gireg_22_gvalue_arg()
+   local R = lgi.Regress
+   checkv(R.test_int_value_arg(42), 42, 'number')
+end
+
+function tests.t01_gireg_23_gvalue_return()
+   local R = lgi.Regress
+   checkv(R.test_value_return(43), 43, 'number')
+end   
+
+--[[--
 function tests.t02_gio_01_loadfile_sync()
    local file = Gio.file_new_for_path('test.lua')
    local ok, contents, length, etag = file:load_contents()
@@ -286,6 +297,7 @@ function tests.t02_gio_03_loadfile_coro()
    assert(ok and type(contents) == 'string' and type(length) == 'number' and
     type(etag) == 'string')
 end
+--]]--
 
 local tests_passed = 0
 local tests_failed = 0
