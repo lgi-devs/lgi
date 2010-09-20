@@ -6,12 +6,21 @@ local Gio = require 'lgi.Gio'
 
 local tests = {}
 
+-- Fails given tests with error, number indicates how many functions on the
+-- stack should be skipped when reporting error location.
+local function fail(msg, skip)
+   error(msg or 'failure', (skip or 1) + 1)
+end
+local function check(cond, msg, skip)
+   if not cond then fail(msg, (skip or 1) + 1) end
+end
+
 -- Helper, checks that given value has requested type and value.
 local function checkv(val, exp, exptype)
-   assert(type(val) == exptype, string.format("got type `%s', expected `%s'",
-					      type(val), exptype))
-   assert(val == exp, string.format("got value `%s', expected `%s'",
-				    tostring(val), tostring(exp)))
+   check(type(val) == exptype, string.format("got type `%s', expected `%s'",
+					     type(val), exptype), 2)
+   check(val == exp, string.format("got value `%s', expected `%s'",
+				   tostring(val), tostring(exp)), 2)
 end
 
 -- gobject-introspection 'Regress' based tests.
@@ -118,18 +127,18 @@ function tests.t01_gireg_09_uint64()
    local R = lgi.Regress
    checkv(R.test_uint64(0), 0, 'number')
    checkv(R.test_uint64(1), 1, 'number')
-   checkv(R.test_uint64(-1), 0xffffffffffffffff, 'number')
    checkv(R.test_uint64(1.1), 1, 'number')
-   checkv(R.test_uint64(-1.1), 0xffffffffffffffff, 'number')
 
    checkv(R.test_uint64(0x80000000), 0x80000000, 'number')
    checkv(R.test_uint64(0xffffffff), 0xffffffff, 'number')
    checkv(R.test_uint64(0x100000000), 0x100000000, 'number')
-   checkv(R.test_uint64(0x8000000000000000), 0x8000000000000000, 'number')
-   checkv(R.test_uint64(0x10000000000000000), 0, 'number')
 
 -- See comment above about lossy conversions.
 -- checkv(R.test_uint64(0xffffffffffffffff), 0xffffffffffffffff, 'number')
+-- checkv(R.test_uint64(-1), 0xffffffffffffffff, 'number')
+-- checkv(R.test_uint64(-1.1), 0xffffffffffffffff, 'number')
+-- checkv(R.test_uint64(0x8000000000000000), 0x8000000000000000, 'number')
+-- checkv(R.test_uint64(0x10000000000000000), 0, 'number')
 end
 
 function tests.t01_gireg_10_short()
@@ -188,16 +197,16 @@ end
 
 -- Helper, checks that given value has requested type and value.
 local function checkvf(val, exp, tolerance)
-   assert(type(val) == 'number', string.format(
-	     "got type `%s', expected `number'", type(val)))
-   assert(math.abs(val - exp) <= tolerance,
+   check(type(val) == 'number', string.format(
+	     "got type `%s', expected `number'", type(val)), 2)
+   check(math.abs(val - exp) <= tolerance,
 	  string.format("got value `%s', expected `%s'",
-			tostring(val), tostring(exp)))
+			tostring(val), tostring(exp)), 2)
 end
 
 function tests.t01_gireg_16_float()
    local R = lgi.Regress
-   local t = 0.000001
+   local t = 0.0000001
    checkvf(R.test_float(0), 0, t)
    checkvf(R.test_float(1), 1, t)
    checkvf(R.test_float(1.1), 1.1, t)
