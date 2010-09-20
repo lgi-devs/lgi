@@ -129,7 +129,7 @@ lgi_find (lua_State *L)
 }
 
 static int
-lgi_get (lua_State* L)
+lgi_construct (lua_State* L)
 {
   /* Create new instance based on the embedded typeinfo. */
   gpointer res;
@@ -146,6 +146,7 @@ lgi_get (lua_State* L)
       break;
 
     case GI_INFO_TYPE_STRUCT:
+    case GI_INFO_TYPE_UNION:
       res = lgi_compound_struct_new (L, ii);
       vals = 1;
       break;
@@ -167,7 +168,7 @@ lgi_get (lua_State* L)
       break;
 
     default:
-      lua_pushfstring (L, "failing to create unknown type %d (%s.%s)",
+      lua_pushfstring (L, "failing to construct unknown type %d (%s.%s)",
 		      g_base_info_get_type (ii),
 		      g_base_info_get_namespace (ii),
 		      g_base_info_get_name (ii));
@@ -332,7 +333,7 @@ const char *lgi_sd (lua_State *L)
 
 static const struct luaL_reg lgi_reg[] = {
   { "find", lgi_find },
-  { "get", lgi_get },
+  { "construct", lgi_construct },
   { "gtype", lgi_gtype },
   { "cast", lgi_cast },
   { "connect", lgi_connect },

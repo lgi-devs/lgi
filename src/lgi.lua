@@ -88,7 +88,7 @@ end
 function struct_mt.__call(type, fields)
    -- Create the structure instance.
    local info = assert(ri:find_by_gtype(type[0].gtype))
-   local struct = core.get(info)
+   local struct = core.construct(info)
 
    -- Set values of fields.
    for name, value in pairs(fields or {}) do
@@ -174,7 +174,7 @@ gi._structs = {
 -- Loads given set of symbols into table.
 local function get_symbols(into, symbols, container)
    for _, symbol in pairs(symbols) do
-      into[symbol] = core.get(core.find(symbol, container))
+      into[symbol] = core.construct(core.find(symbol, container))
    end
 end
 
@@ -233,7 +233,7 @@ function class_mt.__call(class, param)
       end
 
       -- Create the object.
-      obj = core.get(info, params)
+      obj = core.construct(info, params)
 
       -- Attach signals previously filtered out from creation.
       for name, func in pairs(others) do obj[name] = func end
@@ -365,20 +365,14 @@ local function check_type(info)
    end
 end
 
--- Similar to core.get(), but checks the type first before allowing to be
--- instantiated.
-local function checked_get(info)
-   return check_type(info) and core.get(info)
-end
-
 typeloader[gi.InfoType.FUNCTION] =
    function(namespace, info)
-      return checked_get(info), '_functions'
+      return check_type(info) and core.construct(info), '_functions'
    end
 
 typeloader[gi.InfoType.CONSTANT] =
    function(namespace, info)
-      return checked_get(info), '_constants'
+      return check_type(info) and core.construct(info), '_constants'
    end
 
 local function load_enum(info, meta)
@@ -515,7 +509,7 @@ local function load_struct(namespace, struct, info)
       load_compound(struct, info, struct_mt)
       struct._methods = get_category(
 	 info, gi.struct_info_get_n_methods(info), gi.struct_info_get_method,
-	 core.get, nil, nil, rawget(struct, '_methods'))
+	 core.construct, nil, nil, rawget(struct, '_methods'))
       struct._fields = get_category(
 	 info, gi.struct_info_get_n_fields(info), gi.struct_info_get_field)
    end
@@ -534,7 +528,7 @@ typeloader[gi.InfoType.UNION] =
       load_compound(union, info, struct_mt)
       union._methods = get_category(
 	 info, gi.union_info_get_n_methods(info), gi.union_info_get_method,
-	 core.get)
+	 core.construct)
       union._fields = get_category(
 	 info, gi.union_info_get_n_fields(info), gi.union_info_get_field)
       return union, '_unions'
@@ -599,7 +593,7 @@ typeloader[gi.InfoType.INTERFACE] =
 	    local flags = gi.function_info_get_flags(ii)
 	    if bit.band(flags, gi.FunctionInfoFlags.IS_GETTER
 			+ gi.FunctionInfoFlags.IS_SETTER) == 0 then
-	       return core.get(ii)
+	       return core.construct(ii)
 	    end
 	 end)
       interface._signals = get_category(
@@ -608,7 +602,7 @@ typeloader[gi.InfoType.INTERFACE] =
 	 load_signal_name_reverse)
       interface._constants = get_category(
 	 info, gi.interface_info_get_n_constants(info),
-	 gi.interface_info_get_constant, core.get)
+	 gi.interface_info_get_constant, core.construct)
       interface._inherits = get_category(
 	 info, gi.interface_info_get_n_prerequisites(info),
 	 gi.interface_info_get_prerequisite,
@@ -643,7 +637,7 @@ local function load_class(namespace, class, info)
 	 local flags = gi.function_info_get_flags(mi)
 	 if bit.band( flags, (gi.FunctionInfoFlags.IS_GETTER
 			      + gi.FunctionInfoFlags.IS_SETTER)) == 0 then
-	    return core.get(mi)
+	    return core.construct(mi)
 	 end
       end, nil, nil, rawget(class, '_methods'))
    class._signals = get_category(
@@ -651,7 +645,7 @@ local function load_class(namespace, class, info)
       load_signal, load_signal_name, load_signal_name_reverse)
    class._constants = get_category(
       info, gi.object_info_get_n_constants(info), gi.object_info_get_constant,
-      core.get)
+      core.construct)
    class._inherits = get_category(
       info, gi.object_info_get_n_interfaces(info), gi.object_info_get_interface,
       function(ii) return repo[ii:get_namespace(ii)][ii:get_name()] end,
