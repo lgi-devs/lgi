@@ -206,9 +206,18 @@ lgi_gclosure_marshal (GClosure *closure, GValue *return_value,
 GClosure *
 lgi_gclosure_create (lua_State *L, int target)
 {
+  LgiClosure *c;
+  int type = lua_type (L, target);
+
+  /* Check that target is something we can call. */
+  if (type != LUA_TFUNCTION && type != LUA_TTABLE && type != LUA_TUSERDATA)
+    {
+      luaL_typerror (L, target, lua_typename (L, type));
+      return NULL;
+    }
+
   /* Create new closure instance. */
-  LgiClosure *c = (LgiClosure *) g_closure_new_simple (sizeof (LgiClosure),
-						       NULL);
+  c = (LgiClosure *) g_closure_new_simple (sizeof (LgiClosure), NULL);
 
   /* Initialize callback thread to be used. */
   c->L = L;
