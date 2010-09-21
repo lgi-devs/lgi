@@ -10,21 +10,6 @@
 
 int lgi_regkey;
 
-int
-lgi_error (lua_State *L, GError *err)
-{
-  lua_pushboolean (L, 0);
-  if (err != NULL)
-    {
-      lua_pushstring (L, err->message);
-      lua_pushinteger (L, err->code);
-      g_error_free (err);
-      return 3;
-    }
-  else
-    return 1;
-}
-
 /* Puts parts of the name to the stack, to be concatenated by lua_concat.
    Returns number of pushed elements. */
 int

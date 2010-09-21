@@ -376,7 +376,13 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
 
   /* Check, whether function threw. */
   if (err != NULL)
-    return lgi_error (L, err);
+    {
+      lua_pushboolean (L, 0);
+      lua_pushstring (L, err->message);
+      lua_pushinteger (L, err->code);
+      g_error_free (err);
+      return 3;
+    }
 
   /* Handle return value. */
   nret = 0;

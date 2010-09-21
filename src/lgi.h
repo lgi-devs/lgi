@@ -21,10 +21,6 @@
 const char *lgi_sd (lua_State* L);
 #endif
 
-/* Reports specified GLib error as function return.  Returns number of items
- * pushed to the stack.  err instance is automatically freed. */
-int lgi_error (lua_State *L, GError *err);
-
 /* Puts parts of the name to the stack, to be concatenated by lua_concat.
    Returns number of pushed elements. */
 int lgi_type_get_name (lua_State *L, GIBaseInfo *info);
