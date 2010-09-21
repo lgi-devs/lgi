@@ -26,6 +26,7 @@ local function log(format, ...) core.log(format:format(...), 'debug') end
 local function loginfo(format, ...) core.log(format:format(...), 'info') end
 
 loginfo 'starting Lgi bootstrap'
+local ir
 
 -- Repository, table with all loaded namespaces.  Its metatable takes care of
 -- loading on-demand.  Created by C-side bootstrap.
@@ -87,7 +88,7 @@ end
 
 function struct_mt.__call(type, fields)
    -- Create the structure instance.
-   local info = assert(ri:find_by_gtype(type[0].gtype))
+   local info = assert(ir:find_by_gtype(type[0].gtype))
    local struct = core.construct(info)
 
    -- Set values of fields.
@@ -122,7 +123,6 @@ end
 -- manually.  Later it will be converted to full-featured repo namespace.
 local gi = setmetatable({ [0] = { name = 'GIRepository' } }, namespace_mt)
 core.repo.GIRepository = gi
-local ir
 
 gi._enums = { InfoType = setmetatable({
 					 FUNCTION = 1,
@@ -845,9 +845,12 @@ do
    -- fields, but it must have constructor creating it from any kind
    -- of Lua callable.
    local closure = repo.GObject.Closure
-   setmetatable(closure, { __call = function(arg)
-				       return core.construct(closure, arg)
+   local closure_info = ir:find_by_name('GObject', 'Closure')
+   setmetatable(closure, { __call = function(_, arg)
+				       return core.construct(closure_info, arg)
 				    end })
+   closure._methods = nil
+   closure._fields = nil
 end
 
 -- Install new loader which will load lgi packages on-demand using 'repo'
