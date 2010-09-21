@@ -330,8 +330,40 @@ compound_gc (lua_State *L)
 static int
 compound_tostring (lua_State *L)
 {
+  GIBaseInfo *bi;
   Compound *compound = compound_prepare (L, 1, TRUE);
-  lua_pushfstring (L, "lgi %p:", compound);
+  const char *type = "";
+
+  /* Find out type of the compound. */
+  lua_rawgeti (L, -1, 0);
+  lua_getfield (L, -1, "gtype");
+  bi = g_irepository_find_by_gtype (NULL, lua_tonumber (L, -1));
+  if (bi != NULL)
+    {
+      switch (g_base_info_get_type (bi))
+        {
+        case GI_INFO_TYPE_OBJECT:
+          type = ".obj";
+          break;
+
+        case GI_INFO_TYPE_STRUCT:
+          type = ".rec";
+          break;
+
+        case GI_INFO_TYPE_UNION:
+          type = ".uni";
+          break;
+
+        default:
+          break;
+        }
+
+      g_base_info_unref (bi);
+    }
+  lua_pop (L, 2);
+
+  /* Create the whole name string. */
+  lua_pushfstring (L, "lgi%s %p:", type, compound);
   lua_rawgeti (L, -2, 0);
   lua_getfield (L, -1, "name");
   lua_replace (L, -2);
