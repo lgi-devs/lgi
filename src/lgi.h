@@ -110,6 +110,11 @@ gpointer lgi_compound_object_new (lua_State *L, GIObjectInfo *ii, int argtable);
 int lgi_compound_get (lua_State *L, int arg, GType *gtype, gpointer *addr, 
 		      gboolean optional);
 
+/* Checks, compound with reqeusted gtype lives at given stack position.  If
+   yes, returns its address and updates real compound's gtype, otherwise
+   returns NULL.  Does not do any conversions/errors. */
+gpointer lgi_compound_check (lua_State *L, int arg, GType *gtype);
+
 /* Initializes type of GValue to specified ti. */
 void lgi_value_init (lua_State *L, GValue *val, GITypeInfo *ti);
 

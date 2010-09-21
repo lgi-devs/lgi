@@ -383,6 +383,40 @@ compound_error (lua_State *L, const char *errmsg, int element)
 		     lua_tostring (L, element));
 }
 
+static Compound *
+compound_check (lua_State *L, int arg, GType *gtype)
+{
+  Compound *compound;
+  GType real_type;
+  int vals;
+  GIBaseInfo *info;
+
+  /* First check whether we have directly compound userdata, and also
+     check for type ancestry. */
+  compound = compound_prepare (L, arg, FALSE);
+  if (compound != NULL)
+    {
+      lua_rawgeti (L, -1, 0);
+      lua_getfield (L, -1, "gtype");
+      real_type = lua_tointeger (L, -1);
+      lua_pop (L, 4);
+      if (*gtype == G_TYPE_NONE || g_type_is_a (real_type, *gtype))
+	{
+          *gtype = real_type;
+	  return compound;
+	}
+    }
+
+  return NULL;
+}
+
+gpointer
+lgi_compound_check (lua_State *L, int arg, GType *gtype)
+{
+  Compound *compound = compound_check (L, arg, gtype);
+  return compound != NULL ? compound->addr : NULL;
+}
+
 int
 lgi_compound_get (lua_State *L, int index, GType *gtype, gpointer *addr,
 		  gboolean optional)
@@ -396,21 +430,12 @@ lgi_compound_get (lua_State *L, int index, GType *gtype, gpointer *addr,
   if (optional && lua_isnoneornil (L, index))
     return 0;
 
-  /* First check whether we have directly compound userdata, and also
-     check for type ancestry. */
-  compound = compound_prepare (L, index, FALSE);
+  /* Check compound type. */
+  compound = compound_check (L, index, gtype);
   if (compound != NULL)
     {
-      lua_rawgeti (L, -1, 0);
-      lua_getfield (L, -1, "gtype");
-      real_type = lua_tointeger (L, -1);
-      lua_pop (L, 4);
-      if (*gtype == G_TYPE_NONE || g_type_is_a (real_type, *gtype))
-	{
-          *gtype = real_type;
-	  *addr = compound->addr;
-	  return 0;
-	}
+      *addr = compound->addr;
+      return 0;
     }
 
   /* Direct type value failed, so try to invoke explicit 'constructor'
