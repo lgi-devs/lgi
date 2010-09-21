@@ -147,9 +147,19 @@ lgi_construct (lua_State* L)
 
     case GI_INFO_TYPE_STRUCT:
     case GI_INFO_TYPE_UNION:
-      res = lgi_compound_struct_new (L, ii);
-      vals = 1;
-      break;
+      {
+	GType type = g_registered_type_info_get_g_type (ii);
+	if (g_type_is_a (type, G_TYPE_CLOSURE))
+	  /* Create closure instance wrapping 2nd argument and return it. */
+	  vals = lgi_compound_create (L, ii, lgi_gclosure_create (L, 2), TRUE);
+	else
+	  {
+	    /* Create common struct. */
+	    res = lgi_compound_struct_new (L, ii);
+	    vals = 1;
+	  }
+	break;
+      }
 
     case GI_INFO_TYPE_OBJECT:
       res = lgi_compound_object_new (L, ii, 2);

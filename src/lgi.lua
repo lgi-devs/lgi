@@ -770,7 +770,7 @@ load_struct(gi, gi._structs.Typelib,
 load_struct(gi, gi._structs.BaseInfo,
 	    ir:find_by_name(gi[0].name, 'BaseInfo'))
 
--- GObject.Object modifications.
+-- GObject modifications.
 do
    local obj = repo.GObject.Object
 
@@ -840,6 +840,14 @@ do
 	 break
       end
    end
+
+   -- Closure modifications.  Closure does not need any methods nor
+   -- fields, but it must have constructor creating it from any kind
+   -- of Lua callable.
+   local closure = repo.GObject.Closure
+   setmetatable(closure, { __call = function(arg)
+				       return core.construct(closure, arg)
+				    end })
 end
 
 -- Install new loader which will load lgi packages on-demand using 'repo'

@@ -358,13 +358,14 @@ lgi_compound_get (lua_State *L, int index, GType req_gtype, gpointer *addr,
   Compound *compound;
   GType real_type;
   int vals, gottype;
-  GIBaseInfo *req_typeinfo;
+  GIBaseInfo *info;
 
   *addr = NULL;
   if (optional && lua_isnoneornil (L, index))
     return 0;
 
-  /* Check for type ancestry. */
+  /* First check whether we have directly compound userdata, and also
+     check for type ancestry. */
   compound = compound_prepare (L, index, FALSE);
   if (compound != NULL)
     {
@@ -379,33 +380,52 @@ lgi_compound_get (lua_State *L, int index, GType req_gtype, gpointer *addr,
 	}
     }
 
-  /* Check for closures; we can create closure from any function,
-     table or userdata (the latter two can be also callable). */
-  if (g_type_is_a (req_gtype, G_TYPE_CLOSURE))
+  /* Direct type value failed, so try to invoke explicit 'constructor'
+     of the type, i.e. when attempting to create instance of Foo.Bar
+     from param arg, call 'local inst = repo.Foo.Bar(arg)'. */
+  info = g_irepository_find_by_gtype (NULL, req_gtype);
+  if (info != NULL)
     {
-      /* Create GClosure for requested target. */
-      int vals = 0;
-      *addr = lgi_gclosure_create (L, index);
-
-      /* Wrap it into new boxed value on the stack. */
-      GIBaseInfo *closure_info = g_irepository_find_by_gtype (NULL,
-							      G_TYPE_CLOSURE);
-      if (closure_info != NULL)
+      lua_rawgeti (L, LUA_REGISTRYINDEX, lgi_regkey);
+      lua_rawgeti (L, -1, LGI_REG_REPO);
+      lua_getfield (L, -1, g_base_info_get_namespace (info));
+      vals = 3;
+      if (!lua_isnil (L, -1))
 	{
-	  vals = lgi_compound_create (L, closure_info, *addr, TRUE);
-	  g_base_info_unref (closure_info);
+	  lua_getfield (L, -1, g_base_info_get_name (info));
+	  vals++;
+	  if (!lua_isnil (L, -1))
+	    {
+	      /* info will not be needed any more, don't let leak it. */
+	      g_base_info_unref (info);
+
+	      /* Call the constructor. */
+	      lua_pushvalue (L, index);
+	      lua_call (L, 1, 1);
+
+	      /* Return object returned by the constructor. */
+	      lua_replace (L, -3);
+	      lua_pop (L, 1);
+	      vals = lgi_compound_get (L, -1, req_gtype, addr, optional) + 1;
+	      if (*addr == NULL)
+		{
+		  lua_pop (L, vals);
+		  vals = 0;
+		}
+
+	      return vals;
+	    }
 	}
 
-      return vals;
+      lua_pop (L, vals);
     }
 
   /* Put exact requested type into the error message. */
   gottype = lua_type (L, index);
-  req_typeinfo = g_irepository_find_by_gtype (NULL, req_gtype);
-  if (req_typeinfo != NULL)
+  if (info != NULL)
     {
-      vals = lgi_type_get_name (L, req_typeinfo);
-      g_base_info_unref (req_typeinfo);
+      vals = lgi_type_get_name (L, info);
+      g_base_info_unref (info);
     }
   else
     {
