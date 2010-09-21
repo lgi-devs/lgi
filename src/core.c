@@ -153,6 +153,24 @@ lgi_construct (lua_State* L)
 	if (g_type_is_a (type, G_TYPE_CLOSURE))
 	  /* Create closure instance wrapping 2nd argument and return it. */
 	  vals = lgi_compound_create (L, ii, lgi_gclosure_create (L, 2), TRUE);
+        else if (g_type_is_a (type, G_TYPE_VALUE))
+          {
+            /* Get requested GType, construct and fill in GValue and return it
+               wrapped in a box which is wrapped in a compound. */
+            GValue val = {0};
+            if (lua_type (L, 2) == LUA_TSTRING)
+              type = g_type_from_name (lua_tostring (L, 2));
+            else
+              type = luaL_checknumber (L, 2);
+
+            g_value_init (&val, type);
+            lgi_value_load (L, &val, 3);
+            vals = lgi_compound_create (L, ii,
+                                        g_boxed_copy (G_TYPE_VALUE, &val),
+                                        TRUE);
+            vals = 1;
+            g_value_unset (&val);
+          }
 	else
 	  {
 	    /* Create common struct. */
@@ -196,7 +214,7 @@ lgi_gtype (lua_State *L)
 {
   GType gtype = G_TYPE_NONE;
 
-  if (lua_isstring (L, 1))
+  if (lua_type (L, 1) == LUA_TSTRING)
     {
       /* Get information about the name. */
       const gchar *name = luaL_checkstring (L, 1);
@@ -273,7 +291,7 @@ lgi_connect (lua_State *L)
 
   /* Get target objects. */
   if (lgi_compound_get (L, 1, &gt_obj, &obj, FALSE)
-      || lgi_compound_get (L, 3, gt_bi, (gpointer *) &ci, FALSE))
+      || lgi_compound_get (L, 3, &gt_bi, (gpointer *) &ci, FALSE))
       g_assert_not_reached ();
 
   /* Create GClosure instance to be used.  This is fast'n'dirty method; it

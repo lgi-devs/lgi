@@ -12,8 +12,8 @@ local assert, setmetatable, getmetatable, type, pairs, string, rawget,
    table, require, tostring, error, ipairs =
       assert, setmetatable, getmetatable, type, pairs, string, rawget,
       table, require, tostring, error, ipairs
+local package, math = package, math
 local bit = require 'bit'
-local package = package
 
 -- Require core lgi utilities, used during bootstrap.
 local core = require 'lgi._core'
@@ -846,11 +846,68 @@ do
    -- of Lua callable.
    local closure = repo.GObject.Closure
    local closure_info = ir:find_by_name('GObject', 'Closure')
-   setmetatable(closure, { __call = function(_, arg)
-				       return core.construct(closure_info, arg)
-				    end })
    closure._methods = nil
    closure._fields = nil
+   getmetatable(closure).__call = function(_, arg)
+				     return core.construct(closure_info, arg)
+				  end
+
+   -- Value is constructible from any kind of source Lua
+   -- value, and the type of the value can be hinted by type name.
+   local value = repo.GObject.Value
+   local value_info = ir:find_by_name('GObject', 'Value')
+   local value_mt = {}
+
+   -- Tries to deduce the gtype according to Lua value.
+   local function gettype(source)
+      if source == nil then
+	 return ''
+      elseif type(source) == 'boolean' then
+	 return 'gboolean'
+      elseif type(source) == 'number' then
+	 -- If the number fits in integer, use it, otherwise use double.
+	 local _, fract = math.modf(source)
+	 local maxint32 = -bit.lshift(1, 31)
+	 return ((fract == 0 and source >= -maxint32 and source < maxint32)
+	      and 'gint' or 'gdouble')
+      elseif type(source) == 'string' then
+	 return 'gchararray'
+      elseif type(source) == 'function' then
+	 -- Generate closure for any kind of function.
+	 return closure[0].gtype
+      elseif type(source) == 'userdata' then
+	 -- Examine type of userdata.
+	 local meta = getmetatable(source)
+	 if meta and meta.__call then
+	    -- It seems that it is possible to call on this, so generate
+	    -- closure.
+	    return closure[0].gtype
+	 elseif meta == getmetatable(value_info) then
+	    -- Some kind of compound, get its real gtype from core.
+	    return core.gtype(source)
+	 end
+      elseif type(source) == 'table' then
+	 -- Check, whether we can call it.
+	 local meta = getmetatable(source)
+	 if meta and meta.__call then
+	    return closure[0].gtype
+	 end
+      end
+
+      -- No idea to what type should this be mapped.
+      error(string.format("unclear type for GValue from argument `%s'",
+			  tostring(source)))
+   end
+
+   -- Implement constructor, taking any source value and optionally type of the
+   -- source.
+   function value_mt:__call(source, stype)
+      stype = stype or gettype(source)
+      return core.construct(value_info, stype, source)
+   end
+   setmetatable(value, value_mt)
+   value._methods = nil
+   value._fields = nil
 end
 
 -- Install new loader which will load lgi packages on-demand using 'repo'
