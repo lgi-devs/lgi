@@ -8,7 +8,7 @@ out = 'build'
 
 def options(opt) :
     opt.tool_options('compiler_cc')
-    opt.add_option('--enable-debugging', action='store_true', dest='debug',
+    opt.add_option('--enable-debug', action='store_true', dest='debug',
                    default=False, help='Enable debugging mode.')
 
 def configure(conf) :
