@@ -848,15 +848,16 @@ do
    local closure_info = ir:find_by_name('GObject', 'Closure')
    closure._methods = nil
    closure._fields = nil
-   getmetatable(closure).__call = function(_, arg)
-				     return core.construct(closure_info, arg)
-				  end
+   setmetatable(closure, { __index = getmetatable(closure).__index,
+			   __tostring = getmetatable(closure).__tostring,
+			   __call = function(_, arg)
+				       return core.construct(closure_info, arg)
+				    end })
 
    -- Value is constructible from any kind of source Lua
    -- value, and the type of the value can be hinted by type name.
    local value = repo.GObject.Value
    local value_info = ir:find_by_name('GObject', 'Value')
-   local value_mt = {}
 
    -- Tries to deduce the gtype according to Lua value.
    local function gettype(source)
@@ -901,6 +902,7 @@ do
 
    -- Implement constructor, taking any source value and optionally type of the
    -- source.
+   local value_mt = {}
    function value_mt:__call(source, stype)
       stype = stype or gettype(source)
       return core.construct(value_info, stype, source)
