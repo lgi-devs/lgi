@@ -135,8 +135,9 @@ lgi_construct (lua_State* L)
   gpointer res;
   int vals = 0;
   GIBaseInfo *ii;
+  GType gt_bi = GI_TYPE_BASE_INFO;
 
-  if (lgi_compound_get (L, 1, GI_TYPE_BASE_INFO, (gpointer *) &ii, FALSE))
+  if (lgi_compound_get (L, 1, &gt_bi, (gpointer *) &ii, FALSE))
     g_assert_not_reached ();
 
   switch (g_base_info_get_type (ii))
@@ -193,16 +194,29 @@ lgi_construct (lua_State* L)
 static int
 lgi_gtype (lua_State *L)
 {
-  const gchar *name = luaL_checkstring (L, 1);
-  GIBaseInfo *info;
+  GType gtype = G_TYPE_NONE;
 
-  /* Get information about the name. */
-  info = g_irepository_find_by_name (NULL, "GIRepository", name);
-  if (info == NULL)
-    return luaL_error (L, "unable to resolve GIRepository.%s", name);
+  if (lua_isstring (L, 1))
+    {
+      /* Get information about the name. */
+      const gchar *name = luaL_checkstring (L, 1);
+      GIBaseInfo *info;
 
-  lua_pushnumber (L, g_registered_type_info_get_g_type (info));
-  g_base_info_unref (info);
+      info = g_irepository_find_by_name (NULL, "GIRepository", name);
+      if (info == NULL)
+        return luaL_error (L, "unable to resolve GIRepository.%s", name);
+
+      gtype = g_registered_type_info_get_g_type (info);
+      g_base_info_unref (info);
+    }
+  else
+    {
+      /* Get information by compound. */
+      gpointer unused;
+      lua_pop (L, lgi_compound_get (L, 1, &gtype, &unused, FALSE));
+    }
+  
+  lua_pushnumber (L, gtype);
   return 1;
 }
 
@@ -212,10 +226,10 @@ static int
 lgi_cast (lua_State *L)
 {
   GObject *obj;
-  GType gtype = luaL_checknumber (L, 2);
+  GType gtype = luaL_checknumber (L, 2), gt_obj = G_TYPE_OBJECT;
 
   /* Get the source object. */
-  lgi_compound_get (L, 1, G_TYPE_OBJECT, (gpointer *) &obj, FALSE);
+  lgi_compound_get (L, 1, &gt_obj, (gpointer *) &obj, FALSE);
 
   /* Check, that casting is possible. */
   if (g_type_is_a (G_TYPE_FROM_INSTANCE (obj), gtype))
@@ -255,10 +269,11 @@ lgi_connect (lua_State *L)
   GClosure *gclosure;
   guint signal_id;
   gulong handler_id;
+  GType gt_obj = G_TYPE_OBJECT, gt_bi = GI_TYPE_BASE_INFO;
 
   /* Get target objects. */
-  if (lgi_compound_get (L, 1, G_TYPE_OBJECT, &obj, FALSE)
-      || lgi_compound_get (L, 3, GI_TYPE_BASE_INFO, (gpointer *) &ci, FALSE))
+  if (lgi_compound_get (L, 1, &gt_obj, &obj, FALSE)
+      || lgi_compound_get (L, 3, gt_bi, (gpointer *) &ci, FALSE))
       g_assert_not_reached ();
 
   /* Create GClosure instance to be used.  This is fast'n'dirty method; it

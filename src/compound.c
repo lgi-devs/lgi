@@ -352,7 +352,7 @@ compound_error (lua_State *L, const char *errmsg, int element)
 }
 
 int
-lgi_compound_get (lua_State *L, int index, GType req_gtype, gpointer *addr,
+lgi_compound_get (lua_State *L, int index, GType *gtype, gpointer *addr,
 		  gboolean optional)
 {
   Compound *compound;
@@ -373,8 +373,9 @@ lgi_compound_get (lua_State *L, int index, GType req_gtype, gpointer *addr,
       lua_getfield (L, -1, "gtype");
       real_type = lua_tointeger (L, -1);
       lua_pop (L, 4);
-      if (g_type_is_a (real_type, req_gtype))
+      if (*gtype == G_TYPE_NONE || g_type_is_a (real_type, *gtype))
 	{
+          *gtype = real_type;
 	  *addr = compound->addr;
 	  return 0;
 	}
@@ -383,8 +384,8 @@ lgi_compound_get (lua_State *L, int index, GType req_gtype, gpointer *addr,
   /* Direct type value failed, so try to invoke explicit 'constructor'
      of the type, i.e. when attempting to create instance of Foo.Bar
      from param arg, call 'local inst = repo.Foo.Bar(arg)'. */
-  info = g_irepository_find_by_gtype (NULL, req_gtype);
-  if (info != NULL)
+  if (*gtype != G_TYPE_NONE
+      && (info = g_irepository_find_by_gtype (NULL, *gtype)) != NULL)
     {
       lua_rawgeti (L, LUA_REGISTRYINDEX, lgi_regkey);
       lua_rawgeti (L, -1, LGI_REG_REPO);
@@ -406,7 +407,7 @@ lgi_compound_get (lua_State *L, int index, GType req_gtype, gpointer *addr,
 	      /* Return object returned by the constructor. */
 	      lua_replace (L, -3);
 	      lua_pop (L, 1);
-	      vals = lgi_compound_get (L, -1, req_gtype, addr, optional) + 1;
+	      vals = lgi_compound_get (L, -1, gtype, addr, optional) + 1;
 	      if (*addr == NULL)
 		{
 		  lua_pop (L, vals);
@@ -429,7 +430,7 @@ lgi_compound_get (lua_State *L, int index, GType req_gtype, gpointer *addr,
     }
   else
     {
-      lua_pushfstring (L, "(%s)", g_type_name (req_gtype));
+      lua_pushfstring (L, "(%s)", g_type_name (*gtype));
       vals = 1;
     }
 
@@ -548,6 +549,7 @@ process_element (lua_State *L, int newval)
   else
     {
       GIBaseInfo *ei = NULL;
+      GType gt_bi = GI_TYPE_BASE_INFO;
 
       /* Try to extract BaseInfo from given field, if possible. */
       if (type == LUA_TUSERDATA && lua_getmetatable (L, -1))
@@ -555,8 +557,7 @@ process_element (lua_State *L, int newval)
 	  int to_pop = 2;
 	  lua_getfield (L, LUA_REGISTRYINDEX, UD_COMPOUND);
 	  if (lua_rawequal (L, -1, -2))
-	    to_pop += lgi_compound_get (L, -3, GI_TYPE_BASE_INFO,
-					(gpointer *) &ei, FALSE);
+	    to_pop += lgi_compound_get (L, -3, &gt_bi, (gpointer *) &ei, FALSE);
 	  lua_pop (L, to_pop);
 	}
 

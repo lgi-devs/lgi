@@ -84,7 +84,7 @@ lgi_value_load (lua_State *L, GValue *val, int narg)
 
     case G_TYPE_OBJECT:
       {
-	vals = lgi_compound_get (L, narg, type, &obj, FALSE);
+	vals = lgi_compound_get (L, narg, &type, &obj, FALSE);
 	g_value_set_object (val, obj);
 	lua_pop (L, vals);
 	return 1;
@@ -92,7 +92,7 @@ lgi_value_load (lua_State *L, GValue *val, int narg)
 
     case G_TYPE_BOXED:
       {
-	vals = lgi_compound_get (L, narg, type, &obj, FALSE);
+	vals = lgi_compound_get (L, narg, &type, &obj, FALSE);
 	g_value_set_boxed (val, obj);
 	lua_pop (L, vals);
 	return 1;

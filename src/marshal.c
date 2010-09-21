@@ -251,10 +251,12 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 	      case GI_INFO_TYPE_UNION:
 	      case GI_INFO_TYPE_OBJECT:
 	      case GI_INFO_TYPE_INTERFACE:
-		nret = lgi_compound_get (L, narg,
-					 g_registered_type_info_get_g_type (ii),
-					 &val->v_pointer, optional);
-		break;
+                {
+                  GType gt = g_registered_type_info_get_g_type (ii);
+                  nret = lgi_compound_get (L, narg, &gt, &val->v_pointer,
+                                           optional);
+                  break;
+                }
 
 	      case GI_INFO_TYPE_CALLBACK:
 		nret = marshal_2c_callable (L, ii, ai, val, narg, ci, args);
