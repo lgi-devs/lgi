@@ -346,6 +346,10 @@ compound_tostring (lua_State *L)
           type = ".obj";
           break;
 
+	case GI_INFO_TYPE_INTERFACE:
+	  type = ".ifc";
+	  break;
+
         case GI_INFO_TYPE_STRUCT:
           type = ".rec";
           break;
@@ -608,18 +612,9 @@ process_element (lua_State *L, int newval)
       GIBaseInfo *ei = NULL;
       GType gt_bi = GI_TYPE_BASE_INFO;
 
-      /* Try to extract BaseInfo from given field, if possible. */
-      if (type == LUA_TUSERDATA && lua_getmetatable (L, -1))
-	{
-	  int to_pop = 2;
-	  lua_getfield (L, LUA_REGISTRYINDEX, UD_COMPOUND);
-	  if (lua_rawequal (L, -1, -2))
-	    to_pop += lgi_compound_get (L, -3, &gt_bi, (gpointer *) &ei, FALSE);
-	  lua_pop (L, to_pop);
-	}
-
       /* Special handling is for compound-userdata, which contain some
 	 kind of baseinfo. */
+      ei = lgi_compound_check (L, -1, &gt_bi);
       if (ei != NULL)
 	{
 	  switch (g_base_info_get_type (ei))
