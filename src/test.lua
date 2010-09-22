@@ -269,6 +269,43 @@ function tests.t01_gireg_23_gvalue_return()
    check(v.type == 'gint', 'incorrect value type')
 end
 
+function tests.t01_gireg_24_utf8_const_return()
+   local R = lgi.Regress
+   local utf8_const = 'const \226\153\165 utf8'
+   check(R.test_utf8_const_return() == utf8_const)
+end
+
+function tests.t01_gireg_25_utf8_nonconst_return()
+   local R = lgi.Regress
+   local utf8_nonconst = 'nonconst \226\153\165 utf8'
+   check(R.test_utf8_nonconst_return() == utf8_nonconst)
+end
+
+function tests.t01_gireg_26_utf8_nonconst_in()
+   local R = lgi.Regress
+   local utf8_nonconst = 'nonconst \226\153\165 utf8'
+   R.test_utf8_nonconst_in(utf8_nonconst)
+end
+
+function tests.t01_gireg_27_utf8_const_in()
+   local R = lgi.Regress
+   local utf8_const = 'const \226\153\165 utf8'
+   R.test_utf8_const_in(utf8_const)
+end
+
+function tests.t01_gireg_28_utf8_out()
+   local R = lgi.Regress
+   local utf8_nonconst = 'nonconst \226\153\165 utf8'
+   check(R.test_utf8_out() == utf8_nonconst)
+end
+
+function tests.t01_gireg_29_utf8_inout()
+   local R = lgi.Regress
+   local utf8_const = 'const \226\153\165 utf8'
+   local utf8_nonconst = 'nonconst \226\153\165 utf8'
+   check(R.test_utf8_inout(utf8_const) == utf8_nonconst)
+end
+
 function tests.t02_gvalue_simple()
    local V = GObject.Value
    local function checkv(gval, tp, val)
