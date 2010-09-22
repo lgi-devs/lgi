@@ -905,6 +905,7 @@ do
    local value_mt = {}
    function value_mt:__call(source, stype)
       stype = stype or gettype(source)
+      if type(stype) == 'string' then stype = GObject.type_from_name(stype) end
       return core.construct(value_info, stype, source)
    end
    setmetatable(value, value_mt)

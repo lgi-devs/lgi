@@ -117,80 +117,76 @@ static int
 lgi_construct (lua_State* L)
 {
   /* Create new instance based on the embedded typeinfo. */
-  gpointer res;
   int vals = 0;
-  GIBaseInfo *ii;
-  GType gt_bi = GI_TYPE_BASE_INFO;
+  GIBaseInfo *bi;
+  GType gtype = GI_TYPE_BASE_INFO;
 
-  if (lgi_compound_get (L, 1, &gt_bi, (gpointer *) &ii, FALSE))
-    g_assert_not_reached ();
-
-  switch (g_base_info_get_type (ii))
+  if ((bi = lgi_compound_check (L, 1, &gtype)) != NULL)
     {
-    case GI_INFO_TYPE_FUNCTION:
-      vals = lgi_callable_create (L, ii);
-      break;
+      switch (g_base_info_get_type (bi))
+	{
+	case GI_INFO_TYPE_FUNCTION:
+	  vals = lgi_callable_create (L, bi);
+	  break;
 
-    case GI_INFO_TYPE_STRUCT:
-    case GI_INFO_TYPE_UNION:
-      {
-	GType type = g_registered_type_info_get_g_type (ii);
-	if (g_type_is_a (type, G_TYPE_CLOSURE))
-	  /* Create closure instance wrapping 2nd argument and return it. */
-	  vals = lgi_compound_create (L, ii, lgi_gclosure_create (L, 2), TRUE);
-        else if (g_type_is_a (type, G_TYPE_VALUE))
-          {
-            /* Get requested GType, construct and fill in GValue and return it
-               wrapped in a box which is wrapped in a compound. */
-            GValue val = {0};
-            if (lua_type (L, 2) == LUA_TSTRING)
-              type = g_type_from_name (lua_tostring (L, 2));
-            else
-              type = luaL_checknumber (L, 2);
-
-            g_value_init (&val, type);
-            lgi_value_load (L, &val, 3);
-            vals = lgi_compound_create (L, ii,
-                                        g_boxed_copy (G_TYPE_VALUE, &val),
-                                        TRUE);
-            vals = 1;
-            g_value_unset (&val);
-          }
-	else
+	case GI_INFO_TYPE_STRUCT:
+	case GI_INFO_TYPE_UNION:
 	  {
-	    /* Create common struct. */
-	    res = lgi_compound_struct_new (L, ii);
-	    vals = 1;
+	    GType type = g_registered_type_info_get_g_type (bi);
+	    if (g_type_is_a (type, G_TYPE_CLOSURE))
+	      /* Create closure instance wrapping 2nd argument and return it. */
+	      vals = lgi_compound_create (L, bi, lgi_gclosure_create (L, 2), 
+					  TRUE);
+	    else if (g_type_is_a (type, G_TYPE_VALUE))
+	      {
+		/* Get requested GType, construct and fill in GValue
+		   and return it wrapped in a GBoxed which is wrapped in
+		   a compound. */
+		GValue val = {0};
+		g_value_init (&val, luaL_checknumber (L, 2));
+		lgi_value_load (L, &val, 3);
+		vals = lgi_compound_create (L, bi,
+					    g_boxed_copy (G_TYPE_VALUE, &val),
+					    TRUE);
+		vals = 1;
+		g_value_unset (&val);
+	      }
+	    else
+	      {
+		/* Create common struct. */
+		lgi_compound_struct_new (L, bi);
+		vals = 1;
+	      }
+	    break;
 	  }
-	break;
-      }
 
-    case GI_INFO_TYPE_OBJECT:
-      res = lgi_compound_object_new (L, ii, 2);
-      vals = 1;
-      break;
+	case GI_INFO_TYPE_OBJECT:
+	  lgi_compound_object_new (L, bi, 2);
+	  vals = 1;
+	  break;
 
-    case GI_INFO_TYPE_CONSTANT:
-      {
-	GITypeInfo* ti = g_constant_info_get_type (ii);
-	GIArgument val;
-	g_constant_info_get_value (ii, &val);
-	vals = lgi_marshal_2lua (L, ti, &val, GI_TRANSFER_NOTHING, NULL, NULL)
-	  ? 1 : 0;
-	g_base_info_unref (ti);
-      }
-      break;
+	case GI_INFO_TYPE_CONSTANT:
+	  {
+	    GITypeInfo* ti = g_constant_info_get_type (bi);
+	    GIArgument val;
+	    g_constant_info_get_value (bi, &val);
+	    vals = lgi_marshal_2lua (L, ti, &val, GI_TRANSFER_NOTHING, 
+				     NULL, NULL);
+	    g_base_info_unref (ti);
+	  }
+	  break;
 
-    default:
-      lua_pushfstring (L, "failing to construct unknown type %d (%s.%s)",
-		      g_base_info_get_type (ii),
-		      g_base_info_get_namespace (ii),
-		      g_base_info_get_name (ii));
-      g_warning ("%s", lua_tostring (L, -1));
-      lua_error (L);
-      break;
+	default:
+	  lua_pushfstring (L, "failing to construct unknown type %d (%s.%s)",
+			   g_base_info_get_type (bi),
+			   g_base_info_get_namespace (bi),
+			   g_base_info_get_name (bi));
+	  g_warning ("%s", lua_tostring (L, -1));
+	  lua_error (L);
+	  break;
+	}
     }
-
+    
   return vals;
 }
 
