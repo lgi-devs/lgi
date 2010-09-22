@@ -192,7 +192,7 @@ compound_register (lua_State *L, GIBaseInfo *info, gpointer *addr,
       g_object_ref_sink (*addr);
 
   /* Store newly created compound to the cache. */
-  lua_pushlightuserdata (L, compound);
+  lua_pushlightuserdata (L, compound->addr);
   lua_pushvalue (L, -2);
   lua_rawset (L, -4);
 
@@ -367,7 +367,7 @@ compound_tostring (lua_State *L)
   lua_pop (L, 2);
 
   /* Create the whole name string. */
-  lua_pushfstring (L, "lgi%s %p:", type, compound);
+  lua_pushfstring (L, "lgi%s %p:", type, compound->addr);
   lua_rawgeti (L, -2, 0);
   lua_getfield (L, -1, "name");
   lua_replace (L, -2);
