@@ -3,6 +3,7 @@
 require 'lgi'
 local GLib = require 'lgi.GLib'
 local Gio = require 'lgi.Gio'
+local GObject = require 'lgi.GObject'
 
 local tests = {}
 
@@ -266,6 +267,32 @@ function tests.t01_gireg_23_gvalue_return()
    local v = R.test_value_return(43)
    checkv(v.value, 43, 'number')
    check(v.type == 'gint', 'incorrect value type')
+end
+
+function tests.t02_gvalue_simple()
+   local V = GObject.Value
+   local function checkv(gval, tp, val)
+      check(type(gval.type) == 'string', "GValue.type is not `string'")
+      check(gval.type == tp, ("GValue type: expected `%s', got `%s'"):format(
+	       tp, gval.type), 2)
+      check(gval.value == val, ("GValue value: exp `%s', got `%s'"):format(
+	       tostring(val), tostring(gval.value), 2))
+   end
+   checkv(V(), '', nil)
+   checkv(V(0), 'gint', 0)
+   checkv(V(1.1), 'gdouble', 1.1)
+   checkv(V('str'), 'gchararray', 'str')
+   local gcl = GObject.Closure(function() end)
+   checkv(V(gcl), 'GClosure', gcl)
+   local v = V(42)
+   checkv(V(v).value, 'gint', 42)
+
+-- For non-refcounted boxeds, the returned Value.value is always new
+-- copy of the instance, so the following test fails:
+--
+-- checkv(V(v), 'GValue', v)
+
+   check(V(v).type == 'GValue')
 end
 
 --[[--
