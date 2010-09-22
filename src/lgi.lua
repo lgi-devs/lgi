@@ -86,6 +86,9 @@ function struct_mt.__index(struct, symbol)
    return find_in_compound(struct, symbol, { '_methods', '_fields' })
 end
 
+-- Metatable for non-creatable structs.
+local struct_nc_mt = { __index = struct_mt.__index }
+
 function struct_mt.__call(type, fields)
    -- Create the structure instance.
    local info = assert(ir:find_by_gtype(type[0].gtype))
@@ -163,12 +166,12 @@ gi._structs = {
       { [0] = { name = 'GIRepository.BaseInfo',
 		gtype = core.gtype('BaseInfo') },
 	_methods = {}
-     }, struct_mt),
+     }, struct_nc_mt),
    Typelib = setmetatable(
       { [0] = { name = 'GIRepository.Typelib',
 		gtype = core.gtype('Typelib') },
 	_methods = {}
-     }, struct_mt),
+     }, struct_nc_mt),
 }
 
 -- Loads given set of symbols into table.
@@ -507,6 +510,7 @@ local function load_struct(namespace, struct, info)
    -- Avoid exposing internal structs created for object implementations.
    if not gi.struct_info_is_gtype_struct(info) then
       load_compound(struct, info, struct_mt)
+      if struct[0].gtype == 4 then setmetatable(struct, struct_nc_mt) end
       struct._methods = get_category(
 	 info, gi.struct_info_get_n_methods(info), gi.struct_info_get_method,
 	 core.construct, nil, nil, rawget(struct, '_methods'))
