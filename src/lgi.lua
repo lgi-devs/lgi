@@ -9,9 +9,9 @@
 --]]--------------------------------------------------------------------------
 
 local assert, setmetatable, getmetatable, type, pairs, string, rawget,
-   table, require, tostring, error, ipairs =
+   table, require, tostring, error, pcall, ipairs =
       assert, setmetatable, getmetatable, type, pairs, string, rawget,
-      table, require, tostring, error, ipairs
+      table, require, tostring, error, pcall, ipairs
 local package, math = package, math
 local bit = require 'bit'
 
@@ -425,11 +425,12 @@ local function get_category(info, count, get_item, xform_value, xform_name,
 	       -- Querying index 0 has special semantics; makes the
 	       -- whole table fully loaded.
 	       if req_name == 0 then
-		  local ei, en, val
+		  local ei, en, val, ok
 
 		  -- Load al values from unknown indices.
 		  while #index > 0 do
-		     ei = check_type(get_item(info, table.remove(index)))
+		     ok, ei = pcall(get_item, info, table.remove(index))
+		     if not ok then ei = nil else ei = check_type(ei) end
 		     val = not xform_value and ei or xform_value(ei)
 		     if val then
 			en = ei:get_name()
@@ -442,7 +443,8 @@ local function get_category(info, count, get_item, xform_value, xform_name,
 
 		  -- Load all known indices.
 		  for en, idx in pairs(index) do
-		     val = check_type(get_item(info, idx))
+		     ok, val = pcall(get_item, info, idx)
+		     if not ok then val = nil else val = check_type(val) end
 		     val = not xform_value and val or xform_value(val)
 		     category[en] = val
 		  end
@@ -720,7 +722,7 @@ local function resolve_namespace(ns_meta)
    local name = ns_meta.name
    local ns = repo[name]
    for i = 0, ir:get_n_infos(name) - 1 do
-      local _ = ns[ir:get_info(name, i):get_name()]
+      pcall(function() local _ = ns[ir:get_info(name, i):get_name()] end)
    end
 end
 
