@@ -383,7 +383,13 @@ local function runtest(name)
    if type(func) ~= 'function' then
       print(string.format('ERRR: %s is not known test', name))
    else
-      local ok, msg = pcall(tests[name])
+      local ok, msg
+      if not tests_debug then
+	 ok, msg = pcall(tests[name])
+      else
+	 tests[name]()
+	 ok = true
+      end
       if ok then
 	 print(string.format('PASS: %s', name))
 	 tests_passed = tests_passed + 1
@@ -394,6 +400,7 @@ local function runtest(name)
    end
 end
 
+-- Create sorted index of tests.
 do
    local names = {}
    for name in pairs(tests) do names[#names + 1] = name end
