@@ -146,7 +146,7 @@ lgi_construct (lua_State* L)
 	    GType type = g_registered_type_info_get_g_type (bi);
 	    if (g_type_is_a (type, G_TYPE_CLOSURE))
 	      /* Create closure instance wrapping 2nd argument and return it. */
-	      vals = lgi_compound_create (L, bi, lgi_gclosure_create (L, 2), 
+	      vals = lgi_compound_create (L, bi, lgi_gclosure_create (L, 2),
 					  TRUE);
 	    else if (g_type_is_a (type, G_TYPE_VALUE))
 	      {
@@ -181,7 +181,7 @@ lgi_construct (lua_State* L)
 	    GITypeInfo* ti = g_constant_info_get_type (bi);
 	    GIArgument val;
 	    g_constant_info_get_value (bi, &val);
-	    vals = lgi_marshal_2lua (L, ti, &val, GI_TRANSFER_NOTHING, 
+	    vals = lgi_marshal_2lua (L, ti, &val, GI_TRANSFER_NOTHING,
 				     NULL, NULL);
 	    g_base_info_unref (ti);
 	  }
@@ -199,6 +199,8 @@ lgi_construct (lua_State* L)
 
       return vals;
     }
+
+  return luaL_typerror (L, 1, "(lgi userdata)");
 }
 
 static int
@@ -225,7 +227,7 @@ lgi_gtype (lua_State *L)
       gpointer unused;
       lua_pop (L, lgi_compound_get (L, 1, &gtype, &unused, FALSE));
     }
-  
+
   lua_pushnumber (L, gtype);
   return 1;
 }

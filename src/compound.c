@@ -392,8 +392,6 @@ compound_check (lua_State *L, int arg, GType *gtype)
 {
   Compound *compound;
   GType real_type;
-  int vals;
-  GIBaseInfo *info;
 
   /* First check whether we have directly compound userdata, and also
      check for type ancestry. */
@@ -426,7 +424,6 @@ lgi_compound_get (lua_State *L, int index, GType *gtype, gpointer *addr,
 		  gboolean optional)
 {
   Compound *compound;
-  GType real_type;
   int vals, gottype;
   GIBaseInfo *info;
 
