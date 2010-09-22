@@ -119,9 +119,20 @@ lgi_construct (lua_State* L)
   /* Create new instance based on the embedded typeinfo. */
   int vals = 0;
   GIBaseInfo *bi;
-  GType gtype = GI_TYPE_BASE_INFO;
+  GType gtype;
+  GValue *val;
 
-  if ((bi = lgi_compound_check (L, 1, &gtype)) != NULL)
+  /* Check, whether arg1 is GValue. */
+  gtype = G_TYPE_VALUE;
+  val = lgi_compound_check (L, 1, &gtype);
+  if (val != NULL)
+    /* Construct from value just unboxes the real value from it. */
+    return lgi_value_store (L, val);
+
+  /* Check whether arg1 is baseinfo. */
+  gtype = GI_TYPE_BASE_INFO;
+  bi = lgi_compound_check (L, 1, &gtype);
+  if (bi != NULL)
     {
       switch (g_base_info_get_type (bi))
 	{
@@ -185,9 +196,9 @@ lgi_construct (lua_State* L)
 	  lua_error (L);
 	  break;
 	}
+
+      return vals;
     }
-    
-  return vals;
 }
 
 static int

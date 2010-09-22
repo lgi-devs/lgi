@@ -263,8 +263,10 @@ end
 
 function tests.t01_gireg_23_gvalue_return()
    local R = lgi.Regress
-   checkv(R.test_value_return(43), 43, 'number')
-end   
+   local v = R.test_value_return(43)
+   checkv(v.value, 43, 'number')
+   check(v.type == 'gint', 'incorrect value type')
+end
 
 --[[--
 function tests.t02_gio_01_loadfile_sync()

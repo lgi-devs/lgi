@@ -902,7 +902,7 @@ do
 
    -- Implement constructor, taking any source value and optionally type of the
    -- source.
-   local value_mt = {}
+   local value_mt = { __index = struct_mt.__index }
    function value_mt:__call(source, stype)
       stype = stype or gettype(source)
       if type(stype) == 'string' then stype = GObject.type_from_name(stype) end
@@ -910,7 +910,15 @@ do
    end
    setmetatable(value, value_mt)
    value._methods = nil
-   value._fields = nil
+   value._fields = { _g_type = value._fields.g_type }
+   function value._fields.type(val, _, newval)
+      assert(not newval, "GObject.Value: `type' not writable")
+      return GObject.type_name(val._fields__g_type)
+   end
+   function value._fields.value(val, _, newval)
+      assert(not newval, "GObject.Value: `value' not writable")
+      return core.construct(val)
+   end
 end
 
 -- Install new loader which will load lgi packages on-demand using 'repo'
