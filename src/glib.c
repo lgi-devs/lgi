@@ -59,7 +59,7 @@ lgi_value_load (lua_State *L, GValue *val, int narg)
   int vals;
   GType type = G_VALUE_TYPE (val);
 
-  if (type == G_TYPE_NONE)
+  if (!G_TYPE_IS_VALUE (type))
     return 0;
 #define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup,	\
 		 gtype, val_get, val_set, ffitype)		\
@@ -111,7 +111,7 @@ int
 lgi_value_store (lua_State *L, const GValue *val)
 {
   GType type = G_VALUE_TYPE (val);
-  if (type == G_TYPE_NONE)
+  if (!G_TYPE_IS_VALUE (type))
     return 0;
 #define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup,	\
 		 gtype, val_get, val_set, ffitype)		\

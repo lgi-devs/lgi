@@ -862,7 +862,7 @@ do
    -- Tries to deduce the gtype according to Lua value.
    local function gettype(source)
       if source == nil then
-	 return ''
+	 return 'void'
       elseif type(source) == 'boolean' then
 	 return 'gboolean'
       elseif type(source) == 'number' then
@@ -905,7 +905,9 @@ do
    local value_mt = { __index = struct_mt.__index }
    function value_mt:__call(source, stype)
       stype = stype or gettype(source)
-      if type(stype) == 'string' then stype = GObject.type_from_name(stype) end
+      if type(stype) == 'string' then 
+	 stype = repo.GObject.type_from_name(stype) 
+      end
       return core.construct(value_info, stype, source)
    end
    setmetatable(value, value_mt)

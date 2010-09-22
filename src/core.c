@@ -154,13 +154,18 @@ lgi_construct (lua_State* L)
 		   and return it wrapped in a GBoxed which is wrapped in
 		   a compound. */
 		GValue val = {0};
-		g_value_init (&val, luaL_checknumber (L, 2));
-		lgi_value_load (L, &val, 3);
-		vals = lgi_compound_create (L, bi,
+                type = luaL_checknumber (L, 2);
+                if (G_TYPE_IS_VALUE (type))
+                  {
+                    g_value_init (&val, type);
+                    lgi_value_load (L, &val, 3);
+                  }
+
+                vals = lgi_compound_create (L, bi,
 					    g_boxed_copy (G_TYPE_VALUE, &val),
 					    TRUE);
-		vals = 1;
-		g_value_unset (&val);
+                if (G_IS_VALUE (&val))
+                  g_value_unset (&val);
 	      }
 	    else
 	      {
