@@ -242,8 +242,8 @@ lgi_callable_create (lua_State *L, GICallableInfo *info)
 	  g_type_info_get_array_type (&param->ti) == GI_ARRAY_TYPE_C)
 	{
 	  arg = g_type_info_get_array_length (&param->ti);
-	  if (arg > 0 && arg < nargs)
-	    callable->params[arg - 1].internal = TRUE;
+	  if (arg >= 0 && arg < nargs)
+	    callable->params[arg].internal = TRUE;
 	}
     }
 
