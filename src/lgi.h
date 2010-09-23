@@ -43,8 +43,11 @@ typedef enum lgi_reg
   /* compound.ref_repo -> repo type table. */
   LGI_REG_TYPEINFO = 2,
 
-  /* whole repository, filled in by bootstrap. */
+  /* Whole repository, filled in by bootstrap. */
   LGI_REG_REPO = 3,
+
+  /* GLib log_handler method. */
+  LGI_REG_LOG_HANDLER = 4,
 
   LGI_REG__LAST
 } LgiRegType;
@@ -53,6 +56,11 @@ typedef enum lgi_reg
 void lgi_compound_init (lua_State *L);
 void lgi_callable_init (lua_State *L);
 void lgi_marshal_init (lua_State *L);
+void lgi_glib_init (lua_State *L);
+
+/* Issues GLib system log message. Expects arguments as Lua function:
+   log(string message, string level). */
+int lgi_glib_log(lua_State *L);
 
 /* Marshalls single value from Lua to GLib/C. Returns number of temporary
    entries pushed to Lua stack, which should be popped before function call

@@ -8,7 +8,45 @@
 
 #include "lgi.h"
 
-int lgi_regkey;
+#ifndef NDEBUG
+const char *lgi_sd (lua_State *L)
+{
+  int i;
+  static gchar *msg = 0;
+  g_free (msg);
+  msg = g_strdup ("");
+  int top = lua_gettop (L);
+  for (i = 1; i <= top; i++)
+    {
+      int t = lua_type (L, i);
+      gchar *item, *nmsg;
+      switch (t)
+	{
+	case LUA_TSTRING:
+	  item = g_strdup_printf ("`%s'", lua_tostring (L, i));
+	  break;
+
+	case LUA_TBOOLEAN:
+	  item = g_strdup_printf (lua_toboolean (L, i) ? "true" : "false");
+	  break;
+
+	case LUA_TNUMBER:
+	  item = g_strdup_printf ("%g", lua_tonumber (L, i));
+	  break;
+
+	default:
+	  item = g_strdup_printf ("%s(%p)", lua_typename (L, t),
+				  lua_topointer (L, i));
+	  break;
+	}
+      nmsg = g_strconcat (msg, " ", item, NULL);
+      g_free (msg);
+      g_free (item);
+      msg = nmsg;
+    }
+  return msg;
+}
+#endif
 
 /* Puts parts of the name to the stack, to be concatenated by lua_concat.
    Returns number of pushed elements. */
@@ -321,57 +359,14 @@ lgi_connect (lua_State *L)
   return 1;
 }
 
-#ifndef NDEBUG
-static const char* lgi_log_levels[] =
-  { "error", "critical", "warning", "message", "info", "debug", NULL };
 static int
-lgi_log (lua_State *L)
+lgi_setlogger(lua_State *L)
 {
-  const char *message = luaL_checkstring (L, 1);
-  int level = 1 << (luaL_checkoption (L, 2, lgi_log_levels[5],
-				      lgi_log_levels) + 2);
-  g_log (G_LOG_DOMAIN, level, "%s", message);
+  lua_rawgeti (L, LUA_REGISTRYINDEX, lgi_regkey);
+  lua_pushvalue (L, 1);
+  lua_rawseti (L, -2, LGI_REG_LOG_HANDLER);
   return 0;
 }
-
-const char *lgi_sd (lua_State *L)
-{
-  int i;
-  static gchar *msg = 0;
-  g_free (msg);
-  msg = g_strdup ("");
-  int top = lua_gettop (L);
-  for (i = 1; i <= top; i++)
-    {
-      int t = lua_type (L, i);
-      gchar *item, *nmsg;
-      switch (t)
-	{
-	case LUA_TSTRING:
-	  item = g_strdup_printf ("`%s'", lua_tostring (L, i));
-	  break;
-
-	case LUA_TBOOLEAN:
-	  item = g_strdup_printf (lua_toboolean (L, i) ? "true" : "false");
-	  break;
-
-	case LUA_TNUMBER:
-	  item = g_strdup_printf ("%g", lua_tonumber (L, i));
-	  break;
-
-	default:
-	  item = g_strdup_printf ("%s(%p)", lua_typename (L, t),
-				  lua_topointer (L, i));
-	  break;
-	}
-      nmsg = g_strconcat (msg, " ", item, NULL);
-      g_free (msg);
-      g_free (item);
-      msg = nmsg;
-    }
-  return msg;
-}
-#endif
 
 static const struct luaL_reg lgi_reg[] = {
   { "find", lgi_find },
@@ -379,9 +374,8 @@ static const struct luaL_reg lgi_reg[] = {
   { "gtype", lgi_gtype },
   { "cast", lgi_cast },
   { "connect", lgi_connect },
-#ifndef NDEBUG
-  { "log", lgi_log },
-#endif
+  { "log", lgi_glib_log },
+  { "setlogger", lgi_setlogger },
   { NULL, NULL }
 };
 
@@ -412,12 +406,14 @@ lgi_create_reg (lua_State* L, enum lgi_reg reg, const char* exportname,
   lua_rawseti (L, -2, reg);
 }
 
+int lgi_regkey;
+
 int
 luaopen_lgi__core (lua_State* L)
 {
   GError* err = NULL;
 
-  /* GLib initializations. */
+  /* Early GLib initializations. */
   g_type_init ();
   g_irepository_require (NULL, "GIRepository", NULL, 0, &err);
   if (err != NULL)
@@ -456,6 +452,7 @@ luaopen_lgi__core (lua_State* L)
 #endif
 
   /* Initialize modules. */
+  lgi_glib_init (L);
   lgi_compound_init (L);
   lgi_callable_init (L);
   lgi_marshal_init (L);

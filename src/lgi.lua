@@ -9,9 +9,9 @@
 --]]--------------------------------------------------------------------------
 
 local assert, setmetatable, getmetatable, type, pairs, string, rawget,
-   table, require, tostring, error, pcall, ipairs =
+   table, require, tostring, error, pcall, ipairs, unpack =
       assert, setmetatable, getmetatable, type, pairs, string, rawget,
-      table, require, tostring, error, pcall, ipairs
+      table, require, tostring, error, pcall, ipairs, unpack
 local package, math = package, math
 local bit = require 'bit'
 
@@ -20,12 +20,52 @@ local core = require 'lgi._core'
 
 module 'lgi'
 
--- Prepare logging support.
-core.log = core.log or function() end
-local function log(format, ...) core.log(format:format(...), 'debug') end
-local function loginfo(format, ...) core.log(format:format(...), 'info') end
+-- Prepare logging support.  'log' is module-exported table, containing all
+-- functionality related to logging wrapped around GLib g_log facility.
+log = { ERROR = 'assert', DEBUG = 'silent' }
+core.setlogger(
+   function(domain, level, message)
+      -- Create domain table in the log table if it does not exist yet.
+      if not log[domain] then log[domain] = {} end
 
-loginfo 'starting Lgi bootstrap'
+      -- Check whether message should generate assert (i.e. Lua exception).
+      local setting = log[domain][level] or log[level]
+      if setting == 'assert' then error() end
+      if setting == 'silent' then return true end
+
+      -- Get handler for the domain and invoke it.
+      local handler = log[domain].handler or log.handler
+      return handler and handler(domain, level, message)
+   end)
+
+-- Main logging facility.
+function log.log(domain, level, format, ...)
+   local ok, msg = pcall(string.format, format, ...)
+   if not ok then msg = ("BAD FMT: `%s', `%s'"):format(format, msg) end
+   core.log(domain, level, msg)
+end
+
+-- Creates table containing methods 'message', 'warning', 'critical', 'error',
+-- 'debug' methods which log to specified domain.
+function log.domain(name)
+   local domain = log[name] or {}
+   for _, level in ipairs { 'message', 'warning', 'critical',
+			    'error', 'debug' } do
+      if not domain[level] then
+	 domain[level] = function(format, ...)
+			    log.log(name, level:upper(), format, ...)
+			 end
+      end
+   end
+   log[name] = domain
+   return domain
+end
+
+-- For the rest of bootstrap, prepare logging to Lgi domain.
+local log = log.domain('Lgi')
+
+log.message('Lgi: Lua to GObject-Introspection binding v0.1')
+
 local ir
 
 -- Repository, table with all loaded namespaces.  Its metatable takes care of
@@ -296,7 +336,7 @@ get_symbols(
 -- Remember default repository.
 ir = gi.Repository.get_default()
 
-loginfo 'repo.GIRepository pre-populated'
+log.debug 'repo.GIRepository pre-populated'
 
 -- Weak table containing symbols which currently being loaded. It is used
 -- mainly to avoid assorted kinds of infinite recursion which might happen
@@ -326,7 +366,7 @@ local function check_type(info)
 	 return (check_type(gi.type_info_get_param_type(info, 0)) and
 	      check_type(gi.type_info_get_param_type(info, 1))) and info
       else
-	 loginfo('unknown typetag %s(%d)', tostring(gi.TypeTag[tag]), tag)
+	 log.warning('unknown typetag %s(%d)', tostring(gi.TypeTag[tag]), tag)
 	 return nil
       end
    elseif (type == gi.InfoType.FUNCTION or type == gi.InfoType.CALLBACK or
@@ -362,8 +402,8 @@ local function check_type(info)
 	 end
 	 info = info:get_container()
       end
-      loginfo("unknown type %s of %s", gi.InfoType[type],
-	      table.concat(name, '.'))
+      log.warning("unknown type %s of %s", gi.InfoType[type],
+		  table.concat(name, '.'))
       return nil
    end
 end
@@ -763,7 +803,7 @@ setmetatable(repo, { __index = function(repo, name)
 			       end })
 
 -- Convert our poor-man's GIRepository namespace into full-featured one.
-loginfo 'upgrading repo.GIRepository to full-featured namespace'
+log.debug('upgrading repo.GIRepository to full-featured namespace')
 gi._enums.InfoType = nil
 gi._enums.TypeTag = nil
 gi._enums.ArrayType = nil
@@ -911,8 +951,8 @@ do
    local value_mt = { __index = struct_mt.__index }
    function value_mt:__call(source, stype)
       stype = stype or gettype(source)
-      if type(stype) == 'string' then 
-	 stype = repo.GObject.type_from_name(stype) 
+      if type(stype) == 'string' then
+	 stype = repo.GObject.type_from_name(stype)
       end
       return core.construct(value_info, stype, source)
    end
@@ -931,7 +971,7 @@ end
 
 -- Install new loader which will load lgi packages on-demand using 'repo'
 -- table.
-loginfo 'installing custom Lua package loader'
+log.debug('installing custom Lua package loader')
 package.loaders[#package.loaders + 1] =
    function(name)
       local prefix, name = string.match(name, '^(%w+)%.(%w+)$')
