@@ -355,6 +355,16 @@ function tests.t01_gireg_36_utf8_null_out()
    check(R.test_utf8_null_out() == nil)
 end
 
+function tests.t01_gireg_37_array_int_in()
+   local R = lgi.Regress
+   check(R.test_array_int_in{1,2,3} == 6)
+   check(R.test_array_int_in{1.1,2,3} == 6)
+   check(R.test_array_int_in{} == 0)
+   check(not pcall(R.test_array_int_in, nil))
+   check(not pcall(R.test_array_int_in, 'help'))
+   check(not pcall(R.test_array_int_in, {'help'}))
+end
+
 function tests.t02_gvalue_simple()
    local V = GObject.Value
    local function checkv(gval, tp, val)
@@ -459,11 +469,15 @@ end
 
 -- Run all tests from commandline, or all tests sequentially, if not
 -- commandline is given.
-local args = {...}
-for _, name in ipairs(#args > 0 and args or tests) do runtest(name) end
-local tests_total = tests_failed + tests_passed
-if tests_failed == 0 then
-   print(string.format('All %d tests passed.', tests_total))
+if tests_run then
+   tests[tests_run]()
 else
-   print(string.format('%d of %d tests FAILED!', tests_failed, tests_total))
+   local args = {...}
+   for _, name in ipairs(#args > 0 and args or tests) do runtest(name) end
+   local tests_total = tests_failed + tests_passed
+   if tests_failed == 0 then
+      print(string.format('All %d tests passed.', tests_total))
+   else
+      print(string.format('%d of %d tests FAILED!', tests_failed, tests_total))
+   end
 end
