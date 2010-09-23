@@ -306,6 +306,55 @@ function tests.t01_gireg_29_utf8_inout()
    check(R.test_utf8_inout(utf8_const) == utf8_nonconst)
 end
 
+function tests.t01_gireg_30_filename_return()
+   local R = lgi.Regress
+   local fns = R.test_filename_return()
+   check(type(fns) == 'table')
+   check(#fns == 2)
+   check(fns[1] == 'åäö')
+   check(fns[2] == '/etc/fstab')
+end
+
+function tests.t01_gireg_31_int_out_utf8()
+   local R = lgi.Regress
+   check(R.test_int_out_utf8('') == 0)
+   check(R.test_int_out_utf8('abc') == 3)
+   local utf8_const = 'const \226\153\165 utf8'
+   check(R.test_int_out_utf8(utf8_const) == 12)
+end
+
+function tests.t01_gireg_32_multi_double_args()
+   local R = lgi.Regress
+   local o1, o2 = R.test_multi_double_args(1)
+   check(o1 == 2 and o2 == 3)
+   check(#{R.test_multi_double_args(1)} == 2)
+end
+
+function tests.t01_gireg_33_utf8_out_out()
+   local R = lgi.Regress
+   local o1, o2 = R.test_utf8_out_out()
+   check(o1 == 'first' and o2 == 'second')
+   check(#{R.test_utf8_out_out()} == 2)
+end
+
+function tests.t01_gireg_34_utf8_out_nonconst_return()
+   local R = lgi.Regress
+   local o1, o2 = R.test_utf8_out_nonconst_return()
+   check(o1 == 'first' and o2 == 'second')
+   check(#{R.test_utf8_out_nonconst_return()} == 2)
+end
+
+function tests.t01_gireg_35_utf8_null_in()
+   local R = lgi.Regress
+   R.test_utf8_null_in(nil)
+   R.test_utf8_null_in()
+end
+
+function tests.t01_gireg_36_utf8_null_out()
+   local R = lgi.Regress
+   check(R.test_utf8_null_out() == nil)
+end
+
 function tests.t02_gvalue_simple()
    local V = GObject.Value
    local function checkv(gval, tp, val)
