@@ -18,8 +18,9 @@ def configure(conf) :
                    args='--cflags --libs', uselib_store='LUA')
     conf.check_cfg(package='gobject-introspection-1.0',
                    args='--cflags --libs', uselib_store='GI')
-    conf.env.append_unique('CCFLAGS', Options.options.debug and '-g' or '-O2')
     conf.env.append_unique('CCFLAGS', '-Wall')
+    conf.env.append_unique('CCFLAGS', Options.options.debug
+                           and '-g' or '-O2 -DNDEBUG')
 
 def build(bld) :
     bld.recurse('src')
