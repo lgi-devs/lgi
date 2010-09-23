@@ -5,6 +5,9 @@ local GLib = require 'lgi.GLib'
 local Gio = require 'lgi.Gio'
 local GObject = require 'lgi.GObject'
 
+-- Make logs verbose (do not mute DEBUG level).
+lgi.log.DEBUG = 'verbose'
+
 local tests = {}
 
 -- Fails given tests with error, number indicates how many functions on the
