@@ -105,6 +105,7 @@ arrayguard_create (lua_State *L, GArray *array)
   GArray **guard;
   luaL_checkstack (L, 2, "");
   guard = lua_newuserdata (L, sizeof (GArray *));
+  *guard = array;
   luaL_getmetatable (L, UD_ARRAYGUARD);
   lua_setmetatable (L, -2);
 }
@@ -112,7 +113,8 @@ arrayguard_create (lua_State *L, GArray *array)
 static int
 arrayguard_gc (lua_State *L)
 {
-  g_array_free ((GArray *) luaL_checkudata (L, 1, UD_ARRAYGUARD), TRUE);
+  GArray **guard = luaL_checkudata (L, 1, UD_ARRAYGUARD);
+  g_array_free (*guard, TRUE);
   return 0;
 }
 
@@ -125,18 +127,31 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 		  GICallableInfo *ci, GIArgument **args)
 {
   GITypeInfo* eti = g_type_info_get_param_type (ti, 0);
-  gsize size = get_type_size (g_type_info_get_tag (eti));
+  GITypeTag etag = g_type_info_get_tag (eti);
+  gsize size = get_type_size (etag);
   gint objlen, len, index, vals = 0, to_pop;
   GITransfer exfer = (xfer == GI_TRANSFER_EVERYTHING
 		      ? GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING);
+  gboolean zero_terminated;
   GArray *array;
 
   /* Represent nil as NULL array. */
   if (optional && lua_isnoneornil (L, narg))
     {
       val->v_pointer = NULL;
+
+      /* Fill in array length argument, if it is specified. */
+      if (atype == GI_ARRAY_TYPE_C)
+          set_int_param (ci, args, g_type_info_get_array_length (ti), 0);
+
       return 0;
     }
+
+  /* Check the type; we allow tables, and if element type is gchar, we can
+     allow also strings. */
+  if ((etag != GI_TYPE_TAG_INT8 && etag != GI_TYPE_TAG_UINT8)
+      || lua_type (L, narg) == LUA_TSTRING)
+      luaL_checktype (L, narg, LUA_TTABLE);
 
   /* Find out how long array should we allocate. */
   len = g_type_info_get_array_fixed_size (ti);
@@ -147,18 +162,22 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
     objlen = len;
 
   /* Allocate the array and wrap it into the userdata guard, if needed. */
-  array = g_array_sized_new (g_type_info_is_zero_terminated (ti),
-			     TRUE, size, len);
-  if (xfer != GI_TRANSFER_EVERYTHING)
+  zero_terminated = g_type_info_is_zero_terminated (ti);
+  if (len > 0 || zero_terminated)
     {
-      arrayguard_create (L, array);
-      vals = 1;
+      array = g_array_sized_new (zero_terminated, TRUE, size, len);
+      array->len = len;
+      if (xfer != GI_TRANSFER_EVERYTHING)
+        {
+          arrayguard_create (L, array);
+          vals = 1;
+        }
     }
 
   /* Iterate through Lua array and fill GArray accordingly. */
   for (index = 0; index < objlen; index++)
     {
-      lua_pushinteger (L, index);
+      lua_pushinteger (L, index + 1);
       lua_gettable (L, narg);
       to_pop = lgi_marshal_2c (L, eti, NULL, exfer,
 			       (GIArgument *)(array->data + index * size), -1,
@@ -169,7 +188,7 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 
   /* Fill in array length argument, if it is specified. */
   if (atype == GI_ARRAY_TYPE_C)
-    set_int_param (ci, args, g_type_info_get_array_length (ti), array->len);
+    set_int_param (ci, args, g_type_info_get_array_length (ti), len);
 
   /* Return either GArray or direct pointer to the data, according to
      the array type. */
