@@ -143,7 +143,7 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
   GITransfer exfer = (xfer == GI_TRANSFER_EVERYTHING
 		      ? GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING);
   gboolean zero_terminated;
-  GArray *array;
+  GArray *array = NULL;
 
   /* Represent nil as NULL array. */
   if (optional && lua_isnoneornil (L, narg))
@@ -160,7 +160,7 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
   /* Check the type; we allow tables, and if element type is gchar, we can
      allow also strings. */
   if ((etag != GI_TYPE_TAG_INT8 && etag != GI_TYPE_TAG_UINT8)
-      || lua_type (L, narg) == LUA_TSTRING)
+      || lua_type (L, narg) != LUA_TSTRING)
       luaL_checktype (L, narg, LUA_TTABLE);
 
   /* Find out how long array should we allocate. */
@@ -202,7 +202,7 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 
   /* Return either GArray or direct pointer to the data, according to
      the array type. */
-  val->v_pointer = (atype == GI_ARRAY_TYPE_ARRAY)
+  val->v_pointer = (atype == GI_ARRAY_TYPE_ARRAY || array == NULL)
     ? (void *) array : (void *) array->data;
 
   return vals;
