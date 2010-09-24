@@ -368,6 +368,25 @@ function tests.t01_gireg_37_array_int_in()
    check(not pcall(R.test_array_int_in, {'help'}))
 end
 
+function tests.t01_gireg_38_array_int_out()
+   local R = lgi.Regress
+   local a = R.test_array_int_out()
+   check(#a == 5)
+   check(a[1] == 0 and a[2] == 1 and a[3] == 2 and a[4] == 3 and a[5] == 4)
+   check(#{R.test_array_int_out()} == 1)
+end
+
+function tests.t01_gireg_39_array_int_inout()
+   local R = lgi.Regress
+   local a = R.test_array_int_inout({1, 2, 3, 4, 5})
+   check(#a == 4)
+   check(a[1] == 3 and a[2] == 4 and a[3] == 5 and a[4] == 6)
+   check(#{R.test_array_int_inout({1, 2, 3, 4, 5})} == 1)
+   check(not pcall(R.test_array_int_inout, nil))
+   check(not pcall(R.test_array_int_inout, 'help'))
+   check(not pcall(R.test_array_int_inout, {'help'}))
+end
+
 function tests.t02_gvalue_simple()
    local V = GObject.Value
    local function checkv(gval, tp, val)
