@@ -345,8 +345,7 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
 	  nret += lgi_marshal_2c (L, &param->ti, &param->ai, param->transfer,
 				  &args[argi], lua_argi++,
 				  callable->info,
-				  (GIArgument **) (ffi_args +
-						   callable->has_self));
+				  ffi_args + callable->has_self);
 	else
 	  {
 	    /* Special handling for out/caller-alloc structures; we have to
@@ -388,8 +387,7 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
   nret = 0;
   if (g_type_info_get_tag (&callable->retval.ti) != GI_TYPE_TAG_VOID)
     nret = lgi_marshal_2lua (L, &callable->retval.ti, &retval,
-			     callable->retval.transfer, callable->info, NULL)
-	? 1 : 0;
+			     callable->retval.transfer, callable->info, NULL);
 
   /* Process output parameters. */
   param = &callable->params[0];
@@ -397,8 +395,7 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
     if (!param->internal && param->dir != GI_DIRECTION_IN)
       if (lgi_marshal_2lua (L, &param->ti, &args[i + callable->has_self],
 			   param->transfer, callable->info,
-			   (GIArgument**) (ffi_args +
-					   callable->has_self)))
+			   ffi_args + callable->has_self))
 	nret++;
 
   return nret;
@@ -481,7 +478,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	if (lgi_marshal_2lua (L, &param->ti,
 			      (GIArgument *) args[i + callable->has_self],
 			      param->transfer, callable->info,
-			      (GIArgument **) &args[callable->has_self]))
+			      args + callable->has_self))
 	    npos++;
       }
 
@@ -518,8 +515,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	    to_pop =
 	      lgi_marshal_2c (L, &param->ti, &param->ai, param->transfer,
 			      (GIArgument *)args[i + callable->has_self], npos,
-			      callable->info,
-			      (GIArgument **)(args + callable->has_self));
+			      callable->info, args + callable->has_self);
 	    if (to_pop != 0)
 	      {
 		g_warning ("cbk %s.%s: arg `%s' (transfer none) %d, unsafe!",

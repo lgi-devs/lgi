@@ -67,13 +67,13 @@ int lgi_glib_log(lua_State *L);
    returns. */
 int lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
                     GITransfer xfer,  GIArgument *val, int narg,
-                    GICallableInfo *ci, GIArgument **args);
+                    GICallableInfo *ci, void **args);
 
 /* Marshalls single value from GLib/C to Lua.  Returns 1 if something
    was pushed to the stack (temporary), 0 otherwise. */
 int lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIArgument *val,
                            GITransfer xfer,
-                           GICallableInfo *ci, GIArgument **args);
+                           GICallableInfo *ci, void **args);
 
 /* Parses given GICallableInfo, creates new userdata for it and stores
    it to the stack. Uses cache, so already parsed callable held in the

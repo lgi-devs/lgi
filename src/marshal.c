@@ -14,24 +14,34 @@
    parameter does not exist or its value cannot be converted to int,
    FALSE is returned. */
 static gboolean
-get_or_set_int_param (GICallableInfo *ci, GIArgument **args, int param,
+get_or_set_int_param (GICallableInfo *ci, void **args, int param,
 		      gint *get_val, gint set_val)
 {
   if (param >= 0 && param < g_callable_info_get_n_args (ci))
     {
       GIArgInfo ai;
       GITypeInfo ti;
+      GIArgument *val;
       g_callable_info_load_arg (ci, param, &ai);
       g_arg_info_load_type (&ai, &ti);
+      if (g_arg_info_get_direction (&ai) == GI_DIRECTION_IN)
+	/* For input parameters, value is directly pointed do by args
+	   table element. */
+	val = (GIArgument *) args[param];
+      else
+	/* For output arguments, args table element points to pointer
+	   to value. */
+	val = *(GIArgument **) args[param];
+
       switch (g_type_info_get_tag (&ti))
 	{
 #define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup,	\
 		 valtype, valget, valset, ffitype)		\
-	  case tag:                                             \
+	  case tag:						\
 	    if (get_val != NULL)				\
-	      *get_val = (int) args[param]->argf;		\
+	      *get_val = val->argf;				\
 	    else						\
-	      args[param]->argf = (ctype) set_val;		\
+	      val->argf = (ctype) set_val;			\
 	    return TRUE;
 #define DECLTYPE_NUMERIC_ONLY
 #include "decltype.h"
@@ -124,7 +134,7 @@ static int
 marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 		  GITransfer xfer, GIArgument *val, int narg,
 		  gboolean optional,
-		  GICallableInfo *ci, GIArgument **args)
+		  GICallableInfo *ci, void **args)
 {
   GITypeInfo* eti = g_type_info_get_param_type (ti, 0);
   GITypeTag etag = g_type_info_get_tag (eti);
@@ -142,7 +152,7 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 
       /* Fill in array length argument, if it is specified. */
       if (atype == GI_ARRAY_TYPE_C)
-          set_int_param (ci, args, g_type_info_get_array_length (ti), 0);
+	  set_int_param (ci, args, g_type_info_get_array_length (ti), 0);
 
       return 0;
     }
@@ -168,10 +178,10 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
       array = g_array_sized_new (zero_terminated, TRUE, size, len);
       array->len = len;
       if (xfer != GI_TRANSFER_EVERYTHING)
-        {
-          arrayguard_create (L, array);
-          vals = 1;
-        }
+	{
+	  arrayguard_create (L, array);
+	  vals = 1;
+	}
     }
 
   /* Iterate through Lua array and fill GArray accordingly. */
@@ -202,7 +212,7 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 static int
 marshal_2c_callable (lua_State *L, GICallableInfo *ci, GIArgInfo *ai,
 		    GIArgument *val, int narg,
-		    GICallableInfo *argci, GIArgument **args)
+		    GICallableInfo *argci, void **args)
 {
   int nret = 0;
   GIScopeType scope = g_arg_info_get_scope (ai);
@@ -219,10 +229,10 @@ marshal_2c_callable (lua_State *L, GICallableInfo *ci, GIArgInfo *ai,
       gint nargs = g_callable_info_get_n_args (argci);
       arg = g_arg_info_get_closure (ai);
       if (arg >= 0 && arg < nargs)
-	args[arg]->v_pointer = closure;
+	((GIArgument *) args[arg])->v_pointer = closure;
       arg = g_arg_info_get_destroy (ai);
       if (arg >= 0 && arg < nargs)
-	args[arg]->v_pointer = lgi_closure_destroy;
+	((GIArgument *) args[arg])->v_pointer = lgi_closure_destroy;
     }
 
   /* In case of scope == SCOPE_TYPE_CALL, we have to create and store on the
@@ -240,7 +250,7 @@ marshal_2c_callable (lua_State *L, GICallableInfo *ci, GIArgInfo *ai,
 int
 lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 		GITransfer transfer, GIArgument *val, int narg,
-		GICallableInfo *ci, GIArgument **args)
+		GICallableInfo *ci, void **args)
 {
   int nret = 0;
   gboolean optional = (ai != NULL && (g_arg_info_is_optional (ai) ||
@@ -270,12 +280,12 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 	      case GI_INFO_TYPE_UNION:
 	      case GI_INFO_TYPE_OBJECT:
 	      case GI_INFO_TYPE_INTERFACE:
-                {
-                  GType gt = g_registered_type_info_get_g_type (ii);
-                  nret = lgi_compound_get (L, narg, &gt, &val->v_pointer,
-                                           optional);
-                  break;
-                }
+		{
+		  GType gt = g_registered_type_info_get_g_type (ii);
+		  nret = lgi_compound_get (L, narg, &gt, &val->v_pointer,
+					   optional);
+		  break;
+		}
 
 	      case GI_INFO_TYPE_CALLBACK:
 		nret = marshal_2c_callable (L, ii, ai, val, narg, ci, args);
@@ -341,7 +351,7 @@ marshal_2lua_simple (lua_State *L, GITypeTag tag, GIArgument *val,
 static int
 marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 		    GIArgument *val, GITransfer xfer,
-		    GICallableInfo *ci, GIArgument **args)
+		    GICallableInfo *ci, void **args)
 {
   GITypeInfo* eti = g_type_info_get_param_type (ti, 0);
   GITypeTag etag = g_type_info_get_tag (eti);
@@ -459,7 +469,7 @@ marshal_2lua_list (lua_State *L, GITypeInfo *ti, GIArgument *val,
 int
 lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIArgument *val,
 		 GITransfer xfer,
-		 GICallableInfo *ci, GIArgument **args)
+		 GICallableInfo *ci, void **args)
 {
   gboolean own = (xfer != GI_TRANSFER_NOTHING);
   GITypeTag tag = g_type_info_get_tag (ti);
