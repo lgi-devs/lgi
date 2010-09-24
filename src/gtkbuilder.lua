@@ -8,7 +8,7 @@ local lgi = require 'lgi'
 local Gtk = lgi.Gtk
 
 -- Initialize GTK
-Gtk.init(0, nil)
+Gtk.init()
 
 -- Instantiate Gtk.Builder and load resources from ui file.
 local builder = Gtk.Builder()
