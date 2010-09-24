@@ -442,8 +442,8 @@ lgi_compound_get (lua_State *L, int index, GType *gtype, gpointer *addr,
   /* Direct type value failed, so try to invoke explicit 'constructor'
      of the type, i.e. when attempting to create instance of Foo.Bar
      from param arg, call 'local inst = repo.Foo.Bar(arg)'. */
-  if (*gtype != G_TYPE_NONE
-      && (info = g_irepository_find_by_gtype (NULL, *gtype)) != NULL)
+  info = g_irepository_find_by_gtype (NULL, *gtype);
+  if (*gtype != G_TYPE_NONE && info != NULL)
     {
       lua_rawgeti (L, LUA_REGISTRYINDEX, lgi_regkey);
       lua_rawgeti (L, -1, LGI_REG_REPO);
