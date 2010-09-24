@@ -387,6 +387,46 @@ function tests.t01_gireg_39_array_int_inout()
    check(not pcall(R.test_array_int_inout, {'help'}))
 end
 
+function tests.t01_gireg_40_array_gint8_in()
+   local R = lgi.Regress
+   check(R.test_array_gint8_in{1,2,3} == 6)
+   check(R.test_array_gint8_in{1.1,2,3} == 6)
+   check(R.test_array_gint8_in{} == 0)
+   check(not pcall(R.test_array_gint8_in, nil))
+   check(not pcall(R.test_array_gint8_in, 'help'))
+   check(not pcall(R.test_array_gint8_in, {'help'}))
+end
+
+function tests.t01_gireg_41_array_gint16_in()
+   local R = lgi.Regress
+   check(R.test_array_gint16_in{1,2,3} == 6)
+   check(R.test_array_gint16_in{1.1,2,3} == 6)
+   check(R.test_array_gint16_in{} == 0)
+   check(not pcall(R.test_array_gint16_in, nil))
+   check(not pcall(R.test_array_gint16_in, 'help'))
+   check(not pcall(R.test_array_gint16_in, {'help'}))
+end
+
+function tests.t01_gireg_42_array_gint32_in()
+   local R = lgi.Regress
+   check(R.test_array_gint32_in{1,2,3} == 6)
+   check(R.test_array_gint32_in{1.1,2,3} == 6)
+   check(R.test_array_gint32_in{} == 0)
+   check(not pcall(R.test_array_gint32_in, nil))
+   check(not pcall(R.test_array_gint32_in, 'help'))
+   check(not pcall(R.test_array_gint32_in, {'help'}))
+end
+
+function tests.t01_gireg_43_array_gint64_in()
+   local R = lgi.Regress
+   check(R.test_array_gint64_in{1,2,3} == 6)
+   check(R.test_array_gint64_in{1.1,2,3} == 6)
+   check(R.test_array_gint64_in{} == 0)
+   check(not pcall(R.test_array_gint64_in, nil))
+   check(not pcall(R.test_array_gint64_in, 'help'))
+   check(not pcall(R.test_array_gint64_in, {'help'}))
+end
+
 function tests.t02_gvalue_simple()
    local V = GObject.Value
    local function checkv(gval, tp, val)
