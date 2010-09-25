@@ -447,6 +447,107 @@ function tests.t01_gireg_45_strv_in_container()
    check(not R.test_strv_in_container{'1', '2', '3', '4'})
 end
 
+function tests.t01_gireg_46_array_gtype_in()
+   local R = lgi.Regress
+   local str = R.test_array_gtype_in {
+      lgi.GObject.Value[0].gtype,
+      lgi.GObject.type_from_name('gchar')
+   }
+   check(str == '[GValue,gchar,]')
+   check(R.test_array_gtype_in({}) == '[]')
+   check(not pcall(R.test_array_gtype_in))
+   check(not pcall(R.test_array_gtype_in, ''))
+   check(not pcall(R.test_array_gtype_in, 1))
+   check(not pcall(R.test_array_gtype_in, function() end))
+end
+
+function tests.t01_gireg_47_strv_out()
+   local R = lgi.Regress
+   local a = R.test_strv_out()
+   check(type(a) == 'table' and #a == 5)
+   check(table.concat(a, ' ') == 'thanks for all the fish')
+   check(#{R.test_strv_out()} == 1)
+end
+
+function tests.t01_gireg_48_strv_out_container()
+   local R = lgi.Regress
+   local a = R.test_strv_out_container()
+   check(type(a) == 'table' and #a == 3)
+   check(table.concat(a, ' ') == '1 2 3')
+end
+
+function tests.t01_gireg_49_strv_outarg()
+   local R = lgi.Regress
+   local a = R.test_strv_outarg()
+   check(type(a) == 'table' and #a == 3)
+   check(table.concat(a, ' ') == '1 2 3')
+   check(#{R.test_strv_outarg()} == 1)
+end
+
+function tests.t01_gireg_50_array_fixed_size_int_out()
+   local R = lgi.Regress
+   local a = R.test_array_fixed_size_int_out()
+   check(type(a) == 'table' and #a == 5)
+   check(a[1] == 0 and a[2] == 1 and a[3] == 2 and a[4] == 3 and a[5] == 4)
+   check(#{R.test_array_fixed_size_int_out()} == 1)
+end
+
+function tests.t01_gireg_51_array_fixed_size_int_return()
+   local R = lgi.Regress
+   local a = R.test_array_fixed_size_int_return()
+   check(type(a) == 'table' and #a == 5)
+   check(a[1] == 0 and a[2] == 1 and a[3] == 2 and a[4] == 3 and a[5] == 4)
+   check(#{R.test_array_fixed_size_int_return()} == 1)
+end
+
+function tests.t01_gireg_52_array_int_in_take()
+   local R = lgi.Regress
+   check(R.test_array_int_in_take{} == 0)
+   check(R.test_array_int_in_take{1} == 1)
+   check(R.test_array_int_in_take{1,2,3,4} == 10)
+   check(not pcall(test_array_int_in_take))
+   check(not pcall(test_array_int_in_take))
+   check(not pcall(test_array_int_in_take, 1))
+   check(not pcall(test_array_int_in_take, 'hello'))
+   check(not pcall(test_array_int_in_take, function() end))
+   check(not pcall(test_array_int_in_take, {'hello'}))
+end
+
+function tests.t01_gireg_53_strv_out_c()
+   local R = lgi.Regress
+   local a = R.test_strv_out_c()
+   check(type(a) == 'table' and #a == 5)
+   check(table.concat(a, ' ') == 'thanks for all the fish')
+end
+
+function tests.t01_gireg_54_int_full_out()
+   local R = lgi.Regress
+   local a = R.test_array_int_full_out()
+   check(type(a) == 'table' and #a == 5)
+   check(a[1] == 0 and a[2] == 1 and a[3] == 2 and a[4] == 3 and a[5] == 4)
+   check(#{R.test_array_int_full_out()} == 1)
+end
+
+function tests.t01_gireg_55_array_int_full_out()
+   local R = lgi.Regress
+   local a = R.test_array_int_full_out()
+   check(type(a) == 'table' and #a == 5)
+   check(a[1] == 0 and a[2] == 1 and a[3] == 2 and a[4] == 3 and a[5] == 4)
+   check(#{R.test_array_int_full_out()} == 1)
+end
+
+function tests.t01_gireg_56_array_int_null_in()
+   local R = lgi.Regress
+   R.test_array_int_null_in()
+   R.test_array_int_null_in(nil)
+end
+
+function tests.t01_gireg_57_array_int_null_out()
+   local R = lgi.Regress
+   local a = R.test_array_int_null_out()
+   check(a == nil)
+end
+
 function tests.t02_gvalue_simple()
    local V = GObject.Value
    local function checkv(gval, tp, val)
