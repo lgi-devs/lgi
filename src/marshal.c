@@ -107,6 +107,31 @@ marshal_2c_simple (lua_State *L, GITypeTag tag, GITransfer transfer,
   return vals;
 }
 
+/* Marshals simple types to Lua.  Simple are number and
+   strings. Returns TRUE if value was handled, 0 otherwise. */
+static int
+marshal_2lua_simple (lua_State *L, GITypeTag tag, GIArgument *val,
+		     gboolean own)
+{
+  int vals = 1;
+  switch (tag)
+    {
+#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup,	\
+		 valtype, valget, valset, ffitype)		\
+      case tag:							\
+	push (L, val->argf);					\
+	if (own)						\
+	  dtor (val->argf);					\
+	break;
+#include "decltype.h"
+
+    default:
+      vals = 0;
+    }
+
+  return vals;
+}
+
 #define UD_ARRAYGUARD "lgi.arrayguard"
 
 static void
@@ -204,6 +229,87 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
   return vals;
 }
 
+static int
+marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
+		    GIArgument *val, GITransfer xfer,
+		    GICallableInfo *ci, void **args)
+{
+  GITypeInfo* eti = g_type_info_get_param_type (ti, 0);
+  GITypeTag etag = g_type_info_get_tag (eti);
+  gsize size = get_type_size (etag);
+  gint len, index;
+  char *data;
+
+  /* Get pointer to array data. */
+  if (val->v_pointer == NULL)
+    {
+      /* NULL array is represented by nil. */
+      lua_pushnil (L);
+      return 1;
+    }
+
+  /* First of all, find out the length of the array. */
+  if (atype == GI_ARRAY_TYPE_ARRAY)
+    {
+      len = ((GArray *) val->v_pointer)->len;
+      data = ((GArray *) val->v_pointer)->data;
+    }
+  else
+    {
+      data = val->v_pointer;
+      if (g_type_info_is_zero_terminated (ti))
+	len = -1;
+      else
+	{
+	  len = g_type_info_get_array_fixed_size (ti);
+	  if (len == -1)
+	    {
+	      /* Length of the array is dynamic, get it from other
+		 argument. */
+	      if (ci == NULL)
+		return 0;
+	      
+	      len = g_type_info_get_array_length (ti);
+	      if (!get_int_param (ci, args, len, &len))
+		return 0;
+	    }
+	}
+    }
+
+  /* Create Lua table which will hold the array. */
+  lua_createtable (L, len > 0 ? len : 0, 0);
+
+  /* Iterate through array elements. */
+  for (index = 0; len < 0 || index < len; index++)
+    {
+      /* Get value from specified index. */
+      GIArgument *eval = (GIArgument *)(data + index * size);
+
+      /* If the array is zero-terminated, terminate now and don't
+	 include NULL entry. */
+      if (len < 0 && eval->v_pointer == NULL)
+	break;
+
+      /* Store value into the table. */
+      if (lgi_marshal_2lua (L, eti, eval,
+			    (xfer == GI_TRANSFER_EVERYTHING) ?
+			    GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING,
+			    NULL, NULL))
+	lua_rawseti (L, -2, index + 1);
+    }
+
+  /* If needed, free the array itself. */
+  if (xfer != GI_TRANSFER_NOTHING)
+    {
+      if (atype == GI_ARRAY_TYPE_ARRAY)
+	g_array_free (val->v_pointer, TRUE);
+      else
+	g_free (val->v_pointer);
+    }
+
+  return 1;
+}
+
 #define UD_LISTGUARD "lgi.listguard"
 
 static GSList **
@@ -292,6 +398,39 @@ marshal_2c_list (lua_State *L, GITypeInfo *ti, gboolean slist,
     }
 
   return vals;
+}
+
+static int
+marshal_2lua_list (lua_State *L, GITypeInfo *ti, GIArgument *val,
+		   GITransfer xfer)
+{
+  GSList *list;
+  GITypeInfo *eti = g_type_info_get_param_type (ti, 0);
+  int index;
+
+  /* Create table to which we will deserialize the list. */
+  lua_newtable (L);
+
+  /* Go through the list and push elements into the table. */
+  for (list = (GSList *) val->v_pointer, index = 0; list != NULL;
+       list = g_slist_next (list))
+    {
+      /* Get access to list item. */
+      GIArgument *eval = (GIArgument *) &list->data;
+
+      /* Store it into the table. */
+      if (lgi_marshal_2lua (L, eti, eval,
+			    (xfer == GI_TRANSFER_EVERYTHING) ?
+			    GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING,
+			    NULL, NULL))
+	lua_rawseti(L, -2, ++index);
+    }
+
+  /* Free the list, if requested. */
+  if (xfer != GI_TRANSFER_NOTHING)
+    g_slist_free (val->v_pointer);
+
+  return 1;
 }
 
 /* Marshalls given callable from Lua to C. */
@@ -417,147 +556,6 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
   return nret;
 }
 
-/* Marshals simple types to Lua.  Simple are number and
-   strings. Returns TRUE if value was handled, 0 otherwise. */
-static int
-marshal_2lua_simple (lua_State *L, GITypeTag tag, GIArgument *val,
-		     gboolean own)
-{
-  int vals = 1;
-  switch (tag)
-    {
-#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup,	\
-		 valtype, valget, valset, ffitype)		\
-      case tag:							\
-	push (L, val->argf);					\
-	if (own)						\
-	  dtor (val->argf);					\
-	break;
-#include "decltype.h"
-
-    default:
-      vals = 0;
-    }
-
-  return vals;
-}
-
-static int
-marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
-		    GIArgument *val, GITransfer xfer,
-		    GICallableInfo *ci, void **args)
-{
-  GITypeInfo* eti = g_type_info_get_param_type (ti, 0);
-  GITypeTag etag = g_type_info_get_tag (eti);
-  gsize size = get_type_size (etag);
-  gint len, index;
-  char *data;
-
-  /* Get pointer to array data. */
-  if (val->v_pointer == NULL)
-    {
-      /* NULL array is represented by nil. */
-      lua_pushnil (L);
-      return 1;
-    }
-
-  /* First of all, find out the length of the array. */
-  if (atype == GI_ARRAY_TYPE_ARRAY)
-    {
-      len = ((GArray *) val->v_pointer)->len;
-      data = ((GArray *) val->v_pointer)->data;
-    }
-  else
-    {
-      data = val->v_pointer;
-      if (g_type_info_is_zero_terminated (ti))
-	len = -1;
-      else
-	{
-	  len = g_type_info_get_array_fixed_size (ti);
-	  if (len == -1)
-	    {
-	      /* Length of the array is dynamic, get it from other
-		 argument. */
-	      if (ci == NULL)
-		return 0;
-
-	      len = g_type_info_get_array_length (ti);
-	      if (!get_int_param (ci, args, len, &len))
-		return 0;
-	    }
-	}
-    }
-
-  /* Create Lua table which will hold the array. */
-  lua_createtable (L, len > 0 ? len : 0, 0);
-
-  /* Iterate through array elements. */
-  for (index = 0; len < 0 || index < len; index++)
-    {
-      /* Get value from specified index. */
-      GIArgument *eval = (GIArgument *)(data + index * size);
-
-      /* If the array is zero-terminated, terminate now and don't
-	 include NULL entry. */
-      if (len < 0 && eval->v_pointer == NULL)
-	break;
-
-      /* Store value into the table. */
-      if (lgi_marshal_2lua (L, eti, eval,
-			    (xfer == GI_TRANSFER_EVERYTHING) ?
-			    GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING,
-			    NULL, NULL))
-	lua_rawseti (L, -2, index + 1);
-    }
-
-  /* If needed, free the array itself. */
-  if (xfer != GI_TRANSFER_NOTHING)
-    {
-      if (atype == GI_ARRAY_TYPE_ARRAY)
-	g_array_free (val->v_pointer, TRUE);
-      else
-	g_free (val->v_pointer);
-    }
-
-  /* Free element's typeinfo. */
-  g_base_info_unref (eti);
-  return 1;
-}
-
-static int
-marshal_2lua_list (lua_State *L, GITypeInfo *ti, GIArgument *val,
-		   GITransfer xfer)
-{
-  GSList *list;
-  GITypeInfo *eti = g_type_info_get_param_type (ti, 0);
-  int index;
-
-  /* Create table to which we will deserialize the list. */
-  lua_newtable (L);
-
-  /* Go through the list and push elements into the table. */
-  for (list = (GSList *) val->v_pointer, index = 0; list != NULL;
-       list = g_slist_next (list))
-    {
-      /* Get access to list item. */
-      GIArgument *eval = (GIArgument *) &list->data;
-
-      /* Store it into the table. */
-      if (lgi_marshal_2lua (L, eti, eval,
-			    (xfer == GI_TRANSFER_EVERYTHING) ?
-			    GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING,
-			    NULL, NULL))
-	lua_rawseti(L, -2, ++index);
-    }
-
-  /* Free the list, if requested. */
-  if (xfer != GI_TRANSFER_NOTHING)
-    g_slist_free (val->v_pointer);
-
-  return 1;
-}
-
 /* Marshalls single value from GLib/C to Lua.  Returns 1 if something
    was pushed to the stack. */
 int
@@ -632,16 +630,19 @@ lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIArgument *val,
   return vals;
 }
 
+static void
+guard_register (lua_State *L, const char *name, lua_CFunction gc)
+{
+  luaL_newmetatable (L, name);
+  lua_pushcfunction (L, gc);
+  lua_setfield (L, -2, "__gc");
+  lua_pop (L, 1);
+}
+
 void
 lgi_marshal_init (lua_State *L)
 {
   /* Register guards metatables. */
-  luaL_newmetatable (L, UD_ARRAYGUARD);
-  lua_pushcfunction (L, arrayguard_gc);
-  lua_setfield (L, -2, "__gc");
-  lua_pop (L, 1);
-  luaL_newmetatable (L, UD_LISTGUARD);
-  lua_pushcfunction (L, listguard_gc);
-  lua_setfield (L, -2, "__gc");
-  lua_pop (L, 1);
+  guard_register (L, UD_ARRAYGUARD, arrayguard_gc);
+  guard_register (L, UD_LISTGUARD, listguard_gc);
 }
