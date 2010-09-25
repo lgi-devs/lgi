@@ -107,6 +107,30 @@ marshal_2c_simple (lua_State *L, GITypeTag tag, GITransfer transfer,
   return vals;
 }
 
+/* Guard which unrefs baseinfo on destruction. */
+#define UD_BASEINFOGUARD "lgi.baseinfoguard"
+
+static int
+baseinfoguard_create (lua_State *L, GIBaseInfo *info)
+{
+  GIBaseInfo **guard;
+  g_assert (info != NULL);
+  luaL_checkstack (L, 2, "");
+  guard = lua_newuserdata (L, sizeof (info));
+  *guard = info;
+  luaL_getmetatable (L, UD_BASEINFOGUARD);
+  lua_setmetatable (L, -2);
+  return lua_gettop (L);
+}
+
+static int
+baseinfoguard_gc (lua_State *L)
+{
+  GIBaseInfo **guard = luaL_checkudata (L, 1, UD_BASEINFOGUARD);
+  g_base_info_unref (*guard);
+  return 0;
+}
+
 /* Marshals simple types to Lua.  Simple are number and
    strings. Returns TRUE if value was handled, 0 otherwise. */
 static int
@@ -160,10 +184,10 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 		  GITransfer xfer, GIArgument *val, int narg,
 		  gboolean optional, GICallableInfo *ci, void **args)
 {
-  GITypeInfo* eti = g_type_info_get_param_type (ti, 0);
-  GITypeTag etag = g_type_info_get_tag (eti);
-  gsize size = get_type_size (etag);
-  gint objlen, len, index, vals = 0, to_pop;
+  GITypeInfo* eti;
+  GITypeTag etag;
+  gsize size;
+  gint objlen, len, index, vals = 0, to_pop, eti_guard;
   GITransfer exfer = (xfer == GI_TRANSFER_EVERYTHING
 		      ? GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING);
   gboolean zero_terminated;
@@ -183,6 +207,12 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 
   /* Check the type; we allow tables only. */
   luaL_checktype (L, narg, LUA_TTABLE);
+
+  /* Get element type info, create guard for it. */
+  eti = g_type_info_get_param_type (ti, 0);
+  eti_guard = baseinfoguard_create (L, eti);
+  etag = g_type_info_get_tag (eti);
+  size = get_type_size (etag);
 
   /* Find out how long array should we allocate. */
   len = g_type_info_get_array_fixed_size (ti);
@@ -226,6 +256,7 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
   val->v_pointer = (atype == GI_ARRAY_TYPE_ARRAY || array == NULL)
     ? (void *) array : (void *) array->data;
 
+  lua_remove (L, eti_guard);
   return vals;
 }
 
@@ -234,10 +265,10 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 		    GIArgument *val, GITransfer xfer,
 		    GICallableInfo *ci, void **args)
 {
-  GITypeInfo* eti = g_type_info_get_param_type (ti, 0);
-  GITypeTag etag = g_type_info_get_tag (eti);
-  gsize size = get_type_size (etag);
-  gint len, index;
+  GITypeInfo* eti;
+  GITypeTag etag;
+  gsize size;
+  gint len, index, eti_guard;
   char *data;
 
   /* Get pointer to array data. */
@@ -267,14 +298,21 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 	      /* Length of the array is dynamic, get it from other
 		 argument. */
 	      if (ci == NULL)
-		return 0;
-	      
+		luaL_error (L, "nested variable-length array; unsupported");
+
 	      len = g_type_info_get_array_length (ti);
 	      if (!get_int_param (ci, args, len, &len))
-		return 0;
+		luaL_error (L, "variable-length array; can't reach length");
 	    }
 	}
     }
+
+  /* Get array element type info, wrap it in the guard so that we
+     don't leak it. */
+  eti = g_type_info_get_param_type (ti, 0);
+  eti_guard = baseinfoguard_create (L, eti);
+  etag = g_type_info_get_tag (eti);
+  size = get_type_size (etag);
 
   /* Create Lua table which will hold the array. */
   lua_createtable (L, len > 0 ? len : 0, 0);
@@ -307,6 +345,7 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 	g_free (val->v_pointer);
     }
 
+  lua_remove (L, eti_guard);
   return 1;
 }
 
@@ -338,11 +377,11 @@ static int
 marshal_2c_list (lua_State *L, GITypeInfo *ti, gboolean slist,
 		 GITransfer xfer, GIArgument *val, int narg)
 {
-  GITypeInfo* eti = g_type_info_get_param_type (ti, 0);
-  GITypeTag etag = g_type_info_get_tag (eti);
+  GITypeInfo *eti;
+  GITypeTag etag;
   GITransfer exfer = (xfer == GI_TRANSFER_EVERYTHING
 		      ? GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING);
-  gint index, vals = 0, to_pop;
+  gint index, vals = 0, to_pop, eti_guard;
   GSList **guard = NULL;
 
   /* Allow empty list to be expressed also as 'nil', because in C,
@@ -354,6 +393,12 @@ marshal_2c_list (lua_State *L, GITypeInfo *ti, gboolean slist,
       luaL_checktype (L, narg, LUA_TTABLE);
       index = lua_objlen (L, narg);
     }
+
+  /* Get list element type info, create guard for it so that we don't
+     leak it. */
+  eti = g_type_info_get_param_type (ti, 0);
+  eti_guard = baseinfoguard_create (L, eti);
+  etag = g_type_info_get_tag (eti);
 
   /* Check the type; since list item is stored as gpointer, we must
      not use any type which does not safely fit into gpointer. */
@@ -397,6 +442,7 @@ marshal_2c_list (lua_State *L, GITypeInfo *ti, gboolean slist,
       vals = 0;
     }
 
+  lua_remove (L, eti_guard);
   return vals;
 }
 
@@ -405,8 +451,12 @@ marshal_2lua_list (lua_State *L, GITypeInfo *ti, GIArgument *val,
 		   GITransfer xfer)
 {
   GSList *list;
-  GITypeInfo *eti = g_type_info_get_param_type (ti, 0);
-  int index;
+  GITypeInfo *eti;
+  int index, eti_guard;
+
+  /* Get element type info, guard it so that we don't leak it. */
+  eti = g_type_info_get_param_type (ti, 0);
+  eti_guard = baseinfoguard_create (L, eti);
 
   /* Create table to which we will deserialize the list. */
   lua_newtable (L);
@@ -430,6 +480,7 @@ marshal_2lua_list (lua_State *L, GITypeInfo *ti, GIArgument *val,
   if (xfer != GI_TRANSFER_NOTHING)
     g_slist_free (val->v_pointer);
 
+  lua_remove (L, eti_guard);
   return 1;
 }
 
@@ -643,6 +694,7 @@ void
 lgi_marshal_init (lua_State *L)
 {
   /* Register guards metatables. */
+  guard_register (L, UD_BASEINFOGUARD, baseinfoguard_gc);
   guard_register (L, UD_ARRAYGUARD, arrayguard_gc);
   guard_register (L, UD_LISTGUARD, listguard_gc);
 }
