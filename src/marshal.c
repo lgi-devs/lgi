@@ -157,11 +157,8 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
       return 0;
     }
 
-  /* Check the type; we allow tables, and if element type is gchar, we can
-     allow also strings. */
-  if ((etag != GI_TYPE_TAG_INT8 && etag != GI_TYPE_TAG_UINT8)
-      || lua_type (L, narg) != LUA_TSTRING)
-      luaL_checktype (L, narg, LUA_TTABLE);
+  /* Check the type; we allow tables only. */
+  luaL_checktype (L, narg, LUA_TTABLE);
 
   /* Find out how long array should we allocate. */
   len = g_type_info_get_array_fixed_size (ti);
@@ -176,7 +173,7 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
   if (len > 0 || zero_terminated)
     {
       array = g_array_sized_new (zero_terminated, TRUE, size, len);
-      array->len = len;
+      g_array_set_size (array, len);
       if (xfer != GI_TRANSFER_EVERYTHING)
 	{
 	  arrayguard_create (L, array);

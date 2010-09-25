@@ -427,6 +427,16 @@ function tests.t01_gireg_43_array_gint64_in()
    check(not pcall(R.test_array_gint64_in, {'help'}))
 end
 
+function tests.t01_gireg_44_strv_in()
+   local R = lgi.Regress
+   check(R.test_strv_in{'1', '2', '3'})
+   check(not pcall(R.test_strv_in))
+   check(not pcall(R.test_strv_in, '1'))
+   check(not pcall(R.test_strv_in, 1))
+   check(not R.test_strv_in{'3', '2', '1'})
+   check(not R.test_strv_in{'1', '2', '3', '4'})
+end
+
 function tests.t02_gvalue_simple()
    local V = GObject.Value
    local function checkv(gval, tp, val)
