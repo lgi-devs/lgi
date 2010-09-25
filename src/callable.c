@@ -138,6 +138,21 @@ get_ffi_type(Param *param)
   return ffi != NULL ? ffi : &ffi_type_pointer;
 }
 
+/* If typeinfo specifies array with length parameter, mark it in
+   specified callable as an internal one. */
+static void
+callable_mark_array_length (Callable *callable, GITypeInfo *ti)
+{
+  gint arg;
+  if (g_type_info_get_tag (ti) == GI_TYPE_TAG_ARRAY &&
+      g_type_info_get_array_type (ti) == GI_ARRAY_TYPE_C)
+    {
+      arg = g_type_info_get_array_length (ti);
+      if (arg >= 0 && arg < callable->nargs)
+	callable->params[arg].internal = TRUE;
+    }
+}
+
 int
 lgi_callable_create (lua_State *L, GICallableInfo *info)
 {
@@ -211,6 +226,7 @@ lgi_callable_create (lua_State *L, GICallableInfo *info)
   callable->retval.transfer = g_callable_info_get_caller_owns (callable->info);
   callable->retval.internal = FALSE;
   ffi_retval = get_ffi_type (&callable->retval);
+  callable_mark_array_length (callable, &callable->retval.ti);
 
   /* Process 'self' argument, if present. */
   ffi_arg = &ffi_args[0];
@@ -238,13 +254,7 @@ lgi_callable_create (lua_State *L, GICallableInfo *info)
 	callable->params[arg].internal = TRUE;
 
       /* Similarly for array length field. */
-      if (g_type_info_get_tag (&param->ti) == GI_TYPE_TAG_ARRAY &&
-	  g_type_info_get_array_type (&param->ti) == GI_ARRAY_TYPE_C)
-	{
-	  arg = g_type_info_get_array_length (&param->ti);
-	  if (arg >= 0 && arg < nargs)
-	    callable->params[arg].internal = TRUE;
-	}
+      callable_mark_array_length (callable, &param->ti);
     }
 
   /* Add ffi info for 'err' argument. */
@@ -310,7 +320,7 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
     {
       GIBaseInfo *parent = g_base_info_get_container (callable->info);
       GType parent_gtype = g_registered_type_info_get_g_type (parent);
-      nret += lgi_compound_get (L, args_index, &parent_gtype, 
+      nret += lgi_compound_get (L, args_index, &parent_gtype,
 				&args[0].v_pointer, FALSE);
       ffi_args[0] = &args[0];
       lua_argi++;
@@ -387,7 +397,8 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
   nret = 0;
   if (g_type_info_get_tag (&callable->retval.ti) != GI_TYPE_TAG_VOID)
     nret = lgi_marshal_2lua (L, &callable->retval.ti, &retval,
-			     callable->retval.transfer, callable->info, NULL);
+			     callable->retval.transfer, callable->info,
+			     ffi_args + callable->has_self);
 
   /* Process output parameters. */
   param = &callable->params[0];
@@ -495,7 +506,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	{
 	  to_pop = lgi_marshal_2c (L, &callable->retval.ti, NULL,
 				   callable->retval.transfer, ret, npos,
-				   NULL, NULL);
+				   callable->info, args + callable->has_self);
 	  if (to_pop != 0)
 	    {
 	      g_warning ("cbk `%s.%s': return (transfer none) %d, unsafe!",
