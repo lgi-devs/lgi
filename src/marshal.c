@@ -133,8 +133,7 @@ arrayguard_gc (lua_State *L)
 static int
 marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 		  GITransfer xfer, GIArgument *val, int narg,
-		  gboolean optional,
-		  GICallableInfo *ci, void **args)
+		  gboolean optional, GICallableInfo *ci, void **args)
 {
   GITypeInfo* eti = g_type_info_get_param_type (ti, 0);
   GITypeTag etag = g_type_info_get_tag (eti);
@@ -201,6 +200,96 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
      the array type. */
   val->v_pointer = (atype == GI_ARRAY_TYPE_ARRAY || array == NULL)
     ? (void *) array : (void *) array->data;
+
+  return vals;
+}
+
+#define UD_LISTGUARD "lgi.listguard"
+
+static GSList **
+listguard_create (lua_State *L)
+{
+  GSList **guard;
+  luaL_checkstack (L, 2, "");
+  guard = lua_newuserdata (L, sizeof (GSList *));
+  *guard = NULL;
+  luaL_getmetatable (L, UD_LISTGUARD);
+  lua_setmetatable (L, -2);
+  return guard;
+}
+
+static int
+listguard_gc (lua_State *L)
+{
+  GSList **guard = luaL_checkudata (L, 1, UD_LISTGUARD);
+  g_slist_free (*guard);
+  return 0;
+}
+
+/* Marshalls GSList or GList from Lua to C. Returns number of
+   temporary elements pushed to the stack. */
+static int
+marshal_2c_list (lua_State *L, GITypeInfo *ti, gboolean slist,
+		 GITransfer xfer, GIArgument *val, int narg)
+{
+  GITypeInfo* eti = g_type_info_get_param_type (ti, 0);
+  GITypeTag etag = g_type_info_get_tag (eti);
+  GITransfer exfer = (xfer == GI_TRANSFER_EVERYTHING
+		      ? GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING);
+  gint index, vals = 0, to_pop;
+  GSList **guard = NULL;
+
+  /* Allow empty list to be expressed also as 'nil', because in C,
+     there is no difference between NULL and empty list. */
+  if (lua_isnoneornil (L, narg))
+    index = 0;
+  else
+    {
+      luaL_checktype (L, narg, LUA_TTABLE);
+      index = lua_objlen (L, narg);
+    }
+
+  /* Check the type; since list item is stored as gpointer, we must
+     not use any type which does not safely fit into gpointer. */
+  if (get_type_size (etag) > sizeof (GIArgument))
+    luaL_error (L, "unusable element type %d for GSList", etag);
+
+  /* Go from back and prepend to the list, which is cheaper than
+     appending. */
+  guard = listguard_create (L);
+  while (index > 0)
+    {
+      /* Prepend new list element and reassign the guard. */
+      if (slist)
+	*guard = g_slist_prepend (*guard, NULL);
+      else
+	*guard = (GSList *) g_list_prepend ((GList *) *guard, NULL);
+
+      /* Retrieve index-th element from the source table and marshall
+	 it into the data pointer of previously allocated element. */
+      lua_pushinteger (L, index--);
+      lua_gettable (L, narg);
+      to_pop = lgi_marshal_2c (L, eti, NULL, exfer,
+			       (GIArgument *) &(*guard)->data, -1, NULL, NULL);
+      lua_remove (L, - to_pop - 1);
+      vals += to_pop;
+    }
+
+  /* Marshalled value is really kept inside the guard. */
+  val->v_pointer = *guard;
+
+  /* In case that the target takes ownership, destroy the guard, will
+     not be really needed. */
+  if (xfer == GI_TRANSFER_NOTHING)
+    /* Keep guard alive, because target does not claim ownership. */
+    vals = 1;
+  else
+    {
+      /* Clear the guard, it is not needed. */
+      *guard = NULL;
+      lua_pop (L, 1);
+      vals = 0;
+    }
 
   return vals;
 }
@@ -310,6 +399,14 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 		g_warning("bad array type %d", atype);
 	      }
 	  }
+	  break;
+
+	case GI_TYPE_TAG_GLIST:
+	  nret = marshal_2c_list (L, ti, FALSE, transfer, val, narg);
+	  break;
+
+	case GI_TYPE_TAG_GSLIST:
+	  nret = marshal_2c_list (L, ti, TRUE, transfer, val, narg);
 	  break;
 
 	default:
@@ -541,6 +638,10 @@ lgi_marshal_init (lua_State *L)
   /* Register guards metatables. */
   luaL_newmetatable (L, UD_ARRAYGUARD);
   lua_pushcfunction (L, arrayguard_gc);
+  lua_setfield (L, -2, "__gc");
+  lua_pop (L, 1);
+  luaL_newmetatable (L, UD_LISTGUARD);
+  lua_pushcfunction (L, listguard_gc);
   lua_setfield (L, -2, "__gc");
   lua_pop (L, 1);
 }
