@@ -548,6 +548,162 @@ function tests.t01_gireg_57_array_int_null_out()
    check(a == nil)
 end
 
+function tests.t01_gireg_58_glist_free()
+   local R = lgi.Regress
+   R.test_glist_free({})
+   R.test_glist_free()
+   R.test_glist_free(nil)
+   R.test_glist_free({"thanks", 'no'})
+   check(not pcall(R.test_glist_free, 1))
+   check(not pcall(R.test_glist_free, 'fish'))
+   check(not pcall(R.test_glist_free, function() end))
+   check(not pcall(R.test_glist_free, {'thanks', function() end}))
+end
+
+function tests.t01_gireg_59_glist_nothing_return()
+   local R = lgi.Regress
+   check(select('#', R.test_glist_nothing_return()) == 1)
+   a = R.test_glist_nothing_return()
+   check(type(a) == 'table' and #a == 3)
+   check(a[1] == '1' and a[2] == '2' and a[3] == '3')
+end
+
+function tests.t01_gireg_60_glist_nothing_return2()
+   local R = lgi.Regress
+   check(select('#', R.test_glist_nothing_return2()) == 1)
+   a = R.test_glist_nothing_return2()
+   check(type(a) == 'table' and #a == 3)
+   check(a[1] == '1' and a[2] == '2' and a[3] == '3')
+end
+
+function tests.t01_gireg_61_glist_container_return()
+   local R = lgi.Regress
+   check(select('#', R.test_glist_container_return()) == 1)
+   a = R.test_glist_container_return()
+   check(type(a) == 'table' and #a == 3)
+   check(a[1] == '1' and a[2] == '2' and a[3] == '3')
+end
+
+function tests.t01_gireg_62_glist_everything_return()
+   local R = lgi.Regress
+   check(select('#', R.test_glist_everything_return()) == 1)
+   a = R.test_glist_everything_return()
+   check(type(a) == 'table' and #a == 3)
+   check(a[1] == '1' and a[2] == '2' and a[3] == '3')
+end
+
+function tests.t01_gireg_63_glist_nothing_in()
+   local R = lgi.Regress
+   R.test_glist_nothing_in  {'1', '2', '3'}
+end
+
+function tests.t01_gireg_64_glist_nothing_in2()
+   local R = lgi.Regress
+   R.test_glist_nothing_in2  {'1', '2', '3'}
+end
+
+function tests.t01_gireg_65_glist_container_in()
+   local R = lgi.Regress
+   R.test_glist_container_in  {'1', '2', '3'}
+end
+
+function tests.t01_gireg_66_glist_everything_in()
+   local R = lgi.Regress
+   R.test_glist_everything_in  {'1', '2', '3'}
+end
+
+function tests.t01_gireg_67_glist_null_in()
+   local R = lgi.Regress
+   R.test_glist_null_in {}
+   R.test_glist_null_in(nil)
+   R.test_glist_null_in()
+end
+
+function tests.t01_gireg_68_glist_null_out()
+   local R = lgi.Regress
+   check(select('#', R.test_glist_null_out()) == 1)
+   local a = R.test_glist_null_out()
+   check(type(a) == 'table' and #a == 0)
+end
+
+function tests.t01_gireg_69_gslist_free()
+   local R = lgi.Regress
+   R.test_gslist_free({})
+   R.test_gslist_free()
+   R.test_gslist_free(nil)
+   R.test_gslist_free({"thanks", 'no'})
+   check(not pcall(R.test_gslist_free, 1))
+   check(not pcall(R.test_gslist_free, 'fish'))
+   check(not pcall(R.test_gslist_free, function() end))
+   check(not pcall(R.test_gslist_free, {'thanks', function() end}))
+end
+
+function tests.t01_gireg_70_gslist_nothing_return()
+   local R = lgi.Regress
+   check(select('#', R.test_gslist_nothing_return()) == 1)
+   a = R.test_gslist_nothing_return()
+   check(type(a) == 'table' and #a == 3)
+   check(a[1] == '1' and a[2] == '2' and a[3] == '3')
+end
+
+function tests.t01_gireg_71_gslist_nothing_return2()
+   local R = lgi.Regress
+   check(select('#', R.test_gslist_nothing_return2()) == 1)
+   a = R.test_gslist_nothing_return2()
+   check(type(a) == 'table' and #a == 3)
+   check(a[1] == '1' and a[2] == '2' and a[3] == '3')
+end
+
+function tests.t01_gireg_72_gslist_container_return()
+   local R = lgi.Regress
+   check(select('#', R.test_gslist_container_return()) == 1)
+   a = R.test_gslist_container_return()
+   check(type(a) == 'table' and #a == 3)
+   check(a[1] == '1' and a[2] == '2' and a[3] == '3')
+end
+
+function tests.t01_gireg_73_gslist_everything_return()
+   local R = lgi.Regress
+   check(select('#', R.test_gslist_everything_return()) == 1)
+   a = R.test_gslist_everything_return()
+   check(type(a) == 'table' and #a == 3)
+   check(a[1] == '1' and a[2] == '2' and a[3] == '3')
+end
+
+function tests.t01_gireg_74_gslist_nothing_in()
+   local R = lgi.Regress
+   R.test_gslist_nothing_in  {'1', '2', '3'}
+end
+
+function tests.t01_gireg_75_gslist_nothing_in2()
+   local R = lgi.Regress
+   R.test_gslist_nothing_in2  {'1', '2', '3'}
+end
+
+function tests.t01_gireg_76_gslist_container_in()
+   local R = lgi.Regress
+   R.test_gslist_container_in  {'1', '2', '3'}
+end
+
+function tests.t01_gireg_77_gslist_everything_in()
+   local R = lgi.Regress
+   R.test_gslist_everything_in  {'1', '2', '3'}
+end
+
+function tests.t01_gireg_78_gslist_null_in()
+   local R = lgi.Regress
+   R.test_gslist_null_in {}
+   R.test_gslist_null_in(nil)
+   R.test_gslist_null_in()
+end
+
+function tests.t01_gireg_79_gslist_null_out()
+   local R = lgi.Regress
+   check(select('#', R.test_gslist_null_out()) == 1)
+   local a = R.test_gslist_null_out()
+   check(type(a) == 'table' and #a == 0)
+end
+
 function tests.t02_gvalue_simple()
    local V = GObject.Value
    local function checkv(gval, tp, val)
