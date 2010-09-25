@@ -174,7 +174,7 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
     {
       array = g_array_sized_new (zero_terminated, TRUE, size, len);
       g_array_set_size (array, len);
-      if (xfer != GI_TRANSFER_EVERYTHING)
+      if (xfer == GI_TRANSFER_NOTHING)
 	{
 	  arrayguard_create (L, array);
 	  vals = 1;

@@ -437,6 +437,16 @@ function tests.t01_gireg_44_strv_in()
    check(not R.test_strv_in{'1', '2', '3', '4'})
 end
 
+function tests.t01_gireg_45_strv_in_container()
+   local R = lgi.Regress
+   check(R.test_strv_in_container{'1', '2', '3'})
+   check(not pcall(R.test_strv_in_container))
+   check(not pcall(R.test_strv_in_container, '1'))
+   check(not pcall(R.test_strv_in_container, 1))
+   check(not R.test_strv_in_container{'3', '2', '1'})
+   check(not R.test_strv_in_container{'1', '2', '3', '4'})
+end
+
 function tests.t02_gvalue_simple()
    local V = GObject.Value
    local function checkv(gval, tp, val)
