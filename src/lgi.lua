@@ -23,6 +23,7 @@ module 'lgi'
 -- Prepare logging support.  'log' is module-exported table, containing all
 -- functionality related to logging wrapped around GLib g_log facility.
 log = { ERROR = 'assert', DEBUG = 'silent' }
+log.DEBUG=nil
 core.setlogger(
    function(domain, level, message)
       -- Create domain table in the log table if it does not exist yet.

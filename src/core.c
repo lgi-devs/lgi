@@ -75,6 +75,44 @@ lgi_type_get_name (lua_State *L, GIBaseInfo *info)
   return n;
 }
 
+typedef struct _Guard
+{
+  gpointer data;
+  GDestroyNotify destroy;
+} Guard;
+#define UD_GUARD "lgi.guard"
+
+static int
+guard_gc (lua_State *L)
+{
+  Guard *guard = lua_touserdata (L, 1);
+  if (guard->data != NULL)
+    guard->destroy (guard->data);
+  return 0;
+}
+
+int
+lgi_guard_create (lua_State *L, gpointer **data, GDestroyNotify destroy)
+{
+  Guard *guard = lua_newuserdata (L, sizeof (Guard));
+  g_assert (destroy != NULL);
+  luaL_getmetatable (L, UD_GUARD);
+  lua_setmetatable (L, -2);
+  guard->data = NULL;
+  guard->destroy = destroy;
+  *data = &guard->data;
+  return lua_gettop (L);
+}
+
+int
+lgi_guard_create_baseinfo (lua_State *L, GIBaseInfo *info)
+{
+  gpointer *data;
+  int res = lgi_guard_create (L, &data, (GDestroyNotify) g_base_info_unref);
+  *data = info;
+  return res;
+}
+
 lua_State *
 lgi_get_callback_state (lua_State **state, int *thread_ref)
 {
@@ -221,11 +259,12 @@ lgi_construct (lua_State* L)
 
 	case GI_INFO_TYPE_CONSTANT:
 	  {
-	    GITypeInfo* ti = g_constant_info_get_type (bi);
+	    GITypeInfo *ti = g_constant_info_get_type (bi);
 	    GIArgument val;
 	    g_constant_info_get_value (bi, &val);
-	    vals = lgi_marshal_2lua (L, ti, &val, GI_TRANSFER_NOTHING,
-				     NULL, NULL);
+	    lgi_marshal_2lua (L, ti, &val, GI_TRANSFER_NOTHING, FALSE, 
+			      NULL, NULL);
+	    vals = 1;
 	    g_base_info_unref (ti);
 	  }
 	  break;
@@ -422,6 +461,12 @@ luaopen_lgi__core (lua_State* L)
       g_error_free (err);
       return luaL_error (L, "%s", lua_tostring (L, -1));
     }
+
+  /* Register 'guard' metatable. */
+  luaL_newmetatable (L, UD_GUARD);
+  lua_pushcfunction (L, guard_gc);
+  lua_setfield (L, -2, "__gc");
+  lua_pop (L, 1);
 
   /* Register _core interface. */
   luaL_register (L, "lgi._core", lgi_reg);

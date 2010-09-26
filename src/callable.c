@@ -353,7 +353,7 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
 	if (param->dir != GI_DIRECTION_OUT)
 	  /* Convert parameter from Lua stack to C. */
 	  nret += lgi_marshal_2c (L, &param->ti, &param->ai, param->transfer,
-				  &args[argi], lua_argi++,
+				  &args[argi], lua_argi++, FALSE,
 				  callable->info,
 				  ffi_args + callable->has_self);
 	else
@@ -396,18 +396,23 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
   /* Handle return value. */
   nret = 0;
   if (g_type_info_get_tag (&callable->retval.ti) != GI_TYPE_TAG_VOID)
-    nret = lgi_marshal_2lua (L, &callable->retval.ti, &retval,
-			     callable->retval.transfer, callable->info,
-			     ffi_args + callable->has_self);
+    {
+      lgi_marshal_2lua (L, &callable->retval.ti, &retval,
+			callable->retval.transfer, FALSE,
+			callable->info, ffi_args + callable->has_self);
+      nret++;
+    }
 
   /* Process output parameters. */
   param = &callable->params[0];
   for (i = 0; i < callable->nargs; i++, param++)
     if (!param->internal && param->dir != GI_DIRECTION_IN)
-      if (lgi_marshal_2lua (L, &param->ti, &args[i + callable->has_self],
-			   param->transfer, callable->info,
-			   ffi_args + callable->has_self))
+      {
+	lgi_marshal_2lua (L, &param->ti, &args[i + callable->has_self],
+			  param->transfer, FALSE,
+			  callable->info, ffi_args + callable->has_self);
 	nret++;
+      }
 
   return nret;
 }
@@ -486,11 +491,11 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   for (i = 0; i < callable->nargs; ++i, ++param)
     if (!param->internal && param->dir != GI_DIRECTION_OUT)
       {
-	if (lgi_marshal_2lua (L, &param->ti,
-			      (GIArgument *) args[i + callable->has_self],
-			      param->transfer, callable->info,
-			      args + callable->has_self))
-	    npos++;
+	lgi_marshal_2lua (L, &param->ti,
+			  (GIArgument *) args[i + callable->has_self],
+			  param->transfer, FALSE,
+			  callable->info, args + callable->has_self);
+	npos++;
       }
 
   /* Call it. */
@@ -505,7 +510,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
       if (g_type_info_get_tag (&callable->retval.ti) != GI_TYPE_TAG_VOID)
 	{
 	  to_pop = lgi_marshal_2c (L, &callable->retval.ti, NULL,
-				   callable->retval.transfer, ret, npos,
+				   callable->retval.transfer, ret, npos, FALSE,
 				   callable->info, args + callable->has_self);
 	  if (to_pop != 0)
 	    {
@@ -526,7 +531,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	    to_pop =
 	      lgi_marshal_2c (L, &param->ti, &param->ai, param->transfer,
 			      (GIArgument *)args[i + callable->has_self], npos,
-			      callable->info, args + callable->has_self);
+			      FALSE, callable->info, args + callable->has_self);
 	    if (to_pop != 0)
 	      {
 		g_warning ("cbk %s.%s: arg `%s' (transfer none) %d, unsafe!",

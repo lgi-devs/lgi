@@ -515,7 +515,9 @@ process_field (lua_State* L, gpointer addr, GIFieldInfo* fi, int newval)
 	  return luaL_argerror (L, 2, "not readable");
 	}
 
-      vals = lgi_marshal_2lua (L, ti, val, GI_TRANSFER_NOTHING, NULL, NULL);
+      lgi_marshal_2lua (L, ti, val, GI_TRANSFER_NOTHING, FALSE,
+			       NULL, NULL);
+      vals = 1;
     }
   else
     {
@@ -526,7 +528,7 @@ process_field (lua_State* L, gpointer addr, GIFieldInfo* fi, int newval)
 	}
 
       lua_pop (L, lgi_marshal_2c (L, ti, NULL, GI_TRANSFER_NOTHING, val,
-				  newval, NULL, NULL));
+				  newval, FALSE, NULL, NULL));
     }
 
   g_base_info_unref (ti);

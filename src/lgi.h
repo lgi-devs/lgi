@@ -25,6 +25,13 @@ const char *lgi_sd (lua_State* L);
    Returns number of pushed elements. */
 int lgi_type_get_name (lua_State *L, GIBaseInfo *info);
 
+/* Allocates guard, a pointer-size userdata with associated destroy
+   handler. Returns stack index of the allocated userdata. */
+int lgi_guard_create (lua_State *L, gpointer **data, GDestroyNotify destroy);
+
+/* Allocates guard which guards specified GIBaseInfo instance. */
+int lgi_guard_create_baseinfo (lua_State *L, GIBaseInfo *info);
+
 /* Returns Lua context to use in the callback.  This is useful to
    avoid calling callbacks in the context of Lua thread which is
    currently suspended, so if this state is detected, a new thread is
@@ -67,13 +74,12 @@ int lgi_glib_log(lua_State *L);
    returns. */
 int lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
                     GITransfer xfer,  GIArgument *val, int narg,
-                    GICallableInfo *ci, void **args);
+		    gboolean use_pointer, GICallableInfo *ci, void **args);
 
-/* Marshalls single value from GLib/C to Lua.  Returns 1 if something
-   was pushed to the stack (temporary), 0 otherwise. */
-int lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIArgument *val,
-                           GITransfer xfer,
-                           GICallableInfo *ci, void **args);
+/* Marshalls single value from GLib/C to Lua. */
+void lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIArgument *val,
+		       GITransfer xfer, gboolean use_pointer,
+		       GICallableInfo *ci, void **args);
 
 /* Parses given GICallableInfo, creates new userdata for it and stores
    it to the stack. Uses cache, so already parsed callable held in the
