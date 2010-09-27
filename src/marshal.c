@@ -200,73 +200,75 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 
   /* Represent nil as NULL array. */
   if (optional && lua_isnoneornil (L, narg))
-    val->v_pointer = NULL;
-  {
-    /* Check the type; we allow tables only. */
-    luaL_checktype (L, narg, LUA_TTABLE);
+    {
+      len = 0;
+      val->v_pointer = NULL;
+    }
+  else
+    {
+      /* Check the type; we allow tables only. */
+      luaL_checktype (L, narg, LUA_TTABLE);
 
-    /* Get element type info, create guard for it. */
-    eti = g_type_info_get_param_type (ti, 0);
-    eti_guard = lgi_guard_create_baseinfo (L, eti);
-    etag = g_type_info_get_tag (eti);
-    esize = array_get_elt_size (etag);
+      /* Get element type info, create guard for it. */
+      eti = g_type_info_get_param_type (ti, 0);
+      eti_guard = lgi_guard_create_baseinfo (L, eti);
+      etag = g_type_info_get_tag (eti);
+      esize = array_get_elt_size (etag);
 
-    /* Find out how long array should we allocate. */
-    zero_terminated = g_type_info_is_zero_terminated (ti);
-    objlen = lua_objlen (L, narg);
-    if (atype == GI_ARRAY_TYPE_ARRAY)
-      len = objlen;
-    else
-      {
-	len = g_type_info_get_array_fixed_size (ti);
-	if (len >= 0 && objlen > len)
-	  objlen = len;
-      }
+      /* Find out how long array should we allocate. */
+      zero_terminated = g_type_info_is_zero_terminated (ti);
+      objlen = lua_objlen (L, narg);
+      len = g_type_info_get_array_fixed_size (ti);
+      if (atype != GI_ARRAY_TYPE_C || len < 0)
+        len = objlen;
+      else if (len < objlen)
+        objlen = len;
 
-    /* Allocate the array and wrap it into the userdata guard, if needed. */
-    if (len > 0 || zero_terminated)
-      {
-	array = g_array_sized_new (zero_terminated, TRUE, esize, len);
-	g_array_set_size (array, len);
-	if (transfer == GI_TRANSFER_NOTHING)
-	  {
-	    GArray **guard;
-	    lgi_guard_create (L, (gpointer **) &guard,
-			      (GDestroyNotify) g_array_unref);
-	    *guard = array;
-	    vals = 1;
-	  }
-      }
+      /* Allocate the array and wrap it into the userdata guard, if needed. */
+      if (len > 0 || zero_terminated)
+        {
+          array = g_array_sized_new (zero_terminated, TRUE, esize, len);
+          g_array_set_size (array, len);
+          if (transfer == GI_TRANSFER_NOTHING)
+            {
+              GArray **guard;
+              lgi_guard_create (L, (gpointer **) &guard,
+                                (GDestroyNotify) g_array_unref);
+              *guard = array;
+              vals = 1;
+            }
+        }
 
-    /* Iterate through Lua array and fill GArray accordingly. */
-    for (index = 0; index < objlen; index++)
-      {
-	lua_pushinteger (L, index + 1);
-	lua_gettable (L, narg);
+      /* Iterate through Lua array and fill GArray accordingly. */
+      for (index = 0; index < objlen; index++)
+        {
+          lua_pushinteger (L, index + 1);
+          lua_gettable (L, narg);
 
-	/* Marshal element retrieved from the table into target array. */
-	to_pop = lgi_marshal_2c (L, eti, NULL, exfer,
-				 (GIArgument *) (array->data + index * esize),
-				 -1, FALSE, NULL, NULL);
+          /* Marshal element retrieved from the table into target array. */
+          to_pop = lgi_marshal_2c (L, eti, NULL, exfer,
+                                   (GIArgument *) (array->data + index * esize),
+                                   -1, FALSE, NULL, NULL);
 
-	/* Remove temporary element from the stack. */
-	lua_remove (L, - to_pop - 1);
+          /* Remove temporary element from the stack. */
+          lua_remove (L, - to_pop - 1);
 
-	/* Remember that some more temp elements could be pushed. */
-	vals += to_pop;
-      }
-  }
+          /* Remember that some more temp elements could be pushed. */
+          vals += to_pop;
+        }
+
+      /* Return either GArray or direct pointer to the data, according to the
+         array type. */
+      val->v_pointer = (atype == GI_ARRAY_TYPE_ARRAY || array == NULL)
+          ? (void *) array : (void *) array->data;
+
+      lua_remove (L, eti_guard);
+    }
 
   /* Fill in array length argument, if it is specified. */
   if (atype == GI_ARRAY_TYPE_C)
     array_get_or_set_length (ti, NULL, len, ci, args);
 
-  /* Return either GArray or direct pointer to the data, according to
-     the array type. */
-  val->v_pointer = (atype == GI_ARRAY_TYPE_ARRAY || array == NULL)
-    ? (void *) array : (void *) array->data;
-
-  lua_remove (L, eti_guard);
   return vals;
 }
 
