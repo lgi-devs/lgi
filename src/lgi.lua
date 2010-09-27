@@ -23,7 +23,6 @@ module 'lgi'
 -- Prepare logging support.  'log' is module-exported table, containing all
 -- functionality related to logging wrapped around GLib g_log facility.
 log = { ERROR = 'assert', DEBUG = 'silent' }
-log.DEBUG=nil
 core.setlogger(
    function(domain, level, message)
       -- Create domain table in the log table if it does not exist yet.
@@ -962,7 +961,7 @@ do
    value._fields = { _g_type = value._fields.g_type }
    function value._fields.type(val, _, newval)
       assert(not newval, "GObject.Value: `type' not writable")
-      return GObject.type_name(val._fields__g_type) or ''
+      return repo.GObject.type_name(val._fields__g_type) or ''
    end
    function value._fields.value(val, _, newval)
       assert(not newval, "GObject.Value: `value' not writable")
