@@ -45,14 +45,15 @@ marshal_2c_int (lua_State *L, GITypeTag tag, GIArgument *val, int narg,
       HANDLE_INT(UINT8, uint8, UINT, 0, 0xff);
       HANDLE_INT(INT16, int16, INT, -0x8000, 0x7fff);
       HANDLE_INT(UINT16, uint16, UINT, 0, 0xffff);
-      HANDLE_INT(INT32, int32, INT, -0x80000000, 0x7fffffff);
-      HANDLE_INT(UINT32, uint32, UINT, 0, 0xffffffff);
-      HANDLE_INT(INT64, int64, INT, -0x8000000000000000L, 0x7fffffffffffffffLL);
-      HANDLE_INT(UINT64, uint64, UINT, 0, 0xffffffffffffffffLL);
+      HANDLE_INT(INT32, int32, INT, -0x80000000L, 0x7fffffffL);
+      HANDLE_INT(UINT32, uint32, UINT, 0, 0xffffffffL);
+      HANDLE_INT(INT64, int64, INT, -0x8000000000000000LL, 
+		 0x7fffffffffffffffLL);
+      HANDLE_INT(UINT64, uint64, UINT, 0, 0xffffffffffffffffULL);
 #if GLIB_SIZEOF_SIZE_T == 4
-      HANDLE_INT(GTYPE, uint32, UINT, 0, 0xffffffff);
+      HANDLE_INT(GTYPE, uint32, UINT, 0, 0xffffffffUL);
 #else
-      HANDLE_INT(GTYPE, uint64, UINT, 0, 0xffffffffffffffffLL);
+      HANDLE_INT(GTYPE, uint64, UINT, 0, 0xffffffffffffffffULL);
 #endif
 #undef HANDLE_INT
 
@@ -70,7 +71,7 @@ marshal_2lua_int (lua_State *L, GITypeTag tag, GIArgument *val,
     {
 #define HANDLE_INT(nameupper, namelower, ptrconv)	\
       case GI_TYPE_TAG_ ## nameupper:			\
-	lua_pushnumber (L, use_pointer		\
+	lua_pushnumber (L, use_pointer			\
 	  ?  GPOINTER_TO_ ## ptrconv (val->v_pointer)	\
 	  : val->v_ ## namelower);			\
 	break;
@@ -275,29 +276,30 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 
   /* Get pointer to array data. */
   if (val->v_pointer == NULL)
+    {
       /* NULL array is represented by nil. */
       lua_pushnil (L);
+      return;
+    }
+
+  /* First of all, find out the length of the array. */
+  if (atype == GI_ARRAY_TYPE_ARRAY)
+    {
+      len = ((GArray *) val->v_pointer)->len;
+      data = ((GArray *) val->v_pointer)->data;
+    }
   else
     {
-      /* First of all, find out the length of the array. */
-      if (atype == GI_ARRAY_TYPE_ARRAY)
-	{
-	  len = ((GArray *) val->v_pointer)->len;
-	  data = ((GArray *) val->v_pointer)->data;
-	}
+      data = val->v_pointer;
+      if (g_type_info_is_zero_terminated (ti))
+	len = -1;
       else
 	{
-	  data = val->v_pointer;
-	  if (g_type_info_is_zero_terminated (ti))
-	    len = -1;
-	  else
-	    {
-	      len = g_type_info_get_array_fixed_size (ti);
-	      if (len == -1)
-		/* Length of the array is dynamic, get it from other
-		   argument. */
-		array_get_or_set_length (ti, &len, 0, ci, args);
-	    }
+	  len = g_type_info_get_array_fixed_size (ti);
+	  if (len == -1)
+	    /* Length of the array is dynamic, get it from other
+	       argument. */
+	    array_get_or_set_length (ti, &len, 0, ci, args);
 	}
     }
 
@@ -502,6 +504,12 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
   GITypeTag tag = g_type_info_get_tag (ti);
   switch (tag)
     {
+    case GI_TYPE_TAG_BOOLEAN:
+      if (!optional && lua_isnone (L, narg))
+	luaL_typerror (L, narg, lua_typename (L, LUA_TBOOLEAN));
+      val->v_boolean = lua_toboolean (L, narg) ? TRUE : FALSE;
+      break;
+
     case GI_TYPE_TAG_FLOAT:
     case GI_TYPE_TAG_DOUBLE:
       {
@@ -614,6 +622,10 @@ lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIArgument *val,
   GITypeTag tag = g_type_info_get_tag (ti);
   switch (tag)
     {
+    case GI_TYPE_TAG_BOOLEAN:
+      lua_pushboolean (L, val->v_boolean);
+      break;
+
     case GI_TYPE_TAG_FLOAT:
     case GI_TYPE_TAG_DOUBLE:
       {
