@@ -549,8 +549,13 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 	 not enforce any encoding on the strings. */
     case GI_TYPE_TAG_UTF8:
     case GI_TYPE_TAG_FILENAME:
-      val->v_string = (gchar *)(optional && lua_isnoneornil (L, narg)
-				? NULL : luaL_checkstring (L, narg));
+      {
+        const gchar *str = (optional && lua_isnoneornil (L, narg)
+                            ? NULL : luaL_checkstring (L, narg));
+        if (transfer == GI_TRANSFER_EVERYTHING)
+          str = g_strdup (str);
+        val->v_string = (gchar *)(str);
+      }
       break;
 
     case GI_TYPE_TAG_INTERFACE:
