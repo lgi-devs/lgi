@@ -121,7 +121,7 @@ gpointer lgi_compound_object_new (lua_State *L, GIObjectInfo *ii, int argtable);
    compound object, returns NULL if Lua-stack value is nil and optional is
    TRUE.  Returns number of temporary Lua objects pushed to the stack. On
    return, fills gtype argument with real gtype of returned compound. */
-int lgi_compound_get (lua_State *L, int arg, GType *gtype, gpointer *addr, 
+int lgi_compound_get (lua_State *L, int arg, GType *gtype, gpointer *addr,
 		      gboolean optional);
 
 /* Checks, compound with reqeusted gtype lives at given stack position.  If

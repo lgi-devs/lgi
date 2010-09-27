@@ -145,7 +145,7 @@ lgi_find (lua_State *L)
   const gchar *symbol = luaL_checkstring (L, 1);
   const gchar *container = luaL_optstring (L, 2, NULL);
   GIBaseInfo *info, *fi, *baseinfo;
-  int vals;
+  int vals, info_guard;
 
   /* Get information about the symbol. */
   info = g_irepository_find_by_name (NULL, "GIRepository",
@@ -184,8 +184,9 @@ lgi_find (lua_State *L)
 
   /* Create new IBaseInfo structure and return it. */
   baseinfo = g_irepository_find_by_name (NULL, "GIRepository", "BaseInfo");
+  info_guard = lgi_guard_create_baseinfo (L, baseinfo);
   vals = lgi_compound_create (L, baseinfo, info, TRUE);
-  g_base_info_unref (baseinfo);
+  lua_remove (L, info_guard);
   return vals;
 }
 
@@ -261,11 +262,12 @@ lgi_construct (lua_State* L)
 	  {
 	    GITypeInfo *ti = g_constant_info_get_type (bi);
 	    GIArgument val;
+            int ti_guard = lgi_guard_create_baseinfo (L, ti);
 	    g_constant_info_get_value (bi, &val);
-	    lgi_marshal_2lua (L, ti, &val, GI_TRANSFER_NOTHING, FALSE, 
+	    lgi_marshal_2lua (L, ti, &val, GI_TRANSFER_NOTHING, FALSE,
 			      NULL, NULL);
 	    vals = 1;
-	    g_base_info_unref (ti);
+            lua_remove (L, ti_guard);
 	  }
 	  break;
 
@@ -331,8 +333,9 @@ lgi_cast (lua_State *L)
       GIBaseInfo *info = g_irepository_find_by_gtype (NULL, gtype);
       if (info != NULL)
 	{
+          int info_guard = lgi_guard_create_baseinfo (L, info);
 	  lgi_compound_create (L, info, g_object_ref (obj), TRUE);
-	  g_base_info_unref (info);
+	  lua_remove (L, info_guard);
 	  return 1;
 	}
     }

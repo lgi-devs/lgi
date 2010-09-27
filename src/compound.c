@@ -265,9 +265,10 @@ lgi_compound_object_new (lua_State *L, GIObjectInfo *oi, int argtable)
 		  /* Initialize and load parameter value from the table
 		     contents. */
 		  ti = g_property_info_get_type (pi);
+                  lgi_guard_create_baseinfo (L, ti);
 		  lgi_value_init (L, &param->value, ti);
-		  lgi_value_load (L, &param->value, -1);
-		  g_base_info_unref (ti);
+		  lgi_value_load (L, &param->value, -2);
+                  lua_pop (L, 1);
 		}
 	    }
 
@@ -504,16 +505,17 @@ static int
 process_field (lua_State* L, gpointer addr, GIFieldInfo* fi, int newval)
 {
   GIArgument *val = G_STRUCT_MEMBER_P (addr, g_field_info_get_offset (fi));
-  GITypeInfo *ti = g_field_info_get_type (fi);
-  int flags = g_field_info_get_flags (fi);
+  GITypeInfo *ti;
+  int flags = g_field_info_get_flags (fi), ti_guard;
   int vals;
+
+  ti = g_field_info_get_type (fi);
+  ti_guard = lgi_guard_create_baseinfo (L, ti);
+
   if (newval == -1)
     {
       if ((flags & GI_FIELD_IS_READABLE) == 0)
-	{
-	  g_base_info_unref (ti);
-	  return luaL_argerror (L, 2, "not readable");
-	}
+        return luaL_argerror (L, 2, "not readable");
 
       lgi_marshal_2lua (L, ti, val, GI_TRANSFER_NOTHING, FALSE,
 			       NULL, NULL);
@@ -522,16 +524,13 @@ process_field (lua_State* L, gpointer addr, GIFieldInfo* fi, int newval)
   else
     {
       if ((flags & GI_FIELD_IS_WRITABLE) == 0)
-	{
-	  g_base_info_unref (ti);
-	  return luaL_argerror (L, 2, "not writable");
-	}
+        return luaL_argerror (L, 2, "not writable");
 
       lua_pop (L, lgi_marshal_2c (L, ti, NULL, GI_TRANSFER_NOTHING, val,
 				  newval, FALSE, NULL, NULL));
     }
 
-  g_base_info_unref (ti);
+  lua_remove (L, ti_guard);
   return vals;
 }
 
@@ -539,20 +538,19 @@ process_field (lua_State* L, gpointer addr, GIFieldInfo* fi, int newval)
 static int
 process_property (lua_State *L, gpointer addr, GIPropertyInfo *pi, int newval)
 {
-  int vals = 0, flags = g_property_info_get_flags (pi);
-  GITypeInfo *ti = g_property_info_get_type (pi);
+  GITypeInfo *ti;
+  int vals = 0, flags = g_property_info_get_flags (pi), ti_guard;
   const gchar *name = g_base_info_get_name (pi);
   GValue val = {0};
 
+  ti = g_property_info_get_type (pi);
+  ti_guard = lgi_guard_create_baseinfo (L, ti);
   lgi_value_init (L, &val, ti);
 
   if (newval == -1)
     {
       if ((flags & G_PARAM_READABLE) == 0)
-	{
-	  g_base_info_unref (ti);
-	  return luaL_argerror (L, 2, "not readable");
-	}
+        return luaL_argerror (L, 2, "not readable");
 
       g_object_get_property ((GObject *) addr, name, &val);
       vals = lgi_value_store (L, &val);
@@ -560,16 +558,14 @@ process_property (lua_State *L, gpointer addr, GIPropertyInfo *pi, int newval)
   else
     {
       if ((flags & G_PARAM_WRITABLE) == 0)
-	{
-	  g_base_info_unref (ti);
-	  return luaL_argerror (L, 2, "not writable");
-	}
+        return luaL_argerror (L, 2, "not writable");
 
       vals = lgi_value_load (L, &val, 3);
       g_object_set_property ((GObject *) addr, name, &val);
     }
 
   g_value_unset (&val);
+  lua_remove (L, ti_guard);
   return vals;
 }
 
