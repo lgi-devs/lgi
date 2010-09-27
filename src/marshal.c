@@ -33,29 +33,36 @@ marshal_2c_int (lua_State *L, GITypeTag tag, GIArgument *val, int narg,
 {
   switch (tag)
     {
-#define HANDLE_INT(nameupper, namelower, ptrconv, val_min, val_max)	\
-    case GI_TYPE_TAG_ ## nameupper:					\
-      val->v_ ## namelower = check_number (L, narg, val_min, val_max);	\
-      if (use_pointer)						\
-	val->v_pointer =						\
-	  G ## ptrconv ## _TO_POINTER (val->v_ ## namelower);		\
-      break
+#define HANDLE_INT(nameup, namelow, ptrconv, pct, val_min, val_max)     \
+      case GI_TYPE_TAG_ ## nameup:					\
+        val->v_ ## namelow = check_number (L, narg, val_min, val_max);	\
+        if (use_pointer)                                                \
+          val->v_pointer =						\
+            G ## ptrconv ## _TO_POINTER ((pct) val->v_ ## namelow);     \
+        break
 
-      HANDLE_INT(INT8, int8, INT, -0x80, 0x7f);
-      HANDLE_INT(UINT8, uint8, UINT, 0, 0xff);
-      HANDLE_INT(INT16, int16, INT, -0x8000, 0x7fff);
-      HANDLE_INT(UINT16, uint16, UINT, 0, 0xffff);
-      HANDLE_INT(INT32, int32, INT, -0x80000000L, 0x7fffffffL);
-      HANDLE_INT(UINT32, uint32, UINT, 0, 0xffffffffL);
-      HANDLE_INT(INT64, int64, INT, -0x8000000000000000LL, 
-		 0x7fffffffffffffffLL);
-      HANDLE_INT(UINT64, uint64, UINT, 0, 0xffffffffffffffffULL);
+#define HANDLE_INT_NOPTR(nameup, namelow, val_min, val_max)             \
+      case GI_TYPE_TAG_ ## nameup:					\
+        val->v_ ## namelow = check_number (L, narg, val_min, val_max);	\
+        g_assert (!use_pointer);                                        \
+        break
+
+      HANDLE_INT(INT8, int8, INT, gint, -0x80, 0x7f);
+      HANDLE_INT(UINT8, uint8, UINT, guint, 0, 0xff);
+      HANDLE_INT(INT16, int16, INT, gint, -0x8000, 0x7fff);
+      HANDLE_INT(UINT16, uint16, UINT, guint, 0, 0xffff);
+      HANDLE_INT(INT32, int32, INT, gint, -0x80000000LL, 0x7fffffffLL);
+      HANDLE_INT(UINT32, uint32, UINT, guint, 0, 0xffffffffUL);
+      HANDLE_INT_NOPTR(INT64, int64, ((lua_Number) -0x7f00000000000000LL) - 1,
+                       0x7fffffffffffffffLL);
+      HANDLE_INT_NOPTR(UINT64, uint64, 0, 0xffffffffffffffffULL);
 #if GLIB_SIZEOF_SIZE_T == 4
-      HANDLE_INT(GTYPE, uint32, UINT, 0, 0xffffffffUL);
+      HANDLE_INT_NOPTR(GTYPE, uint32, 0, 0xffffffffUL);
 #else
-      HANDLE_INT(GTYPE, uint64, UINT, 0, 0xffffffffffffffffULL);
+      HANDLE_INT_NOPTR(GTYPE, uint64, 0, 0xffffffffffffffffULL);
 #endif
 #undef HANDLE_INT
+#undef HANDLE_INT_NOPTR
 
     default:
       g_assert_not_reached ();
