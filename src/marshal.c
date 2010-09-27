@@ -186,8 +186,8 @@ array_get_elt_size (GITypeTag tag)
    pushed to the stack. */
 static int
 marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
-		  GITransfer transfer, GIArgument *val, int narg,
-		  gboolean optional, GICallableInfo *ci, void **args)
+		  GIArgument *val, int narg, gboolean optional,
+                  GITransfer transfer, GICallableInfo *ci, void **args)
 {
   GITypeInfo* eti;
   GITypeTag etag;
@@ -274,7 +274,7 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 
 static void
 marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
-		    GIArgument *val, GITransfer transfer, gboolean use_pointer,
+		    GIArgument *val, GITransfer transfer,
 		    GICallableInfo *ci, void **args)
 {
   GITypeInfo* eti;
@@ -356,8 +356,8 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 /* Marshalls GSList or GList from Lua to C. Returns number of
    temporary elements pushed to the stack. */
 static int
-marshal_2c_list (lua_State *L, GITypeInfo *ti, GITypeTag tag,
-		 GITransfer transfer, GIArgument *val, int narg)
+marshal_2c_list (lua_State *L, GITypeInfo *ti, GITypeTag list_tag,
+		 GIArgument *val, int narg, GITransfer transfer)
 {
   GITypeInfo *eti;
   GITypeTag etag;
@@ -396,7 +396,7 @@ marshal_2c_list (lua_State *L, GITypeInfo *ti, GITypeTag tag,
 			       NULL, NULL);
 
       /* Prepend new list element and reassign the guard. */
-      if (tag == GI_TYPE_TAG_GSLIST)
+      if (list_tag == GI_TYPE_TAG_GSLIST)
 	*guard = g_slist_prepend (*guard, eval.v_pointer);
       else
 	*guard = (GSList *) g_list_prepend ((GList *) *guard, eval.v_pointer);
@@ -427,7 +427,7 @@ marshal_2c_list (lua_State *L, GITypeInfo *ti, GITypeTag tag,
 
 static int
 marshal_2lua_list (lua_State *L, GITypeInfo *ti, GIArgument *val,
-		   GITransfer xfer)
+                   GITransfer xfer)
 {
   GSList *list;
   GITypeInfo *eti;
@@ -603,8 +603,8 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 	  {
 	  case GI_ARRAY_TYPE_C:
 	  case GI_ARRAY_TYPE_ARRAY:
-	    nret = marshal_2c_array (L, ti, atype, transfer, val, narg,
-				     optional, ci, args);
+	    nret = marshal_2c_array (L, ti, atype, val, narg, optional,
+                                     transfer, ci, args);
 	    break;
 
 	  default:
@@ -615,7 +615,7 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 
     case GI_TYPE_TAG_GLIST:
     case GI_TYPE_TAG_GSLIST:
-      nret = marshal_2c_list (L, ti, tag, transfer, val, narg);
+      nret = marshal_2c_list (L, ti, tag, val, narg, transfer);
       break;
 
     default:
@@ -699,7 +699,7 @@ lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIArgument *val,
 	  {
 	  case GI_ARRAY_TYPE_C:
 	  case GI_ARRAY_TYPE_ARRAY:
-	    marshal_2lua_array (L, ti, atype, val, transfer, FALSE, ci, args);
+	    marshal_2lua_array (L, ti, atype, val, transfer, ci, args);
 	    break;
 
 	  default:
