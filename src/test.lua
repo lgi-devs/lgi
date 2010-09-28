@@ -700,6 +700,83 @@ function tests.t01_gireg_79_gslist_null_out()
    check(type(a) == 'table' and #a == 0)
 end
 
+function tests.t01_gireg_80_ghash_null_return()
+   local R = lgi.Regress
+   check(select('#', R.test_ghash_null_return()) == 1)
+   check(R.test_ghash_null_return() == nil)
+end
+
+local function size_htab(h)
+   local size = 0
+   for _ in pairs(h) do size = size + 1 end
+   return size
+end
+
+function tests.t01_gireg_81_ghash_nothing_return()
+   local R = lgi.Regress
+   local count = 0
+   check(select('#', R.test_ghash_nothing_return()) == 1)
+   local h = R.test_ghash_nothing_return()
+   check(type(h) == 'table')
+   check(size_htab(h) == 3)
+   check(h.foo == 'bar' and h.baz == 'bat' and h.qux == 'quux')
+end
+
+function tests.t01_gireg_82_ghash_container_return()
+   local R = lgi.Regress
+   local count = 0
+   check(select('#', R.test_ghash_container_return()) == 1)
+   local h = R.test_ghash_container_return()
+   check(type(h) == 'table')
+   check(size_htab(h) == 3)
+   check(h.foo == 'bar' and h.baz == 'bat' and h.qux == 'quux')
+end
+
+function tests.t01_gireg_83_ghash_everything_return()
+   local R = lgi.Regress
+   local count = 0
+   check(select('#', R.test_ghash_everything_return()) == 1)
+   local h = R.test_ghash_everything_return()
+   check(type(h) == 'table')
+   check(size_htab(h) == 3)
+   check(h.foo == 'bar' and h.baz == 'bat' and h.qux == 'quux')
+end
+
+function tests.t01_gireg_84_ghash_null_in()
+   local R = lgi.Regress
+   R.test_ghash_null_in(nil)
+   R.test_ghash_null_in()
+   check(not pcall(R.test_ghash_null_in,1))
+   check(not pcall(R.test_ghash_null_in,'string'))
+   check(not pcall(R.test_ghash_null_in,function() end))
+end
+
+function tests.t01_gireg_85_ghash_null_out()
+   local R = lgi.Regress
+   check(R.test_ghash_null_out() == nil)
+end
+
+function tests.t01_gireg_86_ghash_nothing_in()
+   local R = lgi.Regress
+   R.test_ghash_nothing_in({ foo = 'bar', baz = 'bat', qux = 'quux' })
+   check(not pcall(R.test_ghash_nothing_in))
+   check(not pcall(R.test_ghash_nothing_in, 1))
+   check(not pcall(R.test_ghash_nothing_in, 'test'))
+   check(not pcall(R.test_ghash_nothing_in, function() end))
+end
+
+function tests.t01_gireg_87_ghash_nested_everything_return()
+   local R = lgi.Regress
+   check(select('#', R.test_ghash_nested_everything_return) == 1);
+   local a = R.test_ghash_nested_everything_return()
+   check(type(a) == 'table')
+   check(size_htab(a) == 1)
+   check(type(a.wibble) == 'table')
+   check(size_htab(a.wibble) == 3)
+   check(a.wibble.foo == 'bar' and a.wibble.baz == 'bat'
+	 and a.wibble.qux == 'quux')
+end
+
 function tests.t02_gvalue_simple()
    local V = GObject.Value
    local function checkv(gval, tp, val)
