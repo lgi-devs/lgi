@@ -381,7 +381,10 @@ marshal_2c_list (lua_State *L, GITypeInfo *ti, GITypeTag list_tag,
 
   /* Go from back and prepend to the list, which is cheaper than
      appending. */
-  lgi_guard_create (L, (gpointer **) &guard, (GDestroyNotify) g_slist_free);
+  lgi_guard_create (L, (gpointer **) &guard,
+		    list_tag == GI_TYPE_TAG_GSLIST
+		    ? (GDestroyNotify) g_slist_free
+		    : (GDestroyNotify) g_list_free);
   while (index > 0)
     {
       /* Retrieve index-th element from the source table and marshall
@@ -409,8 +412,8 @@ marshal_2c_list (lua_State *L, GITypeInfo *ti, GITypeTag list_tag,
 }
 
 static int
-marshal_2lua_list (lua_State *L, GITypeInfo *ti, GIArgument *val,
-		   GITransfer xfer)
+marshal_2lua_list (lua_State *L, GITypeInfo *ti, GITypeTag list_tag,
+		   GIArgument *val, GITransfer xfer)
 {
   GSList *list;
   GITypeInfo *eti;
@@ -440,7 +443,12 @@ marshal_2lua_list (lua_State *L, GITypeInfo *ti, GIArgument *val,
 
   /* Free the list, if we got its ownership. */
   if (xfer != GI_TRANSFER_NOTHING)
-    g_slist_free (val->v_pointer);
+    {
+      if (list_tag == GI_TYPE_TAG_GSLIST)
+	g_slist_free (val->v_pointer);
+      else
+	g_list_free (val->v_pointer);
+    }
 
   lua_remove (L, eti_guard);
   return 1;
@@ -853,7 +861,7 @@ lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIArgument *val,
 
     case GI_TYPE_TAG_GSLIST:
     case GI_TYPE_TAG_GLIST:
-      marshal_2lua_list (L, ti, val, transfer);
+      marshal_2lua_list (L, ti, tag, val, transfer);
       break;
 
     case GI_TYPE_TAG_GHASH:
