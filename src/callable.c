@@ -352,7 +352,8 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
 	int argi = i + callable->has_self;
 	if (param->dir != GI_DIRECTION_OUT)
 	  /* Convert parameter from Lua stack to C. */
-	  nret += lgi_marshal_2c (L, &param->ti, &param->ai, param->transfer,
+	  nret += lgi_marshal_2c (L, &param->ti, &param->ai, 
+				  GI_TRANSFER_NOTHING,
 				  &args[argi], lua_argi++, FALSE,
 				  callable->info,
 				  ffi_args + callable->has_self);
@@ -493,7 +494,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
       {
 	lgi_marshal_2lua (L, &param->ti,
 			  (GIArgument *) args[i + callable->has_self],
-			  param->transfer, FALSE,
+			  GI_TRANSFER_NOTHING, FALSE,
 			  callable->info, args + callable->has_self);
 	npos++;
       }

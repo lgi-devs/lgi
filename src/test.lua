@@ -353,12 +353,6 @@ function tests.t01_gireg_25_utf8_nonconst_return()
    check(R.test_utf8_nonconst_return() == utf8_nonconst)
 end
 
-function tests.t01_gireg_26_utf8_nonconst_in()
-   local R = lgi.Regress
-   local utf8_nonconst = 'nonconst \226\153\165 utf8'
-   R.test_utf8_nonconst_in(utf8_nonconst)
-end
-
 function tests.t01_gireg_27_utf8_const_in()
    local R = lgi.Regress
    local utf8_const = 'const \226\153\165 utf8'
@@ -506,16 +500,6 @@ function tests.t01_gireg_44_strv_in()
    check(not R.test_strv_in{'1', '2', '3', '4'})
 end
 
-function tests.t01_gireg_45_strv_in_container()
-   local R = lgi.Regress
-   check(R.test_strv_in_container{'1', '2', '3'})
-   check(not pcall(R.test_strv_in_container))
-   check(not pcall(R.test_strv_in_container, '1'))
-   check(not pcall(R.test_strv_in_container, 1))
-   check(not R.test_strv_in_container{'3', '2', '1'})
-   check(not R.test_strv_in_container{'1', '2', '3', '4'})
-end
-
 function tests.t01_gireg_46_array_gtype_in()
    local R = lgi.Regress
    local str = R.test_array_gtype_in {
@@ -569,19 +553,6 @@ function tests.t01_gireg_51_array_fixed_size_int_return()
    check(#{R.test_array_fixed_size_int_return()} == 1)
 end
 
-function tests.t01_gireg_52_array_int_in_take()
-   local R = lgi.Regress
-   check(R.test_array_int_in_take{} == 0)
-   check(R.test_array_int_in_take{1} == 1)
-   check(R.test_array_int_in_take{1,2,3,4} == 10)
-   check(not pcall(test_array_int_in_take))
-   check(not pcall(test_array_int_in_take))
-   check(not pcall(test_array_int_in_take, 1))
-   check(not pcall(test_array_int_in_take, 'hello'))
-   check(not pcall(test_array_int_in_take, function() end))
-   check(not pcall(test_array_int_in_take, {'hello'}))
-end
-
 function tests.t01_gireg_53_strv_out_c()
    local R = lgi.Regress
    local a = R.test_strv_out_c()
@@ -615,18 +586,6 @@ function tests.t01_gireg_57_array_int_null_out()
    local R = lgi.Regress
    local a = R.test_array_int_null_out()
    check(a == nil)
-end
-
-function tests.t01_gireg_58_glist_free()
-   local R = lgi.Regress
-   R.test_glist_free({})
-   R.test_glist_free()
-   R.test_glist_free(nil)
-   R.test_glist_free({"thanks", 'no'})
-   check(not pcall(R.test_glist_free, 1))
-   check(not pcall(R.test_glist_free, 'fish'))
-   check(not pcall(R.test_glist_free, function() end))
-   check(not pcall(R.test_glist_free, {'thanks', function() end}))
 end
 
 function tests.t01_gireg_59_glist_nothing_return()
@@ -671,16 +630,6 @@ function tests.t01_gireg_64_glist_nothing_in2()
    R.test_glist_nothing_in2  {'1', '2', '3'}
 end
 
-function tests.t01_gireg_65_glist_container_in()
-   local R = lgi.Regress
-   R.test_glist_container_in  {'1', '2', '3'}
-end
-
-function tests.t01_gireg_66_glist_everything_in()
-   local R = lgi.Regress
-   R.test_glist_everything_in  {'1', '2', '3'}
-end
-
 function tests.t01_gireg_67_glist_null_in()
    local R = lgi.Regress
    R.test_glist_null_in {}
@@ -693,18 +642,6 @@ function tests.t01_gireg_68_glist_null_out()
    check(select('#', R.test_glist_null_out()) == 1)
    local a = R.test_glist_null_out()
    check(type(a) == 'table' and #a == 0)
-end
-
-function tests.t01_gireg_69_gslist_free()
-   local R = lgi.Regress
-   R.test_gslist_free({})
-   R.test_gslist_free()
-   R.test_gslist_free(nil)
-   R.test_gslist_free({"thanks", 'no'})
-   check(not pcall(R.test_gslist_free, 1))
-   check(not pcall(R.test_gslist_free, 'fish'))
-   check(not pcall(R.test_gslist_free, function() end))
-   check(not pcall(R.test_gslist_free, {'thanks', function() end}))
 end
 
 function tests.t01_gireg_70_gslist_nothing_return()
@@ -747,16 +684,6 @@ end
 function tests.t01_gireg_75_gslist_nothing_in2()
    local R = lgi.Regress
    R.test_gslist_nothing_in2  {'1', '2', '3'}
-end
-
-function tests.t01_gireg_76_gslist_container_in()
-   local R = lgi.Regress
-   R.test_gslist_container_in  {'1', '2', '3'}
-end
-
-function tests.t01_gireg_77_gslist_everything_in()
-   local R = lgi.Regress
-   R.test_gslist_everything_in  {'1', '2', '3'}
 end
 
 function tests.t01_gireg_78_gslist_null_in()
