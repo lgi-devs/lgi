@@ -777,6 +777,33 @@ function tests.t01_gireg_87_ghash_nested_everything_return()
 	 and a.wibble.qux == 'quux')
 end
 
+function tests.t01_gireg_88_enum()
+   local R = lgi.Regress
+   check(R.TestEnum.VALUE1 == 0)
+   check(R.TestEnum.VALUE2 == 1)
+   check(R.TestEnum.VALUE3 == 42)
+   check(R.TestEnum[0] == 'VALUE1')
+   check(R.TestEnum[1] == 'VALUE2')
+   check(R.TestEnum[42] == 'VALUE3')
+   check(R.TestEnum[43] == nil)
+   check(R.test_enum_param(0) == 'value1')
+   check(R.test_enum_param(1) == 'value2')
+   check(R.test_enum_param(42) == 'value3')
+end
+
+function tests.t01_gireg_89_flags()
+   local R = lgi.Regress
+   check(R.TestFlags.FLAG1 == 1)
+   check(R.TestFlags.FLAG2 == 2)
+   check(R.TestFlags.FLAG3 == 4)
+   check(R.TestFlags[7].FLAG1 == 1)
+   check(R.TestFlags[7].FLAG2 == 2)
+   check(R.TestFlags[7].FLAG3 == 4)
+   check(R.TestFlags[3].FLAG1 == 1)
+   check(R.TestFlags[3].FLAG2 == 2)
+   check(R.TestFlags[3].FLAG3 == nil)
+end
+
 function tests.t02_gvalue_simple()
    local V = GObject.Value
    local function checkv(gval, tp, val)
