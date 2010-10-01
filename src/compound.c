@@ -139,13 +139,13 @@ compound_register (lua_State *L, GIBaseInfo *info, gpointer *addr,
       /* Try to find type in the repo. */
       if (info == NULL)
 	info = g_irepository_find_by_gtype (NULL, gtype);
-      if (!G_UNLIKELY (info == NULL))
+      if (G_LIKELY (info != NULL))
 	{
 	  lua_getfield (L, -2, g_base_info_get_namespace (info));
-	  if (!G_UNLIKELY (lua_isnil (L, -1)))
+	  if (G_LIKELY (!lua_isnil (L, -1)))
 	    {
 	      lua_getfield (L, -1, g_base_info_get_name (info));
-	      if (!G_UNLIKELY (lua_isnil (L, -1)))
+	      if (G_LIKELY (!lua_isnil (L, -1)))
 		{
 		  /* Replace the best result we've found so far. */
 		  lua_replace (L, -3);
