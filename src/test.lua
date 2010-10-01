@@ -817,7 +817,7 @@ function tests.t01_gireg_90_test_struct_a()
    check(a.some_double == 3.14)
    a.some_enum = R.TestEnum.VALUE2
    check(a.some_enum == R.TestEnum.VALUE2)
-   a = R.TestStructA { some_int = 42, some_int8 = 12, 
+   a = R.TestStructA { some_int = 42, some_int8 = 12,
 		       some_double = 3.14, some_enum = R.TestEnum.VALUE2 }
    a.some_int = 43
    a.some_int8 = 13
@@ -840,6 +840,24 @@ function tests.t01_gireg_90_test_struct_a()
    check(select('#', (function() a.some_int = 0 end)()) == 0)
    check(select('#', (function() return a.some_int end)()) == 1)
    check(select('#', (function() local b = a.some_int end)()) == 0)
+end
+
+function tests.t01_gireg_91_test_struct_a_clone()
+   local R = lgi.Regress
+   local a = R.TestStructA { some_int = 42, some_int8 = 12, some_double = 3.14,
+			     some_enum = R.TestEnum.VALUE2 }
+   check(select('#', a:clone()) == 1)
+   local b = a:clone()
+   check(type(b) == 'userdata')
+   check(b ~= a)
+   check(b.some_int == 42)
+   check(b.some_int8 == 12)
+   check(b.some_double == 3.14)
+   check(b.some_enum == R.TestEnum.VALUE2)
+   check(a.some_int == 42)
+   check(a.some_int8 == 12)
+   check(a.some_double == 3.14)
+   check(a.some_enum == R.TestEnum.VALUE2)
 end
 
 function tests.t02_gvalue_simple()

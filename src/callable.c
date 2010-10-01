@@ -286,7 +286,7 @@ int
 lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
 {
   Param *param;
-  int i, lua_argi, nret;
+  int i, lua_argi, nret, caller_allocated = 0;
   GIArgument retval;
   GIArgument *args;
   void **ffi_args, **redirect_out;
@@ -326,8 +326,11 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
       lua_argi++;
     }
 
-  /* Prepare proper call->ffi_args[] pointing to real args (or redirects in
-     case of inout/out parameters). */
+  /* Prepare proper call->ffi_args[] pointing to real args (or
+     redirects in case of inout/out parameters). Note that this loop
+     cannot be merged with following marshalling loop, because during
+     marshalling of closure or arrays marshalling code can read/write
+     values ahead of currently marshalled value. */
   nret = 0;
   param = &callable->params[0];
   for (i = 0; i < callable->nargs; i++, param++)
@@ -352,7 +355,7 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
 	int argi = i + callable->has_self;
 	if (param->dir != GI_DIRECTION_OUT)
 	  /* Convert parameter from Lua stack to C. */
-	  nret += lgi_marshal_2c (L, &param->ti, &param->ai, 
+	  nret += lgi_marshal_2c (L, &param->ti, &param->ai,
 				  GI_TRANSFER_NOTHING,
 				  &args[argi], lua_argi++, FALSE,
 				  callable->info,
@@ -361,13 +364,24 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
 	  {
 	    /* Special handling for out/caller-alloc structures; we have to
 	       manually pre-create them and store them on the stack. */
-	    if (g_arg_info_is_caller_allocates (&param->ai) &&
-		g_type_info_get_tag (&param->ti) == GI_TYPE_TAG_INTERFACE)
+	    if (g_arg_info_is_caller_allocates (&param->ai))
 	      {
 		GIBaseInfo *ii = g_type_info_get_interface (&param->ti);
 		GIInfoType type = g_base_info_get_type (ii);
-		if (type == GI_INFO_TYPE_STRUCT || type == GI_INFO_TYPE_UNION)
-		  args[argi].v_pointer = lgi_compound_struct_new (L, ii);
+		g_assert (type == GI_INFO_TYPE_STRUCT
+			  || type == GI_INFO_TYPE_UNION);
+
+		/* Even when this is output parameter, for C interface
+		   it really looks like input one, i.e. FFI points
+		   directly to our allocated structure. */
+		ffi_args[argi] = &args[argi];
+		args[argi].v_pointer = lgi_compound_struct_new (L, ii);
+
+		/* Move the structure on the stack *below* any already
+		   present temporary values. */
+		lua_insert (L, -nret - 1);
+		caller_allocated++;
+
 		g_base_info_unref (ii);
 	      }
 	  }
@@ -402,6 +416,7 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
 			callable->retval.transfer, FALSE,
 			callable->info, ffi_args + callable->has_self);
       nret++;
+      lua_insert (L, -caller_allocated - 1);
     }
 
   /* Process output parameters. */
@@ -409,12 +424,23 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
   for (i = 0; i < callable->nargs; i++, param++)
     if (!param->internal && param->dir != GI_DIRECTION_IN)
       {
-	lgi_marshal_2lua (L, &param->ti, &args[i + callable->has_self],
-			  param->transfer, FALSE,
-			  callable->info, ffi_args + callable->has_self);
+	if (!g_arg_info_is_caller_allocates (&param->ai))
+	  {
+	    /* Marshal output parameter. */
+	    lgi_marshal_2lua (L, &param->ti, &args[i + callable->has_self],
+			      param->transfer, FALSE,
+			      callable->info, ffi_args + callable->has_self);
+	    lua_insert (L, -caller_allocated - 1);
+	  }
+	else
+	  /* Caller allocated parameter is already marshalled and
+	     lying on the stack. */
+	  caller_allocated--;
+
 	nret++;
       }
 
+  g_assert (caller_allocated == 0);
   return nret;
 }
 
