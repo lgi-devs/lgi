@@ -804,6 +804,44 @@ function tests.t01_gireg_89_flags()
    check(R.TestFlags[3].FLAG3 == nil)
 end
 
+function tests.t01_gireg_90_test_struct_a()
+   local R = lgi.Regress
+   check(select('#', R.TestStructA()) == 1)
+   local a = R.TestStructA()
+   check(type(a) == 'userdata')
+   a.some_int = 42
+   check(a.some_int == 42)
+   a.some_int8 = 12
+   check(a.some_int8 == 12)
+   a.some_double = 3.14
+   check(a.some_double == 3.14)
+   a.some_enum = R.TestEnum.VALUE2
+   check(a.some_enum == R.TestEnum.VALUE2)
+   a = R.TestStructA { some_int = 42, some_int8 = 12, 
+		       some_double = 3.14, some_enum = R.TestEnum.VALUE2 }
+   a.some_int = 43
+   a.some_int8 = 13
+   check(a.some_int == 43)
+   check(a.some_int8 == 13)
+   check(a.some_double == 3.14)
+   check(a.some_enum == R.TestEnum.VALUE2)
+   a.some_double = 3.15
+   check(a.some_int == 43)
+   check(a.some_int8 == 13)
+   check(a.some_double == 3.15)
+   check(a.some_enum == R.TestEnum.VALUE2)
+   a.some_enum = R.TestEnum.VALUE3
+   check(a.some_int == 43)
+   check(a.some_int8 == 13)
+   check(a.some_double == 3.15)
+   check(a.some_enum == R.TestEnum.VALUE3)
+   check(not pcall(function() return a.foo end))
+   check(not pcall(function() a.foo = 1 end))
+   check(select('#', (function() a.some_int = 0 end)()) == 0)
+   check(select('#', (function() return a.some_int end)()) == 1)
+   check(select('#', (function() local b = a.some_int end)()) == 0)
+end
+
 function tests.t02_gvalue_simple()
    local V = GObject.Value
    local function checkv(gval, tp, val)
