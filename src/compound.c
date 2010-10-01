@@ -528,6 +528,7 @@ process_field (lua_State* L, gpointer addr, GIFieldInfo* fi, int newval)
 
       lua_pop (L, lgi_marshal_2c (L, ti, NULL, GI_TRANSFER_NOTHING, val,
 				  newval, FALSE, NULL, NULL));
+      vals = 0;
     }
 
   lua_remove (L, ti_guard);
