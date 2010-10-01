@@ -126,12 +126,16 @@ function struct_mt.__index(struct, symbol)
    return find_in_compound(struct, symbol, { '_methods', '_fields' })
 end
 
--- Metatable for non-creatable structs.
-local struct_nc_mt = { __index = struct_mt.__index }
-
 function struct_mt.__call(type, fields)
    -- Create the structure instance.
-   local info = assert(ir:find_by_gtype(type[0].gtype))
+   local info
+   if type[0].type then
+      -- Lookup info by gtype.
+      info = assert(ir:find_by_gtype(type[0].gtype))
+   else
+      -- GType is not available, so lookup info by name.
+      info = assert(ir:find_by_name(type[0].name:match('^(.-)%.(.+)$')))
+   end
    local struct = core.construct(info)
 
    -- Set values of fields.
@@ -206,12 +210,12 @@ gi._structs = {
       { [0] = { name = 'GIRepository.BaseInfo',
 		gtype = core.gtype('BaseInfo') },
 	_methods = {}
-     }, struct_nc_mt),
+     }, struct_mt),
    Typelib = setmetatable(
       { [0] = { name = 'GIRepository.Typelib',
 		gtype = core.gtype('Typelib') },
 	_methods = {}
-     }, struct_nc_mt),
+     }, struct_mt),
 }
 
 -- Loads given set of symbols into table.
@@ -542,6 +546,10 @@ local function load_compound(compound, info, mt)
    -- Fill in meta of the compound.
    compound[0] = compound[0] or {}
    compound[0].gtype = gi.registered_type_info_get_g_type(info)
+   if compound[0].gtype == 4 then
+      -- Non-boxed struct, it doesn't have any gtype.
+      compound[0].gtype = nil
+   end
    compound[0].name = (info:get_namespace() .. '.'  .. info:get_name())
    compound[0].resolve = resolve_compound
    setmetatable(compound, mt)
@@ -552,7 +560,6 @@ local function load_struct(namespace, struct, info)
    -- Avoid exposing internal structs created for object implementations.
    if not gi.struct_info_is_gtype_struct(info) then
       load_compound(struct, info, struct_mt)
-      if struct[0].gtype == 4 then setmetatable(struct, struct_nc_mt) end
       struct._methods = get_category(
 	 info, gi.struct_info_get_n_methods(info), gi.struct_info_get_method,
 	 core.construct, nil, nil, rawget(struct, '_methods'))
