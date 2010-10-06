@@ -75,9 +75,11 @@ int lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 		    GITransfer xfer,  GIArgument *val, int narg,
 		    gboolean use_pointer, GICallableInfo *ci, void **args);
 
-/* Marshalls single value from GLib/C to Lua. */
+/* Marshalls single value from GLib/C to Lua. If parent is non-0, it
+   is stack index of parent structure/array in which this C value
+   resides. */
 void lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer, 
-		       GIArgument *val, gboolean use_pointer,
+		       GIArgument *val, int parent, gboolean use_pointer,
 		       GICallableInfo *ci, void **args);
 
 /* Parses given GICallableInfo, creates new userdata for it and stores

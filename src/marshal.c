@@ -333,7 +333,7 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
       /* Store value into the table. */
       lgi_marshal_2lua (L, eti, (transfer == GI_TRANSFER_EVERYTHING) ?
 			GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING,
-			eval, FALSE, NULL, NULL);
+			eval, 0, FALSE, NULL, NULL);
       lua_rawseti (L, -2, index + 1);
     }
 
@@ -435,7 +435,7 @@ marshal_2lua_list (lua_State *L, GITypeInfo *ti, GITypeTag list_tag,
       /* Store it into the table. */
       lgi_marshal_2lua (L, eti, (xfer == GI_TRANSFER_EVERYTHING) ?
 			GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING,
-			eval, TRUE, NULL, NULL);
+			eval, 0, TRUE, NULL, NULL);
       lua_rawseti(L, -2, ++index);
     }
 
@@ -546,7 +546,7 @@ marshal_2c_hash (lua_State *L, GITypeInfo *ti, GIArgument *val, int narg,
 }
 
 static int
-marshal_2lua_hash (lua_State *L, GITypeInfo *ti, GITransfer xfer, 
+marshal_2lua_hash (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 		   GIArgument *val)
 {
   GHashTableIter iter;
@@ -579,7 +579,7 @@ marshal_2lua_hash (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 	  /* Marshal key and value to the stack. */
 	  for (i = 0; i < 2; i++)
 	    lgi_marshal_2lua (L, eti[i], GI_TRANSFER_NOTHING, &eval[i],
-			      TRUE, NULL, NULL);
+			      0, TRUE, NULL, NULL);
 
 	  /* Store these two elements to the table. */
 	  lua_settable (L, -3);
@@ -775,11 +775,17 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
    was pushed to the stack. */
 void
 lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
-		  GIArgument *val, gboolean use_pointer,
+		  GIArgument *val, int parent, gboolean use_pointer,
 		  GICallableInfo *ci, void **args)
 {
   gboolean own = (transfer != GI_TRANSFER_NOTHING);
   GITypeTag tag = g_type_info_get_tag (ti);
+
+  /* Make sure that parent is absolute index so that it is fixed even
+     when we add/remove from the stack. */
+  if (parent < 0)
+    parent += lua_gettop (L) + 1;
+
   switch (tag)
     {
     case GI_TYPE_TAG_BOOLEAN:
@@ -818,7 +824,8 @@ lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
       {
 	GIBaseInfo *info = g_type_info_get_interface (ti);
 	int info_guard = lgi_guard_create_baseinfo (L, info);
-	switch (g_base_info_get_type (info))
+	GIInfoType type = g_base_info_get_type (info);
+	switch (type)
 	  {
 	  case GI_INFO_TYPE_ENUM:
 	  case GI_INFO_TYPE_FLAGS:
@@ -831,8 +838,18 @@ lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
 	  case GI_INFO_TYPE_UNION:
 	  case GI_INFO_TYPE_OBJECT:
 	  case GI_INFO_TYPE_INTERFACE:
-	    lgi_compound_create (L, info, val->v_pointer, own, 0);
-	    break;
+	    {
+	      gpointer addr = val->v_pointer;
+	      if ((type == GI_INFO_TYPE_STRUCT || type == GI_INFO_TYPE_UNION)
+		  && parent != 0)
+		/* If struct or union allocated inside parent, the
+		   address is actually address of argument itself, not
+		   the pointer inside. */
+		addr = &val;
+
+	      lgi_compound_create (L, info, addr, own, parent);
+	      break;
+	    }
 
 	  default:
 	    g_assert_not_reached ();

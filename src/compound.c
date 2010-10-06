@@ -542,7 +542,7 @@ process_field (lua_State* L, gpointer addr, GIFieldInfo* fi, int newval)
       if ((flags & GI_FIELD_IS_READABLE) == 0)
 	return luaL_argerror (L, 2, "not readable");
 
-      lgi_marshal_2lua (L, ti, GI_TRANSFER_NOTHING, val, FALSE, NULL, NULL);
+      lgi_marshal_2lua (L, ti, GI_TRANSFER_NOTHING, val, 1, FALSE, NULL, NULL);
       vals = 1;
     }
   else
