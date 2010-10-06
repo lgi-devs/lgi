@@ -503,7 +503,6 @@ luaopen_lgi__core (lua_State* L)
   lgi_glib_init (L);
   lgi_compound_init (L);
   lgi_callable_init (L);
-  lgi_marshal_init (L);
 
   /* Pop the registry table, return registration table. */
   lua_pop (L, 1);

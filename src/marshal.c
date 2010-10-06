@@ -870,7 +870,3 @@ lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
       marshal_2lua_int (L, tag, val, use_pointer);
     }
 }
-
-void
-lgi_marshal_init (lua_State *L)
-{}
