@@ -142,7 +142,7 @@ lgi_value_store (lua_State *L, const GValue *val)
 	  {
 	    gpointer obj = GI_IS_OBJECT_INFO (bi) ?
 	      g_value_dup_object (val) : g_value_dup_boxed (val);
-	    int vals = lgi_compound_create (L, bi, obj, TRUE);
+	    int vals = lgi_compound_create (L, bi, obj, TRUE, 0);
 	    g_base_info_unref (bi);
 	    return vals;
 	  }

@@ -19,13 +19,22 @@ typedef struct _Compound
   gpointer addr;
 
   /* Lua reference to repo table representing this compound. */
-  int ref_repo : 31;
+  int ref_repo : 30;
 
-  /* Flag indicating whether compound is owned. */
+  /* Ownership type of the compound. */
   int owns : 1;
 
+  /* Set to non-zero, if data.parent is valid field containing Lua
+     reference to parent object (i.e. owns memory to which `addr'
+     points to). */
+  int has_parent : 1;
+
   /* If the structure is allocated 'on the stack', its data is here. */
-  gchar data[1];
+  union
+  {
+    gchar data[1];
+    int parent;
+  } data;
 } Compound;
 #define UD_COMPOUND "lgi.compound"
 
@@ -64,7 +73,7 @@ compound_prepare (lua_State *L, int arg, gboolean throw)
 
 static int
 compound_register (lua_State *L, GIBaseInfo *info, gpointer *addr,
-		   gboolean owns, gboolean alloc_struct)
+		   gboolean owns, int parent, gboolean alloc_struct)
 {
   Compound *compound;
   gsize size;
@@ -73,6 +82,10 @@ compound_register (lua_State *L, GIBaseInfo *info, gpointer *addr,
 
   g_assert (addr != NULL);
   luaL_checkstack (L, 7, "");
+
+  /* Convert 'parent' to absolute stack index. */
+  if (parent < 0)
+    parent += lua_gettop (L) + 1;
 
   /* Prepare access to registry and cache. */
   lua_rawgeti (L, LUA_REGISTRYINDEX, lgi_regkey);
@@ -103,24 +116,32 @@ compound_register (lua_State *L, GIBaseInfo *info, gpointer *addr,
     }
 
   /* Create and initialize new userdata instance. */
-  size = 0;
+  size = G_STRUCT_OFFSET (Compound, data);
   if (alloc_struct)
     {
       info_type = g_base_info_get_type (info);
       if (info_type == GI_INFO_TYPE_STRUCT)
-	size = g_struct_info_get_size (info);
+	size += g_struct_info_get_size (info);
       else if (info_type == GI_INFO_TYPE_UNION)
-	size = g_union_info_get_size (info);
+	size += g_union_info_get_size (info);
     }
-  compound = lua_newuserdata (L, G_STRUCT_OFFSET (Compound, data) + size);
+  else if (parent != 0)
+    size = sizeof (Compound);
+  compound = lua_newuserdata (L, size);
   compound->owns = 0;
   compound->ref_repo = LUA_REFNIL;
   luaL_getmetatable (L, UD_COMPOUND);
   lua_setmetatable (L, -2);
   if (alloc_struct)
     {
-      *addr = compound->data;
-      memset (compound->data, 0, size);
+      *addr = compound->data.data;
+      memset (compound->data.data, 0, size - G_STRUCT_OFFSET (Compound, data));
+    }
+  else if (parent != 0)
+    {
+      compound->has_parent = 1;
+      lua_pushvalue (L, parent);
+      compound->data.parent = luaL_ref (L, LUA_REGISTRYINDEX);
     }
 
   /* Load ref_repo reference to repo table of the object.  This is a bit
@@ -204,9 +225,10 @@ compound_register (lua_State *L, GIBaseInfo *info, gpointer *addr,
 }
 
 int
-lgi_compound_create (lua_State *L, GIBaseInfo *ii, gpointer addr, gboolean own)
+lgi_compound_create (lua_State *L, GIBaseInfo *ii, gpointer addr, gboolean own,
+		     int parent)
 {
-  return compound_register (L, ii, &addr, own, FALSE);
+  return compound_register (L, ii, &addr, own, parent, FALSE);
 }
 
 gpointer
@@ -216,7 +238,7 @@ lgi_compound_struct_new (lua_State *L, GIBaseInfo *ii)
      non-owned, because we do not need to free it in any way; its space will be
      reclaimed with compound itself. */
   gpointer addr = NULL;
-  return compound_register (L, ii, &addr, FALSE, TRUE) ? addr : NULL;
+  return compound_register (L, ii, &addr, FALSE, 0, TRUE) ? addr : NULL;
 }
 
 gpointer
@@ -265,10 +287,10 @@ lgi_compound_object_new (lua_State *L, GIObjectInfo *oi, int argtable)
 		  /* Initialize and load parameter value from the table
 		     contents. */
 		  ti = g_property_info_get_type (pi);
-                  lgi_guard_create_baseinfo (L, ti);
+		  lgi_guard_create_baseinfo (L, ti);
 		  lgi_value_init (L, &param->value, ti);
 		  lgi_value_load (L, &param->value, -2);
-                  lua_pop (L, 1);
+		  lua_pop (L, 1);
 		}
 	    }
 
@@ -292,7 +314,7 @@ lgi_compound_object_new (lua_State *L, GIObjectInfo *oi, int argtable)
       luaL_error (L, "failed to create instance of `%s'", lua_tostring (L, -1));
     }
 
-  return compound_register (L, oi, &addr, TRUE, FALSE) ? addr : NULL;
+  return compound_register (L, oi, &addr, TRUE, 0, FALSE) ? addr : NULL;
 }
 
 static int
@@ -323,6 +345,9 @@ compound_gc (lua_State *L)
 	g_boxed_free (gtype, compound->addr);
     }
 
+  if (compound->has_parent)
+    luaL_unref (L, LUA_REGISTRYINDEX, compound->data.parent);
+
   /* Free the reference to the repo object in typeinfo regtable. */
   luaL_unref (L, -2, compound->ref_repo);
   return 0;
@@ -342,26 +367,26 @@ compound_tostring (lua_State *L)
   if (bi != NULL)
     {
       switch (g_base_info_get_type (bi))
-        {
-        case GI_INFO_TYPE_OBJECT:
-          type = ".obj";
-          break;
+	{
+	case GI_INFO_TYPE_OBJECT:
+	  type = ".obj";
+	  break;
 
 	case GI_INFO_TYPE_INTERFACE:
 	  type = ".ifc";
 	  break;
 
-        case GI_INFO_TYPE_STRUCT:
-          type = ".rec";
-          break;
+	case GI_INFO_TYPE_STRUCT:
+	  type = ".rec";
+	  break;
 
-        case GI_INFO_TYPE_UNION:
-          type = ".uni";
-          break;
+	case GI_INFO_TYPE_UNION:
+	  type = ".uni";
+	  break;
 
-        default:
-          break;
-        }
+	default:
+	  break;
+	}
 
       g_base_info_unref (bi);
     }
@@ -405,7 +430,7 @@ compound_check (lua_State *L, int arg, GType *gtype)
       lua_pop (L, 4);
       if (*gtype == G_TYPE_NONE || g_type_is_a (real_type, *gtype))
 	{
-          *gtype = real_type;
+	  *gtype = real_type;
 	  return compound;
 	}
     }
@@ -515,7 +540,7 @@ process_field (lua_State* L, gpointer addr, GIFieldInfo* fi, int newval)
   if (newval == -1)
     {
       if ((flags & GI_FIELD_IS_READABLE) == 0)
-        return luaL_argerror (L, 2, "not readable");
+	return luaL_argerror (L, 2, "not readable");
 
       lgi_marshal_2lua (L, ti, val, GI_TRANSFER_NOTHING, FALSE,
 			       NULL, NULL);
@@ -524,7 +549,7 @@ process_field (lua_State* L, gpointer addr, GIFieldInfo* fi, int newval)
   else
     {
       if ((flags & GI_FIELD_IS_WRITABLE) == 0)
-        return luaL_argerror (L, 2, "not writable");
+	return luaL_argerror (L, 2, "not writable");
 
       lua_pop (L, lgi_marshal_2c (L, ti, NULL, GI_TRANSFER_NOTHING, val,
 				  newval, FALSE, NULL, NULL));
@@ -551,7 +576,7 @@ process_property (lua_State *L, gpointer addr, GIPropertyInfo *pi, int newval)
   if (newval == -1)
     {
       if ((flags & G_PARAM_READABLE) == 0)
-        return luaL_argerror (L, 2, "not readable");
+	return luaL_argerror (L, 2, "not readable");
 
       g_object_get_property ((GObject *) addr, name, &val);
       vals = lgi_value_store (L, &val);
@@ -559,7 +584,7 @@ process_property (lua_State *L, gpointer addr, GIPropertyInfo *pi, int newval)
   else
     {
       if ((flags & G_PARAM_WRITABLE) == 0)
-        return luaL_argerror (L, 2, "not writable");
+	return luaL_argerror (L, 2, "not writable");
 
       vals = lgi_value_load (L, &val, 3);
       g_object_set_property ((GObject *) addr, name, &val);

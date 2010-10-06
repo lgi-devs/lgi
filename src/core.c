@@ -185,7 +185,7 @@ lgi_find (lua_State *L)
   /* Create new IBaseInfo structure and return it. */
   baseinfo = g_irepository_find_by_name (NULL, "GIRepository", "BaseInfo");
   info_guard = lgi_guard_create_baseinfo (L, baseinfo);
-  vals = lgi_compound_create (L, baseinfo, info, TRUE);
+  vals = lgi_compound_create (L, baseinfo, info, TRUE, 0);
   lua_remove (L, info_guard);
   return vals;
 }
@@ -224,7 +224,7 @@ lgi_construct (lua_State* L)
 	    if (g_type_is_a (type, G_TYPE_CLOSURE))
 	      /* Create closure instance wrapping 2nd argument and return it. */
 	      vals = lgi_compound_create (L, bi, lgi_gclosure_create (L, 2),
-					  TRUE);
+					  TRUE, 0);
 	    else if (g_type_is_a (type, G_TYPE_VALUE))
 	      {
 		/* Get requested GType, construct and fill in GValue
@@ -240,7 +240,7 @@ lgi_construct (lua_State* L)
 
                 vals = lgi_compound_create (L, bi,
 					    g_boxed_copy (G_TYPE_VALUE, &val),
-					    TRUE);
+					    TRUE, 0);
                 if (G_IS_VALUE (&val))
                   g_value_unset (&val);
 	      }
@@ -334,7 +334,7 @@ lgi_cast (lua_State *L)
       if (info != NULL)
 	{
           int info_guard = lgi_guard_create_baseinfo (L, info);
-	  lgi_compound_create (L, info, g_object_ref (obj), TRUE);
+	  lgi_compound_create (L, info, g_object_ref (obj), TRUE, 0);
 	  lua_remove (L, info_guard);
 	  return 1;
 	}

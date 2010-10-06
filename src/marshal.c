@@ -833,7 +833,7 @@ lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIArgument *val,
 	  case GI_INFO_TYPE_UNION:
 	  case GI_INFO_TYPE_OBJECT:
 	  case GI_INFO_TYPE_INTERFACE:
-	    lgi_compound_create (L, info, val->v_pointer, own);
+	    lgi_compound_create (L, info, val->v_pointer, own, 0);
 	    break;
 
 	  default:

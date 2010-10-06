@@ -73,7 +73,7 @@ int lgi_glib_log(lua_State *L);
    entries pushed to Lua stack, which should be popped before function call
    returns. */
 int lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
-                    GITransfer xfer,  GIArgument *val, int narg,
+		    GITransfer xfer,  GIArgument *val, int narg,
 		    gboolean use_pointer, GICallableInfo *ci, void **args);
 
 /* Marshalls single value from GLib/C to Lua. */
@@ -96,21 +96,26 @@ int lgi_callable_call (lua_State *L, gpointer addr, int func, int args);
    userdata). Returns user_data field for the closure and fills call_addr with
    executable address for the closure. */
 gpointer lgi_closure_create (lua_State* L, GICallableInfo* ci, int target,
-                             gboolean autodestroy, gpointer* call_addr);
+			     gboolean autodestroy, gpointer* call_addr);
 
 /* GDestroyNotify-compatible callback for destroying closure. */
 void lgi_closure_destroy (gpointer user_data);
 
-/* Creates closure guard Lua userdata object and puts it on the stack.  Closure
- * guard automatically destroys the closure in its __gc metamethod. */
+/* Creates closure guard Lua userdata object and puts it on the stack.
+   Closure guard automatically destroys the closure in its __gc
+   metamethod. */
 void lgi_closure_guard (lua_State *L, gpointer user_data);
 
-/* Creates new compound of given address and type, pushes its userdata on the
- * lua stack. Returns 1 if successful, 0 otherwise. */
+/* Creates new compound of given address and type, pushes its userdata
+   on the lua stack. Parent is 0 or stack index of parent item, which
+   owns memory in which registered compound lives.  Returns 1 if
+   successful, 0 otherwise. */
 int lgi_compound_create (lua_State *L, GIBaseInfo *ii, gpointer addr,
-			 gboolean own);
+			 gboolean own, int parent);
 
-/* Creates new struct including allocated place for it. */
+/* Creates new struct including allocated place for it. When
+   owner_parent is not 0, it is stack position of the parent on which
+   is the structure allocated, so it is kept by this element. */
 gpointer lgi_compound_struct_new (lua_State *L, GIBaseInfo *ii);
 
 /* Creates new object, initializes with specified properties. */

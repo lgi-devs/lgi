@@ -509,7 +509,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   if (callable->has_self)
     {
       if (lgi_compound_create (L, g_base_info_get_container(callable->info),
-			       ((GIArgument*) args[0])->v_pointer, FALSE))
+			       ((GIArgument*) args[0])->v_pointer, FALSE, 0))
 	npos++;
     }
 
