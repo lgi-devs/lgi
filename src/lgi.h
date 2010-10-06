@@ -77,8 +77,8 @@ int lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 		    gboolean use_pointer, GICallableInfo *ci, void **args);
 
 /* Marshalls single value from GLib/C to Lua. */
-void lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIArgument *val,
-		       GITransfer xfer, gboolean use_pointer,
+void lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer, 
+		       GIArgument *val, gboolean use_pointer,
 		       GICallableInfo *ci, void **args);
 
 /* Parses given GICallableInfo, creates new userdata for it and stores

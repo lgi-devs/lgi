@@ -412,9 +412,9 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
   nret = 0;
   if (g_type_info_get_tag (&callable->retval.ti) != GI_TYPE_TAG_VOID)
     {
-      lgi_marshal_2lua (L, &callable->retval.ti, &retval,
-			callable->retval.transfer, FALSE,
-			callable->info, ffi_args + callable->has_self);
+      lgi_marshal_2lua (L, &callable->retval.ti, callable->retval.transfer, 
+			&retval, FALSE, callable->info, 
+			ffi_args + callable->has_self);
       nret++;
       lua_insert (L, -caller_allocated - 1);
     }
@@ -427,8 +427,8 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
 	if (!g_arg_info_is_caller_allocates (&param->ai))
 	  {
 	    /* Marshal output parameter. */
-	    lgi_marshal_2lua (L, &param->ti, &args[i + callable->has_self],
-			      param->transfer, FALSE,
+	    lgi_marshal_2lua (L, &param->ti, param->transfer, 
+			      &args[i + callable->has_self], FALSE,
 			      callable->info, ffi_args + callable->has_self);
 	    lua_insert (L, -caller_allocated - 1);
 	  }
@@ -518,10 +518,9 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   for (i = 0; i < callable->nargs; ++i, ++param)
     if (!param->internal && param->dir != GI_DIRECTION_OUT)
       {
-	lgi_marshal_2lua (L, &param->ti,
+	lgi_marshal_2lua (L, &param->ti, GI_TRANSFER_NOTHING,
 			  (GIArgument *) args[i + callable->has_self],
-			  GI_TRANSFER_NOTHING, FALSE,
-			  callable->info, args + callable->has_self);
+			  FALSE, callable->info, args + callable->has_self);
 	npos++;
       }
 
