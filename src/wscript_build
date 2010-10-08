@@ -1,6 +1,0 @@
-#! /usr/bin/env python
-
-bld.shlib(
-    source = ['core.c', 'callable.c', 'marshal.c', 'glib.c', 'compound.c'],
-    target = 'lgi',
-    uselib = ['LUA', 'GI'])
