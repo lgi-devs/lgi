@@ -35,7 +35,7 @@ def build(bld):
     bld.add_group()
 
     # Build .gir file from the sources and shared library.
-    bld(rule = '${GI_g_ir_scanner} --warn-all --quiet ' +
+    bld(rule = '${GI_g_ir_scanner} --warn-all --quiet --no-libtool ' +
         '--namespace=Regress --nsversion=1.0 ' +
         '--include=cairo-1.0 --include=Gio-2.0 -lregress -L tests ${SRC} ' +
         '--output=${TGT}',
