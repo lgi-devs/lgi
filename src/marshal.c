@@ -771,6 +771,47 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
   return nret;
 }
 
+gboolean
+lgi_marshal_2c_caller_alloc (lua_State *L, GITypeInfo *ti, GIArgument *val,
+			     int pos)
+{
+  gboolean handled = FALSE;
+  switch (g_type_info_get_tag (ti))
+    {
+    case GI_TYPE_TAG_INTERFACE:
+      {
+	GIBaseInfo *ii = g_type_info_get_interface (ti);
+	GIInfoType type = g_base_info_get_type (ii);
+	if (type == GI_INFO_TYPE_STRUCT || type == GI_INFO_TYPE_UNION)
+	  {
+	    if (pos < 0)
+	      val->v_pointer = lgi_compound_struct_new (L, ii);
+	    handled = TRUE;
+	  }
+
+	g_base_info_unref (ii);
+	break;
+      }
+
+    case GI_TYPE_TAG_ARRAY:
+      {
+	if (g_type_info_get_array_type (ti) == GI_ARRAY_TYPE_C)
+	  {
+	    /* Currently only fixed-size arrays are supported. */
+	    int length = g_type_info_get_array_fixed_size (ti);
+	    g_assert (length > 0);
+	  }
+
+	break;
+      }
+
+    default:
+      break;
+    }
+
+  return handled;
+}
+
 /* Marshalls single value from GLib/C to Lua.  Returns 1 if something
    was pushed to the stack. */
 void

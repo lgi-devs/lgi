@@ -75,6 +75,12 @@ int lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 		    GITransfer xfer,  GIArgument *val, int narg,
 		    gboolean use_pointer, GICallableInfo *ci, void **args);
 
+/* If given parameter is out;caller-allocates, tries to perform
+   special 2c marshalling.  If not needed, returns FALSE, otherwise
+   stores single value with value prepared to be returned to C. */
+gboolean lgi_marshal_2c_caller_alloc (lua_State *L, GITypeInfo *ti,
+				      GIArgument *val, int pos);
+
 /* Marshalls single value from GLib/C to Lua. If parent is non-0, it
    is stack index of parent structure/array in which this C value
    resides. */
