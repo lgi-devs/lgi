@@ -29,12 +29,13 @@ end
 function testgroup:run(id)
    local function runfunc(num)
       self.results.total = self.results.total + 1
-      io.write(('%-8s:%3d:%-40s'):format(self.name, num, self[num]))
+      io.write(('%-8s:%3d:%-30s'):format(self.name, num, self[num]))
       local func = self[self[num]]
       if self.debug then func() else
-	 if not pcall(func) then
+	 local ok, msg = pcall(func)
+	 if not ok then
 	    self.results.failed = self.results.failed + 1
-	    io.write('FAIL\n')
+	    io.write('FAIL:' .. tostring(msg) .. '\n')
 	    return
 	 end
       end
@@ -945,6 +946,15 @@ local groups = { 'gireg', gireg = gireg }
 local failed = false
 args = args or {}
 if #args == 0 then
+   -- Check for debug mode.
+   if tests_debug then
+      for _, name in ipairs(groups) do
+	 groups[name].debug = true
+	 _G[name] = groups[name]
+      end
+      return
+   end
+
    -- Run everything.
    for _, group in ipairs(groups) do
       groups[group]:run()
