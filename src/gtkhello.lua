@@ -18,11 +18,12 @@ local window = Gtk.Window {
    title = 'window',
    default_width = 400,
    default_height = 300,
+   has_resize_grip = true,
    on_destroy = Gtk.main_quit
 }
 
 -- Create some more widgets for the window.
-local status_bar = Gtk.Statusbar { has_resize_grip = true }
+local status_bar = Gtk.Statusbar()
 local toolbar = Gtk.Toolbar()
 local ctx = status_bar:get_context_id('default')
 status_bar:push(ctx, 'This is statusbar message.')
