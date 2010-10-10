@@ -104,6 +104,13 @@ lgi_guard_create (lua_State *L, gpointer **data, GDestroyNotify destroy)
   return lua_gettop (L);
 }
 
+void
+lgi_guard_get_data (lua_State *L, int pos, gpointer **data)
+{
+  Guard *guard = lua_touserdata (L, pos);
+  *data = &guard->data;
+}
+
 int
 lgi_guard_create_baseinfo (lua_State *L, GIBaseInfo *info)
 {

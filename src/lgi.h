@@ -29,6 +29,9 @@ int lgi_type_get_name (lua_State *L, GIBaseInfo *info);
    handler. Returns stack index of the allocated userdata. */
 int lgi_guard_create (lua_State *L, gpointer **data, GDestroyNotify destroy);
 
+/* Returns data of specified guard. */
+void lgi_guard_get_data (lua_State *L, int pos, gpointer **data);
+
 /* Allocates guard which guards specified GIBaseInfo instance. */
 int lgi_guard_create_baseinfo (lua_State *L, GIBaseInfo *info);
 
