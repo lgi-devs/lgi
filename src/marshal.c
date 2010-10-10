@@ -153,11 +153,12 @@ array_get_or_set_length (GITypeInfo *ti, gssize *get_length, gssize set_length,
 }
 
 /* Retrieves pointer to GIArgument in given array, given that array
-   contains elements of type tag. */
+   contains elements of type ti. */
 static gssize
-array_get_elt_size (GITypeTag tag)
+array_get_elt_size (GITypeInfo *ti)
 {
-  switch (tag)
+  gssize size = sizeof (gpointer);
+  switch (g_type_info_get_tag (ti))
     {
 #define HANDLE_ELT(nameupper, nametype)		\
       case GI_TYPE_TAG_ ## nameupper:		\
@@ -177,9 +178,23 @@ array_get_elt_size (GITypeTag tag)
       HANDLE_ELT(GTYPE, GType);
 #undef HANDLE_ELT
 
+    case GI_TYPE_TAG_INTERFACE:
+      {
+	GIBaseInfo *info = g_type_info_get_interface (ti);
+	GIInfoType type = g_base_info_get_type (info);
+	if (type == GI_INFO_TYPE_STRUCT)
+	  size = g_struct_info_get_size (info);
+	else if (type == GI_INFO_TYPE_UNION)
+	  size = g_union_info_get_size (info);
+	g_base_info_unref (info);
+	break;
+      }
+
     default:
-      return sizeof (gpointer);
+      break;
     }
+
+  return size;
 }
 
 /* Marshalls array from Lua to C. Returns number of temporary elements
@@ -190,7 +205,6 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 		  GITransfer transfer, GICallableInfo *ci, void **args)
 {
   GITypeInfo* eti;
-  GITypeTag etag;
   gssize len, objlen, esize;
   gint index, vals = 0, to_pop, eti_guard;
   GITransfer exfer = (transfer == GI_TRANSFER_EVERYTHING
@@ -212,8 +226,7 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
       /* Get element type info, create guard for it. */
       eti = g_type_info_get_param_type (ti, 0);
       eti_guard = lgi_guard_create_baseinfo (L, eti);
-      etag = g_type_info_get_tag (eti);
-      esize = array_get_elt_size (etag);
+      esize = array_get_elt_size (eti);
 
       /* Find out how long array should we allocate. */
       zero_terminated = g_type_info_is_zero_terminated (ti);
@@ -271,11 +284,10 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 
 static void
 marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
-		    GITransfer transfer, GIArgument *val,
+		    GITransfer transfer, GIArgument *val, int parent,
 		    GICallableInfo *ci, void **args)
 {
   GITypeInfo *eti;
-  GITypeTag etag;
   gssize len, esize;
   gint index, eti_guard;
   char *data;
@@ -313,8 +325,7 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
      don't leak it. */
   eti = g_type_info_get_param_type (ti, 0);
   eti_guard = lgi_guard_create_baseinfo (L, eti);
-  etag = g_type_info_get_tag (eti);
-  esize = array_get_elt_size (etag);
+  esize = array_get_elt_size (eti);
 
   /* Create Lua table which will hold the array. */
   lua_createtable (L, len > 0 ? len : 0, 0);
@@ -333,7 +344,7 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
       /* Store value into the table. */
       lgi_marshal_2lua (L, eti, (transfer == GI_TRANSFER_EVERYTHING) ?
 			GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING,
-			eval, 0, FALSE, NULL, NULL);
+			eval, parent, FALSE, NULL, NULL);
       lua_rawseti (L, -2, index + 1);
     }
 
@@ -906,7 +917,7 @@ lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
 	  {
 	  case GI_ARRAY_TYPE_C:
 	  case GI_ARRAY_TYPE_ARRAY:
-	    marshal_2lua_array (L, ti, atype, transfer, val, ci, args);
+	    marshal_2lua_array (L, ti, atype, transfer, val, parent, ci, args);
 	    break;
 
 	  default:
