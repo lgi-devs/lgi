@@ -795,7 +795,7 @@ lgi_marshal_2c_caller_alloc (lua_State *L, GITypeInfo *ti, GIArgument *val,
 	GIInfoType type = g_base_info_get_type (ii);
 	if (type == GI_INFO_TYPE_STRUCT || type == GI_INFO_TYPE_UNION)
 	  {
-	    if (pos < 0)
+	    if (pos == 0)
 	      val->v_pointer = lgi_compound_struct_new (L, ii);
 	    handled = TRUE;
 	  }
@@ -808,9 +808,51 @@ lgi_marshal_2c_caller_alloc (lua_State *L, GITypeInfo *ti, GIArgument *val,
       {
 	if (g_type_info_get_array_type (ti) == GI_ARRAY_TYPE_C)
 	  {
-	    /* Currently only fixed-size arrays are supported. */
-	    int length = g_type_info_get_array_fixed_size (ti);
-	    g_assert (length > 0);
+	    gpointer *array_guard;
+	    if (pos == 0)
+	      {
+		gssize elt_size, size;
+
+		/* Currently only fixed-size arrays are supported. */
+		elt_size =
+		  array_get_elt_size (g_type_info_get_param_type (ti, 0));
+		size = g_type_info_get_array_fixed_size (ti);
+		g_assert (size > 0);
+
+		/* Allocate underlying array.  It is temporary,
+		   existing only for the duration of the call. */
+		lgi_guard_create (L, &array_guard,
+				  (GDestroyNotify) g_array_unref);
+		*array_guard = g_array_sized_new (FALSE, FALSE, elt_size, size);
+		g_array_set_size (*array_guard, size);
+	      }
+	    else
+	      {
+		/* Convert the allocated array into Lua table with
+		   contents. We have to do it in-place. */
+		GIArgument array_arg;
+
+		/* Make sure that pos is absolute, so that stack
+		   shuffling below does not change the elemnt it
+		   points to. */
+		if (pos < 0)
+		  pos += lua_gettop (L) + 1;
+
+		/* Get GArray from the guard and unmarshal it as a
+		   full GArray into Lua. */
+		lgi_guard_get_data (L, pos,
+		&array_guard); array_arg.v_pointer = *array_guard;
+		marshal_2lua_array (L, ti, GI_ARRAY_TYPE_ARRAY,
+		GI_TRANSFER_EVERYTHING, &array_arg, pos, NULL, NULL);
+
+		/* Deactivate old guard, everything was marshalled
+		   into the newly created and marshalled table. */
+		*array_guard = NULL;
+
+		/* Switch old value with the new data. */
+		lua_replace (L, pos);
+	      }
+	    handled = TRUE;
 	  }
 
 	break;

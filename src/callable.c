@@ -364,7 +364,7 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
 	   manually pre-create them and store them on the stack. */
 	else if (g_arg_info_is_caller_allocates (&param->ai)
 		 && lgi_marshal_2c_caller_alloc (L, &param->ti,
-						 &args[argi], -1))
+						 &args[argi], 0))
 	  {
 	    /* Even when marked as OUT, caller-allocates arguments
 	       behave as if they are actually IN from libffi POV. */
@@ -423,7 +423,7 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
 	    lua_insert (L, -caller_allocated - 1);
 	  }
 	else if (lgi_marshal_2c_caller_alloc (L, &param->ti, NULL,
-					      caller_allocated))
+					      -caller_allocated  - nret))
 	  /* Caller allocated parameter is already marshalled and
 	     lying on the stack. */
 	  caller_allocated--;
