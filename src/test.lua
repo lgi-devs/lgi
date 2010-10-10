@@ -939,6 +939,40 @@ function gireg.struct_a_clone()
    check(a.some_enum == R.TestEnum.VALUE2)
 end
 
+function gireg.struct_b()
+   local R = lgi.Regress
+   local b = R.TestStructB()
+
+   -- Basic fields assignments.
+   b.some_int8 = 13
+   check(b.some_int8 == 13)
+   b.nested_a.some_int = -1
+   check(b.some_int8 == 13)
+   check(b.nested_a.some_int == -1)
+   b.nested_a.some_int8 = -2
+   check(b.some_int8 == 13)
+   check(b.nested_a.some_int == -1)
+   check(b.nested_a.some_int8 == -2)
+
+   -- Whole nested structure assignment.
+   b.nested_a = { some_int = 42, some_int8 = 12,
+		  some_double = 3.14, some_enum = R.TestEnum.VALUE2 }
+   check(b.nested_a.some_int == 42)
+   check(b.nested_a.some_int8 == 12)
+   check(b.nested_a.some_double == 3.14)
+   check(b.nested_a.some_enum == R.TestEnum.VALUE2)
+
+   -- Nested structure construction.
+   b = R.TestStructB { some_int8 = 21, nested_a =
+		       { some_int = 42, some_int8 = 12,
+			 some_double = 3.14, some_enum = R.TestEnum.VALUE2 } }
+   check(b.some_int8 == 21)
+   check(b.nested_a.some_int == 42)
+   check(b.nested_a.some_int8 == 12)
+   check(b.nested_a.some_double == 3.14)
+   check(b.nested_a.some_enum == R.TestEnum.VALUE2)
+end
+
 -- Available groups
 local groups = { 'gireg', gireg = gireg }
 
