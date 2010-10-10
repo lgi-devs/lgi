@@ -939,7 +939,7 @@ lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
 		/* If struct or union allocated inside parent, the
 		   address is actually address of argument itself, not
 		   the pointer inside. */
-		addr = &val;
+		addr = val;
 
 	      lgi_compound_create (L, info, addr, own, parent);
 	      break;
