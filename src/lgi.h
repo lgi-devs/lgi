@@ -131,11 +131,12 @@ gpointer lgi_compound_struct_new (lua_State *L, GIBaseInfo *ii);
 /* Creates new object, initializes with specified properties. */
 gpointer lgi_compound_object_new (lua_State *L, GIObjectInfo *ii, int argtable);
 
-/* Retrieves compound-type parameter from given Lua-stack position, checks,
-   whether it is suitable for requested gtype.  Fills in pointer to the
-   compound object, returns NULL if Lua-stack value is nil and optional is
-   TRUE.  Returns number of temporary Lua objects pushed to the stack. On
-   return, fills gtype argument with real gtype of returned compound. */
+/* Retrieves compound-type parameter from given Lua-stack position,
+   checks, whether it is suitable for requested gtype.  Fills in
+   pointer to the compound object, or NULL if Lua-stack value is nil
+   and optional is TRUE.  Returns number of temporary Lua objects
+   pushed to the stack. On return, fills gtype argument with real
+   gtype of returned compound. */
 int lgi_compound_get (lua_State *L, int arg, GType *gtype, gpointer *addr,
 		      gboolean optional);
 
@@ -143,6 +144,11 @@ int lgi_compound_get (lua_State *L, int arg, GType *gtype, gpointer *addr,
    yes, returns its address and updates real compound's gtype, otherwise
    returns NULL.  Does not do any conversions/errors. */
 gpointer lgi_compound_check (lua_State *L, int arg, GType *gtype);
+
+/* Gets/sets given property or field of compound. luaCFunction
+   protocol, prototype is: 
+   curval = lgi_compound_elementof(compound, eltinfo[, newval]) */
+int lgi_compound_elementof (lua_State *L);
 
 /* Initializes type of GValue to specified ti. */
 void lgi_value_init (lua_State *L, GValue *val, GITypeInfo *ti);

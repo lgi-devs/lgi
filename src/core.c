@@ -423,6 +423,7 @@ static const struct luaL_reg lgi_reg[] = {
   { "gtype", lgi_gtype },
   { "cast", lgi_cast },
   { "connect", lgi_connect },
+  { "elementof", lgi_compound_elementof },
   { "log", lgi_glib_log },
   { "setlogger", lgi_setlogger },
   { NULL, NULL }

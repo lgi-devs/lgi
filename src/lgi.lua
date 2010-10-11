@@ -555,37 +555,13 @@ local function load_compound(compound, info, mt)
    setmetatable(compound, mt)
 end
 
--- Loads structure information into table representing the structure
-local function load_struct(namespace, struct, info)
-   -- Avoid exposing internal structs created for object implementations.
-   if not gi.struct_info_is_gtype_struct(info) then
-      load_compound(struct, info, struct_mt)
-      struct._methods = get_category(
-	 info, gi.struct_info_get_n_methods(info), gi.struct_info_get_method,
-	 core.construct, nil, nil, rawget(struct, '_methods'))
-      struct._fields = get_category(
-	 info, gi.struct_info_get_n_fields(info), gi.struct_info_get_field)
-   end
+local function load_element_field(fi)
+   return function(obj, _, newval) return core.elementof(obj, fi, newval) end
 end
 
-typeloader[gi.InfoType.STRUCT] =
-   function(namespace, info)
-      local struct = {}
-      load_struct(namespace, struct, info)
-      return struct, '_structs'
-   end
-
-typeloader[gi.InfoType.UNION] =
-   function(namespace, info)
-      local union = {}
-      load_compound(union, info, struct_mt)
-      union._methods = get_category(
-	 info, gi.union_info_get_n_methods(info), gi.union_info_get_method,
-	 core.construct)
-      union._fields = get_category(
-	 info, gi.union_info_get_n_fields(info), gi.union_info_get_field)
-      return union, '_unions'
-   end
+local function load_element_property(pi)
+   return function(obj, _, newval) return core.elementof(obj, pi, newval) end
+end
 
 local function load_signal_name(name)
    name = string.match(name, '^on_(.+)$')
@@ -596,7 +572,7 @@ local function load_signal_name_reverse(name)
    return 'on_' .. string.gsub(name, '%-', '_')
 end
 
-local function load_signal(info)
+local function load_element_signal(info)
    return
    function(obj, _, newval)
       if newval then
@@ -629,6 +605,40 @@ local function load_signal(info)
    end
 end
 
+-- Loads structure information into table representing the structure
+local function load_struct(namespace, struct, info)
+   -- Avoid exposing internal structs created for object implementations.
+   if not gi.struct_info_is_gtype_struct(info) then
+      load_compound(struct, info, struct_mt)
+      struct._methods = get_category(
+	 info, gi.struct_info_get_n_methods(info), gi.struct_info_get_method,
+	 core.construct, nil, nil, rawget(struct, '_methods'))
+      struct._fields = get_category(
+	 info, gi.struct_info_get_n_fields(info), gi.struct_info_get_field,
+	 load_element_field)
+   end
+end
+
+typeloader[gi.InfoType.STRUCT] =
+   function(namespace, info)
+      local struct = {}
+      load_struct(namespace, struct, info)
+      return struct, '_structs'
+   end
+
+typeloader[gi.InfoType.UNION] =
+   function(namespace, info)
+      local union = {}
+      load_compound(union, info, struct_mt)
+      union._methods = get_category(
+	 info, gi.union_info_get_n_methods(info), gi.union_info_get_method,
+	 core.construct)
+      union._fields = get_category(
+	 info, gi.union_info_get_n_fields(info), gi.union_info_get_field,
+	 load_element_field)
+      return union, '_unions'
+   end
+
 typeloader[gi.InfoType.INTERFACE] =
    function(namespace, info)
       -- Load all components of the interface.
@@ -636,7 +646,7 @@ typeloader[gi.InfoType.INTERFACE] =
       load_compound(interface, info, interface_mt)
       interface._properties = get_category(
 	 info, gi.interface_info_get_n_properties(info),
-	 gi.interface_info_get_property, nil,
+	 gi.interface_info_get_property, load_element_property,
 	 function(name) return string.gsub(name, '_', '%-') end,
 	 function(name) return string.gsub(name, '%-', '_') end)
       interface._methods = get_category(
@@ -651,8 +661,8 @@ typeloader[gi.InfoType.INTERFACE] =
 	 end)
       interface._signals = get_category(
 	 info, gi.interface_info_get_n_signals(info),
-	 gi.interface_info_get_signal, load_signal, load_signal_name,
-	 load_signal_name_reverse)
+	 gi.interface_info_get_signal, load_element_signal,
+	 load_signal_name, load_signal_name_reverse)
       interface._constants = get_category(
 	 info, gi.interface_info_get_n_constants(info),
 	 gi.interface_info_get_constant, core.construct)
@@ -681,7 +691,7 @@ local function load_class(namespace, class, info)
    load_compound(class, info, class_mt)
    class._properties = get_category(
       info, gi.object_info_get_n_properties(info), gi.object_info_get_property,
-      nil,
+      load_element_property,
       function(n) return (string.gsub(n, '_', '%-')) end,
       function(n) return (string.gsub(n, '%-', '_')) end)
    class._methods = get_category(
@@ -695,7 +705,7 @@ local function load_class(namespace, class, info)
       end, nil, nil, rawget(class, '_methods'))
    class._signals = get_category(
       info, gi.object_info_get_n_signals(info), gi.object_info_get_signal,
-      load_signal, load_signal_name, load_signal_name_reverse)
+      load_element_signal, load_signal_name, load_signal_name_reverse)
    class._constants = get_category(
       info, gi.object_info_get_n_constants(info), gi.object_info_get_constant,
       core.construct)

@@ -481,7 +481,7 @@ lgi_compound_get (lua_State *L, int index, GType *gtype, gpointer *addr,
 	  vals++;
 	  if (!lua_isnil (L, -1))
 	    {
-	      /* info will not be needed any more, don't let leak it. */
+	      /* 'info' will not be needed any more, don't leak it. */
 	      g_base_info_unref (info);
 
 	      /* Call the constructor. */
@@ -525,72 +525,88 @@ lgi_compound_get (lua_State *L, int index, GType *gtype, gpointer *addr,
   return 0;
 }
 
-/* Processes compound element of 'field' type. */
-static int
-process_field (lua_State* L, gpointer addr, GIFieldInfo* fi, int newval)
+int
+lgi_compound_elementof (lua_State *L)
 {
-  GIArgument *val = G_STRUCT_MEMBER_P (addr, g_field_info_get_offset (fi));
+  Compound *compound = compound_prepare (L, 1, TRUE);
+  GIBaseInfo *ei;
   GITypeInfo *ti;
-  int flags = g_field_info_get_flags (fi), ti_guard;
-  int vals;
+  GType gtype = GI_TYPE_BASE_INFO;
+  int vals = 0;
 
-  ti = g_field_info_get_type (fi);
-  ti_guard = lgi_guard_create_baseinfo (L, ti);
-
-  if (newval == -1)
+  lua_pop (L, lgi_compound_get (L, 2, &gtype, (gpointer *) &ei, FALSE));
+  switch (g_base_info_get_type (ei))
     {
-      if ((flags & GI_FIELD_IS_READABLE) == 0)
-	return luaL_argerror (L, 2, "not readable");
+    case GI_INFO_TYPE_FIELD:
+      {
+	GIArgument *val = G_STRUCT_MEMBER_P (compound->addr,
+					     g_field_info_get_offset (ei));
+	gint flags = g_field_info_get_flags (ei), ti_guard;
 
-      lgi_marshal_2lua (L, ti, GI_TRANSFER_NOTHING, val, 1, FALSE, NULL, NULL);
-      vals = 1;
+	ti = g_field_info_get_type (ei);
+	ti_guard = lgi_guard_create_baseinfo (L, ti);
+
+	if (lua_isnoneornil (L, 3))
+	  {
+	    if ((flags & GI_FIELD_IS_READABLE) == 0)
+	      return luaL_argerror (L, 2, "not readable");
+
+	    lgi_marshal_2lua (L, ti, GI_TRANSFER_NOTHING, val, 1,
+			      FALSE, NULL, NULL);
+	    vals = 1;
+	  }
+	else
+	  {
+	    if ((flags & GI_FIELD_IS_WRITABLE) == 0)
+	      return luaL_argerror (L, 2, "not writable");
+
+	    lua_pop (L, lgi_marshal_2c (L, ti, NULL, GI_TRANSFER_NOTHING, val,
+					3, FALSE, NULL, NULL));
+	    vals = 0;
+	  }
+
+	lua_remove (L, ti_guard);
+	break;
+      }
+
+    case GI_INFO_TYPE_PROPERTY:
+      {
+	int flags = g_property_info_get_flags (ei), ti_guard;
+	const gchar *name = g_base_info_get_name (ei);
+	GValue val = {0};
+
+	ti = g_property_info_get_type (ei);
+	ti_guard = lgi_guard_create_baseinfo (L, ti);
+	lgi_value_init (L, &val, ti);
+
+	if (lua_isnoneornil (L, 3))
+	  {
+	    if ((flags & G_PARAM_READABLE) == 0)
+	      return luaL_argerror (L, 2, "not readable");
+
+	    g_object_get_property (compound->addr, name, &val);
+	    vals = lgi_value_store (L, &val);
+	  }
+	else
+	  {
+	    if ((flags & G_PARAM_WRITABLE) == 0)
+	      return luaL_argerror (L, 2, "not writable");
+
+	    vals = lgi_value_load (L, &val, 3);
+	    g_object_set_property (compound->addr, name, &val);
+	  }
+
+	g_value_unset (&val);
+	lua_remove (L, ti_guard);
+	break;
+      }
+
+    default:
+      g_assert_not_reached ();
     }
-  else
-    {
-      if ((flags & GI_FIELD_IS_WRITABLE) == 0)
-	return luaL_argerror (L, 2, "not writable");
 
-      lua_pop (L, lgi_marshal_2c (L, ti, NULL, GI_TRANSFER_NOTHING, val,
-				  newval, FALSE, NULL, NULL));
-      vals = 0;
-    }
-
-  lua_remove (L, ti_guard);
-  return vals;
-}
-
-/* Processes compound element of 'property' type. */
-static int
-process_property (lua_State *L, gpointer addr, GIPropertyInfo *pi, int newval)
-{
-  GITypeInfo *ti;
-  int vals = 0, flags = g_property_info_get_flags (pi), ti_guard;
-  const gchar *name = g_base_info_get_name (pi);
-  GValue val = {0};
-
-  ti = g_property_info_get_type (pi);
-  ti_guard = lgi_guard_create_baseinfo (L, ti);
-  lgi_value_init (L, &val, ti);
-
-  if (newval == -1)
-    {
-      if ((flags & G_PARAM_READABLE) == 0)
-	return luaL_argerror (L, 2, "not readable");
-
-      g_object_get_property ((GObject *) addr, name, &val);
-      vals = lgi_value_store (L, &val);
-    }
-  else
-    {
-      if ((flags & G_PARAM_WRITABLE) == 0)
-	return luaL_argerror (L, 2, "not writable");
-
-      vals = lgi_value_load (L, &val, 3);
-      g_object_set_property ((GObject *) addr, name, &val);
-    }
-
-  g_value_unset (&val);
-  lua_remove (L, ti_guard);
+  /* Do not g_base_info_unref (ei), because it is owned by compound
+     passed as 2nd argument. */
   return vals;
 }
 
@@ -602,7 +618,7 @@ process_element (lua_State *L, int newval)
 {
   /* Load compound and element. */
   int vals = 0, type;
-  Compound *compound = compound_prepare (L, 1, TRUE);
+  compound_prepare (L, 1, TRUE);
   lua_pushvalue (L, 2);
   lua_gettable (L, -2);
   type = lua_type (L, -1);
@@ -629,41 +645,15 @@ process_element (lua_State *L, int newval)
     }
   else
     {
-      GIBaseInfo *ei = NULL;
-      GType gt_bi = GI_TYPE_BASE_INFO;
-
-      /* Special handling is for compound-userdata, which contain some
-	 kind of baseinfo. */
-      ei = lgi_compound_check (L, -1, &gt_bi);
-      if (ei != NULL)
+      /* Everything else is simply forwarded for index, or error for
+	 newindex. */
+      if (newval != -1)
 	{
-	  switch (g_base_info_get_type (ei))
-	    {
-	    case GI_INFO_TYPE_FIELD:
-	      vals = process_field (L, compound->addr, ei, newval);
-	      break;
-
-	    case GI_INFO_TYPE_PROPERTY:
-	      vals = process_property (L, compound->addr, ei, newval);
-	      break;
-
-	    default:
-	      break;
-	    }
-	  /* Don't unref ei, its lifetime is controlled by userdata. */
+	  lua_pop (L, 1);
+	  return compound_error (L, "%s: `%s' not writable", 2);
 	}
       else
-	{
-	  /* Everything else is simply forwarded for index, or error
-	     for newindex. */
-	  if (newval != -1)
-	    {
-	      lua_pop (L, 1);
-	      return compound_error (L, "%s: `%s' not writable", 2);
-	    }
-	  else
-	    vals = 1;
-	}
+	vals = 1;
     }
 
   return vals;
