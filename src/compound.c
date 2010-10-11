@@ -528,12 +528,20 @@ lgi_compound_get (lua_State *L, int index, GType *gtype, gpointer *addr,
 int
 lgi_compound_elementof (lua_State *L)
 {
-  Compound *compound = compound_prepare (L, 1, TRUE);
+  Compound *compound;
   GIBaseInfo *ei;
   GITypeInfo *ti;
   GType gtype = GI_TYPE_BASE_INFO;
   int vals = 0;
 
+  /* compound_prepare below pushes two more tables to the stack.  If
+     we are called without 3rd argument, make sure that there is 'nil'
+     at the 3rd argument position, otherwise code below gets confused
+     whether 'get' or 'set' operation is requested. */
+  if (lua_isnone (L, 3))
+    lua_pushnil (L);
+
+  compound = compound_prepare (L, 1, TRUE);
   lua_pop (L, lgi_compound_get (L, 2, &gtype, (gpointer *) &ei, FALSE));
   switch (g_base_info_get_type (ei))
     {
