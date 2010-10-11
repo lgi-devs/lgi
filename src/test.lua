@@ -973,6 +973,37 @@ function gireg.struct_b()
    check(b.nested_a.some_enum == R.TestEnum.VALUE2)
 end
 
+function gireg.struct_b_clone()
+   local R = lgi.Regress
+   local b = R.TestStructB { some_int8 = 21, nested_a =
+			     { some_int = 42, some_int8 = 12,
+			       some_double = 3.14, 
+			       some_enum = R.TestEnum.VALUE2 } }
+   check(select('#', b:clone()) == 1)
+   local bc = b:clone()
+   check(type(bc) == 'userdata')
+   check(bc ~= b)
+   check(bc.some_int8 == 21)
+   check(bc.nested_a.some_int == 42)
+   check(bc.nested_a.some_int8 == 12)
+   check(bc.nested_a.some_double == 3.14)
+   check(bc.nested_a.some_enum == R.TestEnum.VALUE2)
+   check(bc.nested_a.some_int == 42)
+   check(bc.nested_a.some_int8 == 12)
+   check(bc.nested_a.some_double == 3.14)
+   check(bc.nested_a.some_enum == R.TestEnum.VALUE2)
+
+   check(b.some_int8 == 21)
+   check(b.nested_a.some_int == 42)
+   check(b.nested_a.some_int8 == 12)
+   check(b.nested_a.some_double == 3.14)
+   check(b.nested_a.some_enum == R.TestEnum.VALUE2)
+   check(b.nested_a.some_int == 42)
+   check(b.nested_a.some_int8 == 12)
+   check(b.nested_a.some_double == 3.14)
+   check(b.nested_a.some_enum == R.TestEnum.VALUE2)
+end
+
 -- Available groups
 local groups = { 'gireg', gireg = gireg }
 
