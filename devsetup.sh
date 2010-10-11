@@ -37,17 +37,19 @@ test x$hasit = xyes || GI_TYPELIB_PATH="$build_dir:$GI_TYPELIB_PATH"
 export GI_TYPELIB_PATH
 
 unset hasit
-for path in $LUA_CPATH; do
-    test $path = "$build_dir/?${ext}" && hasit=yes
+lgi_lua_cpath=`lua -e "print(package.cpath)"`
+for path in $lgi_lua_cpath; do
+    test "$path" = "$build_dir/?${ext}" && hasit=yes
 done
-test x$hasit = xyes || LUA_CPATH="$build_dir/?${ext};$LUA_CPATH"
+test x$hasit = xyes || LUA_CPATH="$build_dir/?${ext};$lgi_lua_cpath"
 export LUA_CPATH
 
 unset hasit
-for path in $LUA_PATH; do
-    test $p = "$build_dir/?.lua" && hasit=yes
+lgi_lua_path=`lua -e "print(package.path)"`
+for path in $lgi_lua_path; do
+    test "$path" = "$build_dir/?.lua" && hasit=yes
 done
-test x$hasit = xyes || LUA_PATH="$build_dir/?.lua;$LUA_PATH"
+test x$hasit = xyes || LUA_PATH="$build_dir/?.lua;$lgi_lua_path"
 export LUA_PATH
 
 IFS=$save_ifs
