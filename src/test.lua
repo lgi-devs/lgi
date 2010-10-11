@@ -883,6 +883,14 @@ function gireg.flags()
    check(R.TestFlags[3].FLAG3 == nil)
 end
 
+function gireg.const()
+   local R = lgi.Regress
+   checkv(R.INT_CONSTANT, 4422, 'number')
+   checkv(R.DOUBLE_CONSTANT, 44.22, 'number')
+   checkv(R.STRING_CONSTANT, 'Some String', 'string')
+   checkv(R.Mixed_Case_Constant, 4423, 'number')
+end
+
 function gireg.struct_a()
    local R = lgi.Regress
    check(select('#', R.TestStructA()) == 1)
