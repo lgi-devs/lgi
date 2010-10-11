@@ -556,6 +556,29 @@ local function load_compound(compound, info, mt)
 end
 
 local function load_element_field(fi)
+   -- Check the type of the field.
+   local ti = gi.field_info_get_type(fi)
+   local tag = gi.type_info_get_tag(ti)
+   if tag == gi.TypeTag.INTERFACE then
+      local ii = gi.type_info_get_interface(ti)
+      local type = gi.base_info_get_type(ii)
+      if type == gi.InfoType.STRUCT or type == gi.InfoType.UNION then
+	 -- Nested structure, handle assignment to it specially.
+	 return function(obj, _, newval)
+		   -- Get access to underlying nested structure.
+		   local sub = core.elementof(obj, fi)
+
+		   -- Reading it is simple, we are done.
+		   if not newval then return sub end
+
+		   -- Writing means assigning all fields from the
+		   -- source table.
+		   for name, value in pairs(newval) do sub[name] = value end
+		end
+      end
+   end
+
+   -- For other types, simple closure arounf elementof() is sufficient.
    return function(obj, _, newval) return core.elementof(obj, fi, newval) end
 end
 
