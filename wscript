@@ -32,14 +32,3 @@ def configure(conf):
 
 def build(bld):
     bld.recurse('src tests')
-
-# Install everything into root build dir, so that it is easilly reachable
-# during development testing (instead of assorted files scattered under build
-# directory).  Implemented by brutal rapture of waf 'install' feature.
-from waflib.Build import InstallContext
-class DevContext(InstallContext):
-    cmd = 'dev'
-    def install_files(self, *k, **kw):
-        tsk = super(DevContext, self).install_files(*k, **kw)
-        tsk.dest = self.bldnode.abspath()
-        return tsk
