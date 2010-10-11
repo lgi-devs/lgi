@@ -1,7 +1,18 @@
 #! /usr/bin/env python
 
+from waflib.TaskGen import feature, before, after
+
+@feature('luaext')
+@before('apply_link', 'propagate_uselib')
+def apply_lua_so_name(self):
+    pattern = '%s.so'
+    if self.env.DEST_OS in ['win32', 'cygwin']:
+        pattern = '%s.dll'
+    self.env['cshlib_PATTERN'] = self.env['cxxshlib_PATTERN'] = pattern
+
 def build(bld):
-    bld.shlib(
+    bld(
+        features = 'c cshlib luaext',
         source = 'core.c callable.c marshal.c glib.c compound.c',
         target = 'lgi',
         uselib = ['LUA', 'GI'],
