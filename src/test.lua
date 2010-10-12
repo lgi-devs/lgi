@@ -29,7 +29,7 @@ end
 function testgroup:run(id)
    local function runfunc(num)
       self.results.total = self.results.total + 1
-      io.write(('%-8s:%3d:%-30s'):format(self.name, num, self[num]))
+      io.write(('%-8s:%3d:%-35s'):format(self.name, num, self[num]))
       local func = self[self[num]]
       if self.debug then func() else
 	 local ok, msg = pcall(func)
@@ -933,10 +933,12 @@ function gireg.struct_a_clone()
    local R = lgi.Regress
    local a = R.TestStructA { some_int = 42, some_int8 = 12, some_double = 3.14,
 			     some_enum = R.TestEnum.VALUE2 }
+   check(a == a)
    check(select('#', a:clone()) == 1)
    local b = a:clone()
    check(type(b) == 'userdata')
    check(b ~= a)
+   check(b == b)
    check(b.some_int == 42)
    check(b.some_int8 == 12)
    check(b.some_double == 3.14)
@@ -987,10 +989,12 @@ function gireg.struct_b_clone()
 			     { some_int = 42, some_int8 = 12,
 			       some_double = 3.14, 
 			       some_enum = R.TestEnum.VALUE2 } }
+   check(b == b)
    check(select('#', b:clone()) == 1)
    local bc = b:clone()
    check(type(bc) == 'userdata')
    check(bc ~= b)
+   check(bc == bc)
    check(bc.some_int8 == 21)
    check(bc.nested_a.some_int == 42)
    check(bc.nested_a.some_int8 == 12)
@@ -1010,6 +1014,46 @@ function gireg.struct_b_clone()
    check(b.nested_a.some_int8 == 12)
    check(b.nested_a.some_double == 3.14)
    check(b.nested_a.some_enum == R.TestEnum.VALUE2)
+end
+
+function gireg.boxed_a_equals()
+   local R = lgi.Regress
+   check(R.TestSimpleBoxedA({ some_int = 1, some_int8 = 2, 
+			      some_double = 3.14 }):equals(
+	    R.TestSimpleBoxedA({ some_int = 1, some_int8 = 2, 
+				 some_double = 3.14 })))
+   check(not R.TestSimpleBoxedA({ some_int = 2, some_int8 = 2, 
+				  some_double = 3.14 }):equals(
+	    R.TestSimpleBoxedA({ some_int = 1, some_int8 = 2, 
+				 some_double = 3.14 })))
+   check(R.TestSimpleBoxedA():equals(R.TestSimpleBoxedA()))
+   check(not pcall(R.TestSimpleBoxedA().equals))
+   check(not pcall(R.TestSimpleBoxedA().equals, nil))
+   check(not pcall(R.TestSimpleBoxedA().equals, {}))
+   check(not pcall(R.TestSimpleBoxedA().equals, 1))
+   check(not pcall(R.TestSimpleBoxedA().equals, 'string'))
+   check(not pcall(R.TestSimpleBoxedA().equals, function() end))
+end
+
+function gireg.boxed_a_const_return()
+   local R = lgi.Regress
+   check(select('#', R.test_simple_boxed_a_const_return()) == 1)
+   local a = R.test_simple_boxed_a_const_return()
+   check(a.some_int == 5)
+   check(a.some_int8 == 6)
+   check(a.some_double == 7)
+end
+
+function gireg.boxed_new()
+   local R = lgi.Regress
+   check(select('#', R.TestBoxed.new()) == 1)
+   local bn = R.TestBoxed.new()
+   local bac1 = R.TestBoxed.new_alternative_constructor1(1)
+   check(bac1.some_int8 == 1)
+   local bac2 = R.TestBoxed.new_alternative_constructor2(1, 2)
+   check(bac2.some_int8 == 3)
+   local bac3 = R.TestBoxed.new_alternative_constructor3('25')
+   check(bac3.some_int8 == 25)
 end
 
 -- Available groups
