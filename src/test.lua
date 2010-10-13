@@ -1058,6 +1058,38 @@ function gireg.boxed_new()
    check(bac3.some_int8 == 25)
 end
 
+function gireg.boxed_copy()
+   local R = lgi.Regress
+   local b = R.TestBoxed.new()
+   b.some_int8 = 1
+   b.nested_a = { some_int = 1, some_int8 = 2, some_double = 3.14 }
+   check(select('#', b:copy()) == 1)
+   local bc = b:copy()
+   check(bc ~= b)
+   check(bc.some_int8 == 1)
+   check(bc.nested_a.some_int == 1)
+   check(bc.nested_a.some_int8 == 2)
+   check(bc.nested_a.some_double == 3.14)
+end
+
+function gireg.boxed_equals()
+   local R = lgi.Regress
+   local b1 = R.TestBoxed.new()
+   b1.some_int8 = 1
+   b1.nested_a = { some_int = 1, some_int8 = 2, some_double = 3.14 }
+   local b2 = R.TestBoxed.new()
+   b2.some_int8 = 1
+   b2.nested_a = { some_int = 1, some_int8 = 2, some_double = 3.14 }
+   check(b1:equals(b2))
+   b1.some_int8 = 2
+   check(not b1:equals(b2))
+   b1.some_int8 = 1
+   b1.nested_a.some_int = 2
+   check(not b1:equals(b2))
+   b1.nested_a.some_int = 1
+   check(b1:equals(b2))
+end
+
 -- Available groups
 local groups = { 'gireg', gireg = gireg }
 
