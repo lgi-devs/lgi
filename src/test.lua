@@ -30,14 +30,16 @@ function testgroup:run(id)
    local function runfunc(num)
       self.results.total = self.results.total + 1
       io.write(('%-8s:%3d:%-35s'):format(self.name, num, self[num]))
+      local ok, msg
       local func = self[self[num]]
-      if self.debug then func() else
-	 local ok, msg = pcall(func)
-	 if not ok then
-	    self.results.failed = self.results.failed + 1
-	    io.write('FAIL:' .. tostring(msg) .. '\n')
-	    return
-	 end
+      if self.debug then func() ok = true else
+	 ok, msg = pcall(func)
+      end
+      collectgarbage()
+      if not ok then
+	 self.results.failed = self.results.failed + 1
+	 io.write('FAIL:' .. tostring(msg) .. '\n')
+	 return
       end
       io.write('PASS\n')
    end
