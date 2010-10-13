@@ -1,6 +1,6 @@
 --[[-- Assorted tests. --]]--
 
-require 'lgi'
+local lgi = require 'lgi'
 local GLib = require 'lgi.GLib'
 local Gio = require 'lgi.Gio'
 local GObject = require 'lgi.GObject'

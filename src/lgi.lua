@@ -1,45 +1,45 @@
 --[[--------------------------------------------------------------------------
+LGI Lua-side core.
 
-    Lgi bootstrapper.
-
-    Copyright (c) 2010 Pavel Holejsovsky
-    Licensed under the MIT license:
-    http://www.opensource.org/licenses/mit-license.php
-
+Copyright (c) 2010 Pavel Holejsovsky
+Licensed under the MIT license:
+http://www.opensource.org/licenses/mit-license.php
 --]]--------------------------------------------------------------------------
 
 local assert, setmetatable, getmetatable, type, pairs, string, rawget,
-   table, require, tostring, error, pcall, ipairs, unpack =
-      assert, setmetatable, getmetatable, type, pairs, string, rawget,
-      table, require, tostring, error, pcall, ipairs, unpack
+table, require, tostring, error, pcall, ipairs, unpack =
+   assert, setmetatable, getmetatable, type, pairs, string, rawget,
+table, require, tostring, error, pcall, ipairs, unpack
 local package, math = package, math
 local bit = require 'bit'
 
 -- Require core lgi utilities, used during bootstrap.
 local core = require 'lgi._core'
 
-module 'lgi'
+-- Create lgi table, containing the module.
+local lgi = {}
 
 -- Prepare logging support.  'log' is module-exported table, containing all
 -- functionality related to logging wrapped around GLib g_log facility.
-log = { ERROR = 'assert', DEBUG = 'silent' }
+local logtable = { ERROR = 'assert', DEBUG = 'silent' }
+lgi.log = logtable
 core.setlogger(
    function(domain, level, message)
       -- Create domain table in the log table if it does not exist yet.
-      if not log[domain] then log[domain] = {} end
+      if not logtable[domain] then logtable[domain] = {} end
 
       -- Check whether message should generate assert (i.e. Lua exception).
-      local setting = log[domain][level] or log[level]
+      local setting = logtable[domain][level] or logtable[level]
       if setting == 'assert' then error() end
       if setting == 'silent' then return true end
 
       -- Get handler for the domain and invoke it.
-      local handler = log[domain].handler or log.handler
+      local handler = logtable[domain].handler or logtable.handler
       return handler and handler(domain, level, message)
    end)
 
 -- Main logging facility.
-function log.log(domain, level, format, ...)
+function logtable.log(domain, level, format, ...)
    local ok, msg = pcall(string.format, format, ...)
    if not ok then msg = ("BAD FMT: `%s', `%s'"):format(format, msg) end
    core.log(domain, level, msg)
@@ -47,22 +47,22 @@ end
 
 -- Creates table containing methods 'message', 'warning', 'critical', 'error',
 -- 'debug' methods which log to specified domain.
-function log.domain(name)
-   local domain = log[name] or {}
+function logtable.domain(name)
+   local domain = logtable[name] or {}
    for _, level in ipairs { 'message', 'warning', 'critical',
 			    'error', 'debug' } do
       if not domain[level] then
 	 domain[level] = function(format, ...)
-			    log.log(name, level:upper(), format, ...)
+			    logtable.log(name, level:upper(), format, ...)
 			 end
       end
    end
-   log[name] = domain
+   logtable[name] = domain
    return domain
 end
 
 -- For the rest of bootstrap, prepare logging to Lgi domain.
-local log = log.domain('Lgi')
+local log = logtable.domain('Lgi')
 
 log.message('Lgi: Lua to GObject-Introspection binding v0.1')
 
@@ -1021,4 +1021,5 @@ package.loaders[#package.loaders + 1] =
    end
 
 -- Access to module proxies the whole repo, for convenience.
-setmetatable(_M, { __index = function(_, name) return repo[name] end })
+setmetatable(lgi, { __index = function(_, name) return repo[name] end })
+return lgi
