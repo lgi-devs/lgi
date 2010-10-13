@@ -1,9 +1,8 @@
-- marshalling hashtables
-- marshalling lists lua->c
-- implement signals using native lgi GClosure implementation instead
-  of detour through libffi.
+- unified marshalling of GIArgument and GValues
+- use it for properties access and signal marshalling.
+- signals using native lgi GClosure implementation instead of detour
+  through libffi.
 - GValue - support for STRV and GValueArray.
-- gimarshallintests usage.
 - Gio: async->coro wrappers.
 - Gio: modifiable buffer as input for _read methods.
 - Gtk: Container.child handling
