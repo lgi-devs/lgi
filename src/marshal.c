@@ -828,6 +828,66 @@ lgi_marshal_arg_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
   return nret;
 }
 
+void
+lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
+		    GValue *val, int narg)
+{
+  /* Initial decision is up to GValue type; if the type reported by
+     GValue identifies type uniquelly, we ignore 'ti' arg
+     completely. */
+  int vals;
+  gpointer obj;
+  GType type = G_VALUE_TYPE (val);
+  if (!G_TYPE_IS_VALUE (type))
+    return;
+#define HANDLE_GTYPE(gtype, getter, setter)		\
+  else if (type == G_TYPE_ ## gtype)			\
+    {							\
+      g_value_ ## setter (val, getter (L, narg));	\
+      return;						\
+    }
+
+  HANDLE_GTYPE(BOOLEAN, lua_toboolean, set_boolean)
+  HANDLE_GTYPE(CHAR, luaL_checkinteger, set_char)
+  HANDLE_GTYPE(UCHAR, luaL_checkinteger, set_uchar)
+  HANDLE_GTYPE(INT, luaL_checkinteger, set_int)
+  HANDLE_GTYPE(UINT, luaL_checknumber, set_uint)
+  HANDLE_GTYPE(LONG, luaL_checknumber, set_long)
+  HANDLE_GTYPE(ULONG, luaL_checknumber, set_ulong)
+  HANDLE_GTYPE(INT64, luaL_checknumber, set_int64)
+  HANDLE_GTYPE(UINT64, luaL_checknumber, set_uint64)
+  HANDLE_GTYPE(FLOAT, luaL_checknumber, set_float)
+  HANDLE_GTYPE(DOUBLE, luaL_checknumber, set_double)
+  HANDLE_GTYPE(GTYPE, luaL_checknumber, set_gtype)
+  HANDLE_GTYPE(STRING, luaL_checkstring, set_string)
+  HANDLE_GTYPE(ENUM, luaL_checkinteger, set_enum)
+  HANDLE_GTYPE(FLAGS, luaL_checkinteger, set_flags)
+#undef HANDLE_GTYPE
+
+  /* Handle other cases. */
+  switch (G_TYPE_FUNDAMENTAL (type))
+    {
+    case G_TYPE_BOXED:
+      {
+	vals = lgi_compound_get (L, narg, &type, &obj, FALSE);
+	g_value_set_boxed (val, obj);
+	lua_pop (L, vals);
+	return;
+      }
+
+    case G_TYPE_OBJECT:
+      {
+	vals = lgi_compound_get (L, narg, &type, &obj, FALSE);
+	g_value_set_boxed (val, obj);
+	lua_pop (L, vals);
+	return;
+      }
+
+    default:
+      g_assert_not_reached ();
+    }
+}
+
 gboolean
 lgi_marshal_arg_2c_caller_alloc (lua_State *L, GITypeInfo *ti, GIArgument *val,
 				 int pos)

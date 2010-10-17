@@ -81,6 +81,10 @@ int lgi_marshal_arg_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 			GITransfer xfer,  GIArgument *val, int narg,
 			gboolean use_pointer, GICallableInfo *ci, void **args);
 
+/* Marshalls single value from Lua to GValue. ti is optional. */
+void lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
+			 GValue *val, int narg);
+
 /* If given parameter is out;caller-allocates, tries to perform
    special 2c marshalling.  If not needed, returns FALSE, otherwise
    stores single value with value prepared to be returned to C. */
