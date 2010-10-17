@@ -10,6 +10,51 @@
 
 #include "lgi.h"
 
+GType
+lgi_get_gtype (lua_State *L, GITypeInfo *ti)
+{
+  GType gtype = G_TYPE_INVALID;
+  switch (g_type_info_get_tag (ti))
+    {
+#define HANDLE_TAG(tag, gt)			\
+    case GI_TYPE_TAG_ ## tag:			\
+      return G_TYPE_ ## gt
+
+      HANDLE_TAG (BOOLEAN, BOOLEAN);
+      HANDLE_TAG (INT8, CHAR);
+      HANDLE_TAG (UINT8, UCHAR);
+      HANDLE_TAG (INT16, INT);
+      HANDLE_TAG (UINT16, UINT);
+      HANDLE_TAG (INT32, INT);
+      HANDLE_TAG (UINT32, UINT);
+      HANDLE_TAG (INT64, INT64);
+      HANDLE_TAG (UINT64, UINT64);
+      HANDLE_TAG (FLOAT, FLOAT);
+      HANDLE_TAG (DOUBLE, DOUBLE);
+      HANDLE_TAG (GTYPE, GTYPE);
+      HANDLE_TAG (UTF8, STRING);
+      HANDLE_TAG (FILENAME, STRING);
+      HANDLE_TAG (GHASH, HASH_TABLE);
+      HANDLE_TAG (ERROR, ERROR);
+
+#undef HANDLE_TAG
+
+    case GI_TYPE_TAG_INTERFACE:
+      {
+	GIBaseInfo *info = g_type_info_get_interface (ti);
+	g_assert (GI_IS_REGISTERED_TYPE_INFO (info));
+	gtype = g_registered_type_info_get_g_type (info);
+	g_base_info_unref (info);
+	break;
+      }
+
+    default:
+      g_assert_not_reached ();
+    }
+
+  return gtype;
+}
+
 /* Checks whether given argument contains number which fits given
    constraints. If yes, returns it, otehrwise throws Lua error. */
 static lua_Number
