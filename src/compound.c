@@ -129,6 +129,7 @@ compound_register (lua_State *L, GIBaseInfo *info, gpointer *addr,
     size = sizeof (Compound);
   compound = lua_newuserdata (L, size);
   compound->owns = 0;
+  compound->has_parent = 0;
   compound->ref_repo = LUA_REFNIL;
   luaL_getmetatable (L, UD_COMPOUND);
   lua_setmetatable (L, -2);
