@@ -611,65 +611,66 @@ lgi_compound_elementof (lua_State *L)
   return vals;
 }
 
-/* Calls compound_prepare(arg1), checks element (arg2), and processes
-   it; either reads it to stack (newval = -1) or sets it to value at
-   newval stack. */
-static int
-process_element (lua_State *L, int newval)
-{
-  /* Load compound and element. */
-  int vals = 0, type;
-  compound_prepare (L, 1, TRUE);
-  lua_pushvalue (L, 2);
-  lua_gettable (L, -2);
-  type = lua_type (L, -1);
-  if (type == LUA_TNIL)
-      /* Not found. */
-    return compound_error (L, "%s: no `%s'", 2);
-  else if (type == LUA_TFUNCTION)
-    {
-      /* Custom function, so call it. */
-      lua_pushvalue (L, 1);
-      lua_pushvalue (L, 2);
-      if (newval == -1)
-	{
-	  /* Getting value, signature is res = func(obj, fieldname). */
-	  vals = 1;
-	  lua_call (L, 2, 1);
-	}
-      else
-	{
-	  /* Setting value, signature is func(obj, fieldname, newval). */
-	  lua_pushvalue (L, newval);
-	  lua_call (L, 3, 0);
-	}
-    }
-  else
-    {
-      /* Everything else is simply forwarded for index, or error for
-	 newindex. */
-      if (newval != -1)
-	{
-	  lua_pop (L, 1);
-	  return compound_error (L, "%s: `%s' not writable", 2);
-	}
-      else
-	vals = 1;
-    }
-
-  return vals;
-}
-
 static int
 compound_index (lua_State *L)
 {
-  return process_element (L, -1);
+  /* Load compound and element. */
+  compound_prepare (L, 1, TRUE);
+  lua_pushvalue (L, 2);
+  lua_gettable (L, -2);
+  switch (lua_type (L, -1))
+    {
+    case LUA_TFUNCTION:
+      {
+	/* Custom function, so call it. */
+	lua_pushvalue (L, 1);
+	lua_pushvalue (L, 2);
+	lua_call (L, 2, 1);
+	break;
+      }
+
+    case LUA_TNIL:
+      /* Not found. */
+      return compound_error (L, "%s: no `%s'", 2);
+
+    default:
+      /* Everything else is simply forwarded to caller. */
+      break;
+    }    
+
+  return 1;
 }
 
 static int
 compound_newindex (lua_State *L)
 {
-  return process_element (L, 3);
+  /* Load compound and element. */
+  compound_prepare (L, 1, TRUE);
+  lua_pushvalue (L, 2);
+  lua_gettable (L, -2);
+  switch (lua_type (L, -1))
+    {
+    case LUA_TFUNCTION:
+      {
+	/* Custom function, so call it. */
+	lua_pushvalue (L, 1);
+	lua_pushvalue (L, 2);
+	lua_pushvalue (L, 3);
+	lua_call (L, 3, 0);
+	break;
+      }
+
+    case LUA_TNIL:
+      /* Not found. */
+      return compound_error (L, "%s: no `%s'", 2);
+
+    default:
+      /* Custom (static) elements are not writable. */
+      lua_pop (L, 1);
+      return compound_error (L, "%s: `%s' not writable", 2);
+    }
+
+  return 0;
 }
 
 static const struct luaL_reg compound_reg[] = {
