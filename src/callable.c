@@ -355,16 +355,16 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
 	int argi = i + callable->has_self;
 	if (param->dir != GI_DIRECTION_OUT)
 	  /* Convert parameter from Lua stack to C. */
-	  nret += lgi_marshal_2c (L, &param->ti, &param->ai,
-				  GI_TRANSFER_NOTHING,
-				  &args[argi], lua_argi++, FALSE,
-				  callable->info,
-				  ffi_args + callable->has_self);
+	  nret += lgi_marshal_arg_2c (L, &param->ti, &param->ai,
+				      GI_TRANSFER_NOTHING,
+				      &args[argi], lua_argi++, FALSE,
+				      callable->info,
+				      ffi_args + callable->has_self);
 	/* Special handling for out/caller-alloc structures; we have to
 	   manually pre-create them and store them on the stack. */
 	else if (g_arg_info_is_caller_allocates (&param->ai)
-		 && lgi_marshal_2c_caller_alloc (L, &param->ti,
-						 &args[argi], 0))
+		 && lgi_marshal_arg_2c_caller_alloc (L, &param->ti,
+						     &args[argi], 0))
 	  {
 	    /* Even when marked as OUT, caller-allocates arguments
 	       behave as if they are actually IN from libffi POV. */
@@ -402,9 +402,9 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
   nret = 0;
   if (g_type_info_get_tag (&callable->retval.ti) != GI_TYPE_TAG_VOID)
     {
-      lgi_marshal_2lua (L, &callable->retval.ti, callable->retval.transfer,
-			&retval, 0, FALSE, callable->info,
-			ffi_args + callable->has_self);
+      lgi_marshal_arg_2lua (L, &callable->retval.ti, callable->retval.transfer,
+			    &retval, 0, FALSE, callable->info,
+			    ffi_args + callable->has_self);
       nret++;
       lua_insert (L, -caller_allocated - 1);
     }
@@ -417,13 +417,14 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
 	if (!g_arg_info_is_caller_allocates (&param->ai))
 	  {
 	    /* Marshal output parameter. */
-	    lgi_marshal_2lua (L, &param->ti, param->transfer,
-			      &args[i + callable->has_self], 0, FALSE,
-			      callable->info, ffi_args + callable->has_self);
+	    lgi_marshal_arg_2lua (L, &param->ti, param->transfer,
+				  &args[i + callable->has_self], 0, FALSE,
+				  callable->info,
+				  ffi_args + callable->has_self);
 	    lua_insert (L, -caller_allocated - 1);
 	  }
-	else if (lgi_marshal_2c_caller_alloc (L, &param->ti, NULL,
-					      -caller_allocated  - nret))
+	else if (lgi_marshal_arg_2c_caller_alloc (L, &param->ti, NULL,
+						  -caller_allocated  - nret))
 	  /* Caller allocated parameter is already marshalled and
 	     lying on the stack. */
 	  caller_allocated--;
@@ -509,9 +510,10 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   for (i = 0; i < callable->nargs; ++i, ++param)
     if (!param->internal && param->dir != GI_DIRECTION_OUT)
       {
-	lgi_marshal_2lua (L, &param->ti, GI_TRANSFER_NOTHING,
-			  (GIArgument *) args[i + callable->has_self],
-			  0, FALSE, callable->info, args + callable->has_self);
+	lgi_marshal_arg_2lua (L, &param->ti, GI_TRANSFER_NOTHING,
+			      (GIArgument *) args[i + callable->has_self],
+			      0, FALSE, callable->info,
+			      args + callable->has_self);
 	npos++;
       }
 
@@ -526,9 +528,10 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
       int to_pop;
       if (g_type_info_get_tag (&callable->retval.ti) != GI_TYPE_TAG_VOID)
 	{
-	  to_pop = lgi_marshal_2c (L, &callable->retval.ti, NULL,
-				   callable->retval.transfer, ret, npos, FALSE,
-				   callable->info, args + callable->has_self);
+	  to_pop = lgi_marshal_arg_2c (L, &callable->retval.ti, NULL,
+				       callable->retval.transfer, ret, npos,
+				       FALSE, callable->info,
+				       args + callable->has_self);
 	  if (to_pop != 0)
 	    {
 	      g_warning ("cbk `%s.%s': return (transfer none) %d, unsafe!",
@@ -546,9 +549,10 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	if (!param->internal && param->dir != GI_DIRECTION_IN)
 	  {
 	    to_pop =
-	      lgi_marshal_2c (L, &param->ti, &param->ai, param->transfer,
-			      (GIArgument *)args[i + callable->has_self], npos,
-			      FALSE, callable->info, args + callable->has_self);
+	      lgi_marshal_arg_2c (L, &param->ti, &param->ai, param->transfer,
+				  (GIArgument *)args[i + callable->has_self],
+				  npos, FALSE, callable->info,
+				  args + callable->has_self);
 	    if (to_pop != 0)
 	      {
 		g_warning ("cbk %s.%s: arg `%s' (transfer none) %d, unsafe!",

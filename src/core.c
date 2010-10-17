@@ -271,8 +271,8 @@ lgi_construct (lua_State* L)
 	    GIArgument val;
             int ti_guard = lgi_guard_create_baseinfo (L, ti);
 	    g_constant_info_get_value (bi, &val);
-	    lgi_marshal_2lua (L, ti, GI_TRANSFER_NOTHING, &val, 0, FALSE,
-			      NULL, NULL);
+	    lgi_marshal_arg_2lua (L, ti, GI_TRANSFER_NOTHING, &val, 0, FALSE,
+				  NULL, NULL);
 	    vals = 1;
             lua_remove (L, ti_guard);
 	  }

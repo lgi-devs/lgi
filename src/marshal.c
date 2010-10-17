@@ -256,9 +256,10 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 	  lua_gettable (L, narg);
 
 	  /* Marshal element retrieved from the table into target array. */
-	  to_pop = lgi_marshal_2c (L, eti, NULL, exfer,
-				   (GIArgument *) (array->data + index * esize),
-				   -1, FALSE, NULL, NULL);
+	  to_pop = lgi_marshal_arg_2c (L, eti, NULL, exfer,
+				       (GIArgument *) (array->data +
+						       index * esize),
+				       -1, FALSE, NULL, NULL);
 
 	  /* Remove temporary element from the stack. */
 	  lua_remove (L, - to_pop - 1);
@@ -342,9 +343,9 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 	break;
 
       /* Store value into the table. */
-      lgi_marshal_2lua (L, eti, (transfer == GI_TRANSFER_EVERYTHING) ?
-			GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING,
-			eval, parent, FALSE, NULL, NULL);
+      lgi_marshal_arg_2lua (L, eti, (transfer == GI_TRANSFER_EVERYTHING) ?
+			    GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING,
+			    eval, parent, FALSE, NULL, NULL);
       lua_rawseti (L, -2, index + 1);
     }
 
@@ -402,8 +403,8 @@ marshal_2c_list (lua_State *L, GITypeInfo *ti, GITypeTag list_tag,
       GIArgument eval;
       lua_pushinteger (L, index--);
       lua_gettable (L, narg);
-      to_pop = lgi_marshal_2c (L, eti, NULL, exfer, &eval, -1, TRUE,
-			       NULL, NULL);
+      to_pop = lgi_marshal_arg_2c (L, eti, NULL, exfer, &eval, -1, TRUE,
+				   NULL, NULL);
 
       /* Prepend new list element and reassign the guard. */
       if (list_tag == GI_TYPE_TAG_GSLIST)
@@ -444,9 +445,9 @@ marshal_2lua_list (lua_State *L, GITypeInfo *ti, GITypeTag list_tag,
       GIArgument *eval = (GIArgument *) &list->data;
 
       /* Store it into the table. */
-      lgi_marshal_2lua (L, eti, (xfer == GI_TRANSFER_EVERYTHING) ?
-			GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING,
-			eval, 0, TRUE, NULL, NULL);
+      lgi_marshal_arg_2lua (L, eti, (xfer == GI_TRANSFER_EVERYTHING) ?
+			    GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING,
+			    eval, 0, TRUE, NULL, NULL);
       lua_rawseti(L, -2, ++index);
     }
 
@@ -533,8 +534,8 @@ marshal_2c_hash (lua_State *L, GITypeInfo *ti, GIArgument *val, int narg,
 
 	  /* Marshal key and value from the table. */
 	  for (i = 0; i < 2; i++)
-	    vals += lgi_marshal_2c (L, eti[i], NULL, exfer, &eval[i],
-				    key_pos + i, TRUE, NULL, NULL);
+	    vals += lgi_marshal_arg_2c (L, eti[i], NULL, exfer, &eval[i],
+					key_pos + i, TRUE, NULL, NULL);
 
 	  /* Insert newly marshalled pointers into the table. */
 	  g_hash_table_insert (*table, eval[0].v_pointer, eval[1].v_pointer);
@@ -589,8 +590,8 @@ marshal_2lua_hash (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 	{
 	  /* Marshal key and value to the stack. */
 	  for (i = 0; i < 2; i++)
-	    lgi_marshal_2lua (L, eti[i], GI_TRANSFER_NOTHING, &eval[i],
-			      0, TRUE, NULL, NULL);
+	    lgi_marshal_arg_2lua (L, eti[i], GI_TRANSFER_NOTHING, &eval[i],
+				  0, TRUE, NULL, NULL);
 
 	  /* Store these two elements to the table. */
 	  lua_settable (L, -3);
@@ -646,9 +647,9 @@ marshal_2c_callable (lua_State *L, GICallableInfo *ci, GIArgInfo *ai,
 
 /* Marshalls single value from Lua to GLib/C. */
 int
-lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
-		GITransfer transfer, GIArgument *val, int narg,
-		gboolean use_pointer, GICallableInfo *ci, void **args)
+lgi_marshal_arg_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
+		    GITransfer transfer, GIArgument *val, int narg,
+		    gboolean use_pointer, GICallableInfo *ci, void **args)
 {
   int nret = 0;
   gboolean optional = (ai != NULL && (g_arg_info_is_optional (ai) ||
@@ -783,8 +784,8 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 }
 
 gboolean
-lgi_marshal_2c_caller_alloc (lua_State *L, GITypeInfo *ti, GIArgument *val,
-			     int pos)
+lgi_marshal_arg_2c_caller_alloc (lua_State *L, GITypeInfo *ti, GIArgument *val,
+				 int pos)
 {
   gboolean handled = FALSE;
   switch (g_type_info_get_tag (ti))
@@ -868,9 +869,9 @@ lgi_marshal_2c_caller_alloc (lua_State *L, GITypeInfo *ti, GIArgument *val,
 /* Marshalls single value from GLib/C to Lua.  Returns 1 if something
    was pushed to the stack. */
 void
-lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
-		  GIArgument *val, int parent, gboolean use_pointer,
-		  GICallableInfo *ci, void **args)
+lgi_marshal_arg_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
+		      GIArgument *val, int parent, gboolean use_pointer,
+		      GICallableInfo *ci, void **args)
 {
   gboolean own = (transfer != GI_TRANSFER_NOTHING);
   GITypeTag tag = g_type_info_get_tag (ti);

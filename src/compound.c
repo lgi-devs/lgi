@@ -552,8 +552,8 @@ lgi_compound_elementof (lua_State *L)
 	    if ((flags & GI_FIELD_IS_READABLE) == 0)
 	      return luaL_argerror (L, 2, "not readable");
 
-	    lgi_marshal_2lua (L, ti, GI_TRANSFER_NOTHING, val, 1,
-			      FALSE, NULL, NULL);
+	    lgi_marshal_arg_2lua (L, ti, GI_TRANSFER_NOTHING, val, 1,
+				  FALSE, NULL, NULL);
 	    vals = 1;
 	  }
 	else
@@ -561,8 +561,8 @@ lgi_compound_elementof (lua_State *L)
 	    if ((flags & GI_FIELD_IS_WRITABLE) == 0)
 	      return luaL_argerror (L, 2, "not writable");
 
-	    lua_pop (L, lgi_marshal_2c (L, ti, NULL, GI_TRANSFER_NOTHING, val,
-					3, FALSE, NULL, NULL));
+	    lua_pop (L, lgi_marshal_arg_2c (L, ti, NULL, GI_TRANSFER_NOTHING,
+					    val, 3, FALSE, NULL, NULL));
 	    vals = 0;
 	  }
 
@@ -636,7 +636,7 @@ compound_index (lua_State *L)
     default:
       /* Everything else is simply forwarded to caller. */
       break;
-    }    
+    }
 
   return 1;
 }
