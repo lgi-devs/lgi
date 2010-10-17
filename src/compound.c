@@ -333,15 +333,7 @@ compound_gc (lua_State *L)
 
       /* Decide what to do according to the type. */
       if (G_TYPE_IS_OBJECT (gtype))
-	{
-	  GType realgtype = G_TYPE_FROM_INSTANCE (compound->addr);
-	  if (!g_type_is_a (realgtype, gtype))
-	    {
-	      g_debug ("BAD! %p (is %s, claims %s)", compound->addr,
-		       g_type_name (realgtype), g_type_name (gtype));
-	    }
-	  g_object_unref (compound->addr);
-	}
+	g_object_unref (compound->addr);
       else if (G_TYPE_IS_BOXED (gtype))
 	g_boxed_free (gtype, compound->addr);
     }
