@@ -1,5 +1,3 @@
-#! /bin/sh
-
 # Sets up environment and links in 'build' waf directory.  After sourcing this
 # script into interactive shell, everything should be set up to run uninstalled
 # LGI version incl. testsuite.
