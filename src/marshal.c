@@ -867,6 +867,18 @@ lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
   /* Handle other cases. */
   switch (G_TYPE_FUNDAMENTAL (type))
     {
+    case G_TYPE_ENUM:
+      {
+        g_value_set_enum (val, luaL_checkinteger (L, narg));
+        return;
+      }
+
+    case G_TYPE_FLAGS:
+      {
+        g_value_set_flags (val, luaL_checkinteger (L, narg));
+        return;
+      }
+
     case G_TYPE_BOXED:
       {
 	vals = lgi_compound_get (L, narg, &type, &obj, FALSE);
@@ -929,7 +941,8 @@ lgi_marshal_arg_2c_caller_alloc (lua_State *L, GITypeInfo *ti, GIArgument *val,
 		   existing only for the duration of the call. */
 		lgi_guard_create (L, &array_guard,
 				  (GDestroyNotify) g_array_unref);
-		*array_guard = g_array_sized_new (FALSE, FALSE, elt_size, size);
+		*array_guard = g_array_sized_new (FALSE, FALSE, elt_size,
+                                                  size);
 		g_array_set_size (*array_guard, size);
 	      }
 	    else
