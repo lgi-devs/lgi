@@ -23,12 +23,11 @@ def build(bld):
             source = gi_tests.find_resource(test))
 
     # Build its shared library.
-    inst = (bld.cmd == 'dev') and ':overrideme:' or None
     bld(features = 'c cshlib',
         uselib = ['LUA', 'GI', 'GIO', 'CAIRO'],
         source = 'regress.c',
         target = 'regress',
-        install_path = inst,
+        install_path = None,
         )
 
     # Easier than trying to hook dependency of .gir on shlib built above.
@@ -46,5 +45,3 @@ def build(bld):
     bld(rule = '${GI_g_ir_compiler} --output=${TGT} ${SRC}',
         source='Regress-1.0.gir',
         target = 'Regress-1.0.typelib')
-    if bld.cmd == 'dev':
-        bld.install_files(':overrideme:', 'Regress-1.0.typelib')
