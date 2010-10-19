@@ -242,7 +242,8 @@ lgi_construct (lua_State* L)
                 if (G_TYPE_IS_VALUE (type))
                   {
                     g_value_init (&val, type);
-                    lgi_value_load (L, &val, 3);
+                    lgi_marshal_val_2c (L, NULL, GI_TRANSFER_NOTHING,
+                                        &val, 3);
                   }
 
                 vals = lgi_compound_create (L, bi,

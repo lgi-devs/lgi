@@ -289,8 +289,9 @@ lgi_compound_object_new (lua_State *L, GIObjectInfo *oi, int argtable)
 		     contents. */
 		  ti = g_property_info_get_type (pi);
 		  lgi_guard_create_baseinfo (L, ti);
-		  lgi_value_init (L, &param->value, ti);
-		  lgi_value_load (L, &param->value, -2);
+                  g_value_init (&param->value, lgi_get_gtype (L, ti));
+                  lgi_marshal_val_2c (L, ti, GI_TRANSFER_NOTHING,
+                                      &param->value, -2);
 		  lua_pop (L, 1);
 		}
 	    }
@@ -578,7 +579,7 @@ lgi_compound_elementof (lua_State *L)
 
 	ti = g_property_info_get_type (ei);
 	ti_guard = lgi_guard_create_baseinfo (L, ti);
-	lgi_value_init (L, &val, ti);
+        g_value_init (&val, lgi_get_gtype (L, ti));
 
 	if (lua_isnoneornil (L, 3))
 	  {
@@ -593,7 +594,7 @@ lgi_compound_elementof (lua_State *L)
 	    if ((flags & G_PARAM_WRITABLE) == 0)
 	      return luaL_argerror (L, 2, "not writable");
 
-	    vals = lgi_value_load (L, &val, 3);
+            lgi_marshal_val_2c (L, ti, GI_TRANSFER_NOTHING, &val, 3);
 	    g_object_set_property (compound->addr, name, &val);
 	  }
 

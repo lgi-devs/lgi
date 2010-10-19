@@ -157,13 +157,6 @@ gpointer lgi_compound_check (lua_State *L, int arg, GType *gtype);
    curval = lgi_compound_elementof(compound, eltinfo[, newval]) */
 int lgi_compound_elementof (lua_State *L);
 
-/* Initializes type of GValue to specified ti. */
-void lgi_value_init (lua_State *L, GValue *val, GITypeInfo *ti);
-
-/* Loads GValue contents from specified stack position.  Value must
-   already have assigned correct type. */
-int lgi_value_load (lua_State *L, GValue *val, int narg);
-
 /* Pushes GValue content to stack. */
 int lgi_value_store (lua_State *L, const GValue *val);
 
