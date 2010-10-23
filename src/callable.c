@@ -191,6 +191,7 @@ lgi_callable_create (lua_State *L, GICallableInfo *info)
   callable->nargs = nargs;
   callable->has_self = 0;
   callable->throws = 0;
+  callable->address = NULL;
   if (GI_IS_FUNCTION_INFO (info))
     {
       /* Get FunctionInfo flags. */
