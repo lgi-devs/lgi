@@ -7,9 +7,9 @@ http://www.opensource.org/licenses/mit-license.php
 --]]--------------------------------------------------------------------------
 
 local assert, setmetatable, getmetatable, type, pairs, string, rawget,
-table, require, tostring, error, pcall, ipairs, unpack =
+table, require, tostring, error, pcall, ipairs, unpack, next =
    assert, setmetatable, getmetatable, type, pairs, string, rawget,
-table, require, tostring, error, pcall, ipairs, unpack
+table, require, tostring, error, pcall, ipairs, unpack or table.unpack, next
 local package, math = package, math
 local bit = require 'bit'
 
@@ -462,7 +462,6 @@ local function get_category(info, count, get_item, xform_value, xform_name,
    -- by get_info method, and table part contains name->index mapping.
    local index = {}
    for i = 1, count do index[i] = i - 1 end
-   local cached_names = 0
    return setmetatable(
       original_table or {}, { __index =
 	    function(category, req_name)
@@ -508,7 +507,6 @@ local function get_category(info, count, get_item, xform_value, xform_name,
 		  -- We know at least the index, so get info directly.
 		  val = get_item(info, idx)
 		  index[name] = nil
-		  cached_names = cached_names - 1
 	       else
 		  -- Not yet, go through unknown indices and try to
 		  -- find the name.
@@ -519,14 +517,13 @@ local function get_category(info, count, get_item, xform_value, xform_name,
 		     if en == name then break end
 		     val = nil
 		     index[en] = idx
-		     cached_names = cached_names + 1
 		  end
 		  if not val then return nil end
 	       end
 
 	       -- If there is nothing in the index, we can disconnect
 	       -- metatable, because everything is already loaded.
-	       if #index == 0 and cached_names == 0 then
+	       if not next(index) then
 		  setmetatable(category, nil)
 	       end
 
