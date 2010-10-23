@@ -166,7 +166,9 @@ lgi_callable_create (lua_State *L, GICallableInfo *info)
   luaL_checkstack (L, 5, "");
   lua_rawgeti (L, LUA_REGISTRYINDEX, lgi_regkey);
   lua_rawgeti (L, -1, LGI_REG_CACHE);
-  lua_concat (L, lgi_type_get_name(L, info));
+  lua_pushinteger (L, g_base_info_get_type (info));
+  lua_pushstring (L, ":");
+  lua_concat (L, lgi_type_get_name(L, info) + 2);
   lua_pushvalue (L, -1);
   lua_gettable (L, -3);
   if (!lua_isnil (L, -1))
