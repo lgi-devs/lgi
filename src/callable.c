@@ -575,6 +575,8 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
       g_set_error_literal (err, q, 1, lua_tostring(L, -1));
       lua_pop (L, 1);
     }
+  else
+    g_warning ("ignoring error from closure: %s", lua_tostring (L, -1));
 
   /* If the closure is marked as autodestroy, destroy it now.  Note that it is
      unfortunately not possible to destroy it directly here, because we would
