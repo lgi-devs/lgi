@@ -578,7 +578,7 @@ local function load_element_field(fi)
       end
    end
 
-   -- For other types, simple closure arounf elementof() is sufficient.
+   -- For other types, simple closure around elementof() is sufficient.
    return function(obj, _, newval) return core.elementof(obj, fi, newval) end
 end
 
