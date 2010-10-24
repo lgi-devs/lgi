@@ -35,14 +35,6 @@ void lgi_guard_get_data (lua_State *L, int pos, gpointer **data);
 /* Allocates guard which guards specified GIBaseInfo instance. */
 int lgi_guard_create_baseinfo (lua_State *L, GIBaseInfo *info);
 
-/* Returns Lua context to use in the callback.  This is useful to
-   avoid calling callbacks in the context of Lua thread which is
-   currently suspended, so if this state is detected, a new thread is
-   created instead. It is assumed that callback stores state and
-   thread-ref of the Lua thread in which was callback registered.
-   These are passed as arguments to this function. */
-lua_State *lgi_get_callback_state (lua_State **state, int *thread_ref);
-
 /* Key in registry, containing table with all our private data. */
 extern int lgi_regkey;
 typedef enum lgi_reg
@@ -94,7 +86,7 @@ gboolean lgi_marshal_arg_2c_caller_alloc (lua_State *L, GITypeInfo *ti,
 /* Marshalls single value from GLib/C to Lua. If parent is non-0, it
    is stack index of parent structure/array in which this C value
    resides. */
-void lgi_marshal_arg_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer, 
+void lgi_marshal_arg_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 			   GIArgument *val, int parent, gboolean use_pointer,
 			   GICallableInfo *ci, void **args);
 
@@ -157,7 +149,7 @@ int lgi_compound_get (lua_State *L, int arg, GType *gtype, gpointer *addr,
 gpointer lgi_compound_check (lua_State *L, int arg, GType *gtype);
 
 /* Gets/sets given property or field of compound. luaCFunction
-   protocol, prototype is: 
+   protocol, prototype is:
    curval = lgi_compound_elementof(compound, eltinfo[, newval]) */
 int lgi_compound_elementof (lua_State *L);
 

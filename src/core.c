@@ -120,32 +120,6 @@ lgi_guard_create_baseinfo (lua_State *L, GIBaseInfo *info)
   return res;
 }
 
-lua_State *
-lgi_get_callback_state (lua_State **state, int *thread_ref)
-{
-  /* Get access to proper Lua context. */
-  lua_State *L = *state;
-  lua_rawgeti (L, LUA_REGISTRYINDEX, *thread_ref);
-  if (lua_isthread (L, -1))
-    {
-      L = lua_tothread (L, -1);
-      if (lua_status (L) != 0)
-	{
-	  /* Thread is not in usable state for us, it is suspended, we
-	     cannot afford to resume it, because it is possible that
-	     the routine we are about to call is actually going to
-	     resume it.  Create new thread instead and switch closure
-	     to its context. */
-	  L = lua_newthread (L);
-	  luaL_unref (L, LUA_REGISTRYINDEX, *thread_ref);
-	  *thread_ref = luaL_ref (*state, LUA_REGISTRYINDEX);
-	}
-    }
-  lua_pop (*state, 1);
-  *state = L;
-  return L;
-}
-
 static int
 lgi_find (lua_State *L)
 {
@@ -241,19 +215,19 @@ lgi_construct (lua_State* L)
 		   and return it wrapped in a GBoxed which is wrapped in
 		   a compound. */
 		GValue val = {0};
-                type = luaL_checknumber (L, 2);
-                if (G_TYPE_IS_VALUE (type))
-                  {
-                    g_value_init (&val, type);
-                    lgi_marshal_val_2c (L, NULL, GI_TRANSFER_NOTHING,
-                                        &val, 3);
-                  }
+		type = luaL_checknumber (L, 2);
+		if (G_TYPE_IS_VALUE (type))
+		  {
+		    g_value_init (&val, type);
+		    lgi_marshal_val_2c (L, NULL, GI_TRANSFER_NOTHING,
+					&val, 3);
+		  }
 
-                vals = lgi_compound_create (L, bi,
+		vals = lgi_compound_create (L, bi,
 					    g_boxed_copy (G_TYPE_VALUE, &val),
 					    TRUE, 0);
-                if (G_IS_VALUE (&val))
-                  g_value_unset (&val);
+		if (G_IS_VALUE (&val))
+		  g_value_unset (&val);
 	      }
 	    else
 	      {
@@ -273,12 +247,12 @@ lgi_construct (lua_State* L)
 	  {
 	    GITypeInfo *ti = g_constant_info_get_type (bi);
 	    GIArgument val;
-            int ti_guard = lgi_guard_create_baseinfo (L, ti);
+	    int ti_guard = lgi_guard_create_baseinfo (L, ti);
 	    g_constant_info_get_value (bi, &val);
 	    lgi_marshal_arg_2lua (L, ti, GI_TRANSFER_NOTHING, &val, 0, FALSE,
 				  NULL, NULL);
 	    vals = 1;
-            lua_remove (L, ti_guard);
+	    lua_remove (L, ti_guard);
 	  }
 	  break;
 
@@ -311,7 +285,7 @@ lgi_gtype (lua_State *L)
 
       info = g_irepository_find_by_name (NULL, "GIRepository", name);
       if (info == NULL)
-        return luaL_error (L, "unable to resolve GIRepository.%s", name);
+	return luaL_error (L, "unable to resolve GIRepository.%s", name);
 
       gtype = g_registered_type_info_get_g_type (info);
       g_base_info_unref (info);
@@ -344,7 +318,7 @@ lgi_cast (lua_State *L)
       GIBaseInfo *info = g_irepository_find_by_gtype (NULL, gtype);
       if (info != NULL)
 	{
-          int info_guard = lgi_guard_create_baseinfo (L, info);
+	  int info_guard = lgi_guard_create_baseinfo (L, info);
 	  lgi_compound_create (L, info, g_object_ref (obj), TRUE, 0);
 	  lua_remove (L, info_guard);
 	  return 1;
