@@ -11,57 +11,6 @@
 
 #include "lgi.h"
 
-int
-lgi_value_store (lua_State *L, const GValue *val)
-{
-  GType type = G_VALUE_TYPE (val);
-  if (!G_TYPE_IS_VALUE (type))
-    return 0;
-#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup,	\
-		 gtype, val_get, val_set, ffitype)		\
-  else if (type == gtype)					\
-    {								\
-      push (L, val_get (val));					\
-      return 1;							\
-    }
-#define DECLTYPE_KEY_BY_GTYPE
-#include "decltype.h"
-
-  /* Handle other cases. */
-  switch (G_TYPE_FUNDAMENTAL (type))
-    {
-    case G_TYPE_ENUM:
-      lua_pushinteger (L, g_value_get_enum (val));
-      return 1;
-
-    case G_TYPE_FLAGS:
-      lua_pushinteger (L, g_value_get_flags (val));
-      return 1;
-
-    case G_TYPE_OBJECT:
-    case G_TYPE_BOXED:
-      {
-	GIBaseInfo *bi = g_irepository_find_by_gtype (NULL, type);
-	if (bi != NULL)
-	  {
-	    gpointer obj = GI_IS_OBJECT_INFO (bi) ?
-	      g_value_dup_object (val) : g_value_dup_boxed (val);
-	    int vals = lgi_compound_create (L, bi, obj, TRUE, 0);
-	    g_base_info_unref (bi);
-	    return vals;
-	  }
-	break;
-      }
-
-    default:
-      break;
-    }
-
-  return luaL_error (L, "g_value_get: no handling or  %s(%s)",
-		     g_type_name (type),
-		     g_type_name (G_TYPE_FUNDAMENTAL (type)));
-}
-
 typedef struct _LgiClosure
 {
   GClosure closure;
@@ -99,7 +48,10 @@ lgi_gclosure_marshal (GClosure *closure, GValue *return_value,
 
   /* Push parameters. */
   while (n_param_values--)
-    vals += lgi_value_store (L, param_values++);
+    {
+      lgi_marshal_val_2lua (L, NULL, GI_TRANSFER_NOTHING, param_values++);
+      vals++;
+    }
 
   /* Invoke the function. */
   res = lua_pcall (L, vals, 1, 0);

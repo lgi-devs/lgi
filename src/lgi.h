@@ -98,6 +98,10 @@ void lgi_marshal_arg_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 			   GIArgument *val, int parent, gboolean use_pointer,
 			   GICallableInfo *ci, void **args);
 
+/* Marshalls single value from GValue to Lua. ti is optional. */
+void lgi_marshal_val_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
+			   const GValue *val);
+
 /* Parses given GICallableInfo, creates new userdata for it and stores
    it to the stack. Uses cache, so already parsed callable held in the
    cache is reused if possible. */
@@ -156,9 +160,6 @@ gpointer lgi_compound_check (lua_State *L, int arg, GType *gtype);
    protocol, prototype is: 
    curval = lgi_compound_elementof(compound, eltinfo[, newval]) */
 int lgi_compound_elementof (lua_State *L);
-
-/* Pushes GValue content to stack. */
-int lgi_value_store (lua_State *L, const GValue *val);
 
 /* Creates GClosure which invokes specified target. */
 GClosure *lgi_gclosure_create (lua_State *L, int target);

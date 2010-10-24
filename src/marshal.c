@@ -869,14 +869,14 @@ lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
     {
     case G_TYPE_ENUM:
       {
-        g_value_set_enum (val, luaL_checkinteger (L, narg));
-        return;
+	g_value_set_enum (val, luaL_checkinteger (L, narg));
+	return;
       }
 
     case G_TYPE_FLAGS:
       {
-        g_value_set_flags (val, luaL_checkinteger (L, narg));
-        return;
+	g_value_set_flags (val, luaL_checkinteger (L, narg));
+	return;
       }
 
     case G_TYPE_BOXED:
@@ -942,7 +942,7 @@ lgi_marshal_arg_2c_caller_alloc (lua_State *L, GITypeInfo *ti, GIArgument *val,
 		lgi_guard_create (L, &array_guard,
 				  (GDestroyNotify) g_array_unref);
 		*array_guard = g_array_sized_new (FALSE, FALSE, elt_size,
-                                                  size);
+						  size);
 		g_array_set_size (*array_guard, size);
 	      }
 	    else
@@ -1099,4 +1099,72 @@ lgi_marshal_arg_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
     default:
       marshal_2lua_int (L, tag, val, use_pointer);
     }
+}
+
+void
+lgi_marshal_val_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
+		      const GValue *val)
+{
+  GType type = G_VALUE_TYPE (val);
+  if (!G_TYPE_IS_VALUE (type))
+    {
+      lua_pushnil (L);
+      return;
+    }
+#define HANDLE_GTYPE(gtype, pusher, getter)		\
+  else if (type == G_TYPE_ ## gtype)			\
+    {							\
+      pusher (L, g_value_ ## getter (val));		\
+      return;						\
+    }
+
+  HANDLE_GTYPE(BOOLEAN, lua_pushboolean, get_boolean)
+  HANDLE_GTYPE(CHAR, lua_pushinteger, get_char)
+  HANDLE_GTYPE(UCHAR, lua_pushinteger, get_uchar)
+  HANDLE_GTYPE(INT, lua_pushinteger, get_int)
+  HANDLE_GTYPE(UINT, lua_pushnumber, get_uint)
+  HANDLE_GTYPE(LONG, lua_pushnumber, get_long)
+  HANDLE_GTYPE(ULONG, lua_pushnumber, get_ulong)
+  HANDLE_GTYPE(INT64, lua_pushnumber, get_int64)
+  HANDLE_GTYPE(UINT64, lua_pushnumber, get_uint64)
+  HANDLE_GTYPE(FLOAT, lua_pushnumber, get_float)
+  HANDLE_GTYPE(DOUBLE, lua_pushnumber, get_double)
+  HANDLE_GTYPE(GTYPE, lua_pushnumber, get_gtype)
+  HANDLE_GTYPE(STRING, lua_pushstring, get_string)
+  HANDLE_GTYPE(ENUM, lua_pushinteger, get_enum)
+  HANDLE_GTYPE(FLAGS, lua_pushinteger, get_flags)
+#undef HANDLE_GTYPE
+
+  /* Handle other cases. */
+  switch (G_TYPE_FUNDAMENTAL (type))
+    {
+    case G_TYPE_ENUM:
+      lua_pushinteger (L, g_value_get_enum (val));
+      return;
+
+    case G_TYPE_FLAGS:
+      lua_pushinteger (L, g_value_get_flags (val));
+      return;
+
+    case G_TYPE_OBJECT:
+    case G_TYPE_BOXED:
+      {
+	GIBaseInfo *bi = g_irepository_find_by_gtype (NULL, type);
+	if (bi != NULL)
+	  {
+	    gpointer obj = GI_IS_OBJECT_INFO (bi) ?
+	      g_value_dup_object (val) : g_value_dup_boxed (val);
+	    lgi_compound_create (L, bi, obj, TRUE, 0);
+	    g_base_info_unref (bi);
+	    return;
+	  }
+	break;
+      }
+
+    default:
+      break;
+    }
+
+  luaL_error (L, "g_value_get: no handling or  %s(%s)",
+	      g_type_name (type), g_type_name (G_TYPE_FUNDAMENTAL (type)));
 }

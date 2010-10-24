@@ -210,8 +210,11 @@ lgi_construct (lua_State* L)
   gtype = G_TYPE_VALUE;
   val = lgi_compound_check (L, 1, &gtype);
   if (val != NULL)
-    /* Construct from value just unboxes the real value from it. */
-    return lgi_value_store (L, val);
+    {
+      /* Construct from value just unboxes the real value from it. */
+      lgi_marshal_val_2lua (L, NULL, GI_TRANSFER_NOTHING, val);
+      return 1;
+    }
 
   /* Check whether arg1 is baseinfo. */
   gtype = GI_TYPE_BASE_INFO;
