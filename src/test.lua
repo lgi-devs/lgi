@@ -1090,6 +1090,99 @@ function gireg.boxed_equals()
    check(b1:equals(b2))
 end
 
+function gireg.obj_create()
+   local R = lgi.Regress
+   local o = R.TestObj()
+   check(o)
+   check(type(o) == 'userdata')
+   check(select('#', R.TestObj()) == 1)
+end
+
+function gireg.obj_prop_int()
+   local R = lgi.Regress
+   local o = R.TestObj()
+
+   check(o.int == 0)
+   o.int = 42
+   check(o.int == 42)
+   check(not pcall(function() o.int = {} end))
+   check(not pcall(function() o.int = 'lgi' end))
+   check(not pcall(function() o.int = nil end))
+   check(not pcall(function() o.int = function() end end))
+end
+
+function gireg.obj_prop_float()
+   local R = lgi.Regress
+   local o = R.TestObj()
+
+   check(o.float == 0)
+   o.float = 42.1
+   checkvf(o.float, 42.1, 0.00001)
+   check(not pcall(function() o.float = {} end))
+   check(not pcall(function() o.float = 'lgi' end))
+   check(not pcall(function() o.float = nil end))
+   check(not pcall(function() o.float = function() end end))
+end
+
+function gireg.obj_prop_double()
+   local R = lgi.Regress
+   local o = R.TestObj()
+
+   check(o.double == 0)
+   o.double = 42.1
+   checkvf(o.double, 42.1, 0.0000000001)
+   check(not pcall(function() o.double = {} end))
+   check(not pcall(function() o.double = 'lgi' end))
+   check(not pcall(function() o.double = nil end))
+   check(not pcall(function() o.double = function() end end))
+end
+
+function gireg.obj_prop_string()
+   local R = lgi.Regress
+   local o = R.TestObj()
+
+   check(o.string == nil)
+   o.string = 'lgi'
+   check(o.string == 'lgi')
+   check(not pcall(function() o.string = {} end))
+   check(not pcall(function() o.string = nil end))
+   check(not pcall(function() o.string = function() end end))
+end
+
+function gireg.obj_prop_bare()
+   local R = lgi.Regress
+   local o = R.TestObj()
+
+   check(o.bare == nil)
+   local pv = R.TestObj()
+   o.bare = pv
+   check(o.bare == pv)
+   o.bare = nil
+   check(o.bare == nil)
+   check(not pcall(function() o.bare = {} end))
+   check(not pcall(function() o.bare = 42 end))
+   check(not pcall(function() o.bare = 'lgi' end))
+   check(not pcall(function() o.bare = function() end end))
+   check(not pcall(function() o.bare = R.TestBoxed() end))
+end
+
+function gireg.obj_prop_boxed()
+   local R = lgi.Regress
+   local o = R.TestObj()
+
+   check(o.boxed == nil)
+   local pv = R.TestBoxed()
+   o.boxed = pv
+   check(o.boxed:equals(pv))
+   o.boxed = nil
+   check(o.boxed == nil)
+   check(not pcall(function() o.boxed = {} end))
+   check(not pcall(function() o.boxed = 42 end))
+   check(not pcall(function() o.boxed = 'lgi' end))
+   check(not pcall(function() o.boxed = function() end end))
+   check(not pcall(function() o.bare = R.TestObj() end))
+end
+
 -- Available groups
 local groups = { 'gireg', gireg = gireg }
 
