@@ -97,16 +97,29 @@ get_simple_ffi_type (GITypeTag tag)
   ffi_type *ffi;
   switch (tag)
     {
-    case GI_TYPE_TAG_VOID:
-      ffi = &ffi_type_void;
-      break;
+#define HANDLE_TYPE(tag, ffitype)		\
+      case GI_TYPE_TAG_ ## tag:			\
+	ffi = &ffi_type_ ## ffitype;		\
+	break
 
-#define DECLTYPE(tag, ctype, argf, dtor, push, check, opt, dup,	\
-		 val_type, val_get, val_set, ffitype)		\
-      case tag:							\
-	ffi = &ffitype;						\
-	break;
-#include "decltype.h"
+      HANDLE_TYPE(VOID, void);
+      HANDLE_TYPE(BOOLEAN, uint);
+      HANDLE_TYPE(INT8, sint8);
+      HANDLE_TYPE(UINT8, uint8);
+      HANDLE_TYPE(INT16, sint16);
+      HANDLE_TYPE(UINT16, uint16);
+      HANDLE_TYPE(INT32, sint32);
+      HANDLE_TYPE(UINT32, uint32);
+      HANDLE_TYPE(INT64, sint64);
+      HANDLE_TYPE(UINT64, uint64);
+      HANDLE_TYPE(FLOAT, float);
+      HANDLE_TYPE(DOUBLE, double);
+#if GLIB_SIZEOF_SIZE_T == 4
+      HANDLE_TYPE(GTYPE, uint32);
+#else
+      HANDLE_TYPE(GTYPE, uint64);
+#endif
+#undef HANDLE_TYPE
 
     default:
       ffi = NULL;
