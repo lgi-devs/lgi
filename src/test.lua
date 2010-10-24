@@ -391,7 +391,7 @@ function gireg.gvalue_simple()
       check(gval.type == tp, ("GValue type: expected `%s', got `%s'"):format(
 	       tp, gval.type), 2)
       check(gval.value == val, ("GValue value: exp `%s', got `%s'"):format(
-	       tostring(val), tostring(gval.value), 2))
+	       tostring(val), tostring(gval.value)), 2)
    end
    checkv(V(), '', nil)
    checkv(V(0), 'gint', 0)
