@@ -1,9 +1,11 @@
 --[[--------------------------------------------------------------------------
-LGI Lua-side core.
 
-Copyright (c) 2010 Pavel Holejsovsky
-Licensed under the MIT license:
-http://www.opensource.org/licenses/mit-license.php
+  LGI Lua-side core.
+
+  Copyright (c) 2010 Pavel Holejsovsky
+  Licensed under the MIT license:
+  http://www.opensource.org/licenses/mit-license.php
+
 --]]--------------------------------------------------------------------------
 
 local assert, setmetatable, getmetatable, type, pairs, string, rawget,
@@ -561,12 +563,12 @@ local function load_element_field(fi)
       local type = gi.base_info_get_type(ii)
       if type == gi.InfoType.STRUCT or type == gi.InfoType.UNION then
 	 -- Nested structure, handle assignment to it specially.
-	 return function(obj, _, newval)
+	 return function(obj, _, setter, newval)
 		   -- Get access to underlying nested structure.
-		   local sub = core.elementof(obj, fi)
+		   local sub = core.elementof(obj, fi, false)
 
 		   -- Reading it is simple, we are done.
-		   if not newval then return sub end
+		   if not setter then return sub end
 
 		   -- Writing means assigning all fields from the
 		   -- source table.
@@ -576,11 +578,15 @@ local function load_element_field(fi)
    end
 
    -- For other types, simple closure around elementof() is sufficient.
-   return function(obj, _, newval) return core.elementof(obj, fi, newval) end
+   return function(obj, _, setter, newval)
+	     return core.elementof(obj, fi, setter, newval)
+	  end
 end
 
 local function load_element_property(pi)
-   return function(obj, _, newval) return core.elementof(obj, pi, newval) end
+   return function(obj, _, setter, newval)
+	     return core.elementof(obj, pi, setter, newval)
+	  end
 end
 
 local function load_signal_name(name)

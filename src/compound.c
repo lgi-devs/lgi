@@ -528,13 +528,6 @@ lgi_compound_elementof (lua_State *L)
   GType gtype = GI_TYPE_BASE_INFO;
   int vals = 0;
 
-  /* compound_prepare below pushes two more tables to the stack.  If
-     we are called without 3rd argument, make sure that there is 'nil'
-     at the 3rd argument position, otherwise code below gets confused
-     whether 'get' or 'set' operation is requested. */
-  if (lua_isnone (L, 3))
-    lua_pushnil (L);
-
   compound = compound_prepare (L, 1, TRUE);
   lua_pop (L, lgi_compound_get (L, 2, &gtype, (gpointer *) &ei, FALSE));
   switch (g_base_info_get_type (ei))
@@ -548,7 +541,7 @@ lgi_compound_elementof (lua_State *L)
 	ti = g_field_info_get_type (ei);
 	ti_guard = lgi_guard_create_baseinfo (L, ti);
 
-	if (lua_isnoneornil (L, 3))
+	if (!lua_toboolean (L, 3))
 	  {
 	    if ((flags & GI_FIELD_IS_READABLE) == 0)
 	      return luaL_argerror (L, 2, "not readable");
@@ -563,7 +556,7 @@ lgi_compound_elementof (lua_State *L)
 	      return luaL_argerror (L, 2, "not writable");
 
 	    lua_pop (L, lgi_marshal_arg_2c (L, ti, NULL, GI_TRANSFER_NOTHING,
-					    val, 3, FALSE, NULL, NULL));
+					    val, 4, FALSE, NULL, NULL));
 	    vals = 0;
 	  }
 
@@ -581,7 +574,7 @@ lgi_compound_elementof (lua_State *L)
 	ti_guard = lgi_guard_create_baseinfo (L, ti);
         g_value_init (&val, lgi_get_gtype (L, ti));
 
-	if (lua_isnoneornil (L, 3))
+	if (!lua_toboolean (L, 3))
 	  {
 	    if ((flags & G_PARAM_READABLE) == 0)
 	      return luaL_argerror (L, 2, "not readable");
@@ -595,7 +588,7 @@ lgi_compound_elementof (lua_State *L)
 	    if ((flags & G_PARAM_WRITABLE) == 0)
 	      return luaL_argerror (L, 2, "not writable");
 
-            lgi_marshal_val_2c (L, ti, GI_TRANSFER_NOTHING, &val, 3);
+            lgi_marshal_val_2c (L, ti, GI_TRANSFER_NOTHING, &val, 4);
 	    g_object_set_property (compound->addr, name, &val);
 	  }
 
@@ -627,7 +620,8 @@ compound_index (lua_State *L)
 	/* Custom function, so call it. */
 	lua_pushvalue (L, 1);
 	lua_pushvalue (L, 2);
-	lua_call (L, 2, 1);
+	lua_pushboolean (L, 0);
+	lua_call (L, 3, 1);
 	break;
       }
 
@@ -657,8 +651,9 @@ compound_newindex (lua_State *L)
 	/* Custom function, so call it. */
 	lua_pushvalue (L, 1);
 	lua_pushvalue (L, 2);
+	lua_pushboolean (L, 1);
 	lua_pushvalue (L, 3);
-	lua_call (L, 3, 0);
+	lua_call (L, 4, 0);
 	break;
       }
 
