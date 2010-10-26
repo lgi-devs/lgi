@@ -890,7 +890,7 @@ lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
     case G_TYPE_OBJECT:
       {
 	vals = lgi_compound_get (L, narg, &type, &obj, FALSE);
-	g_value_set_boxed (val, obj);
+	g_value_set_object (val, obj);
 	lua_pop (L, vals);
 	return;
       }
