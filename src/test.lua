@@ -1,4 +1,12 @@
---[[-- Assorted tests. --]]--
+--[[--------------------------------------------------------------------------
+
+  LGI core testsuite.
+
+  Copyright (c) 2010 Pavel Holejsovsky
+  Licensed under the MIT license:
+  http://www.opensource.org/licenses/mit-license.php
+
+--]]--------------------------------------------------------------------------
 
 local lgi = require 'lgi'
 local GLib = require 'lgi.GLib'
