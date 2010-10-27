@@ -294,7 +294,7 @@ lgi_gtype (lua_State *L)
     {
       /* Get information by compound. */
       gpointer unused;
-      lua_pop (L, lgi_compound_get (L, 1, &gtype, &unused, FALSE));
+      lua_pop (L, lgi_compound_get (L, 1, &gtype, &unused, 0));
     }
 
   lua_pushnumber (L, gtype);
@@ -310,7 +310,7 @@ lgi_cast (lua_State *L)
   GType gtype = luaL_checknumber (L, 2), gt_obj = G_TYPE_OBJECT;
 
   /* Get the source object. */
-  lgi_compound_get (L, 1, &gt_obj, (gpointer *) &obj, FALSE);
+  lgi_compound_get (L, 1, &gt_obj, (gpointer *) &obj, 0);
 
   /* Check, that casting is possible. */
   if (g_type_is_a (G_TYPE_FROM_INSTANCE (obj), gtype))
@@ -354,8 +354,8 @@ lgi_connect (lua_State *L)
   GType gt_obj = G_TYPE_OBJECT, gt_bi = GI_TYPE_BASE_INFO;
 
   /* Get target objects. */
-  if (lgi_compound_get (L, 1, &gt_obj, &obj, FALSE)
-      || lgi_compound_get (L, 3, &gt_bi, (gpointer *) &ci, FALSE))
+  if (lgi_compound_get (L, 1, &gt_obj, &obj, 0)
+      || lgi_compound_get (L, 3, &gt_bi, (gpointer *) &ci, 0))
       g_assert_not_reached ();
 
   /* Create GClosure instance to be used.  This is fast'n'dirty method; it

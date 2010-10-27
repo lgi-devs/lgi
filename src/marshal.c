@@ -780,7 +780,7 @@ lgi_marshal_arg_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 	    {
 	      GType gtype = g_registered_type_info_get_g_type (info);
 	      nret = lgi_compound_get (L, narg, &gtype, &val->v_pointer,
-				       optional);
+				       optional ? LGI_FLAGS_OPTIONAL : 0);
 	      break;
 	    }
 
@@ -881,7 +881,7 @@ lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 
     case G_TYPE_BOXED:
       {
-	vals = lgi_compound_get (L, narg, &type, &obj, FALSE);
+	vals = lgi_compound_get (L, narg, &type, &obj, LGI_FLAGS_OPTIONAL);
 	g_value_set_boxed (val, obj);
 	lua_pop (L, vals);
 	return;
@@ -889,7 +889,7 @@ lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 
     case G_TYPE_OBJECT:
       {
-	vals = lgi_compound_get (L, narg, &type, &obj, FALSE);
+	vals = lgi_compound_get (L, narg, &type, &obj, LGI_FLAGS_OPTIONAL);
 	g_value_set_object (val, obj);
 	lua_pop (L, vals);
 	return;

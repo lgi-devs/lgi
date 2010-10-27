@@ -289,9 +289,9 @@ lgi_compound_object_new (lua_State *L, GIObjectInfo *oi, int argtable)
 		     contents. */
 		  ti = g_property_info_get_type (pi);
 		  lgi_guard_create_baseinfo (L, ti);
-                  g_value_init (&param->value, lgi_get_gtype (L, ti));
-                  lgi_marshal_val_2c (L, ti, GI_TRANSFER_NOTHING,
-                                      &param->value, -2);
+		  g_value_init (&param->value, lgi_get_gtype (L, ti));
+		  lgi_marshal_val_2c (L, ti, GI_TRANSFER_NOTHING,
+				      &param->value, -2);
 		  lua_pop (L, 1);
 		}
 	    }
@@ -441,7 +441,7 @@ lgi_compound_check (lua_State *L, int arg, GType *gtype)
 
 int
 lgi_compound_get (lua_State *L, int index, GType *gtype, gpointer *addr,
-		  gboolean optional)
+		  unsigned flags)
 {
   Compound *compound;
   int vals, gottype;
@@ -449,7 +449,7 @@ lgi_compound_get (lua_State *L, int index, GType *gtype, gpointer *addr,
 
   *addr = NULL;
   if (lua_isnoneornil (L, index))
-    return optional ? 0 : luaL_argerror (L, index, "nil");
+    return (flags & LGI_FLAGS_OPTIONAL) ? 0 : luaL_argerror (L, index, "nil");
 
   /* Check compound type. */
   compound = compound_check (L, index, gtype);
@@ -485,7 +485,7 @@ lgi_compound_get (lua_State *L, int index, GType *gtype, gpointer *addr,
 	      /* Return object returned by the constructor. */
 	      lua_replace (L, -3);
 	      lua_pop (L, 1);
-	      vals = lgi_compound_get (L, -1, gtype, addr, optional) + 1;
+	      vals = lgi_compound_get (L, -1, gtype, addr, flags) + 1;
 	      if (*addr == NULL)
 		{
 		  lua_pop (L, vals);
@@ -529,7 +529,7 @@ lgi_compound_elementof (lua_State *L)
   int vals = 0;
 
   compound = compound_prepare (L, 1, TRUE);
-  lua_pop (L, lgi_compound_get (L, 2, &gtype, (gpointer *) &ei, FALSE));
+  lua_pop (L, lgi_compound_get (L, 2, &gtype, (gpointer *) &ei, 0));
   switch (g_base_info_get_type (ei))
     {
     case GI_INFO_TYPE_FIELD:
@@ -572,7 +572,7 @@ lgi_compound_elementof (lua_State *L)
 
 	ti = g_property_info_get_type (ei);
 	ti_guard = lgi_guard_create_baseinfo (L, ti);
-        g_value_init (&val, lgi_get_gtype (L, ti));
+	g_value_init (&val, lgi_get_gtype (L, ti));
 
 	if (!lua_toboolean (L, 3))
 	  {
@@ -588,7 +588,7 @@ lgi_compound_elementof (lua_State *L)
 	    if ((flags & G_PARAM_WRITABLE) == 0)
 	      return luaL_argerror (L, 2, "not writable");
 
-            lgi_marshal_val_2c (L, ti, GI_TRANSFER_NOTHING, &val, 4);
+	    lgi_marshal_val_2c (L, ti, GI_TRANSFER_NOTHING, &val, 4);
 	    g_object_set_property (compound->addr, name, &val);
 	  }
 

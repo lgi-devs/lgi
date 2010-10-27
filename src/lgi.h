@@ -54,6 +54,12 @@ typedef enum lgi_reg
   LGI_REG__LAST
 } LgiRegType;
 
+/* Generic flags used in the interface. */
+enum _LgiFlags
+  {
+    LGI_FLAGS_OPTIONAL =    1 << 0
+  } LgiFlags;
+
 /* Initialization of modules. */
 void lgi_compound_init (lua_State *L);
 void lgi_callable_init (lua_State *L);
@@ -141,7 +147,7 @@ gpointer lgi_compound_object_new (lua_State *L, GIObjectInfo *ii, int argtable);
    pushed to the stack. On return, fills gtype argument with real
    gtype of returned compound. */
 int lgi_compound_get (lua_State *L, int arg, GType *gtype, gpointer *addr,
-		      gboolean optional);
+		      unsigned flags);
 
 /* Checks, compound with reqeusted gtype lives at given stack position.  If
    yes, returns its address and updates real compound's gtype, otherwise
