@@ -448,8 +448,8 @@ lgi_compound_get (lua_State *L, int index, GType *gtype, gpointer *addr,
   GIBaseInfo *info;
 
   *addr = NULL;
-  if (optional && lua_isnoneornil (L, index))
-    return 0;
+  if (lua_isnoneornil (L, index))
+    return optional ? 0 : luaL_argerror (L, index, "nil");
 
   /* Check compound type. */
   compound = compound_check (L, index, gtype);
