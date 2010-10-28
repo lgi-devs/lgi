@@ -1188,7 +1188,7 @@ function gireg.obj_prop_boxed()
    check(not pcall(function() o.boxed = 42 end))
    check(not pcall(function() o.boxed = 'lgi' end))
    check(not pcall(function() o.boxed = function() end end))
-   check(not pcall(function() o.bare = R.TestObj() end))
+   check(not pcall(function() o.boxed = R.TestObj() end))
 end
 
 -- Available groups
