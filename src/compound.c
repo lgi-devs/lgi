@@ -461,7 +461,7 @@ lgi_compound_get (lua_State *L, int index, GType *gtype, gpointer *addr,
 
   /* Direct type value failed, so try to invoke explicit 'constructor'
      of the type, i.e. when attempting to create instance of Foo.Bar
-     from param arg, call 'local inst = repo.Foo.Bar(arg)'. */
+     from param arg, call 'local inst = repo.Foo.Bar[0].construct(arg)'. */
   info = g_irepository_find_by_gtype (NULL, *gtype);
   if (*gtype != G_TYPE_NONE && info != NULL)
     {
@@ -475,24 +475,34 @@ lgi_compound_get (lua_State *L, int index, GType *gtype, gpointer *addr,
 	  vals++;
 	  if (!lua_isnil (L, -1))
 	    {
-	      /* 'info' will not be needed any more, don't leak it. */
-	      g_base_info_unref (info);
-
-	      /* Call the constructor. */
-	      lua_pushvalue (L, index);
-	      lua_call (L, 1, 1);
-
-	      /* Return object returned by the constructor. */
-	      lua_replace (L, -3);
-	      lua_pop (L, 1);
-	      vals = lgi_compound_get (L, -1, gtype, addr, flags) + 1;
-	      if (*addr == NULL)
+	      /* Get '[0].construct' part. */
+	      lua_rawgeti (L, -1, 0);
+	      vals++;
+	      if (!lua_isnil (L, -1))
 		{
-		  lua_pop (L, vals);
-		  vals = 0;
-		}
 
-	      return vals;
+		  lua_getfield (L, -1, "construct");
+		  vals++;
+		  if (!lua_isnil (L, -1))
+		    {
+		      /* Call the constructor. */
+		      lua_pushvalue (L, index);
+		      lua_call (L, 1, 1);
+
+		      /* Return object returned by the constructor. */
+		      lua_replace (L, -5);
+		      lua_pop (L, 3);
+		      vals = lgi_compound_get (L, -1, gtype, addr, flags) + 1;
+		      if (*addr != NULL)
+			{
+			  g_base_info_unref (info);
+			  return vals;
+			}
+
+		      lua_pop (L, vals);
+		      vals = 0;
+		    }
+		}
 	    }
 	}
 
