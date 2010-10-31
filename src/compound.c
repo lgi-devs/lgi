@@ -590,7 +590,7 @@ lgi_compound_elementof (lua_State *L)
 	      return luaL_argerror (L, 2, "not readable");
 
 	    g_object_get_property (compound->addr, name, &val);
-	    lgi_marshal_val_2lua (L, NULL, GI_TRANSFER_NOTHING, &val);
+	    lgi_marshal_val_2lua (L, ti, GI_TRANSFER_NOTHING, &val);
 	    vals = 1;
 	  }
 	else

@@ -997,7 +997,7 @@ function gireg.struct_b_clone()
    local R = lgi.Regress
    local b = R.TestStructB { some_int8 = 21, nested_a =
 			     { some_int = 42, some_int8 = 12,
-			       some_double = 3.14, 
+			       some_double = 3.14,
 			       some_enum = R.TestEnum.VALUE2 } }
    check(b == b)
    check(select('#', b:clone()) == 1)
@@ -1028,13 +1028,13 @@ end
 
 function gireg.boxed_a_equals()
    local R = lgi.Regress
-   check(R.TestSimpleBoxedA({ some_int = 1, some_int8 = 2, 
+   check(R.TestSimpleBoxedA({ some_int = 1, some_int8 = 2,
 			      some_double = 3.14 }):equals(
-	    R.TestSimpleBoxedA({ some_int = 1, some_int8 = 2, 
+	    R.TestSimpleBoxedA({ some_int = 1, some_int8 = 2,
 				 some_double = 3.14 })))
-   check(not R.TestSimpleBoxedA({ some_int = 2, some_int8 = 2, 
+   check(not R.TestSimpleBoxedA({ some_int = 2, some_int8 = 2,
 				  some_double = 3.14 }):equals(
-	    R.TestSimpleBoxedA({ some_int = 1, some_int8 = 2, 
+	    R.TestSimpleBoxedA({ some_int = 1, some_int8 = 2,
 				 some_double = 3.14 })))
    check(R.TestSimpleBoxedA():equals(R.TestSimpleBoxedA()))
    check(not pcall(R.TestSimpleBoxedA().equals))
@@ -1189,6 +1189,21 @@ function gireg.obj_prop_boxed()
    check(not pcall(function() o.boxed = 'lgi' end))
    check(not pcall(function() o.boxed = function() end end))
    check(not pcall(function() o.boxed = R.TestObj() end))
+end
+
+function gireg.obj_prop_hash()
+   local R = lgi.Regress
+   local o = R.TestObj()
+
+   check(o.hash_table == nil)
+   o.hash_table = { a = 1, b = 2 }
+   local ov = o.hash_table
+   check(ov.a == 1 and ov.b == 2)
+   check(not pcall(function() o.hash_table = 42 end))
+   check(not pcall(function() o.hash_table = 'lgi' end))
+   check(not pcall(function() o.hash_table = function() end end))
+   check(not pcall(function() o.hash_table = R.TestObj() end))
+   check(not pcall(function() o.hash_table = R.TestBoxed() end))
 end
 
 -- Available groups

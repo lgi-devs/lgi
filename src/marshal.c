@@ -512,20 +512,20 @@ marshal_2lua_list (lua_State *L, GITypeInfo *ti, GITypeTag list_tag,
 /* Marshalls array from Lua to C. Returns number of temporary elements
    pushed to the stack. */
 static int
-marshal_2c_hash (lua_State *L, GITypeInfo *ti, GIArgument *val, int narg,
+marshal_2c_hash (lua_State *L, GITypeInfo *ti, GHashTable **table, int narg,
 		 gboolean optional, GITransfer transfer)
 {
   GITypeInfo *eti[2];
   GITransfer exfer = (transfer == GI_TRANSFER_EVERYTHING
 		      ? GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING);
-  GHashTable **table;
   gint i, vals = 0, guard, table_guard;
+  GHashTable **guarded_table;
   GHashFunc hash_func;
   GEqualFunc equal_func;
 
   /* Represent nil as NULL table. */
   if (optional && lua_isnoneornil (L, narg))
-    val->v_pointer = NULL;
+    *table = NULL;
   else
     {
       /* Check the type; we allow tables only. */
@@ -541,7 +541,7 @@ marshal_2c_hash (lua_State *L, GITypeInfo *ti, GIArgument *val, int narg,
 
       /* Create the hashtable and guard it so that it is destroyed in
 	 case something goes wrong during marshalling. */
-      table_guard = lgi_guard_create (L, (gpointer **) &table,
+      table_guard = lgi_guard_create (L, (gpointer **) &guarded_table,
 				      (GDestroyNotify) g_hash_table_destroy);
       vals++;
 
@@ -568,7 +568,7 @@ marshal_2c_hash (lua_State *L, GITypeInfo *ti, GIArgument *val, int narg,
 	  hash_func = NULL;
 	  equal_func = NULL;
 	}
-      val->v_pointer = *table = g_hash_table_new (hash_func, equal_func);
+      *guarded_table = *table = g_hash_table_new (hash_func, equal_func);
 
       /* Iterate through Lua table and fill hashtable. */
       lua_pushnil (L);
@@ -602,9 +602,9 @@ marshal_2c_hash (lua_State *L, GITypeInfo *ti, GIArgument *val, int narg,
   return vals;
 }
 
-static int
+static void
 marshal_2lua_hash (lua_State *L, GITypeInfo *ti, GITransfer xfer,
-		   GIArgument *val)
+		   GHashTable *hash_table)
 {
   GHashTableIter iter;
   GITypeInfo *eti[2];
@@ -612,7 +612,7 @@ marshal_2lua_hash (lua_State *L, GITypeInfo *ti, GITransfer xfer,
   GIArgument eval[2];
 
   /* Check for 'NULL' table, represent it simply as nil. */
-  if (val->v_pointer == NULL)
+  if (hash_table == NULL)
     lua_pushnil (L);
   else
     {
@@ -629,7 +629,7 @@ marshal_2lua_hash (lua_State *L, GITypeInfo *ti, GITransfer xfer,
       lua_newtable (L);
 
       /* Go through the hashtable and push elements into the table. */
-      g_hash_table_iter_init (&iter, val->v_pointer);
+      g_hash_table_iter_init (&iter, hash_table);
       while (g_hash_table_iter_next (&iter, &eval[0].v_pointer,
 				     &eval[1].v_pointer))
 	{
@@ -644,12 +644,11 @@ marshal_2lua_hash (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 
       /* Free the table, if requested. */
       if (xfer != GI_TRANSFER_NOTHING)
-	g_hash_table_unref (val->v_pointer);
+	g_hash_table_unref (hash_table);
 
       lua_remove (L, guard);
       lua_remove (L, guard);
     }
-  return 1;
 }
 
 /* Marshalls given callable from Lua to C. */
@@ -818,7 +817,8 @@ lgi_marshal_arg_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
       break;
 
     case GI_TYPE_TAG_GHASH:
-      nret = marshal_2c_hash (L, ti, val, narg, optional, transfer);
+      nret = marshal_2c_hash (L, ti, (GHashTable **) &val->v_pointer, narg,
+			      optional, transfer);
       break;
 
     default:
@@ -863,6 +863,24 @@ lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
   HANDLE_GTYPE(ENUM, luaL_checkinteger, set_enum)
   HANDLE_GTYPE(FLAGS, luaL_checkinteger, set_flags)
 #undef HANDLE_GTYPE
+
+  /* If we have typeinfo, try to use it for some specific cases. */
+  if (ti != NULL)
+    {
+      switch (g_type_info_get_tag (ti))
+	{
+	case GI_TYPE_TAG_GHASH:
+	  {
+	    GHashTable *table;
+	    marshal_2c_hash (L, ti, &table, narg, FALSE, GI_TRANSFER_NOTHING);
+	    g_value_set_boxed (val, table);
+	    return;
+	  }
+
+	default:
+	  break;
+	}
+    }
 
   /* Handle other cases. */
   switch (G_TYPE_FUNDAMENTAL (type))
@@ -1093,7 +1111,7 @@ lgi_marshal_arg_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
       break;
 
     case GI_TYPE_TAG_GHASH:
-      marshal_2lua_hash (L, ti, transfer, val);
+      marshal_2lua_hash (L, ti, transfer, val->v_pointer);
       break;
 
     default:
@@ -1135,6 +1153,21 @@ lgi_marshal_val_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
   HANDLE_GTYPE(FLAGS, lua_pushinteger, get_flags)
 #undef HANDLE_GTYPE
 
+  /* If we have typeinfo, try to use it for some specific cases. */
+  if (ti != NULL)
+    {
+      switch (g_type_info_get_tag (ti))
+	{
+	case GI_TYPE_TAG_GHASH:
+	  marshal_2lua_hash (L, ti, GI_TRANSFER_NOTHING,
+			     g_value_get_boxed (val));
+	  return;
+
+	default:
+	  break;
+	}
+    }
+
   /* Handle other cases. */
   switch (G_TYPE_FUNDAMENTAL (type))
     {
@@ -1165,6 +1198,6 @@ lgi_marshal_val_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
       break;
     }
 
-  luaL_error (L, "g_value_get: no handling or  %s(%s)",
+  luaL_error (L, "g_value_get: no handling of %s(%s)",
 	      g_type_name (type), g_type_name (G_TYPE_FUNDAMENTAL (type)));
 }
