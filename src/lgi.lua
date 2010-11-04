@@ -273,6 +273,7 @@ function class_mt.__call(class, param)
       -- table.
       for name, value in pairs(param or {}) do
 	 local paramtype = class[name]
+	 if type(paramtype) == 'function' then paramtype = paramtype() end
 	 if (type(paramtype) == 'userdata' and
 	  gi.base_info_get_type(paramtype) == gi.InfoType.PROPERTY) then
 	    params[paramtype] = value
@@ -563,12 +564,15 @@ local function load_element_field(fi)
       local type = gi.base_info_get_type(ii)
       if type == gi.InfoType.STRUCT or type == gi.InfoType.UNION then
 	 -- Nested structure, handle assignment to it specially.
-	 return function(obj, _, setter, newval)
+	 return function(obj, _, mode, newval)
+		   -- If reading the type, read it directly.
+		   if mode == nil then return fi end
+
 		   -- Get access to underlying nested structure.
 		   local sub = core.elementof(obj, fi, false)
 
 		   -- Reading it is simple, we are done.
-		   if not setter then return sub end
+		   if not mode then return sub end
 
 		   -- Writing means assigning all fields from the
 		   -- source table.
@@ -578,14 +582,16 @@ local function load_element_field(fi)
    end
 
    -- For other types, simple closure around elementof() is sufficient.
-   return function(obj, _, setter, newval)
-	     return core.elementof(obj, fi, setter, newval)
+   return function(obj, _, mode, newval)
+	     if mode == nil then return fi end
+	     return core.elementof(obj, fi, mode, newval)
 	  end
 end
 
 local function load_element_property(pi)
-   return function(obj, _, setter, newval)
-	     return core.elementof(obj, pi, setter, newval)
+   return function(obj, _, mode, newval)
+	     if mode == nil then return pi end
+	     return core.elementof(obj, pi, mode, newval)
 	  end
 end
 
