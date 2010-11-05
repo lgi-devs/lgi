@@ -18,12 +18,13 @@ def configure(conf):
                    mandatory=True,
                    args='--cflags --libs')
     conf.check_cfg(package='lua5.1', uselib_store='LUA',
-                   msg = 'Checking for Lua package directories',
-                   okmsg = 'ok',
+                   msg='Checking for Lua package directories',
+                   okmsg='ok',
                    variables=['INSTALL_LMOD', 'INSTALL_CMOD'])
     conf.check_cfg(package='gobject-introspection-1.0', uselib_store='GI',
                    mandatory=True,
-                   args='--cflags --libs')
+                   args='gobject-introspection-1.0 >= 0.9.7 --cflags --libs',
+                   msg='Checking for gobject-introspection >= 0.9.7')
     conf.env.append_unique('CCFLAGS', '-Wall')
     conf.env.append_unique('CCFLAGS', Options.options.debug
                            and '-g' or ['-O2', '-DNDEBUG'])
