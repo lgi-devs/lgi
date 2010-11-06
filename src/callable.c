@@ -338,9 +338,10 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
     }
 
   /* Prepare data for the call. */
-  args = g_newa (GIArgument, callable->nargs + callable->has_self);
-  redirect_out = g_newa (void *, callable->nargs + callable->has_self);
-  ffi_args = g_newa (void *, callable->nargs + callable->has_self);
+  nargs = callable->nargs + callable->has_self;
+  args = g_newa (GIArgument, nargs);
+  redirect_out = g_newa (void *, nargs + callable->throws);
+  ffi_args = g_newa (void *, nargs + callable->throws);
 
   /* Prepare 'self', if present. */
   lua_argi = args_index;
@@ -408,7 +409,10 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
 
   /* Add error for 'throws' type function. */
   if (callable->throws)
-    ffi_args[callable->has_self + callable->nargs] = &err;
+    {
+      redirect_out[nargs] = &err;
+      ffi_args[nargs] = &redirect_out[nargs];
+    }
 
   /* Call the function. */
   ffi_call (&callable->cif, addr, &retval, ffi_args);
