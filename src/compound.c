@@ -337,6 +337,20 @@ compound_gc (lua_State *L)
 	g_object_unref (compound->addr);
       else if (G_TYPE_IS_BOXED (gtype))
 	g_boxed_free (gtype, compound->addr);
+      else
+	{
+	  /* Some other fundamental type, check, whether it has
+	     registered custom unref method. */
+	  GIObjectInfo *info = g_irepository_find_by_gtype (NULL, gtype);
+	  if (g_object_info_get_fundamental (info))
+	    {
+	      GIObjectInfoUnrefFunction unref =
+		g_object_info_get_unref_function_pointer (info);
+	      if (unref != NULL)
+		unref (compound->addr);
+	    }
+	  g_base_info_unref (info);
+	}
     }
 
   if (compound->has_parent)

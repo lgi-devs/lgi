@@ -1078,6 +1078,32 @@ lgi_marshal_arg_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
 		   the pointer inside. */
 		addr = val;
 
+	      /* If we do not own the compound, we should try to take
+		 its ownership; keeping pointer to compound without
+		 owning it is dangerous, it might be destroyed under
+		 our hands. */
+	      if (!own && (type == GI_INFO_TYPE_OBJECT
+			   || type == GI_INFO_TYPE_INTERFACE))
+		{
+		  if (!g_object_info_get_fundamental (info))
+		    {
+		      /* Standard GObject, use standard method. */
+		      g_object_ref (addr);
+		      own = TRUE;
+		    }
+		  else
+		    {
+		      /* Try to use custom ref method. */
+		      GIObjectInfoRefFunction ref =
+			g_object_info_get_ref_function_pointer (info);
+		      if (ref != NULL)
+			{
+			  ref (addr);
+			  own = TRUE;
+			}
+		    }
+		}
+
 	      lgi_compound_create (L, info, addr, own, parent);
 	      break;
 	    }

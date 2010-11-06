@@ -1212,6 +1212,15 @@ function gireg.obj_prop_hash()
    check(not pcall(function() o.hash_table = R.TestBoxed() end))
 end
 
+function gireg.obj_fundamental()
+   local R = lgi.Regress
+   local f = R.TestFundamentalSubObject.new('foo-nda-mental')
+   check(f)
+   check(f.data == 'foo-nda-mental')
+   f = nil
+   collectgarbage()
+end
+
 -- Available groups
 local groups = { 'gireg', gireg = gireg }
 
