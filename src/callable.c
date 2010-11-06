@@ -309,12 +309,18 @@ int
 lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
 {
   Param *param;
-  int i, lua_argi, nret, caller_allocated = 0;
+  int i, lua_argi, nret, caller_allocated = 0, nargs;
   GIArgument retval;
   GIArgument *args;
   void **ffi_args, **redirect_out;
   GError *err = NULL;
   Callable *callable = luaL_checkudata (L, func_index, UD_CALLABLE);
+
+  /* Make sure that all unspecified arguments are set as nil; during
+     marhsalling we might create temporary values on the stack, which
+     can be confused with input arguments expected but not passed by
+     caller. */
+  lua_settop(L, callable->has_self + callable->nargs + 1);
 
   /* We cannot push more stuff than count of arguments we have. */
   luaL_checkstack (L, callable->nargs, "");
