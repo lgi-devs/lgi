@@ -914,8 +914,31 @@ lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
       }
 
     default:
-      g_assert_not_reached ();
+      {
+	/* Try fundamentals; they have custom gtype. */
+	GIBaseInfo *info = g_irepository_find_by_gtype (NULL, type);
+	if (info != NULL)
+	  {
+	    GIObjectInfoSetValueFunction set_value = NULL;
+	    if (g_base_info_get_type (info) == GI_INFO_TYPE_OBJECT &&
+		g_object_info_get_fundamental (info))
+	      set_value = g_object_info_get_set_value_function_pointer (info);
+	    g_base_info_unref (info);
+	    if (set_value != NULL)
+	      {
+		gpointer obj;
+		vals = lgi_compound_get (L, narg, &type, &obj,
+					 LGI_FLAGS_OPTIONAL);
+		set_value (val, obj);
+		lua_pop (L, vals);
+		return;
+	      }
+	  }
+      }
     }
+
+  luaL_error (L, "g_value_set: no handling of %s(%s)",
+	      g_type_name (type), g_type_name (G_TYPE_FUNDAMENTAL (type)));
 }
 
 gboolean
@@ -1221,7 +1244,32 @@ lgi_marshal_val_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
       }
 
     default:
-      break;
+      {
+	/* Fundamentals handling. */
+	GIBaseInfo *info = g_irepository_find_by_gtype (NULL, type);
+	if (info != NULL)
+	  {
+	    if (g_base_info_get_type (info) == GI_INFO_TYPE_OBJECT
+		&& g_object_info_get_fundamental (info))
+	      {
+		GIObjectInfoGetValueFunction get_value;
+		GIObjectInfoRefFunction ref;
+		get_value =
+		  g_object_info_get_get_value_function_pointer (info);
+		ref = g_object_info_get_ref_function_pointer (info);
+		if (get_value != NULL && ref != NULL)
+		  {
+		    gpointer obj = get_value (val);
+		    if (obj != NULL)
+		      ref (obj);
+		    lgi_compound_create (L, info, obj, TRUE, 0);
+		    g_base_info_unref (info);
+		    return;
+		  }
+	      }
+	    g_base_info_unref (info);
+	  }
+      }
     }
 
   luaL_error (L, "g_value_get: no handling of %s(%s)",

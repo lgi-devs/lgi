@@ -1217,6 +1217,8 @@ function gireg.obj_fundamental()
    local f = R.TestFundamentalSubObject.new('foo-nda-mental')
    check(f)
    check(f.data == 'foo-nda-mental')
+   local v = lgi.GObject.Value(f)
+   check(v.value == f)
    f = nil
    collectgarbage()
 end
