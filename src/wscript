@@ -16,6 +16,7 @@ def build(bld):
         source = 'core.c callable.c marshal.c glib.c compound.c',
         target = 'lgi',
         uselib = ['LUA', 'GI'],
+        cflags = bld.env.CCFLAGS,
         install_path = '${LUA_INSTALL_CMOD}',
         )
     bld.install_files('${LUA_INSTALL_LMOD}/', 'lgi.lua')
