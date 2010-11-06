@@ -606,8 +606,9 @@ end
 
 local function load_element_signal(info)
    return
-   function(obj, _, newval)
-      if newval then
+   function(obj, _, mode, newval)
+      if mode == nil then return info end
+      if mode then
 	 -- Assignment means 'connect signal without detail'.
 	 core.connect(obj, info:get_name(), info, newval)
       else
