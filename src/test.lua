@@ -870,14 +870,20 @@ function gireg.enum()
    local R = lgi.Regress
    check(R.TestEnum.VALUE1 == 0)
    check(R.TestEnum.VALUE2 == 1)
-   check(R.TestEnum.VALUE3 == 42)
+   check(R.TestEnum.VALUE3 == -1)
    check(R.TestEnum[0] == 'VALUE1')
    check(R.TestEnum[1] == 'VALUE2')
-   check(R.TestEnum[42] == 'VALUE3')
+   check(R.TestEnum[-1] == 'VALUE3')
    check(R.TestEnum[43] == nil)
    check(R.test_enum_param(0) == 'value1')
    check(R.test_enum_param(1) == 'value2')
-   check(R.test_enum_param(42) == 'value3')
+   check(R.test_enum_param(-1) == 'value3')
+
+   check(R.TestEnumUnsigned.VALUE1 == 1)
+   check(R.TestEnumUnsigned.VALUE2 == 0x80000000)
+   check(R.TestEnumUnsigned[1] == 'VALUE1')
+   check(R.TestEnumUnsigned[0x80000000] == 'VALUE2')
+   check(R.TestEnumUnsigned[-1] == nil)
 end
 
 function gireg.flags()
