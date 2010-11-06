@@ -14,8 +14,9 @@ require 'lgi'
 local Gtk = require 'lgi.Gtk'
 local Gio = require 'lgi.Gio'
 
-local function new_window(app, file)
-   local ok, contents = file and file:load_contents()
+local function new_editor(app, file)
+   local ok, contents
+   if file then ok, contents = file:load_contents() end
    local window = Gtk.Window {
       type = Gtk.WindowType.TOPLEVEL,
       application = app,
@@ -34,25 +35,27 @@ if false then
    local app = Gtk.Application.new('org.lgi.GtkPad',
 				   Gio.ApplicationFlags.HANDLES_OPEN)
    app.on_activate = function(app)
-			new_window(app)
+			new_editor(app)
 		     end
 
    app.on_open = function(app, files)
-		    for i = 1, #files do new_window(app, files[i]) end
+		    for i = 1, #files do new_editor(app, files[i]) end
 		 end
 
-   return app:run(0, 'prd')
+   return app:run(...)
 else
    Gtk.init()
    local args, running = { ... }, 0
    for i = 1, #args ~= 0 and #args or 1 do
-      new_window(nil, args[i]).on_destroy = function() 
-					       count = count - 1
-					       if count == 0 then
-						  Gtk.main_quit()
-					       end
-					    end
-      count = count + 1
+      if args[i] then args[i] = Gio.file_new_for_path(args[i]) end
+      local window = new_editor(nil, args[i])
+      running = running + 1
+      window.on_destroy = function()
+			     running = running - 1
+			     if running == 0 then
+				Gtk.main_quit()
+			     end
+			  end
    end
    Gtk.main()
 end
