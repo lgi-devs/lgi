@@ -27,6 +27,7 @@ def build(bld):
         uselib = ['LUA', 'GI', 'GIO', 'CAIRO'],
         source = 'regress.c',
         target = 'regress',
+        cflags = bld.env.CCFLAGS,
         install_path = None,
         )
 
