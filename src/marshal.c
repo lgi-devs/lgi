@@ -709,7 +709,7 @@ lgi_marshal_arg_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
   switch (tag)
     {
     case GI_TYPE_TAG_BOOLEAN:
-      if (!optional && lua_isnone (L, narg))
+      if (!optional && lua_isnoneornil (L, narg))
 	luaL_typerror (L, narg, lua_typename (L, LUA_TBOOLEAN));
       val->v_boolean = lua_toboolean (L, narg) ? TRUE : FALSE;
       break;
