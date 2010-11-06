@@ -540,8 +540,7 @@ local function get_category(info, count, get_item, xform_value, xform_name,
       })
 end
 
--- Loads all fields, consts, properties, methods and interfaces of given
--- object.
+-- Sets up compound header (field 0) and metatable for the compound table.
 local function load_compound(compound, info, mt)
    -- Fill in meta of the compound.
    compound[0] = compound[0] or {}
@@ -747,6 +746,9 @@ local function load_class(namespace, class, info)
       function(ii) return repo[ii:get_namespace(ii)][ii:get_name()] end,
       nil,
       function(n, ii) return ii:get_namespace() .. '.' .. n end)
+   class._fields = get_category(
+      info, gi.object_info_get_n_fields(info), gi.object_info_get_field,
+      load_element_field)
    local _ = rawget(class, '_inherits') and class._inherits[0]
 
    -- Add parent (if any) into _inherits table.
