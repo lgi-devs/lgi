@@ -159,5 +159,9 @@ gpointer lgi_compound_check (lua_State *L, int arg, GType *gtype);
    curval = lgi_compound_elementof(compound, eltinfo[, newval]) */
 int lgi_compound_elementof (lua_State *L);
 
+/* Retrieves either list of all properties of given compound, or just
+   one if name is specified.  Returned property info is GParamSpec. */
+int lgi_compound_properties(lua_State *L);
+
 /* Creates GClosure which invokes specified target. */
 GClosure *lgi_gclosure_create (lua_State *L, int target);

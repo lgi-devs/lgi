@@ -547,6 +547,48 @@ lgi_compound_get (lua_State *L, int index, GType *gtype, gpointer *addr,
 }
 
 int
+lgi_compound_properties(lua_State *L)
+{
+  int vals = 0;
+  GIBaseInfo *pspec_info;
+  gpointer obj;
+  GType gtype = G_TYPE_OBJECT;
+  gboolean list = lua_isnoneornil (L, 2);
+
+  lua_pop (L, lgi_compound_get(L, 1, &gtype, &obj, 0));
+  pspec_info = g_irepository_find_by_name (NULL, "GObject", "ParamSpec");
+  lgi_guard_create_baseinfo (L, pspec_info);
+  if (list)
+    {
+      /* List all properties of the object, store them into the table. */
+      guint n_properties, i;
+      GParamSpec **pspecs;
+
+      lua_newtable (L);
+      vals = 1;
+      pspecs = g_object_class_list_properties (G_OBJECT_GET_CLASS (obj),
+					       &n_properties);
+      for (i = 0; i < n_properties; ++i)
+	if (lgi_compound_create (L, pspec_info, pspecs[i], FALSE, 0))
+	  lua_setfield (L, -2, pspecs[i]->name);
+
+      /* Returned array has to be freed. */
+      g_free (pspecs);
+    }
+  else
+    {
+      /* Find specified property. */
+      GParamSpec *pspec =
+	g_object_class_find_property (G_OBJECT_GET_CLASS (obj),
+				      lua_tostring (L, 2));
+      if (pspec != NULL)
+	vals = lgi_compound_create (L, pspec_info, pspec, FALSE, 0);
+    }
+
+  return vals;
+}
+
+int
 lgi_compound_elementof (lua_State *L)
 {
   Compound *compound;
