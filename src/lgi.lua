@@ -924,6 +924,10 @@ do
       end
    end
 
+   -- ParamSpec.  Manually add its gtype, because it is not present in
+   -- the typelib and is vital to dynamic elementof() innards.
+   repo.GObject.ParamSpec[0].gtype = repo.GObject.type_from_name('GParam')
+
    -- Closure modifications.  Closure does not need any methods nor
    -- fields, but it must have constructor creating it from any kind
    -- of Lua callable.
