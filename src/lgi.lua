@@ -89,7 +89,7 @@ local function find_in_compound(compound, symbol, categories)
       -- Look in specified category.
       local val = from_category(compound, prefix, name)
       if val then return val end
-   else
+   elseif string.sub(symbol, 1, 1) ~= '_' then
       -- Check all available categories.
       for i = 1, #categories do
 	 local val = from_category(compound, categories[i], symbol)
@@ -99,7 +99,7 @@ local function find_in_compound(compound, symbol, categories)
 
    -- Check all inherited compounds.
    for _, inherited in pairs(rawget(compound, '_inherits') or {}) do
-      local val = find_in_compound(inherited, symbol, categories)
+      local val = inherited[symbol]
       if val then return val end
    end
 end
