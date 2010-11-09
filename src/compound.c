@@ -342,14 +342,17 @@ compound_gc (lua_State *L)
 	  /* Some other fundamental type, check, whether it has
 	     registered custom unref method. */
 	  GIObjectInfo *info = g_irepository_find_by_gtype (NULL, gtype);
-	  if (g_object_info_get_fundamental (info))
+	  if (info != NULL)
 	    {
-	      GIObjectInfoUnrefFunction unref =
-		g_object_info_get_unref_function_pointer (info);
-	      if (unref != NULL)
-		unref (compound->addr);
+	      if (g_object_info_get_fundamental (info))
+		{
+		  GIObjectInfoUnrefFunction unref =
+		    g_object_info_get_unref_function_pointer (info);
+		  if (unref != NULL)
+		    unref (compound->addr);
+		}
+	      g_base_info_unref (info);
 	    }
-	  g_base_info_unref (info);
 	}
     }
 
