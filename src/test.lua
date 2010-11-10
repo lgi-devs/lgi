@@ -1212,6 +1212,21 @@ function gireg.obj_prop_hash()
    check(not pcall(function() o.hash_table = R.TestBoxed() end))
 end
 
+function gireg.obj_prop_list()
+   local R = lgi.Regress
+   local o = R.TestObj()
+
+   check(o.hash_table == nil)
+   o.list = { 'one', 'two', 'three',  }
+   local ov = o.list
+   check(#ov == 3 and ov[1] == 'one' and ov[2] == 'two' and ov[3] == 'three')
+   check(not pcall(function() o.list = 42 end))
+   check(not pcall(function() o.list = 'lgi' end))
+   check(not pcall(function() o.list = function() end end))
+   check(not pcall(function() o.list = R.TestObj() end))
+   check(not pcall(function() o.list = R.TestBoxed() end))
+end
+
 function gireg.obj_fundamental()
    local R = lgi.Regress
    local f = R.TestFundamentalSubObject.new('foo-nda-mental')

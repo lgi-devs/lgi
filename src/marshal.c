@@ -35,6 +35,8 @@ lgi_get_gtype (lua_State *L, GITypeInfo *ti)
       HANDLE_TAG (UTF8, STRING);
       HANDLE_TAG (FILENAME, STRING);
       HANDLE_TAG (GHASH, HASH_TABLE);
+      HANDLE_TAG (GLIST, POINTER);
+      HANDLE_TAG (GSLIST, POINTER);
       HANDLE_TAG (ERROR, ERROR);
 
 #undef HANDLE_TAG
@@ -410,7 +412,7 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
    temporary elements pushed to the stack. */
 static int
 marshal_2c_list (lua_State *L, GITypeInfo *ti, GITypeTag list_tag,
-		 GIArgument *val, int narg, GITransfer transfer)
+		 gpointer *list, int narg, GITransfer transfer)
 {
   GITypeInfo *eti;
   GITypeTag etag;
@@ -462,16 +464,16 @@ marshal_2c_list (lua_State *L, GITypeInfo *ti, GITypeTag list_tag,
     }
 
   /* Marshalled value is kept inside the guard. */
-  val->v_pointer = *guard;
+  *list = *guard;
   lua_remove (L, eti_guard);
   return vals;
 }
 
 static int
 marshal_2lua_list (lua_State *L, GITypeInfo *ti, GITypeTag list_tag,
-		   GITransfer xfer, GIArgument *val)
+		   GITransfer xfer, gpointer list)
 {
-  GSList *list;
+  GSList *i;
   GITypeInfo *eti;
   gint index, eti_guard;
 
@@ -483,11 +485,10 @@ marshal_2lua_list (lua_State *L, GITypeInfo *ti, GITypeTag list_tag,
   lua_newtable (L);
 
   /* Go through the list and push elements into the table. */
-  for (list = (GSList *) val->v_pointer, index = 0; list != NULL;
-       list = g_slist_next (list))
+  for (i = list, index = 0; i != NULL; i = g_slist_next (i))
     {
       /* Get access to list item. */
-      GIArgument *eval = (GIArgument *) &list->data;
+      GIArgument *eval = (GIArgument *) &i->data;
 
       /* Store it into the table. */
       lgi_marshal_arg_2lua (L, eti, (xfer == GI_TRANSFER_EVERYTHING) ?
@@ -500,9 +501,9 @@ marshal_2lua_list (lua_State *L, GITypeInfo *ti, GITypeTag list_tag,
   if (xfer != GI_TRANSFER_NOTHING)
     {
       if (list_tag == GI_TYPE_TAG_GSLIST)
-	g_slist_free (val->v_pointer);
+	g_slist_free (list);
       else
-	g_list_free (val->v_pointer);
+	g_list_free (list);
     }
 
   lua_remove (L, eti_guard);
@@ -813,7 +814,7 @@ lgi_marshal_arg_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 
     case GI_TYPE_TAG_GLIST:
     case GI_TYPE_TAG_GSLIST:
-      nret = marshal_2c_list (L, ti, tag, val, narg, transfer);
+      nret = marshal_2c_list (L, ti, tag, &val->v_pointer, narg, transfer);
       break;
 
     case GI_TYPE_TAG_GHASH:
@@ -867,13 +868,23 @@ lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
   /* If we have typeinfo, try to use it for some specific cases. */
   if (ti != NULL)
     {
-      switch (g_type_info_get_tag (ti))
+      GITypeTag tag = g_type_info_get_tag (ti);
+      switch (tag)
 	{
 	case GI_TYPE_TAG_GHASH:
 	  {
 	    GHashTable *table;
 	    marshal_2c_hash (L, ti, &table, narg, FALSE, GI_TRANSFER_NOTHING);
 	    g_value_set_boxed (val, table);
+	    return;
+	  }
+
+	case GI_TYPE_TAG_GLIST:
+	case GI_TYPE_TAG_GSLIST:
+	  {
+	    gpointer list;
+	    marshal_2c_list (L, ti, tag, &list, narg, GI_TRANSFER_NOTHING);
+	    g_value_set_pointer (val, list);
 	    return;
 	  }
 
@@ -1156,7 +1167,7 @@ lgi_marshal_arg_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
 
     case GI_TYPE_TAG_GSLIST:
     case GI_TYPE_TAG_GLIST:
-      marshal_2lua_list (L, ti, tag, transfer, val);
+      marshal_2lua_list (L, ti, tag, transfer, val->v_pointer);
       break;
 
     case GI_TYPE_TAG_GHASH:
@@ -1205,12 +1216,21 @@ lgi_marshal_val_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
   /* If we have typeinfo, try to use it for some specific cases. */
   if (ti != NULL)
     {
-      switch (g_type_info_get_tag (ti))
+      GITypeTag tag = g_type_info_get_tag (ti);
+      switch (tag)
 	{
 	case GI_TYPE_TAG_GHASH:
 	  marshal_2lua_hash (L, ti, GI_TRANSFER_NOTHING,
 			     g_value_get_boxed (val));
 	  return;
+
+	case GI_TYPE_TAG_GLIST:
+	case GI_TYPE_TAG_GSLIST:
+	  {
+	    marshal_2lua_list (L, ti, tag, GI_TRANSFER_NOTHING,
+			       g_value_get_pointer (val));
+	    return;
+	  }
 
 	default:
 	  break;
