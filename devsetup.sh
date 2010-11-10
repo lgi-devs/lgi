@@ -2,13 +2,16 @@
 # script into interactive shell, everything should be set up to run uninstalled
 # LGI version incl. testsuite.
 
-build_dir=`cd \`dirname $0\` && pwd`/build
+test -f ./devsetup.sh || { 
+    echo 'devsetup.sh must be sourced from LGI top directory, i.e.'
+    echo '. ./devsetup.sh'; return; }
+build_dir=`pwd`/build
 ext=.so; pfx=lib
 test x`uname -o` != xCygwin || { ext=.dll; pfx=cyg; }
 test -x $build_dir/src/lgi${ext} &&			\
     test -x $build_dir/tests/${pfx}regress${ext} &&	\
     test -r $build_dir/tests/Regress-1.0.typelib || {	\
-    echo 'LGI must be built first.'; exit 1; }
+    echo 'LGI must be built first.'; return; }
 
 # Create links from files to root 'build' dir.
 (cd $build_dir && ln -sf src/lgi${ext} &&	\
@@ -22,14 +25,14 @@ IFS=':;'
 
 unset hasit
 for path in $LD_LIBRARY_PATH; do
-    p=`cd $path && pwd`; test $p = $build_dir && hasit=yes
+    p=`cd "$path" && pwd`; test $p = $build_dir && hasit=yes
 done
 test x$hasit = xyes || LD_LIBRARY_PATH="$build_dir:$LD_LIBRARY_PATH"
 export LD_LIBRARY_PATH
 
 unset hasit
 for path in $GI_TYPELIB_PATH; do
-    p=`cd $path && pwd`; test $p = $build_dir && hasit=yes
+    p=`cd "$path" && pwd`; test $p = $build_dir && hasit=yes
 done
 test x$hasit = xyes || GI_TYPELIB_PATH="$build_dir:$GI_TYPELIB_PATH"
 export GI_TYPELIB_PATH
