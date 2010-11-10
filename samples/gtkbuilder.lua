@@ -12,7 +12,7 @@ Gtk.init()
 
 -- Instantiate Gtk.Builder and load resources from ui file.
 local builder = Gtk.Builder()
-builder:add_from_file('demo.ui')
+assert(builder:add_from_file('demo.ui'))
 
 -- Get top-level window from the builder.
 local window = builder:get_object('window1')
