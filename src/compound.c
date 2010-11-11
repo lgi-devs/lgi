@@ -588,90 +588,124 @@ lgi_compound_properties(lua_State *L)
   return vals;
 }
 
+/* Helper method, performs elementof() operation on property of given
+   object. */
+static int
+compound_propertyof (lua_State *L, Compound *compound, GITypeInfo *ti,
+		     GType gtype, const gchar *name, GParamFlags flags)
+{
+  int vals = 0;
+  GValue val = {0};
+  g_value_init (&val, gtype);
+
+  if (!lua_toboolean (L, 3))
+    {
+      if ((flags & G_PARAM_READABLE) == 0)
+	return luaL_argerror (L, 2, "not readable");
+
+      g_object_get_property (compound->addr, name, &val);
+      lgi_marshal_val_2lua (L, ti, GI_TRANSFER_NOTHING, &val);
+      vals = 1;
+    }
+  else
+    {
+      if ((flags & G_PARAM_WRITABLE) == 0)
+	return luaL_argerror (L, 2, "not writable");
+
+      lgi_marshal_val_2c (L, ti, GI_TRANSFER_NOTHING, &val, 4);
+      g_object_set_property (compound->addr, name, &val);
+    }
+
+  if (G_IS_VALUE (&val))
+    g_value_unset (&val);
+
+  return vals;
+}
+
 int
 lgi_compound_elementof (lua_State *L)
 {
   Compound *compound;
   GIBaseInfo *ei;
-  GITypeInfo *ti;
-  GType gtype = GI_TYPE_BASE_INFO;
+  GType gtype;
   int vals = 0;
 
+  /* Prepare arg 1 - object on while we want access element. */
   compound = compound_prepare (L, 1, TRUE);
-  lua_pop (L, lgi_compound_get (L, 2, &gtype, (gpointer *) &ei, 0));
-  switch (g_base_info_get_type (ei))
+
+  /* Check argument 2; is it GIBaseInfo? */
+  gtype = GI_TYPE_BASE_INFO;
+  ei = lgi_compound_check (L, 2, &gtype);
+  if (ei != NULL)
     {
-    case GI_INFO_TYPE_FIELD:
-      {
-	GIArgument *val = G_STRUCT_MEMBER_P (compound->addr,
-					     g_field_info_get_offset (ei));
-	gint flags = g_field_info_get_flags (ei), ti_guard;
-
-	ti = g_field_info_get_type (ei);
-	ti_guard = lgi_guard_create_baseinfo (L, ti);
-
-	if (!lua_toboolean (L, 3))
+      GITypeInfo *ti;
+      int ti_guard;
+      switch (g_base_info_get_type (ei))
+	{
+	case GI_INFO_TYPE_PROPERTY:
 	  {
-	    if ((flags & GI_FIELD_IS_READABLE) == 0)
-	      return luaL_argerror (L, 2, "not readable");
-
-	    lgi_marshal_arg_2lua (L, ti, GI_TRANSFER_NOTHING, val, 1,
-				  FALSE, NULL, NULL);
-	    vals = 1;
-	  }
-	else
-	  {
-	    if ((flags & GI_FIELD_IS_WRITABLE) == 0)
-	      return luaL_argerror (L, 2, "not writable");
-
-	    lua_pop (L, lgi_marshal_arg_2c (L, ti, NULL, GI_TRANSFER_NOTHING,
-					    val, 4, FALSE, NULL, NULL));
-	    vals = 0;
+	    ti = g_property_info_get_type (ei);
+	    ti_guard = lgi_guard_create_baseinfo (L, ti);
+	    vals = compound_propertyof (L, compound, ti, lgi_get_gtype (L, ti),
+					g_base_info_get_name (ei),
+					g_property_info_get_flags (ei));
+	    lua_remove (L, ti_guard);
+	    break;
 	  }
 
-	lua_remove (L, ti_guard);
-	break;
-      }
-
-    case GI_INFO_TYPE_PROPERTY:
-      {
-	int flags = g_property_info_get_flags (ei), ti_guard;
-	const gchar *name = g_base_info_get_name (ei);
-	GValue val = {0};
-
-	ti = g_property_info_get_type (ei);
-	ti_guard = lgi_guard_create_baseinfo (L, ti);
-	g_value_init (&val, lgi_get_gtype (L, ti));
-
-	if (!lua_toboolean (L, 3))
+	case GI_INFO_TYPE_FIELD:
 	  {
-	    if ((flags & G_PARAM_READABLE) == 0)
-	      return luaL_argerror (L, 2, "not readable");
+	    GIArgument *val = G_STRUCT_MEMBER_P (compound->addr,
+						 g_field_info_get_offset (ei));
+	    gint flags = g_field_info_get_flags (ei);
 
-	    g_object_get_property (compound->addr, name, &val);
-	    lgi_marshal_val_2lua (L, ti, GI_TRANSFER_NOTHING, &val);
-	    vals = 1;
+	    ti = g_field_info_get_type (ei);
+	    ti_guard = lgi_guard_create_baseinfo (L, ti);
+
+	    if (!lua_toboolean (L, 3))
+	      {
+		if ((flags & GI_FIELD_IS_READABLE) == 0)
+		  return luaL_argerror (L, 2, "not readable");
+
+		lgi_marshal_arg_2lua (L, ti, GI_TRANSFER_NOTHING, val, 1,
+				      FALSE, NULL, NULL);
+		vals = 1;
+	      }
+	    else
+	      {
+		if ((flags & GI_FIELD_IS_WRITABLE) == 0)
+		  return luaL_argerror (L, 2, "not writable");
+
+		lua_pop (L, lgi_marshal_arg_2c (L, ti, NULL,
+						GI_TRANSFER_NOTHING,
+						val, 4, FALSE, NULL, NULL));
+		vals = 0;
+	      }
+
+	    lua_remove (L, ti_guard);
+	    break;
 	  }
-	else
-	  {
-	    if ((flags & G_PARAM_WRITABLE) == 0)
-	      return luaL_argerror (L, 2, "not writable");
 
-	    lgi_marshal_val_2c (L, ti, GI_TRANSFER_NOTHING, &val, 4);
-	    g_object_set_property (compound->addr, name, &val);
-	  }
+	default:
+	  g_assert_not_reached ();
+	}
 
-	g_value_unset (&val);
-	lua_remove (L, ti_guard);
-	break;
-      }
-
-    default:
-      g_assert_not_reached ();
+      /* Do not g_base_info_unref (ei), because it is owned by
+	 compound passed as 2nd argument. */
+    }
+  else
+    {
+      /* Arg 2 is not GIBaseInfo, it might be a pspec. */
+      GParamSpec *pspec;
+      gtype = G_TYPE_PARAM;
+      pspec = lgi_compound_check (L, 2, &gtype);
+      if (pspec != NULL)
+	vals = compound_propertyof (L, compound, NULL, pspec->value_type,
+				    pspec->name, pspec->flags);
+      else
+	luaL_typerror (L, 2, "GIBaseInfo or GParamSpec");
     }
 
-  /* Do not g_base_info_unref (ei), because it is owned by compound
-     passed as 2nd argument. */
   return vals;
 }
 
