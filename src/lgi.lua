@@ -74,6 +74,10 @@ local ir
 -- loading on-demand.  Created by C-side bootstrap.
 local repo = core.repo
 
+local function default_element_impl(compound, _, symbol)
+   return compound[symbol] 
+end
+
 -- Loads symbol from specified compound (object, struct or interface).
 -- Recursively looks up inherited elements.
 local function find_in_compound(compound, symbol, categories)
@@ -103,6 +107,14 @@ local function find_in_compound(compound, symbol, categories)
    for _, implemented in pairs(rawget(compound, '_implements') or {}) do
       val = implemented[symbol]
       if val then return val end
+   end
+
+   -- '_element' is pseudo-method, its default implementation here
+   -- does just return compound[symbol], but can be overriden for
+   -- specific compounds to find symbol dynamically according to
+   -- compound instance.
+   if symbol == '_element' then 
+      return default_element_impl
    end
 end
 
@@ -859,6 +871,24 @@ do
 
    -- No methods are needed (yet).
    obj._methods = nil
+
+   -- Install custom _element handler, which is used to handle dynamic
+   -- properties (the ones which are present on the real instance, but
+   -- not in the typelibs).
+   function obj._element(type, obj, name)
+      local element = type[name]
+      if not element then
+	 -- Element not found in the repo (typelib), try whether
+	 -- dynamic property of the specified name exists.
+	 local pspec = core.properties(obj, string.gsub(name, '_', '%-'))
+	 if pspec then
+	    element = function(obj, _, mode, newval)
+			 return core.elementof(obj, pspec, mode, newval)
+		      end
+	 end
+      end
+      return element
+   end
 
    -- Install 'on_notify' signal.  There are a few gotchas causing that the
    -- signal is handled separately from common signal handling above:

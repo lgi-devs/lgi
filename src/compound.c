@@ -412,18 +412,6 @@ compound_tostring (lua_State *L)
   return 1;
 }
 
-/* Reports error related to given compound element. Expects
-   compound_prepared' stack layout.*/
-static int
-compound_error (lua_State *L, const char *errmsg, int element)
-{
-  /* Prepare name of the compound. */
-  lua_rawgeti (L, -2, 0);
-  lua_getfield (L, -1, "name");
-  return luaL_error (L, errmsg, lua_tostring (L, -1),
-		     lua_tostring (L, element));
-}
-
 static Compound *
 compound_check (lua_State *L, int arg, GType *gtype)
 {
@@ -710,31 +698,44 @@ lgi_compound_elementof (lua_State *L)
 }
 
 static int
-compound_index (lua_State *L)
+compound_element (lua_State *L, gboolean write)
 {
+  int type;
+  const gchar *error_message;
+
   /* Load compound and element. */
   compound_prepare (L, 1, TRUE);
-  lua_pushvalue (L, 2);
-  lua_gettable (L, -2);
-  switch (lua_type (L, -1))
+  lua_getfield(L, -1, "_element");
+  lua_pushvalue(L, -2);
+  lua_pushvalue(L, 1);
+  lua_pushvalue(L, 2);
+  lua_call(L, 3, 1);
+  type = lua_type (L, -1);
+
+  if (type == LUA_TNIL)
+    error_message = "%s: no `%s'";
+  else if (write && type != LUA_TFUNCTION)
+    error_message =  "%s: `%s' not writable";
+  else
+    return type;
+
+  /* Prepare name of the compound. */
+  lua_rawgeti (L, -3, 0);
+  lua_getfield (L, -2, "name");
+  return luaL_error (L, error_message, lua_tostring (L, -1),
+		     lua_tostring (L, 2));
+}
+
+static int
+compound_index (lua_State *L)
+{
+  if (compound_element (L, FALSE) == LUA_TFUNCTION)
     {
-    case LUA_TFUNCTION:
-      {
-	/* Custom function, so call it. */
-	lua_pushvalue (L, 1);
-	lua_pushvalue (L, 2);
-	lua_pushboolean (L, 0);
-	lua_call (L, 3, 1);
-	break;
-      }
-
-    case LUA_TNIL:
-      /* Not found. */
-      return compound_error (L, "%s: no `%s'", 2);
-
-    default:
-      /* Everything else is simply forwarded to caller. */
-      break;
+      /* Custom function, so call it. */
+      lua_pushvalue (L, 1);
+      lua_pushvalue (L, 2);
+      lua_pushboolean (L, 0);
+      lua_call (L, 3, 1);
     }
 
   return 1;
@@ -743,33 +744,12 @@ compound_index (lua_State *L)
 static int
 compound_newindex (lua_State *L)
 {
-  /* Load compound and element. */
-  compound_prepare (L, 1, TRUE);
+  compound_element (L, TRUE);
+  lua_pushvalue (L, 1);
   lua_pushvalue (L, 2);
-  lua_gettable (L, -2);
-  switch (lua_type (L, -1))
-    {
-    case LUA_TFUNCTION:
-      {
-	/* Custom function, so call it. */
-	lua_pushvalue (L, 1);
-	lua_pushvalue (L, 2);
-	lua_pushboolean (L, 1);
-	lua_pushvalue (L, 3);
-	lua_call (L, 4, 0);
-	break;
-      }
-
-    case LUA_TNIL:
-      /* Not found. */
-      return compound_error (L, "%s: no `%s'", 2);
-
-    default:
-      /* Custom (static) elements are not writable. */
-      lua_pop (L, 1);
-      return compound_error (L, "%s: `%s' not writable", 2);
-    }
-
+  lua_pushboolean (L, 1);
+  lua_pushvalue (L, 3);
+  lua_call (L, 4, 0);
   return 0;
 }
 
