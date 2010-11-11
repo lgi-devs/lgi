@@ -97,9 +97,11 @@ local function find_in_compound(compound, symbol, categories)
       end
    end
 
-   -- Check all inherited compounds.
-   for _, inherited in pairs(rawget(compound, '_inherits') or {}) do
-      local val = inherited[symbol]
+   -- Check parent and all implemented compounds.
+   local val = (rawget(compound, '_parent') or {})[symbol]
+   if val then return val end
+   for _, implemented in pairs(rawget(compound, '_implements') or {}) do
+      val = implemented[symbol]
       if val then return val end
    end
 end
@@ -698,22 +700,6 @@ typeloader[gi.InfoType.INTERFACE] =
       interface._constants = get_category(
 	 info, gi.interface_info_get_n_constants(info),
 	 gi.interface_info_get_constant, core.construct)
-      interface._inherits = get_category(
-	 info, gi.interface_info_get_n_prerequisites(info),
-	 gi.interface_info_get_prerequisite,
-	 function(ii)
-	    local ns, n = ii:get_namespace(), ii:get_name()
-	    -- Avoid circular dependencies; in case that prerequisity
-	    -- is to some type which is currently being loaded,
-	    -- disregard it.
-	    if not in_load[ns .. '.' .. n] then return repo[ns][n] end
-	 end,
-	 nil,
-	 function(info_name, ii)
-	    return ii:get_namespace() .. '.' .. info_name
-	 end)
-      -- Immediatelly fully resolve the table.
-      local _ = rawget(interface, '_inherits') and interface._inherits[0]
       return interface, '_interfaces'
    end
 
@@ -741,7 +727,7 @@ local function load_class(namespace, class, info)
    class._constants = get_category(
       info, gi.object_info_get_n_constants(info), gi.object_info_get_constant,
       core.construct)
-   class._inherits = get_category(
+   class._implements = get_category(
       info, gi.object_info_get_n_interfaces(info), gi.object_info_get_interface,
       function(ii) return repo[ii:get_namespace(ii)][ii:get_name()] end,
       nil,
@@ -756,8 +742,7 @@ local function load_class(namespace, class, info)
    if parent then
       local ns, name = parent:get_namespace(), parent:get_name()
       if ns ~= namespace[0].name or name ~= info:get_name() then
-	 class._inherits = rawget(class, '_inherits') or {}
-	 class._inherits[ns .. '.' .. name] = repo[ns][name]
+	 class._parent = repo[ns][name]
       end
    end
 end
