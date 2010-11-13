@@ -1053,6 +1053,10 @@ lgi_marshal_arg_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
 
   switch (tag)
     {
+    case GI_TYPE_TAG_VOID:
+      lua_pushnil (L);
+      break;
+
     case GI_TYPE_TAG_BOOLEAN:
       lua_pushboolean (L, val->v_boolean);
       break;
