@@ -704,7 +704,29 @@ typeloader[gi.InfoType.INTERFACE] =
 			+ gi.FunctionInfoFlags.IS_SETTER) == 0 then
 	       return core.construct(ii)
 	    end
-	 end)
+	 end) or {}
+      -- If method is not found normal way, try to look it up in
+      -- parent namespace (e.g. g_file_new_for_path is exported in
+      -- typelib as Gio.file_new_for_path, while we really want it
+      -- accessible as Gio.File.new_for_path).
+      local meta = getmetatable(interface._methods) or {}
+      local old_index = meta.__index
+      function meta:__index(symbol)
+	 local val
+	 if old_index then val = old_index(self, symbol) end
+	 if not val then
+	    -- Convert name from CamelCase to underscore_delimited form.
+	    local method_name = {}
+	    for part in info:get_name():gmatch('%u%l*') do
+	       method_name[#method_name + 1] = part:lower()
+	    end
+	    method_name[#method_name + 1] = symbol
+	    val = namespace[table.concat(method_name, '_')]
+	    self[symbol] = val
+	 end
+	 return val
+      end
+      setmetatable(interface._methods, meta)
       interface._signals = get_category(
 	 info, gi.interface_info_get_n_signals(info),
 	 gi.interface_info_get_signal, load_element_signal,
