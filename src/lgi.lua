@@ -491,7 +491,7 @@ local function get_category(info, count, get_item, xform_value, xform_name,
 		  while #index > 0 do
 		     ok, ei = pcall(get_item, info, table.remove(index))
 		     if not ok then ei = nil else ei = check_type(ei) end
-		     val = not xform_value and ei or xform_value(ei)
+		     val = ei and (not xform_value and ei or xform_value(ei))
 		     if val then
 			en = ei:get_name()
 			if xform_name_reverse then
