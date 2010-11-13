@@ -75,7 +75,7 @@ local ir
 local repo = core.repo
 
 local function default_element_impl(compound, _, symbol)
-   return compound[symbol] 
+   return compound[symbol]
 end
 
 -- Loads symbol from specified compound (object, struct or interface).
@@ -113,7 +113,7 @@ local function find_in_compound(compound, symbol, categories)
    -- does just return compound[symbol], but can be overriden for
    -- specific compounds to find symbol dynamically according to
    -- compound instance.
-   if symbol == '_element' then 
+   if symbol == '_element' then
       return default_element_impl
    end
 end
