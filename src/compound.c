@@ -534,6 +534,43 @@ lgi_compound_get (lua_State *L, int index, GType *gtype, gpointer *addr,
   return 0;
 }
 
+/* Returns table of interfaces implemented by given compound, exports
+   them as GIInterfaceInfo instances. */
+static int
+compound_interfaces(lua_State *L)
+{
+  guint n_interfaces, i, pos;
+  GType gtype, *interfaces;
+  GIBaseInfo *bi_info;
+
+  /* Get gtype to inspect. */
+  Compound *compound = compound_prepare (L, 1, TRUE);
+  lua_rawgeti (L, -1, 0);
+  lua_getfield (L, -1, "gtype");
+  gtype = luaL_checknumber (L, -1);
+  lua_pop (L, 2);
+  if (G_TYPE_IS_OBJECT (gtype))
+    /* Get real dynamic gtype. */
+    gtype = G_OBJECT_TYPE (compound->addr);
+
+  /* Prepare GIBaseInfo of GIBaseInfo, to wrap returning
+     GIInterfaceInfos in them. */
+  bi_info = g_irepository_find_by_gtype (NULL, GI_TYPE_BASE_INFO);
+  lgi_guard_create_baseinfo (L, bi_info);
+
+  /* Create table with resulting interfaces. */
+  lua_newtable (L);
+  interfaces = g_type_interfaces (gtype, &n_interfaces);
+  for (i = 0, pos = 1; i < n_interfaces; i++)
+    {
+      GIBaseInfo *iface = g_irepository_find_by_gtype (NULL, interfaces[i]);
+      if (iface != NULL && lgi_compound_create (L, bi_info, iface, TRUE, 0))
+	lua_rawseti (L, -2, pos++);
+    }
+
+  return 1;
+}
+
 /* Retrieves either list of all properties of given compound, or just
    one if name is specified.  Returned property info is GParamSpec. */
 static int
@@ -769,6 +806,7 @@ static const struct luaL_reg compound_reg[] = {
 static const struct luaL_reg compound_core_reg[] = {
   { "elementof", compound_elementof },
   { "properties", compound_properties },
+  { "interfaces", compound_interfaces },
   { NULL, NULL }
 };
 
