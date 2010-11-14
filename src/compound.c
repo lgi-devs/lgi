@@ -534,8 +534,10 @@ lgi_compound_get (lua_State *L, int index, GType *gtype, gpointer *addr,
   return 0;
 }
 
-int
-lgi_compound_properties(lua_State *L)
+/* Retrieves either list of all properties of given compound, or just
+   one if name is specified.  Returned property info is GParamSpec. */
+static int
+compound_properties(lua_State *L)
 {
   int vals = 0;
   GIBaseInfo *pspec_info;
@@ -610,8 +612,11 @@ compound_propertyof (lua_State *L, Compound *compound, GITypeInfo *ti,
   return vals;
 }
 
-int
-lgi_compound_elementof (lua_State *L)
+/* Gets/sets given property or field of compound. luaCFunction
+   protocol, prototype is:
+   curval = lgi_compound_elementof(compound, eltinfo[, newval]) */
+static int
+compound_elementof (lua_State *L)
 {
   Compound *compound;
   GIBaseInfo *ei;
@@ -761,6 +766,12 @@ static const struct luaL_reg compound_reg[] = {
   { NULL, NULL }
 };
 
+static const struct luaL_reg compound_core_reg[] = {
+  { "elementof", compound_elementof },
+  { "properties", compound_properties },
+  { NULL, NULL }
+};
+
 void
 lgi_compound_init (lua_State *L)
 {
@@ -768,4 +779,7 @@ lgi_compound_init (lua_State *L)
   luaL_newmetatable (L, UD_COMPOUND);
   luaL_register (L, NULL, compound_reg);
   lua_pop (L, 1);
+
+  /* Add compound-related interface into lgi.core table. */
+  luaL_register (L, NULL, compound_core_reg);
 }
