@@ -241,67 +241,48 @@ local function get_symbols(into, symbols, container)
    end
 end
 
--- Metatable for interfaces, implementing casting on __call.
+-- Metatable for interfaces.
 local interface_mt = {}
 function interface_mt.__index(iface, symbol)
    return find_in_compound(iface, symbol, { '_properties', '_methods',
 					    '_signals', '_constants' })
 end
-function interface_mt.__call(iface, obj)
-   -- Cast operator, 'param' is source object which should be cast.
-   local res = iface and core.cast(obj, iface[0].gtype)
-   if not res then
-      error(string.format("`%s' cannot be cast to `%s'", tostring(obj),
-			  iface[0].name));
-   end
-   return res
-end
 
--- Metatable for classes, implementing object construction or casting
--- on __call.
+-- Metatable for classes, implementing object construction on __call.
 local class_mt = {}
 function class_mt.__index(class, symbol)
    return find_in_compound(class, symbol, {
 			      '_properties', '_methods',
 			      '_signals', '_constants', '_fields' })
 end
+
+-- Object constructor, 'param' contains table with properties/signals
+-- to initialize.
 function class_mt.__call(class, param)
-   local obj
-   if type(param) == 'userdata' then
-      -- Cast operator, 'param' is source object which should be cast.
-      obj = param and core.cast(param, class[0].gtype)
-      if not obj then
-	 error(string.format("`%s' cannot be cast to `%s'", tostring(param),
-			     class[0].name));
+   local params = {}
+   local others = {}
+
+   -- Get BaseInfo from gtype.
+   local info = assert(ir:find_by_gtype(class[0].gtype))
+
+   -- Process 'param' table, create constructor property table and signals
+   -- table.
+   for name, value in pairs(param or {}) do
+      local paramtype = class[name]
+      if type(paramtype) == 'function' then paramtype = paramtype() end
+      if (type(paramtype) == 'userdata' and
+       gi.base_info_get_type(paramtype) == gi.InfoType.PROPERTY) then
+	 params[paramtype] = value
+      else
+	 others[name] = value
       end
-   else
-      -- Constructor, 'param' contains table with properties/signals to
-      -- initialize.
-      local params = {}
-      local others = {}
-
-      -- Get BaseInfo from gtype.
-      local info = assert(ir:find_by_gtype(class[0].gtype))
-
-      -- Process 'param' table, create constructor property table and signals
-      -- table.
-      for name, value in pairs(param or {}) do
-	 local paramtype = class[name]
-	 if type(paramtype) == 'function' then paramtype = paramtype() end
-	 if (type(paramtype) == 'userdata' and
-	  gi.base_info_get_type(paramtype) == gi.InfoType.PROPERTY) then
-	    params[paramtype] = value
-	 else
-	    others[name] = value
-	 end
-      end
-
-      -- Create the object.
-      obj = core.construct(info, params)
-
-      -- Attach signals previously filtered out from creation.
-      for name, func in pairs(others) do obj[name] = func end
    end
+
+   -- Create the object.
+   local obj = core.construct(info, params)
+
+   -- Attach signals previously filtered out from creation.
+   for name, func in pairs(others) do obj[name] = func end
    return obj
 end
 
