@@ -881,6 +881,18 @@ do
    function obj._element(type, obj, name)
       local element = type[name]
       if not element then
+	 -- List all interfaces implemented by this object and try
+	 -- whether they can handle specified _element request.
+	 local interfaces = core.interfaces(obj)
+	 for i = 1, #interfaces do
+	    local interface_type = 
+	       repo[interfaces[i]:get_namespace()][interfaces[i]:get_name()]
+	    if interface_type then
+	       element = interface_type:_element(obj, name)
+	       if element then return element end
+	    end
+	 end
+
 	 -- Element not found in the repo (typelib), try whether
 	 -- dynamic property of the specified name exists.
 	 local pspec = core.properties(obj, string.gsub(name, '_', '%-'))
