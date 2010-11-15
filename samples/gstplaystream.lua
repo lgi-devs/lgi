@@ -15,7 +15,7 @@ Gst.init()
 
 local function bus_callback(bus, message)
    if message.type == Gst.MessageType.ERROR then
-      print 'error'
+      print('Error:', message:parse_error().message)
       Gtk.main_quit()
    elseif message.type == Gst.MessageType.EOS then
       print 'end of stream'
