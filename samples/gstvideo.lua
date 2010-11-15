@@ -21,20 +21,13 @@ pipeline:add(src)
 pipeline:add(sink)
 src:link(sink)
 
-local function on_play()
-end
-
-local function on_stop()
-   pipeline.set_state(Gst.State.READY)
-end
-
 local vbox = Gtk.Box.new(Gtk.Orientation.VERTICAL, 0)
 local drawing_area = Gtk.DrawingArea()
 drawing_area:set_size_request(300, 150)
 vbox:pack_start(drawing_area, true, true, 0)
 local play_button = Gtk.Button.new_from_stock(Gtk.STOCK_MEDIA_PLAY)
 play_button.on_clicked = function()
---			    sink:set_window_handle(0)
+			    sink:set_window_handle(0)
 			    pipeline:set_state(Gst.State.PLAYING)
 			 end
 local stop_button = Gtk.Button.new_from_stock(Gtk.STOCK_MEDIA_STOP)
