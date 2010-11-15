@@ -728,7 +728,6 @@ compound_element (lua_State *L, gboolean write)
   const gchar *error_message;
 
   /* Load compound and element. */
-  compound_prepare (L, 1, TRUE);
   lua_getfield(L, -1, "_element");
   lua_pushvalue(L, -2);
   lua_pushvalue(L, 1);
@@ -753,7 +752,19 @@ compound_element (lua_State *L, gboolean write)
 static int
 compound_index (lua_State *L)
 {
-  if (compound_element (L, FALSE) == LUA_TFUNCTION)
+  Compound *compound = compound_prepare (L, 1, TRUE);
+  if (strcmp (lua_tostring (L, 2), "gtype") == 0)
+    {
+      /* Requesting gtype of the compound. */
+      GType gtype;
+      lua_rawgeti (L, -1, 0);
+      lua_getfield (L, -1, "gtype");
+      gtype = luaL_checknumber (L, -1);
+      if (G_TYPE_IS_OBJECT (gtype))
+	/* Get dynamic type from the object instance. */
+	lua_pushnumber (L, G_OBJECT_TYPE (compound->addr));
+    }
+  else if (compound_element (L, FALSE) == LUA_TFUNCTION)
     {
       /* Custom function, so call it. */
       lua_pushvalue (L, 1);
@@ -768,6 +779,7 @@ compound_index (lua_State *L)
 static int
 compound_newindex (lua_State *L)
 {
+  compound_prepare (L, 1, TRUE);
   compound_element (L, TRUE);
   lua_pushvalue (L, 1);
   lua_pushvalue (L, 2);
