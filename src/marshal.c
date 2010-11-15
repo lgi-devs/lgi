@@ -652,6 +652,28 @@ marshal_2lua_hash (lua_State *L, GITypeInfo *ti, GITransfer xfer,
     }
 }
 
+static void
+marshal_2lua_error (lua_State *L, GITransfer xfer, GError *err)
+{
+  if (err == NULL)
+    lua_pushnil (L);
+  else
+    {
+      /* Create Lua table with duplicated error information. */
+      lua_newtable (L);
+      lua_pushstring (L, g_quark_to_string (err->domain));
+      lua_setfield (L, -2, "domain");
+      lua_pushstring (L, err->message);
+      lua_setfield (L, -2, "message");
+      lua_pushinteger (L, err->code);
+      lua_setfield (L, -2, "code");
+
+      /* If the ownership is transferred, free the original error. */
+      if (xfer != GI_TRANSFER_NOTHING)
+	g_error_free (err);
+    }
+}
+
 /* Marshalls given callable from Lua to C. */
 static int
 marshal_2c_callable (lua_State *L, GICallableInfo *ci, GIArgInfo *ai,
@@ -1176,6 +1198,10 @@ lgi_marshal_arg_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
 
     case GI_TYPE_TAG_GHASH:
       marshal_2lua_hash (L, ti, transfer, val->v_pointer);
+      break;
+
+    case GI_TYPE_TAG_ERROR:
+      marshal_2lua_error (L, transfer, val->v_pointer);
       break;
 
     default:

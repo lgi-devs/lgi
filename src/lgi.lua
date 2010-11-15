@@ -209,6 +209,7 @@ gi._enums = { InfoType = setmetatable({
 					GLIST = 17,
 					GSLIST = 18,
 					GHASH = 19,
+					ERROR = 20,
 				     }, enum_mt),
 	      ArrayType = setmetatable({
 					  C = 0,
@@ -367,6 +368,8 @@ local function check_type(info)
       elseif tag == gi.TypeTag.GHASH then
 	 return (check_type(gi.type_info_get_param_type(info, 0)) and
 	      check_type(gi.type_info_get_param_type(info, 1))) and info
+      elseif tag == gi.TypeTag.ERROR then
+	 return true
       else
 	 log.warning('unknown typetag %s(%d)', tostring(gi.TypeTag[tag]), tag)
 	 return nil
