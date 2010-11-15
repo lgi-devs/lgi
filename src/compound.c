@@ -409,6 +409,9 @@ compound_check (lua_State *L, int arg, GType *gtype)
       lua_getfield (L, -1, "gtype");
       real_type = lua_tointeger (L, -1);
       lua_pop (L, 4);
+      if (G_TYPE_IS_OBJECT (real_type))
+	/* Get real dynamic type from the instance. */
+	real_type = G_OBJECT_TYPE (compound->addr);
       if (*gtype == G_TYPE_NONE || g_type_is_a (real_type, *gtype))
 	{
 	  *gtype = real_type;
