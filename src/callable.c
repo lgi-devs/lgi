@@ -447,7 +447,13 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
   for (i = 0; i < callable->nargs; i++, param++)
     if (!param->internal && param->dir != GI_DIRECTION_IN)
       {
-	if (!g_arg_info_is_caller_allocates (&param->ai))
+	if (g_arg_info_is_caller_allocates (&param->ai)
+	    && lgi_marshal_arg_2c_caller_alloc (L, &param->ti, NULL,
+						-caller_allocated  - nret))
+	  /* Caller allocated parameter is already marshalled and
+	     lying on the stack. */
+	  caller_allocated--;
+	else
 	  {
 	    /* Marshal output parameter. */
 	    lgi_marshal_arg_2lua (L, &param->ti, param->transfer,
@@ -456,11 +462,6 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
 				  ffi_args + callable->has_self);
 	    lua_insert (L, -caller_allocated - 1);
 	  }
-	else if (lgi_marshal_arg_2c_caller_alloc (L, &param->ti, NULL,
-						  -caller_allocated  - nret))
-	  /* Caller allocated parameter is already marshalled and
-	     lying on the stack. */
-	  caller_allocated--;
 
 	nret++;
       }
