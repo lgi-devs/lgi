@@ -22,9 +22,7 @@ local function bus_callback(bus, message)
    elseif message.type == Gst.MessageType.STATE_CHANGED then
       local old, new, pending = message:parse_state_changed()
       print(string.format('state changed: %s->%s:%s',
-			  Gst.State[old] or tostring(old),
-			  Gst.State[new] or tostring(new),
-			  Gst.State[pending] or tostring(pending)))
+			  Gst.State[old], Gst.State[new], Gst.State[pending]))
    elseif message.type == Gst.MessageType.TAG then
       print('taglist found')
    end
