@@ -301,36 +301,6 @@ lgi_gtype (lua_State *L)
   return 1;
 }
 
-/* Checks, whether given compound is object which can be cast to requested
-   gtype, and if yes, creates new compound of requested type. */
-static int
-lgi_cast (lua_State *L)
-{
-  GObject *obj;
-  GType gtype = luaL_checknumber (L, 2), gt_obj = G_TYPE_OBJECT;
-
-  /* Get the source object. */
-  lgi_compound_get (L, 1, &gt_obj, (gpointer *) &obj, 0);
-
-  /* Check, that casting is possible. */
-  if (g_type_is_a (G_TYPE_FROM_INSTANCE (obj), gtype))
-    {
-      GIBaseInfo *info = g_irepository_find_by_gtype (NULL, gtype);
-      if (info != NULL)
-	{
-	  int info_guard = lgi_guard_create_baseinfo (L, info);
-	  lgi_compound_create (L, info, g_object_ref (obj), TRUE, 0);
-	  lua_remove (L, info_guard);
-	  return 1;
-	}
-    }
-
-  /* Failed somehow, avoid casting. */
-  return luaL_error (L, "`%s': failed to cast to `%s'",
-		     g_type_name (G_TYPE_FROM_INSTANCE (obj)),
-		     g_type_name (gtype));
-}
-
 static void
 gclosure_destroy (gpointer user_data, GClosure *closure)
 {
@@ -395,15 +365,80 @@ lgi_setlogger(lua_State *L)
   return 0;
 }
 
+static const char* log_levels[] = {
+  "ERROR", "CRITICAL", "WARNING", "MESSAGE", "INFO", "DEBUG", "???", NULL
+};
+
+static int
+lgi_log (lua_State *L)
+{
+  const char *domain = luaL_checkstring (L, 1);
+  int level = 1 << (luaL_checkoption (L, 2, log_levels[5], log_levels) + 2);
+  const char *message = luaL_checkstring (L, 3);
+  g_log (domain, level, "%s", message);
+  return 0;
+}
+
+static void
+log_handler (const gchar *log_domain, GLogLevelFlags log_level,
+	     const gchar *message, gpointer user_data)
+{
+  lua_State *L = user_data;
+  const gchar **level;
+  gboolean handled = FALSE, throw = FALSE;
+  gint level_bit;
+
+  /* Convert log_level to string. */
+  level = log_levels;
+  for (level_bit = G_LOG_LEVEL_ERROR; level_bit <= G_LOG_LEVEL_DEBUG;
+       level_bit <<= 1, level++)
+    if (log_level & level_bit)
+      break;
+
+  /* Check, whether there is handler registered in Lua. */
+  lua_rawgeti (L, LUA_REGISTRYINDEX, lgi_regkey);
+  lua_rawgeti (L, -1, LGI_REG_LOG_HANDLER);
+  if (!lua_isnil (L, -1))
+    {
+      /* Push arguments and invoke custom log handler. */
+      lua_pushstring (L, log_domain);
+      lua_pushstring (L, *level);
+      lua_pushstring (L, message);
+      switch (lua_pcall (L, 3, 1, 0))
+	{
+	case 0:
+	  /* If function returns non-nil, do not report on our own. */
+	  handled = lua_toboolean (L, -1);
+	  break;
+
+	case LUA_ERRRUN:
+	  /* Force throwing an exception. */
+	  throw = TRUE;
+	  break;
+
+	default:
+	  break;
+	}
+    }
+
+  /* Stack cleanup; either (reg,nil) or (reg,err) are popped. */
+  lua_pop (L, 2);
+
+  /* In case that the level was fatal, throw a lua error. */
+  if (throw || log_level & (G_LOG_FLAG_FATAL | G_LOG_LEVEL_ERROR))
+    luaL_error (L, "%s-%s **: %s", log_domain, *level, message);
+
+  /* If not handled by our handler, use default system logger. */
+  if (!handled)
+    g_log_default_handler (log_domain, log_level, message, NULL);
+}
+
 static const struct luaL_reg lgi_reg[] = {
   { "find", lgi_find },
   { "construct", lgi_construct },
   { "gtype", lgi_gtype },
-  { "cast", lgi_cast },
   { "connect", lgi_connect },
-  { "elementof", lgi_compound_elementof },
-  { "properties", lgi_compound_properties },
-  { "log", lgi_glib_log },
+  { "log",  lgi_log },
   { "setlogger", lgi_setlogger },
   { NULL, NULL }
 };
@@ -440,7 +475,7 @@ int lgi_regkey;
 int
 luaopen_lgi__core (lua_State* L)
 {
-  GError* err = NULL;
+  GError *err = NULL;
 
   /* Early GLib initializations. */
   g_type_init ();
@@ -486,12 +521,16 @@ luaopen_lgi__core (lua_State* L)
   lua_rawset (L, -4);
 #endif
 
+  /* Pop the registry table. */
+  lua_pop (L, 1);
+
+  /* Install custom log handler. */
+  g_log_set_default_handler (log_handler, L);
+
   /* Initialize modules. */
-  lgi_glib_init (L);
   lgi_compound_init (L);
   lgi_callable_init (L);
 
-  /* Pop the registry table, return registration table. */
-  lua_pop (L, 1);
+  /* Return registration table. */
   return 1;
 }

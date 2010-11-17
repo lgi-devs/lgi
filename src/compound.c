@@ -78,7 +78,8 @@ compound_register (lua_State *L, GIBaseInfo *info, gpointer *addr,
   Compound *compound;
   gsize size;
   GIInfoType info_type;
-  GType gtype, leaf_gtype;
+  GIBaseInfo *leaf_info = NULL;
+  GType gtype;
 
   g_assert (addr != NULL);
   luaL_checkstack (L, 7, "");
@@ -145,57 +146,37 @@ compound_register (lua_State *L, GIBaseInfo *info, gpointer *addr,
       compound->data.parent = luaL_ref (L, LUA_REGISTRYINDEX);
     }
 
-  /* Load ref_repo reference to repo table of the object.  This is a bit
-     complicated, because we try to find the most specialized object for which
-     we still have repo type installed, so that e.g. API marked as returning
-     GObject, and returns instance of Gtk.Window returns object Gtk.Window
-     without need to explicitely cast. */
-  lua_rawgeti (L, -3, LGI_REG_REPO);
+  /* Find GIBaseInfo of the coumpound to be used; for objects use the
+     most specialized type of the dynamic object type (i.e. 'info' arg
+     is basically ignored for GObjects and fundamentals). */
   gtype = g_registered_type_info_get_g_type (info);
-  leaf_gtype = g_base_info_get_type (info) == GI_INFO_TYPE_OBJECT
-    ? G_TYPE_FROM_INSTANCE (*addr) : gtype;
-  g_base_info_ref (info);
-  lua_pushnil (L);
-  for (; gtype != G_TYPE_INVALID; gtype = g_type_next_base (leaf_gtype, gtype))
+  if (GI_IS_OBJECT_INFO (info))
     {
-      /* Try to find type in the repo. */
-      if (info == NULL)
-	info = g_irepository_find_by_gtype (NULL, gtype);
-      if (G_LIKELY (info != NULL))
+      /* In case that the type is known to GLib typesystem, try to get
+	 most specialized type known to typelib. */
+      for (gtype = G_TYPE_FROM_INSTANCE (*addr); leaf_info == NULL;
+	   gtype = g_type_parent (gtype))
 	{
-	  lua_getfield (L, -2, g_base_info_get_namespace (info));
-	  if (G_LIKELY (!lua_isnil (L, -1)))
-	    {
-	      lua_getfield (L, -1, g_base_info_get_name (info));
-	      if (G_LIKELY (!lua_isnil (L, -1)))
-		{
-		  /* Replace the best result we've found so far. */
-		  lua_replace (L, -3);
-		  lua_pop (L, 1);
-		}
-	      else
-		/* pop (namespace, nil) pair. */
-		lua_pop (L, 2);
-	    }
-	  else
-	    /* pop nil-namespace */
-	    lua_pop (L, 1);
-
-	  /* Reset info for the next round, if it will come. */
-	  g_base_info_unref (info);
-	  info = NULL;
+	  g_assert (gtype != 0);
+	  leaf_info = g_irepository_find_by_gtype (NULL, gtype);
 	}
+
+      info = leaf_info;
     }
 
-  /* If we failed to find suitable type in the repo, fail. */
-  if (G_UNLIKELY (lua_isnil (L, -1)))
-    {
-      lua_pop (L, 5);
-      return 0;
-    }
+  /* Get ref_repo table according to the 'info'. */
+  lua_rawgeti (L, -3, LGI_REG_REPO);
+  lua_getfield (L, -1, g_base_info_get_namespace (info));
+  lua_getfield (L, -1, g_base_info_get_name (info));
+  g_assert (!lua_isnil (L, -1));
+
+  /* leaf_info is not useful any more, don't let it leak. */
+  if (leaf_info != NULL)
+    g_base_info_unref (leaf_info);
 
   /* Replace now unneded stack space of LGI_REG_REPO with found type. */
-  lua_replace (L, -2);
+  lua_replace (L, -3);
+  lua_pop (L, 1);
 
   /* Store it to the typeinfo. */
   lua_rawgeti (L, -4, LGI_REG_TYPEINFO);
@@ -205,11 +186,12 @@ compound_register (lua_State *L, GIBaseInfo *info, gpointer *addr,
   compound->addr = *addr;
   compound->owns = owns;
 
-  /* If we are storing owned gobject, make sure that we fully sink them.  We
-     are not interested in floating refs. Note that there is ugly exception;
-     GtkWindow's constructor returns non-floating object, but it keeps the
-     reference to window internally, so we want acquire one extra reference. */
-  if (owns && g_type_is_a (leaf_gtype, G_TYPE_OBJECT) &&
+  /* If we are storing owned gobject, make sure that we fully sink
+     them.  We are not interested in floating refs. Note that there is
+     an ugly exception; GtkWindow's constructor returns non-floating
+     object, but it keeps the reference to window internally, so we
+     want acquire one extra reference. */
+  if (owns && G_TYPE_IS_OBJECT (gtype) &&
       (G_IS_INITIALLY_UNOWNED (*addr) || g_object_is_floating (*addr)))
       g_object_ref_sink (*addr);
 
@@ -427,6 +409,9 @@ compound_check (lua_State *L, int arg, GType *gtype)
       lua_getfield (L, -1, "gtype");
       real_type = lua_tointeger (L, -1);
       lua_pop (L, 4);
+      if (G_TYPE_IS_OBJECT (real_type))
+	/* Get real dynamic type from the instance. */
+	real_type = G_OBJECT_TYPE (compound->addr);
       if (*gtype == G_TYPE_NONE || g_type_is_a (real_type, *gtype))
 	{
 	  *gtype = real_type;
@@ -534,8 +519,47 @@ lgi_compound_get (lua_State *L, int index, GType *gtype, gpointer *addr,
   return 0;
 }
 
-int
-lgi_compound_properties(lua_State *L)
+/* Returns table of interfaces implemented by given compound, exports
+   them as GIInterfaceInfo instances. */
+static int
+compound_interfaces(lua_State *L)
+{
+  guint n_interfaces, i, pos;
+  GType gtype, *interfaces;
+  GIBaseInfo *bi_info;
+
+  /* Get gtype to inspect. */
+  Compound *compound = compound_prepare (L, 1, TRUE);
+  lua_rawgeti (L, -1, 0);
+  lua_getfield (L, -1, "gtype");
+  gtype = luaL_checknumber (L, -1);
+  lua_pop (L, 2);
+  if (G_TYPE_IS_OBJECT (gtype))
+    /* Get real dynamic gtype. */
+    gtype = G_OBJECT_TYPE (compound->addr);
+
+  /* Prepare GIBaseInfo of GIBaseInfo, to wrap returning
+     GIInterfaceInfos in them. */
+  bi_info = g_irepository_find_by_gtype (NULL, GI_TYPE_BASE_INFO);
+  lgi_guard_create_baseinfo (L, bi_info);
+
+  /* Create table with resulting interfaces. */
+  lua_newtable (L);
+  interfaces = g_type_interfaces (gtype, &n_interfaces);
+  for (i = 0, pos = 1; i < n_interfaces; i++)
+    {
+      GIBaseInfo *iface = g_irepository_find_by_gtype (NULL, interfaces[i]);
+      if (iface != NULL && lgi_compound_create (L, bi_info, iface, TRUE, 0))
+	lua_rawseti (L, -2, pos++);
+    }
+
+  return 1;
+}
+
+/* Retrieves either list of all properties of given compound, or just
+   one if name is specified.  Returned property info is GParamSpec. */
+static int
+compound_properties(lua_State *L)
 {
   int vals = 0;
   GIBaseInfo *pspec_info;
@@ -610,8 +634,11 @@ compound_propertyof (lua_State *L, Compound *compound, GITypeInfo *ti,
   return vals;
 }
 
-int
-lgi_compound_elementof (lua_State *L)
+/* Gets/sets given property or field of compound. luaCFunction
+   protocol, prototype is:
+   curval = lgi_compound_elementof(compound, eltinfo[, newval]) */
+static int
+compound_elementof (lua_State *L)
 {
   Compound *compound;
   GIBaseInfo *ei;
@@ -704,7 +731,6 @@ compound_element (lua_State *L, gboolean write)
   const gchar *error_message;
 
   /* Load compound and element. */
-  compound_prepare (L, 1, TRUE);
   lua_getfield(L, -1, "_element");
   lua_pushvalue(L, -2);
   lua_pushvalue(L, 1);
@@ -729,7 +755,19 @@ compound_element (lua_State *L, gboolean write)
 static int
 compound_index (lua_State *L)
 {
-  if (compound_element (L, FALSE) == LUA_TFUNCTION)
+  Compound *compound = compound_prepare (L, 1, TRUE);
+  if (strcmp (lua_tostring (L, 2), "gtype") == 0)
+    {
+      /* Requesting gtype of the compound. */
+      GType gtype;
+      lua_rawgeti (L, -1, 0);
+      lua_getfield (L, -1, "gtype");
+      gtype = luaL_checknumber (L, -1);
+      if (G_TYPE_IS_OBJECT (gtype))
+	/* Get dynamic type from the object instance. */
+	lua_pushnumber (L, G_OBJECT_TYPE (compound->addr));
+    }
+  else if (compound_element (L, FALSE) == LUA_TFUNCTION)
     {
       /* Custom function, so call it. */
       lua_pushvalue (L, 1);
@@ -744,6 +782,7 @@ compound_index (lua_State *L)
 static int
 compound_newindex (lua_State *L)
 {
+  compound_prepare (L, 1, TRUE);
   compound_element (L, TRUE);
   lua_pushvalue (L, 1);
   lua_pushvalue (L, 2);
@@ -761,6 +800,13 @@ static const struct luaL_reg compound_reg[] = {
   { NULL, NULL }
 };
 
+static const struct luaL_reg compound_core_reg[] = {
+  { "elementof", compound_elementof },
+  { "properties", compound_properties },
+  { "interfaces", compound_interfaces },
+  { NULL, NULL }
+};
+
 void
 lgi_compound_init (lua_State *L)
 {
@@ -768,4 +814,7 @@ lgi_compound_init (lua_State *L)
   luaL_newmetatable (L, UD_COMPOUND);
   luaL_register (L, NULL, compound_reg);
   lua_pop (L, 1);
+
+  /* Add compound-related interface into lgi.core table. */
+  luaL_register (L, NULL, compound_core_reg);
 }

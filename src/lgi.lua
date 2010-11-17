@@ -209,6 +209,7 @@ gi._enums = { InfoType = setmetatable({
 					GLIST = 17,
 					GSLIST = 18,
 					GHASH = 19,
+					ERROR = 20,
 				     }, enum_mt),
 	      ArrayType = setmetatable({
 					  C = 0,
@@ -241,67 +242,48 @@ local function get_symbols(into, symbols, container)
    end
 end
 
--- Metatable for interfaces, implementing casting on __call.
+-- Metatable for interfaces.
 local interface_mt = {}
 function interface_mt.__index(iface, symbol)
    return find_in_compound(iface, symbol, { '_properties', '_methods',
 					    '_signals', '_constants' })
 end
-function interface_mt.__call(iface, obj)
-   -- Cast operator, 'param' is source object which should be cast.
-   local res = iface and core.cast(obj, iface[0].gtype)
-   if not res then
-      error(string.format("`%s' cannot be cast to `%s'", tostring(obj),
-			  iface[0].name));
-   end
-   return res
-end
 
--- Metatable for classes, implementing object construction or casting
--- on __call.
+-- Metatable for classes, implementing object construction on __call.
 local class_mt = {}
 function class_mt.__index(class, symbol)
    return find_in_compound(class, symbol, {
 			      '_properties', '_methods',
 			      '_signals', '_constants', '_fields' })
 end
+
+-- Object constructor, 'param' contains table with properties/signals
+-- to initialize.
 function class_mt.__call(class, param)
-   local obj
-   if type(param) == 'userdata' then
-      -- Cast operator, 'param' is source object which should be cast.
-      obj = param and core.cast(param, class[0].gtype)
-      if not obj then
-	 error(string.format("`%s' cannot be cast to `%s'", tostring(param),
-			     class[0].name));
+   local params = {}
+   local others = {}
+
+   -- Get BaseInfo from gtype.
+   local info = assert(ir:find_by_gtype(class[0].gtype))
+
+   -- Process 'param' table, create constructor property table and signals
+   -- table.
+   for name, value in pairs(param or {}) do
+      local paramtype = class[name]
+      if type(paramtype) == 'function' then paramtype = paramtype() end
+      if (type(paramtype) == 'userdata' and
+       gi.base_info_get_type(paramtype) == gi.InfoType.PROPERTY) then
+	 params[paramtype] = value
+      else
+	 others[name] = value
       end
-   else
-      -- Constructor, 'param' contains table with properties/signals to
-      -- initialize.
-      local params = {}
-      local others = {}
-
-      -- Get BaseInfo from gtype.
-      local info = assert(ir:find_by_gtype(class[0].gtype))
-
-      -- Process 'param' table, create constructor property table and signals
-      -- table.
-      for name, value in pairs(param or {}) do
-	 local paramtype = class[name]
-	 if type(paramtype) == 'function' then paramtype = paramtype() end
-	 if (type(paramtype) == 'userdata' and
-	  gi.base_info_get_type(paramtype) == gi.InfoType.PROPERTY) then
-	    params[paramtype] = value
-	 else
-	    others[name] = value
-	 end
-      end
-
-      -- Create the object.
-      obj = core.construct(info, params)
-
-      -- Attach signals previously filtered out from creation.
-      for name, func in pairs(others) do obj[name] = func end
    end
+
+   -- Create the object.
+   local obj = core.construct(info, params)
+
+   -- Attach signals previously filtered out from creation.
+   for name, func in pairs(others) do obj[name] = func end
    return obj
 end
 
@@ -386,6 +368,8 @@ local function check_type(info)
       elseif tag == gi.TypeTag.GHASH then
 	 return (check_type(gi.type_info_get_param_type(info, 0)) and
 	      check_type(gi.type_info_get_param_type(info, 1))) and info
+      elseif tag == gi.TypeTag.ERROR then
+	 return true
       else
 	 log.warning('unknown typetag %s(%d)', tostring(gi.TypeTag[tag]), tag)
 	 return nil
@@ -900,6 +884,18 @@ do
    function obj._element(type, obj, name)
       local element = type[name]
       if not element then
+	 -- List all interfaces implemented by this object and try
+	 -- whether they can handle specified _element request.
+	 local interfaces = core.interfaces(obj)
+	 for i = 1, #interfaces do
+	    local interface_type = 
+	       repo[interfaces[i]:get_namespace()][interfaces[i]:get_name()]
+	    if interface_type then
+	       element = interface_type:_element(obj, name)
+	       if element then return element end
+	    end
+	 end
+
 	 -- Element not found in the repo (typelib), try whether
 	 -- dynamic property of the specified name exists.
 	 local pspec = core.properties(obj, string.gsub(name, '_', '%-'))
