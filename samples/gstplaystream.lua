@@ -24,7 +24,11 @@ local function bus_callback(bus, message)
       print(string.format('state changed: %s->%s:%s',
 			  Gst.State[old], Gst.State[new], Gst.State[pending]))
    elseif message.type == Gst.MessageType.TAG then
-      print('taglist found')
+      message:parse_tag():foreach(
+	 function(list, tag)
+	    local ok, value = list:get_string(tag)
+	    if ok then print(('tag: %s = %s'):format(tag, value)) end
+	 end)
    end
 
    return true
