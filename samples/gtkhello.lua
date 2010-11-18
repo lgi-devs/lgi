@@ -35,18 +35,23 @@ toolbar:insert(Gtk.ToolButton {
 	       }, -1)
 
 -- About button in toolbar and its handling.
-toolbar:insert(Gtk.ToolButton {
-		  stock_id = 'gtk-about',
-		  on_clicked = function()
-				  local dlg = Gtk.AboutDialog {
-				     program_name = 'LGI Demo',
-				     title = 'About...',
-				     license = 'MIT'
-				  }
-				  dlg:run()
-				  dlg:hide()
-			       end
-	       }, -1)
+toolbar:insert(
+   Gtk.ToolButton {
+      stock_id = 'gtk-about',
+      on_clicked = function()
+		      local dlg = Gtk.AboutDialog {
+			 program_name = 'LGI Demo',
+			 title = 'About...',
+			 name = 'LGI Hello',
+			 copyright = '(C) Copyright 2010 Pavel Holejsovsky',
+			 authors = { 'Pavel Holejsovsky', 
+				     'Adrian Perez de Castro' },
+			 license_type = Gtk.License.MIT_X11,
+		      }
+		      dlg:run()
+		      dlg:hide()
+		   end
+   }, -1)
 
 -- Pack everything into the window.
 local vbox = Gtk.VBox()
