@@ -600,7 +600,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
       }
 
   /* Call it. */
-  res = lua_pcall (L, npos, LUA_MULTRET, 0);
+  res = 0; lua_call (L, npos, LUA_MULTRET);
   npos = stacktop;
 
   /* Check, whether we can report an error here. */

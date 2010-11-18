@@ -21,6 +21,9 @@
 const char *lgi_sd (lua_State* L);
 #endif
 
+/* Makes sure that Lua stack offset is absolute one, not relative. */
+#define lgi_makeabs(L, x) do { if (x < 0) x += lua_gettop (L) + 1; } while (0)
+
 /* Puts parts of the name to the stack, to be concatenated by lua_concat.
    Returns number of pushed elements. */
 int lgi_type_get_name (lua_State *L, GIBaseInfo *info);

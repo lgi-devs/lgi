@@ -18,7 +18,8 @@ lgi_get_gtype (lua_State *L, GITypeInfo *ti)
     {
 #define HANDLE_TAG(tag, gt)			\
     case GI_TYPE_TAG_ ## tag:			\
-      return G_TYPE_ ## gt
+      gtype = G_TYPE_ ## gt;			\
+      break
 
       HANDLE_TAG (BOOLEAN, BOOLEAN);
       HANDLE_TAG (INT8, CHAR);
@@ -50,6 +51,40 @@ lgi_get_gtype (lua_State *L, GITypeInfo *ti)
 	break;
       }
 
+    case GI_TYPE_TAG_ARRAY:
+      {
+	switch (g_type_info_get_array_type (ti))
+	  {
+	  case GI_ARRAY_TYPE_ARRAY:
+	    gtype = G_TYPE_ARRAY;
+	    break;
+
+	  case GI_ARRAY_TYPE_C:
+	    {
+	      gtype = G_TYPE_POINTER;
+
+	      /* Check whether this is GStrv. */
+	      if (g_type_info_is_zero_terminated (ti))
+		{
+		  GITypeInfo *pti = g_type_info_get_param_type (ti, 0);
+		  if G_LIKELY (pti != NULL)
+		    {
+		      GITypeTag tag = g_type_info_get_tag (pti);
+		      if (tag == GI_TYPE_TAG_UTF8
+			  || tag == GI_TYPE_TAG_FILENAME)
+			gtype = G_TYPE_STRV;
+		      g_base_info_unref (pti);
+		    }
+		}
+	      break;
+	    }
+
+	  default:
+	    g_assert_not_reached ();
+	  }
+	break;
+      }
+
     default:
       g_assert_not_reached ();
     }
@@ -58,7 +93,7 @@ lgi_get_gtype (lua_State *L, GITypeInfo *ti)
 }
 
 /* Checks whether given argument contains number which fits given
-   constraints. If yes, returns it, otehrwise throws Lua error. */
+   constraints. If yes, returns it, otherwise throws Lua error. */
 static lua_Number
 check_number (lua_State *L, int narg, lua_Number val_min, lua_Number val_max)
 {
@@ -156,8 +191,7 @@ array_get_or_set_length (GITypeInfo *ti, gssize *get_length, gssize set_length,
 			 GICallableInfo *ci, void **args)
 {
   gint param = g_type_info_get_array_length (ti);
-  g_assert (ci != NULL);
-  if (param >= 0 && param < g_callable_info_get_n_args (ci))
+  if (param >= 0 && ci != NULL && param < g_callable_info_get_n_args (ci))
     {
       GIArgInfo ai;
       GITypeInfo eti;
@@ -248,7 +282,7 @@ array_get_elt_size (GITypeInfo *ti)
    pushed to the stack. */
 static int
 marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
-		  GIArgument *val, int narg, gboolean optional,
+		  gpointer *out_array, int narg, gboolean optional,
 		  GITransfer transfer, GICallableInfo *ci, void **args)
 {
   GITypeInfo* eti;
@@ -263,7 +297,7 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
   if (optional && lua_isnoneornil (L, narg))
     {
       len = 0;
-      val->v_pointer = NULL;
+      *out_array = NULL;
     }
   else
     {
@@ -317,7 +351,7 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 
       /* Return either GArray or direct pointer to the data, according to the
 	 array type. */
-      val->v_pointer = (atype == GI_ARRAY_TYPE_ARRAY || array == NULL)
+      *out_array = (atype == GI_ARRAY_TYPE_ARRAY || array == NULL)
 	  ? (void *) array : (void *) array->data;
 
       lua_remove (L, eti_guard);
@@ -332,7 +366,7 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 
 static void
 marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
-		    GITransfer transfer, GIArgument *val, int parent,
+		    GITransfer transfer, gpointer array, int parent,
 		    GICallableInfo *ci, void **args)
 {
   GITypeInfo *eti;
@@ -341,7 +375,7 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
   char *data;
 
   /* Get pointer to array data. */
-  if (val->v_pointer == NULL)
+  if (array == NULL)
     {
       /* NULL array is represented by nil. */
       lua_pushnil (L);
@@ -351,12 +385,12 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
   /* First of all, find out the length of the array. */
   if (atype == GI_ARRAY_TYPE_ARRAY)
     {
-      len = ((GArray *) val->v_pointer)->len;
-      data = ((GArray *) val->v_pointer)->data;
+      len = ((GArray *) array)->len;
+      data = ((GArray *) array)->data;
     }
   else
     {
-      data = val->v_pointer;
+      data = array;
       if (g_type_info_is_zero_terminated (ti))
 	len = -1;
       else
@@ -400,9 +434,9 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
   if (transfer != GI_TRANSFER_NOTHING)
     {
       if (atype == GI_ARRAY_TYPE_ARRAY)
-	g_array_free (val->v_pointer, TRUE);
+	g_array_free (array, TRUE);
       else
-	g_free (val->v_pointer);
+	g_free (array);
     }
 
   lua_remove (L, eti_guard);
@@ -510,8 +544,8 @@ marshal_2lua_list (lua_State *L, GITypeInfo *ti, GITypeTag list_tag,
   return 1;
 }
 
-/* Marshalls array from Lua to C. Returns number of temporary elements
-   pushed to the stack. */
+/* Marshalls hashtable from Lua to C. Returns number of temporary
+   elements pushed to the stack. */
 static int
 marshal_2c_hash (lua_State *L, GITypeInfo *ti, GHashTable **table, int narg,
 		 gboolean optional, GITransfer transfer)
@@ -726,8 +760,7 @@ lgi_marshal_arg_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
   /* Convert narg stack position to absolute one, because during
      marshalling some temporary items might be pushed to the stack,
      which would disrupt relative stack addressing of the value. */
-  if (narg < 0)
-    narg += lua_gettop (L) + 1;
+  lgi_makeabs(L, narg);
 
   switch (tag)
     {
@@ -824,8 +857,8 @@ lgi_marshal_arg_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 	  {
 	  case GI_ARRAY_TYPE_C:
 	  case GI_ARRAY_TYPE_ARRAY:
-	    nret = marshal_2c_array (L, ti, atype, val, narg, optional,
-				     transfer, ci, args);
+	    nret = marshal_2c_array (L, ti, atype, &val->v_pointer, narg,
+				     optional, transfer, ci, args);
 	    break;
 
 	  default:
@@ -860,6 +893,7 @@ lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
      completely. */
   int vals;
   gpointer obj;
+  lgi_makeabs (L, narg);
   GType type = G_VALUE_TYPE (val);
   if (!G_TYPE_IS_VALUE (type))
     return;
@@ -893,11 +927,17 @@ lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
       GITypeTag tag = g_type_info_get_tag (ti);
       switch (tag)
 	{
-	case GI_TYPE_TAG_GHASH:
+	case GI_TYPE_TAG_ARRAY:
 	  {
-	    GHashTable *table;
-	    marshal_2c_hash (L, ti, &table, narg, FALSE, GI_TRANSFER_NOTHING);
-	    g_value_set_boxed (val, table);
+	    gpointer array;
+	    lua_pop (L, marshal_2c_array (L, ti,
+					  g_type_info_get_array_type (ti),
+					  &array, narg, FALSE,
+					  GI_TRANSFER_NOTHING, NULL, NULL));
+	    if (type == G_TYPE_POINTER)
+	      g_value_set_pointer (val, array);
+	    else
+	      g_value_set_boxed (val, array);
 	    return;
 	  }
 
@@ -907,6 +947,14 @@ lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 	    gpointer list;
 	    marshal_2c_list (L, ti, tag, &list, narg, GI_TRANSFER_NOTHING);
 	    g_value_set_pointer (val, list);
+	    return;
+	  }
+
+	case GI_TYPE_TAG_GHASH:
+	  {
+	    GHashTable *table;
+	    marshal_2c_hash (L, ti, &table, narg, FALSE, GI_TRANSFER_NOTHING);
+	    g_value_set_boxed (val, table);
 	    return;
 	  }
 
@@ -1023,7 +1071,6 @@ lgi_marshal_arg_2c_caller_alloc (lua_State *L, GITypeInfo *ti, GIArgument *val,
 	      {
 		/* Convert the allocated array into Lua table with
 		   contents. We have to do it in-place. */
-		GIArgument array_arg;
 
 		/* Make sure that pos is absolute, so that stack
 		   shuffling below does not change the elemnt it
@@ -1033,10 +1080,10 @@ lgi_marshal_arg_2c_caller_alloc (lua_State *L, GITypeInfo *ti, GIArgument *val,
 
 		/* Get GArray from the guard and unmarshal it as a
 		   full GArray into Lua. */
-		lgi_guard_get_data (L, pos,
-		&array_guard); array_arg.v_pointer = *array_guard;
+		lgi_guard_get_data (L, pos, &array_guard);
 		marshal_2lua_array (L, ti, GI_ARRAY_TYPE_ARRAY,
-		GI_TRANSFER_EVERYTHING, &array_arg, pos, NULL, NULL);
+				    GI_TRANSFER_EVERYTHING, *array_guard, pos,
+				    NULL, NULL);
 
 		/* Deactivate old guard, everything was marshalled
 		   into the newly created and marshalled table. */
@@ -1070,8 +1117,7 @@ lgi_marshal_arg_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
 
   /* Make sure that parent is absolute index so that it is fixed even
      when we add/remove from the stack. */
-  if (parent < 0)
-    parent += lua_gettop (L) + 1;
+  lgi_makeabs (L, parent);
 
   switch (tag)
     {
@@ -1182,7 +1228,8 @@ lgi_marshal_arg_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
 	  {
 	  case GI_ARRAY_TYPE_C:
 	  case GI_ARRAY_TYPE_ARRAY:
-	    marshal_2lua_array (L, ti, atype, transfer, val, parent, ci, args);
+	    marshal_2lua_array (L, ti, atype, transfer, val->v_pointer,
+				parent, ci, args);
 	    break;
 
 	  default:
@@ -1249,10 +1296,14 @@ lgi_marshal_val_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
       GITypeTag tag = g_type_info_get_tag (ti);
       switch (tag)
 	{
-	case GI_TYPE_TAG_GHASH:
-	  marshal_2lua_hash (L, ti, GI_TRANSFER_NOTHING,
-			     g_value_get_boxed (val));
-	  return;
+	case GI_TYPE_TAG_ARRAY:
+	  {
+	    gpointer array = (type == G_TYPE_POINTER)
+	      ? g_value_get_pointer (val) : g_value_get_boxed (val);
+	    marshal_2lua_array (L, ti, g_type_info_get_array_type (ti),
+				GI_TRANSFER_NOTHING, array, 0, NULL, NULL);
+	    return;
+	  }
 
 	case GI_TYPE_TAG_GLIST:
 	case GI_TYPE_TAG_GSLIST:
@@ -1261,6 +1312,11 @@ lgi_marshal_val_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 			       g_value_get_pointer (val));
 	    return;
 	  }
+
+	case GI_TYPE_TAG_GHASH:
+	  marshal_2lua_hash (L, ti, GI_TRANSFER_NOTHING,
+			     g_value_get_boxed (val));
+	  return;
 
 	default:
 	  break;
