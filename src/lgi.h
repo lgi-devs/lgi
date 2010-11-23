@@ -154,3 +154,25 @@ gpointer lgi_compound_check (lua_State *L, int arg, GType *gtype);
 
 /* Creates GClosure which invokes specified target. */
 GClosure *lgi_gclosure_create (lua_State *L, int target);
+
+/* Struct ownership modes. */
+typedef enum
+  {
+    LGI_STRUCT_PEEK,
+    LGI_STRUCT_PARENT,
+    LGI_STRUCT_OWN,
+    LGI_STRUCT_ALLOCATE,
+  } LgiStructMode;
+
+/* Creates Lua-side part of given structure. Pushes the object
+   representing it on the stack. In 'allocate' mode, new instance of
+   the structure is allocated and managed in Lua heap. If parent not
+   zero, it is stack index of structure parent field (i.e. object in
+   which the structure is part of). */
+gpointer lgi_struct_2lua (lua_State *L, GIStructInfo *si, gpointer addr,
+			  LgiStructMode mode, int parent);
+
+/* Gets pointer to C-structure from given Lua-side object. Returns
+   number of temporary objects created pushed on the stack. */
+int lgi_struct_2c (lua_State *L, GIStructInfo *si, int narg, gpointer *addr,
+		   gboolean optional);
