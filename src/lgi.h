@@ -155,24 +155,24 @@ gpointer lgi_compound_check (lua_State *L, int arg, GType *gtype);
 /* Creates GClosure which invokes specified target. */
 GClosure *lgi_gclosure_create (lua_State *L, int target);
 
-/* Struct ownership modes. */
+/* Record ownership modes. */
 typedef enum
   {
-    LGI_STRUCT_PEEK,
-    LGI_STRUCT_PARENT,
-    LGI_STRUCT_OWN,
-    LGI_STRUCT_ALLOCATE,
-  } LgiStructMode;
+    LGI_RECORD_PEEK,
+    LGI_RECORD_PARENT,
+    LGI_RECORD_OWN,
+    LGI_RECORD_ALLOCATE,
+  } LgiRecordMode;
 
-/* Creates Lua-side part of given structure. Pushes the object
+/* Creates Lua-side part of given record. Pushes the object
    representing it on the stack. In 'allocate' mode, new instance of
-   the structure is allocated and managed in Lua heap. If parent not
-   zero, it is stack index of structure parent field (i.e. object in
-   which the structure is part of). */
-gpointer lgi_struct_2lua (lua_State *L, GIStructInfo *si, gpointer addr,
-			  LgiStructMode mode, int parent);
+   the record is allocated and managed in Lua heap. If parent not
+   zero, it is stack index of record parent (i.e. reocrd of which the
+   arg record is part of). */
+gpointer lgi_record_2lua (lua_State *L, GIBaseInfo *ri, gpointer addr,
+			  LgiRecordMode mode, int parent);
 
 /* Gets pointer to C-structure from given Lua-side object. Returns
    number of temporary objects created pushed on the stack. */
-int lgi_struct_2c (lua_State *L, GIStructInfo *si, int narg, gpointer *addr,
+int lgi_record_2c (lua_State *L, GIBaseInfo *ri, int narg, gpointer *addr,
 		   gboolean optional);
