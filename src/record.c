@@ -92,7 +92,7 @@ lgi_record_2lua (lua_State *L, GIBaseInfo *info, gpointer addr,
   /* Allocate new userdata for record object, attach proper
      metatable. */
   record = lua_newuserdata (L, size);
-  lua_rawgeti (L, LUA_REGISTRYINDEX, 
+  lua_rawgeti (L, LUA_REGISTRYINDEX,
 	       record_mt_ref [mode == LGI_RECORD_ALLOCATE
 			      || mode == LGI_RECORD_PEEK]);
   lua_setmetatable (L, -2);
@@ -230,8 +230,23 @@ record_gc (lua_State *L)
   return 0;
 }
 
+static int
+record_tostring (lua_State *L)
+{
+  Record *record = record_check (L, 1, 3);
+  lua_pushfstring (L, "lgi.rec %p:", record->addr);
+  lua_getfenv (L, 1);
+  lua_rawgeti (L, -1, 0);
+  lua_getfield (L, -1, "name");
+  lua_replace (L, -3);
+  lua_pop (L, 1);
+  lua_concat (L, 2);
+  return 1;
+}
+
 static const struct luaL_Reg record_meta_reg[] = {
   { "__gc", record_gc },
+  { "__tostring", record_tostring },
   { NULL, NULL }
 };
 
