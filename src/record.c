@@ -52,7 +52,7 @@ lgi_record_2lua (lua_State *L, GIBaseInfo *info, gpointer addr,
   lgi_makeabs (L, parent);
 
   /* NULL pointer results in 'nil'. */
-  if (mode != LGI_RECORD_ALLOCATE && addr)
+  if (mode != LGI_RECORD_ALLOCATE && addr == NULL)
     {
       lua_pushnil (L);
       return NULL;
