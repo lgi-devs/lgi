@@ -211,14 +211,13 @@ lgi_record_2c (lua_State *L, GIBaseInfo *ri, int narg, gpointer *addr,
 static int
 record_gc (lua_State *L)
 {
-  Record *record = record_check (L, 1, 3);
+  Record *record = record_check (L, 1, 2);
   if (record && record->mode == LGI_RECORD_OWN)
     {
       /* Free the owned record. */
       GType gtype;
       lua_getfenv (L, 1);
-      lua_rawgeti (L, -1, 0);
-      lua_getfield (L, -1, "gtype");
+      lua_getfield (L, -1, "_gtype");
       gtype = lua_tonumber (L, -1);
       g_assert (G_TYPE_IS_BOXED (gtype));
       g_boxed_free (gtype, record->addr);
@@ -236,10 +235,8 @@ record_tostring (lua_State *L)
   Record *record = record_check (L, 1, 3);
   lua_pushfstring (L, "lgi.rec %p:", record->addr);
   lua_getfenv (L, 1);
-  lua_rawgeti (L, -1, 0);
-  lua_getfield (L, -1, "name");
-  lua_replace (L, -3);
-  lua_pop (L, 1);
+  lua_getfield (L, -1, "_name");
+  lua_replace (L, -2);
   lua_concat (L, 2);
   return 1;
 }
