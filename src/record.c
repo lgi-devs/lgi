@@ -157,6 +157,21 @@ record_check (lua_State *L, int narg, int stackalloc)
   return record;
 }
 
+/* Similar to record_check, but throws in case of failure. */
+static Record *
+record_get (lua_State *L, int narg, int stackalloc)
+{
+  Record *record = record_check (L, narg, stackalloc);
+  if (record == NULL)
+    {
+      lua_pushfstring (L, "lgi.record expected, got %s", 
+		       lua_typename (L, lua_type (L, narg)));
+      luaL_argerror (L, narg, lua_tostring (L, -1));
+    }
+
+  return record;
+}
+
 int
 lgi_record_2c (lua_State *L, GIBaseInfo *ri, int narg, gpointer *addr,
 	       gboolean optional)
@@ -217,8 +232,8 @@ lgi_record_2c (lua_State *L, GIBaseInfo *ri, int narg, gpointer *addr,
 static int
 record_gc (lua_State *L)
 {
-  Record *record = record_check (L, 1, 2);
-  if (record && record->mode == LGI_RECORD_OWN)
+  Record *record = record_get (L, 1, 2);
+  if (record->mode == LGI_RECORD_OWN)
     {
       /* Free the owned record. */
       GType gtype;
@@ -238,7 +253,7 @@ record_gc (lua_State *L)
 static int
 record_tostring (lua_State *L)
 {
-  Record *record = record_check (L, 1, 3);
+  Record *record = record_get (L, 1, 3);
   lua_pushfstring (L, "lgi.%s %p:", record->is_union ? "uni" : "rec",
 		   record->addr);
   lua_getfenv (L, 1);
@@ -248,9 +263,65 @@ record_tostring (lua_State *L)
   return 1;
 }
 
+/* Implements set/get field operation. Lua prototypes:
+       res = field(recordinstance, fieldinfo)
+       field(recordinstance, fieldinfo, newval) */
+static int
+record_field (lua_State *L)
+{
+  gboolean get;
+  Record *record;
+  GIFieldInfo *fi;
+  GIFieldInfoFlags flags;
+  GITypeInfo *ti;
+  GIArgument *val;
+
+  /* Check, whether we are doing set or get operation. */
+  get = lua_isnone (L, 3);
+
+  /* Get record and field instances. */
+  record = record_get (L, 1, 3);
+  fi = record_get (L, 2, 3)->addr;
+
+  /* Check, whether field is readable/writable. */
+  flags = g_field_info_get_flags (fi);
+  if ((flags & (get ? GI_FIELD_IS_READABLE : GI_FIELD_IS_WRITABLE)) == 0)
+    {
+      /* Prepare proper error message. */
+      lua_getfenv (L, 1);
+      lua_getfield (L, -1, "_name");
+      luaL_error (L, "%s: field `%s' is not %s", lua_tostring (L, -1),
+		  g_base_info_get_name (fi), get ? "readable" : "writable");
+    }
+  
+  /* Map GIArgument to proper memory location, get typeinfo of the
+     field and perform actual marshalling. */
+  val = (GIArgument *) (((char *) record->addr)
+			+ g_field_info_get_offset (fi));
+  ti = g_field_info_get_type (fi);
+  lgi_guard_create_baseinfo (L, ti);
+  if (get)
+    {
+      lgi_marshal_arg_2lua (L, ti, GI_TRANSFER_NOTHING, val, 1,
+			    FALSE, NULL, NULL);
+      return 1;
+    }
+  else
+    {
+      lgi_marshal_arg_2c (L, ti, NULL, GI_TRANSFER_NOTHING, val, 3,
+			  FALSE, NULL, NULL);
+      return 0;
+    }
+}
+
 static const struct luaL_Reg record_meta_reg[] = {
   { "__gc", record_gc },
   { "__tostring", record_tostring },
+  { NULL, NULL }
+};
+
+static const struct luaL_Reg record_api_reg[] = {
+  { "field", record_field },
   { NULL, NULL }
 };
 
@@ -265,4 +336,9 @@ lgi_record_init (lua_State *L)
       luaL_register (L, NULL, record_meta_reg + i);
       record_mt_ref [i] = luaL_ref (L, LUA_REGISTRYINDEX);
     }
+
+  /* Create 'record' API table in main core API table. */
+  lua_newtable (L);
+  luaL_register (L, NULL, record_api_reg);
+  lua_setfield (L, -2, "record");
 }

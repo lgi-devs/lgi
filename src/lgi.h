@@ -64,6 +64,7 @@ enum _LgiFlags
   } LgiFlags;
 
 /* Initialization of modules. */
+void lgi_record_init (lua_State *L);
 void lgi_compound_init (lua_State *L);
 void lgi_callable_init (lua_State *L);
 
