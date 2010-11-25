@@ -19,7 +19,10 @@ typedef struct _Record
   gpointer addr;
 
   /* Ownership mode of the record. */
-  LgiRecordMode mode;
+  unsigned mode : 2;
+
+  /* Flag indicating whether this record is union. */
+  unsigned is_union : 1;
 
   union
   {
@@ -43,6 +46,7 @@ lgi_record_2lua (lua_State *L, GIBaseInfo *info, gpointer addr,
 {
   size_t size;
   Record *record;
+  gboolean is_union;
 
   /* Convert 'parent' index to an absolute one. */
   lgi_makeabs (L, parent);
@@ -82,10 +86,11 @@ lgi_record_2lua (lua_State *L, GIBaseInfo *info, gpointer addr,
     }
 
   /* Calculate size of the record to allocate. */
+  is_union = g_base_info_get_type (info) == GI_INFO_TYPE_UNION;
   if (mode == LGI_RECORD_ALLOCATE)
-    size = G_STRUCT_OFFSET (Record, data)
-      +  (g_base_info_get_type (info) == GI_INFO_TYPE_STRUCT)
-      ? g_struct_info_get_size (info) : g_union_info_get_size (info);
+    size = G_STRUCT_OFFSET (Record, data) +  (is_union
+					      ? g_union_info_get_size (info)
+					      : g_struct_info_get_size (info));
   else
     size = (parent == 0) ? G_STRUCT_OFFSET (Record, data) : sizeof (Record);
 
@@ -98,6 +103,7 @@ lgi_record_2lua (lua_State *L, GIBaseInfo *info, gpointer addr,
   lua_setmetatable (L, -2);
   record->addr = addr;
   record->mode = mode;
+  record->is_union = is_union ? 1 : 0;
   if (mode == LGI_RECORD_ALLOCATE)
     memset (record->data.data, 0, size - G_STRUCT_OFFSET (Record, data));
   else if (mode == LGI_RECORD_PARENT)
@@ -233,7 +239,8 @@ static int
 record_tostring (lua_State *L)
 {
   Record *record = record_check (L, 1, 3);
-  lua_pushfstring (L, "lgi.rec %p:", record->addr);
+  lua_pushfstring (L, "lgi.%s %p:", record->is_union ? "uni" : "rec",
+		   record->addr);
   lua_getfenv (L, 1);
   lua_getfield (L, -1, "_name");
   lua_replace (L, -2);
