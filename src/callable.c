@@ -349,9 +349,17 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
   if (callable->has_self)
     {
       GIBaseInfo *parent = g_base_info_get_container (callable->info);
-      GType parent_gtype = g_registered_type_info_get_g_type (parent);
-      nret += lgi_compound_get (L, args_index, &parent_gtype,
-				&args[0].v_pointer, 0);
+      GIInfoType type = g_base_info_get_type (parent);
+      if (type == GI_INFO_TYPE_OBJECT || type == GI_INFO_TYPE_INTERFACE)
+	{
+	  GType parent_gtype = g_registered_type_info_get_g_type (parent);
+	  nret += lgi_compound_get (L, args_index, &parent_gtype,
+				    &args[0].v_pointer, 0);
+	}
+      else
+	nret += lgi_record_2c (L, parent, args_index,
+			       &args[0].v_pointer, FALSE);
+
       ffi_args[0] = &args[0];
       lua_argi++;
     }

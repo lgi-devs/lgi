@@ -830,6 +830,11 @@ lgi_marshal_arg_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 
 	  case GI_INFO_TYPE_STRUCT:
 	  case GI_INFO_TYPE_UNION:
+	    {
+	      nret = lgi_record_2c (L, info, narg, &val->v_pointer, optional);
+	      break;
+	    }
+
 	  case GI_INFO_TYPE_OBJECT:
 	  case GI_INFO_TYPE_INTERFACE:
 	    {
@@ -980,9 +985,11 @@ lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 
     case G_TYPE_BOXED:
       {
-	vals = lgi_compound_get (L, narg, &type, &obj, LGI_FLAGS_OPTIONAL);
+	GIBaseInfo *info = g_irepository_find_by_gtype (NULL, type);
+	lgi_guard_create_baseinfo (L, info);
+	vals = lgi_record_2c (L, info, narg, &obj, TRUE);
 	g_value_set_boxed (val, obj);
-	lua_pop (L, vals);
+	lua_pop (L, vals + 1);
 	return;
       }
 
@@ -1036,7 +1043,8 @@ lgi_marshal_arg_2c_caller_alloc (lua_State *L, GITypeInfo *ti, GIArgument *val,
 	if (type == GI_INFO_TYPE_STRUCT || type == GI_INFO_TYPE_UNION)
 	  {
 	    if (pos == 0)
-	      val->v_pointer = lgi_compound_struct_new (L, ii);
+	      val->v_pointer = lgi_record_2lua (L, ii, NULL,
+						LGI_RECORD_ALLOCATE, 0);
 	    handled = TRUE;
 	  }
 
@@ -1173,16 +1181,28 @@ lgi_marshal_arg_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
 
 	  case GI_INFO_TYPE_STRUCT:
 	  case GI_INFO_TYPE_UNION:
-	  case GI_INFO_TYPE_OBJECT:
-	  case GI_INFO_TYPE_INTERFACE:
 	    {
+	      LgiRecordMode mode;
 	      gpointer addr = val->v_pointer;
-	      if ((type == GI_INFO_TYPE_STRUCT || type == GI_INFO_TYPE_UNION)
-		  && parent != 0)
+	      if (parent != 0)
 		/* If struct or union allocated inside parent, the
 		   address is actually address of argument itself, not
 		   the pointer inside. */
 		addr = val;
+
+	      lgi_compound_create (L, info, addr, own, parent);
+	      if (own)
+		mode = LGI_RECORD_OWN;
+	      else
+		mode = (parent != 0) ? LGI_RECORD_PARENT : LGI_RECORD_PEEK;
+	      lgi_record_2lua (L, info, addr, mode, parent);
+	      break;
+	    }
+
+	  case GI_INFO_TYPE_OBJECT:
+	  case GI_INFO_TYPE_INTERFACE:
+	    {
+	      gpointer addr = val->v_pointer;
 
 	      /* If we do not own the compound, we should try to take
 		 its ownership; keeping pointer to compound without
@@ -1334,14 +1354,27 @@ lgi_marshal_val_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
       lua_pushinteger (L, g_value_get_flags (val));
       return;
 
-    case G_TYPE_OBJECT:
     case G_TYPE_BOXED:
+      {
+	GIBaseInfo *bi = g_irepository_find_by_gtype (NULL, type);
+	int bi_guard = lgi_guard_create_baseinfo (L, bi);
+	if (bi != NULL)
+	  {
+	    gpointer obj = g_value_dup_boxed (val);
+	    lgi_record_2lua (L, bi, obj, LGI_RECORD_OWN, 0);
+	    lua_remove (L, bi_guard);
+	    return;
+	  }
+	lua_remove (L, bi_guard);
+	break;
+      }
+
+    case G_TYPE_OBJECT:
       {
 	GIBaseInfo *bi = g_irepository_find_by_gtype (NULL, type);
 	if (bi != NULL)
 	  {
-	    gpointer obj = GI_IS_OBJECT_INFO (bi) ?
-	      g_value_dup_object (val) : g_value_dup_boxed (val);
+	    gpointer obj = g_value_dup_object (val);
 	    lgi_compound_create (L, bi, obj, TRUE, 0);
 	    g_base_info_unref (bi);
 	    return;

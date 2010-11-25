@@ -126,7 +126,7 @@ lgi_find (lua_State *L)
   const gchar *symbol = luaL_checkstring (L, 1);
   const gchar *container = luaL_optstring (L, 2, NULL);
   GIBaseInfo *info, *fi, *baseinfo;
-  int vals, info_guard;
+  int info_guard;
 
   /* Get information about the symbol. */
   info = g_irepository_find_by_name (NULL, "GIRepository",
@@ -166,9 +166,9 @@ lgi_find (lua_State *L)
   /* Create new IBaseInfo structure and return it. */
   baseinfo = g_irepository_find_by_name (NULL, "GIRepository", "BaseInfo");
   info_guard = lgi_guard_create_baseinfo (L, baseinfo);
-  vals = lgi_compound_create (L, baseinfo, info, TRUE, 0);
+  lgi_record_2lua (L, baseinfo, info, LGI_RECORD_OWN, 0);
   lua_remove (L, info_guard);
-  return vals;
+  return 1;
 }
 
 static int
@@ -232,7 +232,7 @@ lgi_construct (lua_State* L)
 	    else
 	      {
 		/* Create common struct. */
-		lgi_compound_struct_new (L, bi);
+		lgi_record_2lua (L, bi, NULL, LGI_RECORD_ALLOCATE, 0);
 		vals = 1;
 	      }
 	    break;
