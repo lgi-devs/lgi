@@ -9,9 +9,11 @@
 --]]--------------------------------------------------------------------------
 
 local assert, setmetatable, getmetatable, type, pairs, string, rawget,
-table, require, tostring, error, pcall, ipairs, unpack, next =
-   assert, setmetatable, getmetatable, type, pairs, string, rawget,
-table, require, tostring, error, pcall, ipairs, unpack or table.unpack, next
+  table, require, tostring, error, pcall, ipairs, unpack, next,
+  select =
+     assert, setmetatable, getmetatable, type, pairs, string, rawget,
+  table, require, tostring, error, pcall, ipairs, unpack or table.unpack, next,
+  select
 local package, math = package, math
 local bit = require 'bit'
 
@@ -550,6 +552,9 @@ local function load_compound(compound, info, mt)
    compound[0].name = (info:get_namespace() .. '.'  .. info:get_name())
    compound[0].resolve = resolve_compound
    setmetatable(compound, mt)
+
+   compound._gtype = compound[0].gtype
+   compound._name = compound[0].name
 end
 
 local function load_element_field(fi)
@@ -635,6 +640,19 @@ local function load_element_signal(info)
    end
 end
 
+-- Implementation of _access method for structs.
+local function struct_access(typetable, instance, name, ...)
+   local setmode = select('#', ...) > 0
+   local val = typetable[name]
+   if type(val) ~= 'function' then
+      if setmode then
+	 error(("%s: `%s' is not writable"):format(typetable._name, name))
+      end
+      return val 
+   end
+   return val(instance, typetable, setmode, ...)
+end
+
 -- Loads structure information into table representing the structure
 local function load_struct(namespace, struct, info)
    -- Avoid exposing internal structs created for object implementations.
@@ -646,6 +664,7 @@ local function load_struct(namespace, struct, info)
       struct._fields = get_category(
 	 info, gi.struct_info_get_n_fields(info), gi.struct_info_get_field,
 	 load_element_field)
+      struct._access = struct_access
    end
 end
 
