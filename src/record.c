@@ -164,7 +164,7 @@ record_get (lua_State *L, int narg, int stackalloc)
   Record *record = record_check (L, narg, stackalloc);
   if (record == NULL)
     {
-      lua_pushfstring (L, "lgi.record expected, got %s", 
+      lua_pushfstring (L, "lgi.record expected, got %s",
 		       lua_typename (L, lua_type (L, narg)));
       luaL_argerror (L, narg, lua_tostring (L, -1));
     }
@@ -263,9 +263,19 @@ record_tostring (lua_State *L)
   return 1;
 }
 
+/* Implements gwnwric record creation. Lua prototype:
+   recordinstance = core.record.new(structinfo|unioninfo) */
+static int
+record_new (lua_State *L)
+{
+  lgi_record_2lua (L, record_get (L, 1, 3)->addr, NULL,
+		   LGI_RECORD_ALLOCATE, 0);
+  return 1;
+}
+
 /* Implements set/get field operation. Lua prototypes:
-       res = field(recordinstance, fieldinfo)
-       field(recordinstance, fieldinfo, newval) */
+   res = core.record.field(recordinstance, fieldinfo)
+   core.record.field(recordinstance, fieldinfo, newval) */
 static int
 record_field (lua_State *L)
 {
@@ -293,7 +303,7 @@ record_field (lua_State *L)
       luaL_error (L, "%s: field `%s' is not %s", lua_tostring (L, -1),
 		  g_base_info_get_name (fi), get ? "readable" : "writable");
     }
-  
+
   /* Map GIArgument to proper memory location, get typeinfo of the
      field and perform actual marshalling. */
   val = (GIArgument *) (((char *) record->addr)
@@ -322,6 +332,7 @@ static const struct luaL_Reg record_meta_reg[] = {
 
 static const struct luaL_Reg record_api_reg[] = {
   { "field", record_field },
+  { "new", record_new },
   { NULL, NULL }
 };
 
