@@ -290,8 +290,8 @@ record_field (lua_State *L)
   get = lua_isnone (L, 3);
 
   /* Get record and field instances. */
-  record = record_get (L, 1, 3);
-  fi = record_get (L, 2, 3)->addr;
+  record = record_get (L, 1, 2);
+  fi = record_get (L, 2, 2)->addr;
 
   /* Check, whether field is readable/writable. */
   flags = g_field_info_get_flags (fi);
@@ -324,9 +324,39 @@ record_field (lua_State *L)
     }
 }
 
+/* Worker method for __index and __newindex implementation. */
+static int
+record_access (lua_State *L)
+{
+  gboolean get = lua_isnone (L, 3);
+
+  /* Check that 1st arg is a record and invoke one of the forms:
+     result = type:_access(type, recordinstance, name)
+     type:_access(type, recordinstance, name, val) */
+  record_get (L, 1, 7);
+  lua_getfenv (L, 1);
+  lua_getfield (L, -1, "_access");
+  lua_pushvalue (L, -2);
+  lua_pushvalue (L, 1);
+  lua_pushvalue (L, 2);
+  if (get)
+    {
+      lua_call (L, 4, 1);
+      return 1;
+    }
+  else
+    {
+      lua_pushvalue (L, 3);
+      lua_call (L, 5, 0);
+      return 0;
+    }
+}
+
 static const struct luaL_Reg record_meta_reg[] = {
   { "__gc", record_gc },
   { "__tostring", record_tostring },
+  { "__index", record_access },
+  { "__newindex", record_access },
   { NULL, NULL }
 };
 
