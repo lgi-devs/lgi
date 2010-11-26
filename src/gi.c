@@ -310,6 +310,17 @@ info_index (lua_State *L)
 	    }
 	}
     }
+
+  if (GI_IS_ENUM_INFO (*info))
+    {
+      if (strcmp (prop, "storage") == 0)
+	{
+	  GITypeTag tag = g_enum_info_get_storage_type (*info);
+	  lua_pushstring (L, g_type_tag_to_string (tag));
+	  return 1;
+	}
+      INFOS (enum, value);
+    }
   
   if (GI_IS_VALUE_INFO (*info))
     {
