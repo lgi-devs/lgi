@@ -300,8 +300,8 @@ info_index (lua_State *L)
 	}
     }
 
-  lua_pushfstring (L, "unsupported info property `%s'", prop);
-  return luaL_argerror (L, 2, lua_tostring (L, -1));
+  lua_pushnil (L);
+  return 1;
 
 #undef INFOS
 #undef INFOS2
