@@ -52,7 +52,7 @@ static int
 infos_len (lua_State *L)
 {
   Infos* infos = luaL_checkudata (L, 1, LGI_GI_INFOS);
-  lua_pushnumber (L, infos->count + 1);
+  lua_pushnumber (L, infos->count);
   return 1;
 }
 
@@ -159,20 +159,30 @@ info_index (lua_State *L)
     H(STRUCT, struct)
     H(UNION, union)
     H(TYPE, type)
-    H(VALUE, value)
+    H(VALUE, value);
 #undef H
 
-  else if (strcmp (prop, "name") == 0)
+  if  (!GI_IS_TYPE_INFO (*info))
     {
-      lua_pushstring (L, g_base_info_get_name (*info));
+      if (strcmp (prop, "name") == 0)
+	{
+	  lua_pushstring (L, g_base_info_get_name (*info));
+	  return 1;
+	}
+      else if (strcmp (prop, "namespace") == 0)
+	{
+	  lua_pushstring (L, g_base_info_get_namespace (*info));
+	  return 1;
+	}
+    }
+
+  if (strcmp (prop, "fullname") == 0)
+    {
+      lua_concat (L, lgi_type_get_name (L, *info));
       return 1;
     }
-  else if (strcmp (prop, "namespace") == 0)
-    {
-      lua_pushstring (L, g_base_info_get_namespace (*info));
-      return 1;
-    }
-  else if (strcmp (prop, "deprecated") == 0)
+  
+  if (strcmp (prop, "deprecated") == 0)
     {
       lua_pushboolean (L, g_base_info_is_deprecated (*info));
       return 1;
@@ -199,7 +209,8 @@ info_index (lua_State *L)
       if (ti)
 	return info_new (L, ti);
     }
-  else if (GI_IS_REGISTERED_TYPE_INFO (*info))
+  
+  if (GI_IS_REGISTERED_TYPE_INFO (*info))
     {
       if (strcmp (prop, "gtype") == 0)
 	{
@@ -243,7 +254,64 @@ info_index (lua_State *L)
 	    INFOS (object, signal);
 	}
     }
-  else if (GI_IS_VALUE_INFO (*info))
+  
+  if (GI_IS_CALLABLE_INFO (*info))
+    {
+      if (strcmp (prop, "return_type") == 0)
+	return info_new (L, g_callable_info_get_return_type (*info));
+      INFOS (callable, arg);
+
+      if (GI_IS_SIGNAL_INFO (*info))
+	{
+	  if (strcmp (prop, "flags") == 0)
+	    {
+	      GSignalFlags flags = g_signal_info_get_flags (*info);
+	      lua_newtable (L);
+	      if (0);
+#define H(n1, n2)					\
+	      else if ((flags & G_SIGNAL_ ## n1) != 0)	\
+		{					\
+		  lua_pushboolean (L, 1);		\
+		  lua_setfield (L, -2, #n2);		\
+		}
+	      H(RUN_FIRST, run_first)
+		H(RUN_LAST, run_last)
+		H(RUN_CLEANUP, run_cleanup)
+		H(NO_RECURSE, no_recurse)
+		H(DETAILED, detailed)
+		H(ACTION, action)
+		H(NO_HOOKS, no_hooks);
+#undef H
+	      return 1;
+	    }
+	}
+
+      if (GI_IS_FUNCTION_INFO (*info))
+	{
+	  if (strcmp (prop, "flags") == 0)
+	    {
+	      GIFunctionInfoFlags flags = g_function_info_get_flags (*info);
+	      lua_newtable (L);
+	      if (0);
+#define H(n1, n2)					\
+	      else if ((flags & GI_FUNCTION_ ## n1) != 0)	\
+		{					\
+		  lua_pushboolean (L, 1);		\
+		  lua_setfield (L, -2, #n2);		\
+		}
+	      H(IS_METHOD, is_method)
+		H(IS_CONSTRUCTOR, is_constructor)
+		H(IS_GETTER, is_getter)
+		H(IS_SETTER, is_setter)
+		H(WRAPS_VFUNC, wraps_vfunc)
+		H(THROWS, throws);
+#undef H
+	      return 1;
+	    }
+	}
+    }
+  
+  if (GI_IS_VALUE_INFO (*info))
     {
       if (strcmp (prop, "value") == 0)
 	{
@@ -251,7 +319,8 @@ info_index (lua_State *L)
 	  return 1;
 	}
     }
-  else if (GI_IS_TYPE_INFO (*info))
+  
+  if (GI_IS_TYPE_INFO (*info))
     {
       GITypeTag tag = g_type_info_get_tag (*info);
       if (strcmp (prop, "tag") == 0)
