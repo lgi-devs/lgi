@@ -428,23 +428,31 @@ gi_index (lua_State *L)
   return 0;
 }
 
+typedef struct _Reg
+{
+  const gchar *name;
+  const luaL_Reg* reg;
+} Reg;
+
+static const Reg gi_reg[] = {
+  { GI_INFOS, gi_infos_reg },
+  { GI_INFO, gi_info_reg },
+  { GI_NAMESPACE, gi_namespace_reg },
+  { NULL, NULL }
+};
+
 void
 lgi_gi_init (lua_State *L)
 {
-  /* Register metatable for infos object. */
-  luaL_newmetatable (L, GI_INFOS);
-  luaL_register (L, NULL, gi_infos_reg);
-  lua_pop (L, 1);
+  const Reg *reg;
 
-  /* Register metatable for info object. */
-  luaL_newmetatable (L, GI_INFO);
-  luaL_register (L, NULL, gi_info_reg);
-  lua_pop (L, 1);
-
-  /* Register metatable for namespace object. */
-  luaL_newmetatable (L, GI_NAMESPACE);
-  luaL_register (L, NULL, gi_namespace_reg);
-  lua_pop (L, 1);
+  /* Register metatables for userdata objects. */
+  for (reg = gi_reg; reg->name; reg++)
+    {
+      luaL_newmetatable (L, reg->name);
+      luaL_register (L, NULL, reg->reg);
+      lua_pop (L, 1);
+    }
 
   /* Register global API. */
   lua_newtable (L);
