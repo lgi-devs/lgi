@@ -180,7 +180,9 @@ info_index (lua_State *L)
   else if (strcmp (prop, "container") == 0)
     {
       GIBaseInfo *container = g_base_info_get_container (*info);
-      return info_new (L, g_base_info_ref (container));
+      if (container)
+	g_base_info_ref (container);
+      return info_new (L, container);
     }
   else if (strcmp (prop, "typeinfo") == 0)
     {
@@ -204,6 +206,42 @@ info_index (lua_State *L)
 	  lua_pushnumber (L, g_registered_type_info_get_g_type (*info));
 	  return 1;
 	}
+      else if (GI_IS_STRUCT_INFO (*info))
+	{
+	  if (strcmp (prop, "is_gtype_struct") == 0)
+	    {
+	      lua_pushboolean (L, g_struct_info_is_gtype_struct (*info));
+	      return 1;
+	    }
+	  INFOS (struct, field)
+	    INFOS (struct, method);
+	}
+      else if (GI_IS_UNION_INFO (*info))
+	{
+	  if (0);
+	  INFOS (union, field)
+	    INFOS (union, method);
+	}
+      else if (GI_IS_INTERFACE_INFO (*info))
+	{
+	  if (0);
+	  INFOS (interface, prerequisite)
+	    INFOS (interface, method)
+	    INFOS (interface, constant)
+	    INFOS2 (interface, property, properties)
+	    INFOS (interface, signal);
+	}
+      else if (GI_IS_OBJECT_INFO (*info))
+	{
+	  if (strcmp (prop, "parent") == 0)
+	    return info_new (L, g_object_info_get_parent (*info));
+	  INFOS (object, interface)
+	    INFOS (object, field)
+	    INFOS (object, method)
+	    INFOS (object, constant)
+	    INFOS2 (object, property, properties)
+	    INFOS (object, signal);
+	}
     }
   else if (GI_IS_VALUE_INFO (*info))
     {
@@ -212,42 +250,6 @@ info_index (lua_State *L)
 	  lua_pushnumber (L, g_value_info_get_value (*info));
 	  return 1;
 	}
-    }
-  else if (GI_IS_STRUCT_INFO (*info))
-    {
-      if (strcmp (prop, "is_gtype_struct") == 0)
-	{
-	  lua_pushboolean (L, g_struct_info_is_gtype_struct (*info));
-	  return 1;
-	}
-      INFOS (struct, field)
-	INFOS (struct, method);
-    }
-  else if (GI_IS_UNION_INFO (*info))
-    {
-      if (0);
-      INFOS (union, field)
-	INFOS (union, method);
-    }
-  else if (GI_IS_INTERFACE_INFO (*info))
-    {
-      if (0);
-      INFOS (interface, prerequisite)
-	INFOS (interface, method)
-	INFOS (interface, constant)
-	INFOS2 (interface, property, properties)
-	INFOS (interface, signal);
-    }
-  else if (GI_IS_OBJECT_INFO (*info))
-    {
-      if (strcmp (prop, "parent") == 0)
-	return info_new (L, g_object_info_get_parent (*info));
-      INFOS (object, interface)
-	INFOS (object, field)
-	INFOS (object, method)
-	INFOS (object, constant)
-	INFOS2 (object, property, properties)
-	INFOS (object, signal);
     }
   else if (GI_IS_TYPE_INFO (*info))
     {
@@ -282,9 +284,9 @@ info_index (lua_State *L)
 	{
 	  switch (g_type_info_get_array_type (*info))
 	    {
-#define H(n1, n2)			 \
-	      case GI_ARRAY_TYPE_ ## n1: \
-		lua_pushstring (L, #n2); \
+#define H(n1, n2)				\
+	      case GI_ARRAY_TYPE_ ## n1:	\
+		lua_pushstring (L, #n2);	\
 		return 1;
 
 	      H(C, c)
@@ -343,7 +345,12 @@ namespace_index (lua_State *L)
 	  lua_newtable (L);
 	  for (index = 1, dep = deps; *dep; dep++, index++)
 	    {
-	      lua_pushstring (L, *dep);
+	      const gchar *sep = strchr (*dep, '-');
+	      lua_newtable (L);
+	      lua_pushlstring (L, *dep, sep - *dep);
+	      lua_setfield (L, -2, "name");
+	      lua_pushstring (L, sep + 1);
+	      lua_setfield (L, -2, "version");
 	      lua_rawseti (L, -2, index);
 	    }
 	  g_strfreev (deps);
@@ -414,7 +421,14 @@ gi_index (lua_State *L)
     return info_new (L, g_irepository_find_by_gtype (NULL,
 						     luaL_checknumber (L, 2)));
   else
-    return namespace_new (L, luaL_checkstring (L, 2));
+    {
+      const gchar *ns = luaL_checkstring (L, 2);
+      if (g_irepository_is_registered (NULL, ns, NULL))
+	return namespace_new (L, ns);
+    }
+
+  lua_pushnil (L);
+  return 0;
 }
 
 void
