@@ -528,6 +528,7 @@ luaopen_lgi__core (lua_State* L)
   g_log_set_default_handler (log_handler, L);
 
   /* Initialize modules. */
+  lgi_gi_init (L);
   lgi_compound_init (L);
   lgi_callable_init (L);
 
