@@ -346,12 +346,9 @@ namespace_index (lua_State *L)
 	  for (index = 1, dep = deps; *dep; dep++, index++)
 	    {
 	      const gchar *sep = strchr (*dep, '-');
-	      lua_newtable (L);
 	      lua_pushlstring (L, *dep, sep - *dep);
-	      lua_setfield (L, -2, "name");
 	      lua_pushstring (L, sep + 1);
-	      lua_setfield (L, -2, "version");
-	      lua_rawseti (L, -2, index);
+	      lua_settable (L, -3);
 	    }
 	  g_strfreev (deps);
 	}
