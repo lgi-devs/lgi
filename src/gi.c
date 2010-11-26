@@ -16,7 +16,7 @@ typedef GIBaseInfo *(* InfosItemGet)(GIBaseInfo* info, gint item);
 static int
 info_gc (lua_State *L)
 {
-  GIBaseInfo **info = luaL_checkudata (L, 1, GI_INFO);
+  GIBaseInfo **info = luaL_checkudata (L, 1, LGI_GI_INFO);
   g_base_info_unref (*info);
   return 0;
 }
@@ -29,7 +29,7 @@ info_new (lua_State *L, GIBaseInfo *info)
     {
       GIBaseInfo **ud_info = lua_newuserdata (L, sizeof (info));
       *ud_info = info;
-      luaL_getmetatable (L, GI_INFO);
+      luaL_getmetatable (L, LGI_GI_INFO);
       lua_setmetatable (L, -2);
     }
   else
@@ -46,12 +46,12 @@ typedef struct _Infos
   gint count;
   InfosItemGet item_get;
 } Infos;
-#define GI_INFOS "lgi.gi.infos"
+#define LGI_GI_INFOS "lgi.gi.infos"
 
 static int
 infos_len (lua_State *L)
 {
-  Infos* infos = luaL_checkudata (L, 1, GI_INFOS);
+  Infos* infos = luaL_checkudata (L, 1, LGI_GI_INFOS);
   lua_pushnumber (L, infos->count + 1);
   return 1;
 }
@@ -59,7 +59,7 @@ infos_len (lua_State *L)
 static int
 infos_index (lua_State *L)
 {
-  Infos* infos = luaL_checkudata (L, 1, GI_INFOS);
+  Infos* infos = luaL_checkudata (L, 1, LGI_GI_INFOS);
   gint n = luaL_checkinteger (L, 2) - 1;
   luaL_argcheck (L, n >= 0 && n < infos->count, 2, "out of bounds");
   return info_new (L, infos->item_get (infos->info, n));
@@ -70,7 +70,7 @@ static int
 infos_new (lua_State *L, GIBaseInfo *info, gint count, InfosItemGet item_get)
 {
   Infos *infos = lua_newuserdata (L, sizeof (Infos));
-  luaL_getmetatable (L, GI_INFOS);
+  luaL_getmetatable (L, LGI_GI_INFOS);
   lua_setmetatable (L, -2);
   infos->info = g_base_info_ref (info);
   infos->count = count;
@@ -88,7 +88,7 @@ static const luaL_Reg gi_infos_reg[] = {
 static int
 info_index (lua_State *L)
 {
-  GIBaseInfo **info = luaL_checkudata (L, 1, GI_INFO);
+  GIBaseInfo **info = luaL_checkudata (L, 1, LGI_GI_INFO);
   const gchar *prop = luaL_checkstring (L, 2);
 
 #define INFOS(n1, n2)							\
@@ -314,12 +314,12 @@ static const luaL_Reg gi_info_reg[] = {
 };
 
 /* Userdata representing namespace in girepository. */
-#define GI_NAMESPACE "lgi.gi.namespace"
+#define LGI_GI_NAMESPACE "lgi.gi.namespace"
 
 static int
 namespace_len (lua_State *L)
 {
-  const gchar *ns = luaL_checkudata (L, 1, GI_NAMESPACE);
+  const gchar *ns = luaL_checkudata (L, 1, LGI_GI_NAMESPACE);
   lua_pushinteger (L, g_irepository_get_n_infos (NULL, ns) + 1);
   return 1;
 }
@@ -327,7 +327,7 @@ namespace_len (lua_State *L)
 static int
 namespace_index (lua_State *L)
 {
-  const gchar *ns = luaL_checkudata (L, 1, GI_NAMESPACE);
+  const gchar *ns = luaL_checkudata (L, 1, LGI_GI_NAMESPACE);
   const gchar *prop;
   if (lua_isnumber (L, 2))
     return info_new (L, g_irepository_get_info (NULL, ns,
@@ -369,7 +369,7 @@ static int
 namespace_new (lua_State *L, const gchar *namespace)
 {
   gchar *ns = lua_newuserdata (L, strlen (namespace) + 1);
-  luaL_getmetatable (L, GI_NAMESPACE);
+  luaL_getmetatable (L, LGI_GI_NAMESPACE);
   lua_setmetatable (L, -2);
   strcpy (ns, namespace);
   return 1;
@@ -435,9 +435,9 @@ typedef struct _Reg
 } Reg;
 
 static const Reg gi_reg[] = {
-  { GI_INFOS, gi_infos_reg },
-  { GI_INFO, gi_info_reg },
-  { GI_NAMESPACE, gi_namespace_reg },
+  { LGI_GI_INFOS, gi_infos_reg },
+  { LGI_GI_INFO, gi_info_reg },
+  { LGI_GI_NAMESPACE, gi_namespace_reg },
   { NULL, NULL }
 };
 

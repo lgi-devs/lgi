@@ -69,7 +69,7 @@ void lgi_callable_init (lua_State *L);
 void lgi_gi_init (lua_State *L);
 
 /* Metatable name of userdata - gi wrapped 'GIBaseInfo*' */
-#define GI_INFO "lgi.gi.info"
+#define LGI_GI_INFO "lgi.gi.info"
 
 /* Gets gtype of the type represented by typeinfo. */
 GType lgi_get_gtype (lua_State *L, GITypeInfo *ti);
