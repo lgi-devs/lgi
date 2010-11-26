@@ -311,6 +311,72 @@ static const luaL_Reg gi_info_reg[] = {
   { NULL, NULL }
 };
 
+/* Userdata representing namespace in girepository. */
+#define GI_NAMESPACE "lgi.gi.namespace"
+
+static int
+namespace_len (lua_State *L)
+{
+  const gchar *ns = luaL_checkudata (L, 1, GI_NAMESPACE);
+  lua_pushinteger (L, g_irepository_get_n_infos (NULL, ns) + 1);
+  return 1;
+}
+
+static int
+namespace_index (lua_State *L)
+{
+  const gchar *ns = luaL_checkudata (L, 1, GI_NAMESPACE);
+  const gchar *prop;
+  if (lua_isnumber (L, 2))
+    return info_new (L, g_irepository_get_info (NULL, ns,
+						lua_tointeger (L, 2) - 1));
+  prop = luaL_checkstring (L, 2);
+  if (strcmp (prop, "dependencies") == 0)
+    {
+      gchar **deps = g_irepository_get_dependencies (NULL, ns);
+      if (deps == NULL)
+	lua_pushnil (L);
+      else
+	{
+	  int index;
+	  gchar **dep;
+	  lua_newtable (L);
+	  for (index = 1, dep = deps; *dep; dep++, index++)
+	    {
+	      lua_pushstring (L, *dep);
+	      lua_rawseti (L, -2, index);
+	    }
+	  g_strfreev (deps);
+	}
+
+      return 1;
+    }
+  else if (strcmp (prop, "version") == 0)
+    {
+      lua_pushstring (L, g_irepository_get_version (NULL, ns));
+      return 1;
+    }
+  else
+    /* Try to lookup the symbol. */
+    return info_new (L, g_irepository_find_by_name (NULL, ns, prop));
+}
+
+static int
+namespace_new (lua_State *L, const gchar *namespace)
+{
+  gchar *ns = lua_newuserdata (L, strlen (namespace) + 1);
+  luaL_getmetatable (L, GI_NAMESPACE);
+  lua_setmetatable (L, -2);
+  strcpy (ns, namespace);
+  return 1;
+}
+
+static const luaL_Reg gi_namespace_reg[] = {
+  { "__index", namespace_index },
+  { "__len", namespace_len },
+  { NULL, NULL }
+};
+
 /* Lua API: core.gi.require(namespace[, version[, typelib_dir]]) */
 static int
 gi_require (lua_State *L)
@@ -338,63 +404,18 @@ gi_require (lua_State *L)
       return 3;
     }
 
-  lua_pushboolean (L, 1);
-  return 1;
+  return namespace_new (L, namespace);
 }
 
-/* Lua API: core.gi.find(namespace, name)|core.gi.find(gtype) */
 static int
-gi_find (lua_State *L)
+gi_index (lua_State *L)
 {
-  GIBaseInfo *info;
-
-  if (lua_isnoneornil (L, 2))
-    {
-      /* GType variant */
-      GType gtype = luaL_checknumber (L, 1);
-      info = g_irepository_find_by_gtype (NULL, gtype);
-    }
+  if (lua_isnumber (L, 2))
+    return info_new (L, g_irepository_find_by_gtype (NULL,
+						     luaL_checknumber (L, 2)));
   else
-    {
-      /* Namespace/Name variant. */
-      const gchar *namespace = luaL_checkstring (L, 1);
-      const gchar *name = luaL_checkstring (L, 2);
-      info = g_irepository_find_by_name (NULL, namespace, name);
-    }
-
-  return info_new (L, info);
+    return namespace_new (L, luaL_checkstring (L, 2));
 }
-
-/* Lua API: core.gi.get_dependencies(namespace) */
-static int
-gi_get_dependencies (lua_State *L)
-{
-  const gchar *namespace = luaL_checkstring (L, 1);
-  gchar **deps = g_irepository_get_dependencies (NULL, namespace);
-  if (deps == NULL)
-    lua_pushnil (L);
-  else
-    {
-      int index;
-      gchar **dep;
-      lua_newtable (L);
-      for (index = 1, dep = deps; *dep; dep++, index++)
-	{
-	  lua_pushstring (L, *dep);
-	  lua_rawseti (L, -2, index);
-	}
-      g_strfreev (deps);
-    }
-
-  return 1;
-}
-
-static const luaL_Reg gi_api_reg[] = {
-  { "require", gi_require },
-  { "find", gi_find },
-  { "get_dependencies", gi_get_dependencies },
-  { NULL, NULL }
-};
 
 void
 lgi_gi_init (lua_State *L)
@@ -409,8 +430,18 @@ lgi_gi_init (lua_State *L)
   luaL_register (L, NULL, gi_info_reg);
   lua_pop (L, 1);
 
+  /* Register metatable for namespace object. */
+  luaL_newmetatable (L, GI_NAMESPACE);
+  luaL_register (L, NULL, gi_namespace_reg);
+  lua_pop (L, 1);
+
   /* Register global API. */
   lua_newtable (L);
-  luaL_register (L, NULL, gi_api_reg);
+  lua_pushcfunction (L, gi_require);
+  lua_setfield (L, -2, "require");
+  lua_newtable (L);
+  lua_pushcfunction (L, gi_index);
+  lua_setfield (L, -2, "__index");
+  lua_setmetatable (L, -2);
   lua_setfield (L, -2, "gi");
 }
