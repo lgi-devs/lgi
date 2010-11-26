@@ -138,7 +138,7 @@ info_index (lua_State *L)
     }
 
 #define H(n1, n2)						\
-  else if (strcmp (prop, "is_" #n2) == 0)			\
+  if (strcmp (prop, "is_" #n2) == 0)				\
     {								\
       lua_pushboolean (L, GI_IS_ ## n1 ## _INFO (*info));	\
       return 1;							\
