@@ -347,7 +347,7 @@ local function get_category(children, xform_value, xform_name,
 
 		  -- Load al values from unknown indices.
 		  while #index > 0 do
-		     ei = check_type(children(table.remove(index)))
+		     ei = check_type(children[table.remove(index)])
 		     val = ei and (not xform_value and ei or xform_value(ei))
 		     if val then
 			en = ei.name
@@ -677,23 +677,27 @@ local function load_namespace(into, name)
       repo[name] = into
    end
 
-   -- Create _meta table containing auxiliary information
-   -- and data for the namespace.
-   into[0] = { name = name, dependencies = {} }
-   setmetatable(into, namespace_mt)
-
    -- Load the typelibrary for the namespace.
    local ns = gi.require(name)
    if not ns then return nil end
-   into[0].version = ns.version
 
-   -- Load all namespace dependencies.
+   -- Create _meta table containing auxiliary information and data for
+   -- the namespace.
+   setmetatable(into, namespace_mt)
+   into[0] = { name = name, dependencies = {} }
+   into[0].version = ns.version
    into[0].dependencies = ns.dependencies
 
    -- Install 'resolve' closure, which forces loading this namespace.
    -- Useful when someone wants to inspect what's inside (e.g. some
    -- kind of source browser or smart editor).
    into[0].resolve = resolve_namespace
+
+   -- Make sure that all dependent namespaces are also loaded.
+   for name, version in pairs(into[0].dependencies or {}) do
+      load_namespace(nil, name)
+   end
+
    return into
 end
 
