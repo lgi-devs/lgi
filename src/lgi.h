@@ -181,3 +181,7 @@ gpointer lgi_record_2lua (lua_State *L, GIBaseInfo *ri, gpointer addr,
    number of temporary objects created pushed on the stack. */
 int lgi_record_2c (lua_State *L, GIBaseInfo *ri, int narg, gpointer *addr,
 		   gboolean optional);
+
+/* Retrieves gtype of given record, returns G_TYPE_INVALID if the
+   record does not have gtype. */
+GType lgi_record_gtype (lua_State *L, int narg);

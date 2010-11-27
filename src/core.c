@@ -229,8 +229,8 @@ lgi_gtype (lua_State *L)
   else
     {
       /* Get information by compound. */
-      gpointer unused;
-      lua_pop (L, lgi_compound_get (L, 1, &gtype, &unused, 0));
+      if (!lgi_compound_check (L, 1, &gtype))
+	gtype = lgi_record_gtype (L, 1);
     }
 
   lua_pushnumber (L, gtype);
