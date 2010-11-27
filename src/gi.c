@@ -19,10 +19,20 @@ info_new (lua_State *L, GIBaseInfo *info)
 {
   if (info)
     {
-      GIBaseInfo **ud_info = lua_newuserdata (L, sizeof (info));
-      *ud_info = info;
-      luaL_getmetatable (L, LGI_GI_INFO);
-      lua_setmetatable (L, -2);
+      GIBaseInfo **ud_info;
+      
+      if (g_base_info_get_type (info) == GI_INFO_TYPE_INVALID)
+	{
+	  g_base_info_unref (info);
+	  lua_pushnil (L);
+	}
+      else
+	{
+	  ud_info = lua_newuserdata (L, sizeof (info));
+	  *ud_info = info;
+	  luaL_getmetatable (L, LGI_GI_INFO);
+	  lua_setmetatable (L, -2);
+	}
     }
   else
     lua_pushnil (L);
