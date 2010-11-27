@@ -265,12 +265,12 @@ local function check_type(info)
 	 log.warning('unknown typetag %s', tag)
 	 return nil
       end
-   elseif type.is_callable then
+   elseif info.is_callable then
       -- Check all callable arguments and return value.
       if not check_type(info.return_type) then return nil end
       local args = info.args
       for i = 1, #args do
-	 if not check_type(args[i]) then return nil end
+	 if not check_type(args[i].typeinfo) then return nil end
       end
       return info
    elseif type == 'constant' or type == 'property' or type == 'field' then
@@ -329,7 +329,7 @@ local function get_category(children, xform_value, xform_name,
    assert(not xform_name or xform_name_reverse)
 
    -- Early shortcircuit; no elements, no table needed at all.
-   if count == 0 then return original_table end
+   if #children == 0 then return original_table end
 
    -- Index contains array of indices which were still not retrieved
    -- from 'children' table, and table part contains name->index
@@ -585,9 +585,9 @@ local function load_class(namespace, class, info)
    class._methods = get_category(
       info.methods,
       function(mi)
-	 local flags = ii.flags
+	 local flags = mi.flags
 	 if not flags.is_getter and not flags.is_setter then
-	    return core.construct(ii)
+	    return core.construct(mi)
 	 end
       end, nil, nil, rawget(class, '_methods'))
    class._signals = get_category(
