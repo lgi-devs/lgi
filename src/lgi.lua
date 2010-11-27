@@ -839,7 +839,7 @@ do
 				    end })
    -- Implicit conversion constructor, allows using Lua function
    -- directly at the places where GClosure is expected.
-   closure[0].construct = function(arg)
+   closure._construct = function(arg)
 			     return core.construct(closure_info, arg)
 			  end
 
@@ -900,7 +900,7 @@ do
       return core.construct(value_info, stype, source)
    end
    setmetatable(value, value_mt)
-   value[0].construct = function(arg) return value_mt.__call(nil, arg) end
+   value._construct = function(arg) return value_mt.__call(nil, arg) end
    value._methods = nil
    value._fields = { _g_type = value._fields.g_type }
    function value._fields.type(val, _, mode)
