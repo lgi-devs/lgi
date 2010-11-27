@@ -143,7 +143,8 @@ record_check (lua_State *L, int narg, int stackalloc)
   /* Check using metatable that narg is really Record type. */
   Record *record = lua_touserdata (L, narg);
   luaL_checkstack (L, MIN (3, stackalloc), "");
-  lua_getmetatable (L, narg);
+  if (!lua_getmetatable (L, narg))
+    return NULL;
   lua_rawgeti (L, LUA_REGISTRYINDEX, record_mt_ref [0]);
   if (!lua_equal (L, -1, -2))
     {
@@ -213,7 +214,7 @@ lgi_record_2c (lua_State *L, GIBaseInfo *ri, int narg, gpointer *addr,
 	      lua_call (L, 2, 1);
 	      if (!lua_isnil (L, -1))
 		{
-		  lua_replace (L, -5);
+		  lua_replace (L, -6);
 		  lua_pop (L, 4);
 		  return lgi_record_2c (L, ri, -1, addr, optional) + 1;
 		}
@@ -225,7 +226,6 @@ lgi_record_2c (lua_State *L, GIBaseInfo *ri, int narg, gpointer *addr,
     }
 
   *addr = record ? record->addr : NULL;
-  lua_pop (L, 1);
   return 0;
 }
 
