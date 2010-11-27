@@ -13,14 +13,6 @@
 
 typedef GIBaseInfo *(* InfosItemGet)(GIBaseInfo* info, gint item);
 
-static int
-info_gc (lua_State *L)
-{
-  GIBaseInfo **info = luaL_checkudata (L, 1, LGI_GI_INFO);
-  g_base_info_unref (*info);
-  return 0;
-}
-
 /* Creates new instance of info from given GIBaseInfo pointer. */
 static int
 info_new (lua_State *L, GIBaseInfo *info)
@@ -65,6 +57,14 @@ infos_index (lua_State *L)
   return info_new (L, infos->item_get (infos->info, n));
 }
 
+static int
+infos_gc (lua_State *L)
+{
+  GIBaseInfo **info = luaL_checkudata (L, 1, LGI_GI_INFOS);
+  g_base_info_unref (*info);
+  return 0;
+}
+
 /* Creates new userdata object representing given category of infos. */
 static int
 infos_new (lua_State *L, GIBaseInfo *info, gint count, InfosItemGet item_get)
@@ -79,7 +79,7 @@ infos_new (lua_State *L, GIBaseInfo *info, gint count, InfosItemGet item_get)
 }
 
 static const luaL_Reg gi_infos_reg[] = {
-  { "__gc", info_gc },
+  { "__gc", infos_gc },
   { "__len", infos_len },
   { "__index", infos_index },
   { NULL, NULL }
@@ -385,6 +385,14 @@ info_index (lua_State *L)
 
 #undef INFOS
 #undef INFOS2
+}
+
+static int
+info_gc (lua_State *L)
+{
+  GIBaseInfo **info = luaL_checkudata (L, 1, LGI_GI_INFO);
+  g_base_info_unref (*info);
+  return 0;
 }
 
 static const luaL_Reg gi_info_reg[] = {
