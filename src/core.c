@@ -146,9 +146,15 @@ lgi_construct (lua_State* L)
       {
 	GType type = g_registered_type_info_get_g_type (*info);
 	if (g_type_is_a (type, G_TYPE_CLOSURE))
-	  /* Create closure instance wrapping 2nd argument and return it. */
-	  vals = lgi_compound_create (L, *info, lgi_gclosure_create (L, 2),
-				      TRUE, 0);
+	  {
+	    /* Create closure instance wrapping 2nd argument and
+	       return it. */
+	    lgi_record_2lua (L, *info, lgi_gclosure_create (L, 2),
+			     LGI_RECORD_OWN, 0);
+	    vals = 1;
+	  }
+
+
 	else if (g_type_is_a (type, G_TYPE_VALUE))
 	  {
 	    /* Get requested GType, construct and fill in GValue
