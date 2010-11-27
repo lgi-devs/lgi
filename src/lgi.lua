@@ -855,7 +855,7 @@ do
 	    -- It seems that it is possible to call on this, so generate
 	    -- closure.
 	    return closure[0].gtype
-	 elseif meta == getmetatable(value_info) then
+	 else
 	    -- Some kind of compound, get its real gtype from core.
 	    return core.gtype(source)
 	 end
