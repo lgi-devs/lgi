@@ -339,7 +339,12 @@ info_index (lua_State *L)
 	  lua_pushstring (L, g_type_tag_to_string (tag));
 	  return 1;
 	}
-      else if (strcmp (prop, "param") == 0)
+      else if (strcmp (prop, "is_basic") == 0)
+	{
+	  lua_pushboolean (L, G_TYPE_TAG_IS_BASIC (tag));
+	  return 1;
+	}
+      else if (strcmp (prop, "params") == 0)
 	{
 	  if (tag == GI_TYPE_TAG_ARRAY || tag == GI_TYPE_TAG_GLIST ||
 	      tag == GI_TYPE_TAG_GSLIST || tag == GI_TYPE_TAG_GHASH)

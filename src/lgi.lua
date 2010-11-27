@@ -246,11 +246,10 @@ local function check_type(info)
    if type == 'type' then
       -- Check the embedded typeinfo.
       local tag = info.tag
-      if tag == 'gboolean' or tag == 'gint8' or tag == 'guint8'
-	 or tag == 'gint16' or tag == 'gint32' or tag == 'guint32'
-	 or tag == 'gint64' or tag == 'guint64' or tag == 'gfloat'
-	 or tag == 'gdouble' or tag == 'gunichar' or tag == 'GType'
-	 or tag == 'utf8' or tag == 'filename' then return info
+      if tag == 'void' then
+	 return nil
+      elseif info.is_basic then
+	 return info
       elseif tag == 'array' then
 	 return check_type(info.params[1]) and info
       elseif tag == 'interface' then
