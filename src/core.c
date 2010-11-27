@@ -267,12 +267,11 @@ lgi_connect (lua_State *L)
   GClosure *gclosure;
   guint signal_id;
   gulong handler_id;
-  GType gt_obj = G_TYPE_OBJECT, gt_bi = GI_TYPE_BASE_INFO;
+  GType gt_obj = G_TYPE_OBJECT;
 
   /* Get target objects. */
-  if (lgi_compound_get (L, 1, &gt_obj, &obj, 0)
-      || lgi_compound_get (L, 3, &gt_bi, (gpointer *) &ci, 0))
-      g_assert_not_reached ();
+  lgi_compound_get (L, 1, &gt_obj, &obj, 0);
+  ci = *(GIBaseInfo **) luaL_checkudata (L, 3, LGI_GI_INFO);
 
   /* Create GClosure instance to be used.  This is fast'n'dirty method; it
      requires less lines of code to write, but a lot of code to execute when
