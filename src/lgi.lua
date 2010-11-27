@@ -246,9 +246,7 @@ local function check_type(info)
    if type == 'type' then
       -- Check the embedded typeinfo.
       local tag = info.tag
-      if tag == 'void' then
-	 return nil
-      elseif info.is_basic then
+      if info.is_basic then
 	 return info
       elseif tag == 'array' then
 	 return check_type(info.params[1]) and info
