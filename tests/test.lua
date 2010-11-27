@@ -381,55 +381,6 @@ function gireg.type_gtype()
    check(not pcall(R.test_gtype, function() end))
 end
 
-function gireg.closure()
-   local R = lgi.Regress
-   checkv(R.test_closure(function() return 42 end), 42, 'number')
-end
-
-function gireg.closure_arg()
-   local R = lgi.Regress
-   checkv(R.test_closure_one_arg(function(int) return int end, 43), 43,
-	  'number')
-end
-
-function gireg.gvalue_simple()
-   local V = GObject.Value
-   local function checkv(gval, tp, val)
-      check(type(gval.type) == 'string', "GValue.type is not `string'")
-      check(gval.type == tp, ("GValue type: expected `%s', got `%s'"):format(
-	       tp, gval.type), 2)
-      check(gval.value == val, ("GValue value: exp `%s', got `%s'"):format(
-	       tostring(val), tostring(gval.value)), 2)
-   end
-   checkv(V(), '', nil)
-   checkv(V(0), 'gint', 0)
-   checkv(V(1.1), 'gdouble', 1.1)
-   checkv(V('str'), 'gchararray', 'str')
-   local gcl = GObject.Closure(function() end)
-   checkv(V(gcl), 'GClosure', gcl)
-   local v = V(42)
-   checkv(V(v).value, 'gint', 42)
-
--- For non-refcounted boxeds, the returned Value.value is always new
--- copy of the instance, so the following test fails:
---
--- checkv(V(v), 'GValue', v)
-
-   check(V(v).type == 'GValue')
-end
-
-function gireg.gvalue_arg()
-   local R = lgi.Regress
-   checkv(R.test_int_value_arg(42), 42, 'number')
-end
-
-function gireg.gvalue_return()
-   local R = lgi.Regress
-   local v = R.test_value_return(43)
-   checkv(v.value, 43, 'number')
-   check(v.type == 'gint', 'incorrect value type')
-end
-
 function gireg.utf8_const_return()
    local R = lgi.Regress
    local utf8_const = 'const \226\153\165 utf8'
@@ -1102,6 +1053,55 @@ function gireg.boxed_equals()
    check(not b1:equals(b2))
    b1.nested_a.some_int = 1
    check(b1:equals(b2))
+end
+
+function gireg.closure()
+   local R = lgi.Regress
+   checkv(R.test_closure(function() return 42 end), 42, 'number')
+end
+
+function gireg.closure_arg()
+   local R = lgi.Regress
+   checkv(R.test_closure_one_arg(function(int) return int end, 43), 43,
+	  'number')
+end
+
+function gireg.gvalue_simple()
+   local V = GObject.Value
+   local function checkv(gval, tp, val)
+      check(type(gval.type) == 'string', "GValue.type is not `string'")
+      check(gval.type == tp, ("GValue type: expected `%s', got `%s'"):format(
+	       tp, gval.type), 2)
+      check(gval.value == val, ("GValue value: exp `%s', got `%s'"):format(
+	       tostring(val), tostring(gval.value)), 2)
+   end
+   checkv(V(), '', nil)
+   checkv(V(0), 'gint', 0)
+   checkv(V(1.1), 'gdouble', 1.1)
+   checkv(V('str'), 'gchararray', 'str')
+   local gcl = GObject.Closure(function() end)
+   checkv(V(gcl), 'GClosure', gcl)
+   local v = V(42)
+   checkv(V(v).value, 'gint', 42)
+
+-- For non-refcounted boxeds, the returned Value.value is always new
+-- copy of the instance, so the following test fails:
+--
+-- checkv(V(v), 'GValue', v)
+
+   check(V(v).type == 'GValue')
+end
+
+function gireg.gvalue_arg()
+   local R = lgi.Regress
+   checkv(R.test_int_value_arg(42), 42, 'number')
+end
+
+function gireg.gvalue_return()
+   local R = lgi.Regress
+   local v = R.test_value_return(43)
+   checkv(v.value, 43, 'number')
+   check(v.type == 'gint', 'incorrect value type')
 end
 
 function gireg.obj_create()
