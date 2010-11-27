@@ -170,7 +170,7 @@ local bitflags_mt = {}
 function bitflags_mt.__index(bitflags, value)
    local t = {}
    for name, flag in pairs(bitflags) do
-      if type(flag) == 'number' and bit.band(flag, value) == flag then
+      if type(flag) == 'number' and value % (2 * flag) >= flag then
 	 t[name] = flag
       end
    end
@@ -840,7 +840,7 @@ do
       elseif type(source) == 'number' then
 	 -- If the number fits in integer, use it, otherwise use double.
 	 local _, fract = math.modf(source)
-	 local maxint32 = -bit.lshift(1, 31)
+	 local maxint32 = 0x80000000
 	 return ((fract == 0 and source >= -maxint32 and source < maxint32)
 	      and 'gint' or 'gdouble')
       elseif type(source) == 'string' then
