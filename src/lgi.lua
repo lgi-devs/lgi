@@ -694,7 +694,7 @@ local function load_namespace(into, name)
 
    -- Make sure that all dependent namespaces are also loaded.
    for name, version in pairs(into[0].dependencies or {}) do
-      load_namespace(nil, name)
+      local _ = repo[name]
    end
 
    return into
