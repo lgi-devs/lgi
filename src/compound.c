@@ -516,7 +516,6 @@ compound_interfaces(lua_State *L)
 {
   guint n_interfaces, i, pos;
   GType gtype, *interfaces;
-  GIBaseInfo *bi_info;
 
   /* Get gtype to inspect. */
   Compound *compound = compound_prepare (L, 1, TRUE);
@@ -528,19 +527,17 @@ compound_interfaces(lua_State *L)
     /* Get real dynamic gtype. */
     gtype = G_OBJECT_TYPE (compound->addr);
 
-  /* Prepare GIBaseInfo of GIBaseInfo, to wrap returning
-     GIInterfaceInfos in them. */
-  bi_info = g_irepository_find_by_gtype (NULL, GI_TYPE_BASE_INFO);
-  lgi_guard_create_baseinfo (L, bi_info);
-
   /* Create table with resulting interfaces. */
   lua_newtable (L);
   interfaces = g_type_interfaces (gtype, &n_interfaces);
   for (i = 0, pos = 1; i < n_interfaces; i++)
     {
       GIBaseInfo *iface = g_irepository_find_by_gtype (NULL, interfaces[i]);
-      if (iface != NULL && lgi_compound_create (L, bi_info, iface, TRUE, 0))
-	lua_rawseti (L, -2, pos++);
+      if (iface != NULL)
+	{
+	  lgi_gi_info_new (L, iface);
+	  lua_rawseti (L, -2, pos++);
+	}
     }
 
   return 1;
@@ -645,7 +642,7 @@ compound_elementof (lua_State *L)
   gtype = G_TYPE_PARAM;
   pspec = lgi_compound_check (L, 2, &gtype);
   if (pspec != NULL)
-    vals = compound_propertyof (L, compound, NULL, pspec->value_type,
+    return compound_propertyof (L, compound, NULL, pspec->value_type,
 				pspec->name, pspec->flags);
 
   /* Otherwise it must be some info. */
