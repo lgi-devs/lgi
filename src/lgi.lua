@@ -660,8 +660,9 @@ local function resolve_namespace(ns_meta)
    -- table.
    local name = ns_meta.name
    local ns = repo[name]
-   local infos = gi[name].infos
-   for i = 1, #infos do pcall(function() local _ = ns[infos[i].name] end) end
+   for i = 1, #gi[name] do
+      pcall(function() local _ = ns[gi[name][i].name] end)
+   end
 end
 
 -- Loads namespace, optionally with specified version and returns table which
