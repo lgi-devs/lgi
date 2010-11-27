@@ -1,24 +1,28 @@
---[[--------------------------------------------------------------------------
-
-  LGI Lua-side core.
-
-  Copyright (c) 2010 Pavel Holejsovsky
-  Licensed under the MIT license:
-  http://www.opensource.org/licenses/mit-license.php
-
---]]--------------------------------------------------------------------------
+------------------------------------------------------------------------------
+--
+--  LGI Lua-side core.
+--
+--  Copyright (c) 2010 Pavel Holejsovsky
+--  Licensed under the MIT license:
+--  http://www.opensource.org/licenses/mit-license.php
+--
+------------------------------------------------------------------------------
 
 local assert, setmetatable, getmetatable, type, pairs, string, rawget,
-  table, require, tostring, error, pcall, ipairs, unpack, next,
-  select =
-     assert, setmetatable, getmetatable, type, pairs, string, rawget,
-  table, require, tostring, error, pcall, ipairs, unpack or table.unpack, next,
-  select
+table, require, tostring, error, pcall, ipairs, unpack,
+next, select =
+   assert, setmetatable, getmetatable, type, pairs, string, rawget,
+   table, require, tostring, error, pcall, ipairs, unpack or table.unpack,
+   next, select
 local package, math = package, math
-local bit = require 'bit'
 
 -- Require core lgi utilities, used during bootstrap.
 local core = require 'lgi._core'
+
+-- Initialize GI wrapper from the core.
+local gi = core.gi
+assert(gi.require ('GLib', '2.0'))
+assert(gi.require ('GObject', '2.0'))
 
 -- Create lgi table, containing the module.
 local lgi = {}
@@ -69,8 +73,6 @@ end
 local log = logtable.domain('Lgi')
 
 log.message('Lgi: Lua to GObject-Introspection binding v0.1')
-
-local ir
 
 -- Repository, table with all loaded namespaces.  Its metatable takes care of
 -- loading on-demand.  Created by C-side bootstrap.
@@ -149,10 +151,11 @@ function struct_mt.__call(type, fields)
    local info
    if type[0].type then
       -- Lookup info by gtype.
-      info = assert(ir:find_by_gtype(type[0].gtype))
+      info = assert(gi[type[0].gtype])
    else
       -- GType is not available, so lookup info by name.
-      info = assert(ir:find_by_name(type[0].name:match('^(.-)%.(.+)$')))
+      local ns, name = type[0].name:match('^(.-)%.(.+)$')
+      info = assert(gi[ns][name])
    end
    local struct = core.construct(info)
 
@@ -169,7 +172,7 @@ local bitflags_mt = {}
 function bitflags_mt.__index(bitflags, value)
    local t = {}
    for name, flag in pairs(bitflags) do
-      if type(flag) == 'number' and bit.band(flag, value) == flag then
+      if type(flag) == 'number' and value % (2 * flag) >= flag then
 	 t[name] = flag
       end
    end
@@ -181,66 +184,6 @@ local enum_mt = {}
 function enum_mt.__index(enum, value)
    for name, val in pairs(enum) do
       if val == value then return name end
-   end
-end
-
--- Namespace table for GIRepository, populated with basic methods
--- manually.  Later it will be converted to full-featured repo namespace.
-local gi = setmetatable({ [0] = { name = 'GIRepository' } }, namespace_mt)
-core.repo.GIRepository = gi
-
-gi._enums = { InfoType = setmetatable({
-					 FUNCTION = 1,
-					 CALLBACK = 2,
-					 STRUCT = 3,
-					 ENUM = 5,
-					 FLAGS = 6,
-					 OBJECT = 7,
-					 INTERFACE = 8,
-					 CONSTANT = 9,
-					 UNION = 11,
-					 SIGNAL = 13,
-					 VFUNC = 14,
-					 PROPERTY = 15,
-					 FIELD = 16,
-					 TYPE = 18,
-				      }, enum_mt),
-	      TypeTag = setmetatable({
-					ARRAY = 15,
-					INTERFACE = 16,
-					GLIST = 17,
-					GSLIST = 18,
-					GHASH = 19,
-					ERROR = 20,
-				     }, enum_mt),
-	      ArrayType = setmetatable({
-					  C = 0,
-					  ARRAY = 1,
-				       }, enum_mt),
-	      FunctionInfoFlags = setmetatable({
-						  IS_CONSTRUCTOR = 2,
-						  IS_GETTER = 4,
-						  IS_SETTER = 8
-					       }, bitflags_mt),
-	   }
-
-gi._structs = {
-   BaseInfo = setmetatable(
-      { [0] = { name = 'GIRepository.BaseInfo',
-		gtype = core.gtype('BaseInfo') },
-	_methods = {}
-     }, struct_mt),
-   Typelib = setmetatable(
-      { [0] = { name = 'GIRepository.Typelib',
-		gtype = core.gtype('Typelib') },
-	_methods = {}
-     }, struct_mt),
-}
-
--- Loads given set of symbols into table.
-local function get_symbols(into, symbols, container)
-   for _, symbol in pairs(symbols) do
-      into[symbol] = core.construct(core.find(symbol, container))
    end
 end
 
@@ -266,15 +209,14 @@ function class_mt.__call(class, param)
    local others = {}
 
    -- Get BaseInfo from gtype.
-   local info = assert(ir:find_by_gtype(class[0].gtype))
+   local info = assert(gi[class[0].gtype])
 
    -- Process 'param' table, create constructor property table and signals
    -- table.
    for name, value in pairs(param or {}) do
       local paramtype = class[name]
       if type(paramtype) == 'function' then paramtype = paramtype() end
-      if (type(paramtype) == 'userdata' and
-       gi.base_info_get_type(paramtype) == gi.InfoType.PROPERTY) then
+      if type(paramtype) == 'userdata' and paramtype.is_property then
 	 params[paramtype] = value
       else
 	 others[name] = value
@@ -289,60 +231,6 @@ function class_mt.__call(class, param)
    return obj
 end
 
-gi._classes = {
-   Repository = setmetatable(
-      { [0] = { name = 'GIRepository.Repository',
-		gtype = core.gtype('Repository')
-	     },
-	_methods = {}
-     }, class_mt),
-}
-get_symbols(gi._classes.Repository._methods,
-	    { 'get_default', 'require', 'find_by_name', 'find_by_gtype',
-	      'get_n_infos', 'get_info', 'get_dependencies', 'get_version', },
-	    'Repository')
-get_symbols(gi._structs.BaseInfo._methods,
-	    { 'is_deprecated', 'get_name', 'get_namespace',
-	      'get_container' }, 'BaseInfo')
-gi._functions = {}
-get_symbols(
-   gi._functions, {
-      'base_info_get_type',
-      'enum_info_get_n_values', 'enum_info_get_value',
-      'value_info_get_value',
-      'registered_type_info_get_g_type',
-      'struct_info_is_gtype_struct',
-      'struct_info_get_n_fields', 'struct_info_get_field',
-      'struct_info_get_n_methods', 'struct_info_get_method',
-      'interface_info_get_n_prerequisites', 'interface_info_get_prerequisite',
-      'interface_info_get_n_methods', 'interface_info_get_method',
-      'interface_info_get_n_constants', 'interface_info_get_constant',
-      'interface_info_get_n_properties', 'interface_info_get_property',
-      'interface_info_get_n_signals', 'interface_info_get_signal',
-      'object_info_get_parent',
-      'object_info_get_n_interfaces', 'object_info_get_interface',
-      'object_info_get_n_fields', 'object_info_get_field',
-      'object_info_get_n_methods', 'object_info_get_method',
-      'object_info_get_n_constants', 'object_info_get_constant',
-      'object_info_get_n_properties', 'object_info_get_property',
-      'object_info_get_n_signals', 'object_info_get_signal',
-      'type_info_get_tag', 'type_info_get_param_type',
-      'type_info_get_interface', 'type_info_get_array_type',
-      'callable_info_get_return_type', 'callable_info_get_n_args',
-      'callable_info_get_arg',
-      'function_info_get_flags',
-      'signal_info_get_flags',
-      'arg_info_get_type',
-      'constant_info_get_type',
-      'property_info_get_type',
-      'field_info_get_type',
-      })
-
--- Remember default repository.
-ir = gi.Repository.get_default()
-
-log.debug 'repo.GIRepository pre-populated'
-
 -- Weak table containing symbols which currently being loaded. It is used
 -- mainly to avoid assorted kinds of infinite recursion which might happen
 -- during symbol dependencies loading.
@@ -356,71 +244,53 @@ local typeloader = {}
 -- loaded or the type itself if it is ok.
 local function check_type(info)
    if not info then return nil end
-   local type = gi.base_info_get_type(info)
-   if type == gi.InfoType.TYPE then
+   local type = info.type
+   if type == 'type' then
       -- Check the embedded typeinfo.
-      local tag = gi.type_info_get_tag(info)
-      if tag < gi.TypeTag.ARRAY then return info
-      elseif tag == gi.TypeTag.ARRAY then
-	 return check_type(gi.type_info_get_param_type(info, 0)) and info
-      elseif tag == gi.TypeTag.INTERFACE then
-	 return check_type(gi.type_info_get_interface(info)) and info
-      elseif tag == gi.TypeTag.GLIST or tag == gi.TypeTag.GSLIST then
-	 return check_type(gi.type_info_get_param_type(info, 0)) and info
-      elseif tag == gi.TypeTag.GHASH then
-	 return (check_type(gi.type_info_get_param_type(info, 0)) and
-	      check_type(gi.type_info_get_param_type(info, 1))) and info
-      elseif tag == gi.TypeTag.ERROR then
-	 return true
+      local tag = info.tag
+      if info.is_basic then
+	 return info
+      elseif tag == 'array' then
+	 return check_type(info.params[1]) and info
+      elseif tag == 'interface' then
+	 return check_type(info.interface) and info
+      elseif tag == 'glist' or tag == 'gslist' then
+	 return check_type(info.params[1]) and info
+      elseif tag == 'ghash' then
+	 return ((check_type(info.params[1]) and check_type(info.params[2]))
+	      and info)
+      elseif tag == 'error' then
+	 return info
       else
-	 log.warning('unknown typetag %s(%d)', tostring(gi.TypeTag[tag]), tag)
+	 log.warning('unknown typetag %s', tag)
 	 return nil
       end
-   elseif (type == gi.InfoType.FUNCTION or type == gi.InfoType.CALLBACK or
-	   type == gi.InfoType.SIGNAL or type == gi.InfoType.VFUNC) then
+   elseif info.is_callable then
       -- Check all callable arguments and return value.
-      if not check_type(gi.callable_info_get_return_type(info)) then
-	 return nil
-      end
-      for i = 0, gi.callable_info_get_n_args(info) - 1 do
-	 local ai = gi.callable_info_get_arg(info, i)
-	 if not check_type(gi.arg_info_get_type(ai)) then
-	    return nil
-	 end
+      if not check_type(info.return_type) then return nil end
+      local args = info.args
+      for i = 1, #args do
+	 if not check_type(args[i].typeinfo) then return nil end
       end
       return info
-   elseif type == gi.InfoType.CONSTANT then
-      return check_type(gi.constant_info_get_type(info)) and info
-   elseif type == gi.InfoType.PROPERTY then
-      return check_type(gi.property_info_get_type(info)) and info
-   elseif type == gi.InfoType.FIELD then
-      return check_type(gi.field_info_get_type(info)) and info
-   elseif (type == gi.InfoType.STRUCT or type == gi.InfoType.ENUM or
-	   type == gi.InfoType.FLAGS or type == gi.InfoType.OBJECT or
-	   type == gi.InfoType.INTERFACE or type == gi.InfoType.UNION) then
+   elseif type == 'constant' or type == 'property' or type == 'field' then
+      return check_type(info.typeinfo) and info
+   elseif info.is_registered_type then
       -- Check, whether we can reach the symbol in the repo.
-      local ns, n = info:get_namespace(), info:get_name()
+      local ns, n = info.namespace, info.name
       return (in_load[ns .. '.' .. n] or repo[ns][n]) and info
    else
-      local name = {}
-      while info do
-	 if gi.base_info_get_type(info) ~= gi.InfoType.TYPE then
-	    table.insert(name, 1, info:get_name())
-	 end
-	 info = info:get_container()
-      end
-      log.warning("unknown type %s of %s", gi.InfoType[type],
-		  table.concat(name, '.'))
+      log.warning("unknown type `%s' of %s", type, info.fullname)
       return nil
    end
 end
 
-typeloader[gi.InfoType.FUNCTION] =
+typeloader['function'] =
    function(namespace, info)
       return check_type(info) and core.construct(info), '_functions'
    end
 
-typeloader[gi.InfoType.CONSTANT] =
+typeloader['constant'] =
    function(namespace, info)
       return check_type(info) and core.construct(info), '_constants'
    end
@@ -429,10 +299,10 @@ local function load_enum(info, meta)
    local value = {}
 
    -- Load all enum values.
-   for i = 0, gi.enum_info_get_n_values(info) - 1 do
-      local mi = gi.enum_info_get_value(info, i)
-      local name = string.upper(mi:get_name())
-      value[name] = gi.value_info_get_value(mi)
+   local values = info.values
+   for i = 1, #values do
+      local mi = values[i]
+      value[mi.name:upper()] = mi.value
    end
 
    -- Install metatable providing reverse lookup (i.e name(s) by
@@ -441,12 +311,12 @@ local function load_enum(info, meta)
    return value
 end
 
-typeloader[gi.InfoType.ENUM] =
+typeloader['enum'] =
    function(namespace, info)
       return load_enum(info, enum_mt), '_enums'
    end
 
-typeloader[gi.InfoType.FLAGS] =
+typeloader['flags'] =
    function(namespace, info)
       return load_enum(info, bitflags_mt), '_enums'
    end
@@ -454,32 +324,32 @@ typeloader[gi.InfoType.FLAGS] =
 -- Gets table for category of compound (i.e. _fields of struct or _properties
 -- for class etc).  Installs metatable which performs on-demand lookup of
 -- symbols.
-local function get_category(info, count, get_item, xform_value, xform_name,
+local function get_category(children, xform_value, xform_name,
 			    xform_name_reverse, original_table)
    assert(not xform_name or xform_name_reverse)
 
    -- Early shortcircuit; no elements, no table needed at all.
-   if count == 0 then return original_table end
+   if #children == 0 then return original_table end
 
    -- Index contains array of indices which were still not retrieved
-   -- by get_info method, and table part contains name->index mapping.
+   -- from 'children' table, and table part contains name->index
+   -- mapping.
    local index = {}
-   for i = 1, count do index[i] = i - 1 end
+   for i = 1, #children do index[i] = i end
    return setmetatable(
       original_table or {}, { __index =
 	    function(category, req_name)
 	       -- Querying index 0 has special semantics; makes the
 	       -- whole table fully loaded.
 	       if req_name == 0 then
-		  local ei, en, val, ok
+		  local ei, en, val
 
 		  -- Load al values from unknown indices.
 		  while #index > 0 do
-		     ok, ei = pcall(get_item, info, table.remove(index))
-		     if not ok then ei = nil else ei = check_type(ei) end
+		     ei = check_type(children[table.remove(index)])
 		     val = ei and (not xform_value and ei or xform_value(ei))
 		     if val then
-			en = ei:get_name()
+			en = ei.name
 			if xform_name_reverse then
 			   en = xform_name_reverse(en, ei)
 			end
@@ -489,8 +359,7 @@ local function get_category(info, count, get_item, xform_value, xform_name,
 
 		  -- Load all known indices.
 		  for en, idx in pairs(index) do
-		     ok, val = pcall(get_item, info, idx)
-		     if not ok then val = nil else val = check_type(val) end
+		     val = check_type(children[idx])
 		     val = not xform_value and val or xform_value(val)
 		     category[en] = val
 		  end
@@ -508,20 +377,19 @@ local function get_category(info, count, get_item, xform_value, xform_name,
 	       local idx, val = index[name]
 	       if idx then
 		  -- We know at least the index, so get info directly.
-		  val = get_item(info, idx)
+		  val = children[idx]
 		  index[name] = nil
 	       else
 		  -- Not yet, go through unknown indices and try to
 		  -- find the name.
 		  while #index > 0 do
 		     idx = table.remove(index)
-		     val = get_item(info, idx)
-		     local en = val:get_name()
+		     val = children[idx]
+		     local en = val.name
 		     if en == name then break end
 		     val = nil
 		     index[en] = idx
 		  end
-		  if not val then return nil end
 	       end
 
 	       -- If there is nothing in the index, we can disconnect
@@ -544,12 +412,12 @@ end
 local function load_compound(compound, info, mt)
    -- Fill in meta of the compound.
    compound[0] = compound[0] or {}
-   compound[0].gtype = gi.registered_type_info_get_g_type(info)
+   compound[0].gtype = info.gtype
    if compound[0].gtype == 4 then
       -- Non-boxed struct, it doesn't have any gtype.
       compound[0].gtype = nil
    end
-   compound[0].name = (info:get_namespace() .. '.'  .. info:get_name())
+   compound[0].name = (info.namespace .. '.'  .. info.name)
    compound[0].resolve = resolve_compound
    setmetatable(compound, mt)
 
@@ -559,12 +427,11 @@ end
 
 local function load_element_field(fi)
    -- Check the type of the field.
-   local ti = gi.field_info_get_type(fi)
-   local tag = gi.type_info_get_tag(ti)
-   if tag == gi.TypeTag.INTERFACE then
-      local ii = gi.type_info_get_interface(ti)
-      local type = gi.base_info_get_type(ii)
-      if type == gi.InfoType.STRUCT or type == gi.InfoType.UNION then
+   local ti = fi.typeinfo
+   if ti.tag == 'interface' then
+      local ii = ti.interface
+      local type = ii.type
+      if type == 'struct' or type == 'union' then
 	 -- Nested structure, handle assignment to it specially.
 	 return function(obj, _, mode, newval)
 		   -- If reading the type, read it directly.
@@ -612,23 +479,22 @@ local function load_element_signal(info)
       if mode == nil then return info end
       if mode then
 	 -- Assignment means 'connect signal without detail'.
-	 core.connect(obj, info:get_name(), info, newval)
+	 core.connect(obj, info.name, info, newval)
       else
 	 -- Reading yields table with signal operations.
 	 local pad = {
 	    connect = function(_, target, detail, after)
-			 return core.connect(obj, info:get_name(), info, target,
+			 return core.connect(obj, info.name, info, target,
 					     detail, after)
 		      end,
 	 }
 
 	 -- If signal supports details, add metatable implementing __newindex
 	 -- for connecting in the 'on_signal['detail'] = handler' form.
-	 if (gi.base_info_get_type(info) == gi.InfoType.SIGNAL and
-	  bit.band(gi.signal_info_get_flags(info), 16) ~= 0) then
+	 if info.is_signal and info.flags.detailed then
 	    setmetatable(pad, {
 			    __newindex = function(obj, detail, target)
-					    core.connect(obj, info:get_name(),
+					    core.connect(obj, info.name,
 							 info, newval, detail)
 					 end
 			 })
@@ -656,55 +522,42 @@ end
 -- Loads structure information into table representing the structure
 local function load_struct(namespace, struct, info)
    -- Avoid exposing internal structs created for object implementations.
-   if not gi.struct_info_is_gtype_struct(info) then
+   if not info.is_gtype_struct then
       load_compound(struct, info, struct_mt)
       struct._methods = get_category(
-	 info, gi.struct_info_get_n_methods(info), gi.struct_info_get_method,
-	 core.construct, nil, nil, rawget(struct, '_methods'))
-      struct._fields = get_category(
-	 info, gi.struct_info_get_n_fields(info), gi.struct_info_get_field,
-	 load_element_field)
-      struct._access = struct_access
+	 info.methods, core.construct, nil, nil, rawget(struct, '_methods'))
+      struct._fields = get_category(info.fields, load_element_field)
    end
 end
 
-typeloader[gi.InfoType.STRUCT] =
+typeloader['struct'] =
    function(namespace, info)
       local struct = {}
       load_struct(namespace, struct, info)
       return struct, '_structs'
    end
 
-typeloader[gi.InfoType.UNION] =
+typeloader['union'] =
    function(namespace, info)
       local union = {}
-      load_compound(union, info, struct_mt)
-      union._methods = get_category(
-	 info, gi.union_info_get_n_methods(info), gi.union_info_get_method,
-	 core.construct)
-      union._fields = get_category(
-	 info, gi.union_info_get_n_fields(info), gi.union_info_get_field,
-	 load_element_field)
+      load_struct(namespace, union, info)
       return union, '_unions'
    end
 
-typeloader[gi.InfoType.INTERFACE] =
+typeloader['interface'] =
    function(namespace, info)
       -- Load all components of the interface.
       local interface = {}
       load_compound(interface, info, interface_mt)
       interface._properties = get_category(
-	 info, gi.interface_info_get_n_properties(info),
-	 gi.interface_info_get_property, load_element_property,
+	 info.properties, load_element_property,
 	 function(name) return string.gsub(name, '_', '%-') end,
 	 function(name) return string.gsub(name, '%-', '_') end)
       interface._methods = get_category(
-	 info, gi.interface_info_get_n_methods(info),
-	 gi.interface_info_get_method,
+	 info.methods,
 	 function(ii)
-	    local flags = gi.function_info_get_flags(ii)
-	    if bit.band(flags, gi.FunctionInfoFlags.IS_GETTER
-			+ gi.FunctionInfoFlags.IS_SETTER) == 0 then
+	    local flags = ii.flags
+	    if not flags.is_getter and not flags.is_setter then
 	       return core.construct(ii)
 	    end
 	 end) or {}
@@ -720,7 +573,7 @@ typeloader[gi.InfoType.INTERFACE] =
 	 if not val then
 	    -- Convert name from CamelCase to underscore_delimited form.
 	    local method_name = {}
-	    for part in info:get_name():gmatch('%u%l*') do
+	    for part in info.name:gmatch('%u%l*') do
 	       method_name[#method_name + 1] = part:lower()
 	    end
 	    method_name[#method_name + 1] = symbol
@@ -731,12 +584,9 @@ typeloader[gi.InfoType.INTERFACE] =
       end
       setmetatable(interface._methods, meta)
       interface._signals = get_category(
-	 info, gi.interface_info_get_n_signals(info),
-	 gi.interface_info_get_signal, load_element_signal,
+	 info.signals, load_element_signal,
 	 load_signal_name, load_signal_name_reverse)
-      interface._constants = get_category(
-	 info, gi.interface_info_get_n_constants(info),
-	 gi.interface_info_get_constant, core.construct)
+      interface._constants = get_category(info.constants, core.construct)
       return interface, '_interfaces'
    end
 
@@ -745,46 +595,40 @@ local function load_class(namespace, class, info)
    -- Load components of the object.
    load_compound(class, info, class_mt)
    class._properties = get_category(
-      info, gi.object_info_get_n_properties(info), gi.object_info_get_property,
-      load_element_property,
+      info.properties, load_element_property,
       function(n) return (string.gsub(n, '_', '%-')) end,
       function(n) return (string.gsub(n, '%-', '_')) end)
    class._methods = get_category(
-      info, gi.object_info_get_n_methods(info), gi.object_info_get_method,
+      info.methods,
       function(mi)
-	 local flags = gi.function_info_get_flags(mi)
-	 if bit.band( flags, (gi.FunctionInfoFlags.IS_GETTER
-			      + gi.FunctionInfoFlags.IS_SETTER)) == 0 then
+	 local flags = mi.flags
+	 if not flags.is_getter and not flags.is_setter then
 	    return core.construct(mi)
 	 end
       end, nil, nil, rawget(class, '_methods'))
    class._signals = get_category(
-      info, gi.object_info_get_n_signals(info), gi.object_info_get_signal,
-      load_element_signal, load_signal_name, load_signal_name_reverse)
-   class._constants = get_category(
-      info, gi.object_info_get_n_constants(info), gi.object_info_get_constant,
-      core.construct)
+      info.signals, load_element_signal, load_signal_name,
+      load_signal_name_reverse)
+   class._constants = get_category(info.constants, core.construct)
    class._implements = get_category(
-      info, gi.object_info_get_n_interfaces(info), gi.object_info_get_interface,
-      function(ii) return repo[ii:get_namespace(ii)][ii:get_name()] end,
+      info.interfaces,
+      function(ii) return repo[ii.namespace][ii.name] end,
       nil,
-      function(n, ii) return ii:get_namespace() .. '.' .. n end)
-   class._fields = get_category(
-      info, gi.object_info_get_n_fields(info), gi.object_info_get_field,
-      load_element_field)
+      function(n, ii) return ii.namespace .. '.' .. n end)
+   class._fields = get_category(info.fields, load_element_field)
    local _ = rawget(class, '_inherits') and class._inherits[0]
 
    -- Add parent (if any) into _inherits table.
-   local parent = gi.object_info_get_parent(info)
+   local parent = info.parent
    if parent then
-      local ns, name = parent:get_namespace(), parent:get_name()
-      if ns ~= namespace[0].name or name ~= info:get_name() then
+      local ns, name = parent.namespace, parent.name
+      if ns ~= namespace[0].name or name ~= info.name then
 	 class._parent = repo[ns][name]
       end
    end
 end
 
-typeloader[gi.InfoType.OBJECT] =
+typeloader['object'] =
    function(namespace, info)
       local class = {}
       load_class(namespace, class, info)
@@ -800,7 +644,7 @@ function namespace_mt.__index(namespace, symbol)
    if value then return value end
 
    -- Lookup baseinfo of requested symbol in the repo.
-   local info = ir:find_by_name(namespace[0].name, symbol)
+   local info = gi[namespace[0].name][symbol]
 
    -- Store the symbol into the in-load table, because we have to
    -- avoid infinte recursion which might happen during symbol loading (mainly
@@ -810,9 +654,8 @@ function namespace_mt.__index(namespace, symbol)
    in_load[fullname] = info
 
    -- Decide according to symbol type what to do.
-   if info and not info:is_deprecated() then
-      local infotype = gi.base_info_get_type(info)
-      local loader = typeloader[infotype]
+   if info and not info.deprecated then
+      local loader = typeloader[info.type]
       if loader then
 	 local category
 	 value, category = loader(namespace, info)
@@ -835,8 +678,8 @@ local function resolve_namespace(ns_meta)
    -- table.
    local name = ns_meta.name
    local ns = repo[name]
-   for i = 0, ir:get_n_infos(name) - 1 do
-      pcall(function() local _ = ns[ir:get_info(name, i):get_name()] end)
+   for i = 1, #gi[name] do
+      pcall(function() local _ = ns[gi[name][i].name] end)
    end
 end
 
@@ -850,24 +693,27 @@ local function load_namespace(into, name)
       repo[name] = into
    end
 
-   -- Create _meta table containing auxiliary information
-   -- and data for the namespace.
-   into[0] = { name = name, dependencies = {} }
-   setmetatable(into, namespace_mt)
-
    -- Load the typelibrary for the namespace.
-   if not ir:require(name, nil, 0) then return nil end
-   into[0].version = ir:get_version(name)
+   local ns = gi.require(name)
+   if not ns then return nil end
 
-   -- Load all namespace dependencies.
-   for _, name in pairs(ir:get_dependencies(name) or {}) do
-      into[0].dependencies[name] = repo[string.match(name, '(.+)-.+')]
-   end
+   -- Create _meta table containing auxiliary information and data for
+   -- the namespace.
+   setmetatable(into, namespace_mt)
+   into[0] = { name = name, dependencies = {} }
+   into[0].version = ns.version
+   into[0].dependencies = ns.dependencies
 
    -- Install 'resolve' closure, which forces loading this namespace.
    -- Useful when someone wants to inspect what's inside (e.g. some
    -- kind of source browser or smart editor).
    into[0].resolve = resolve_namespace
+
+   -- Make sure that all dependent namespaces are also loaded.
+   for name, version in pairs(into[0].dependencies or {}) do
+      local _ = repo[name]
+   end
+
    return into
 end
 
@@ -875,20 +721,6 @@ end
 setmetatable(repo, { __index = function(repo, name)
 				  return load_namespace(nil, name)
 			       end })
-
--- Convert our poor-man's GIRepository namespace into full-featured one.
-log.debug('upgrading repo.GIRepository to full-featured namespace')
-gi._enums.InfoType = nil
-gi._enums.TypeTag = nil
-gi._enums.ArrayType = nil
-gi._enums.FunctionInfoFlags = nil
-load_namespace(gi, 'GIRepository')
-load_class(gi, gi._classes.Repository,
-	   ir:find_by_name(gi[0].name, 'Repository'))
-load_struct(gi, gi._structs.Typelib,
-	    ir:find_by_name(gi[0].name, 'Typelib'))
-load_struct(gi, gi._structs.BaseInfo,
-	    ir:find_by_name(gi[0].name, 'BaseInfo'))
 
 -- GObject modifications.
 do
@@ -907,8 +739,8 @@ do
 	 -- whether they can handle specified _element request.
 	 local interfaces = core.interfaces(obj)
 	 for i = 1, #interfaces do
-	    local interface_type = 
-	       repo[interfaces[i]:get_namespace()][interfaces[i]:get_name()]
+	    local interface_type =
+	       repo[interfaces[i].namespace][interfaces[i].name]
 	    if interface_type then
 	       element = interface_type:_element(obj, name)
 	       if element then return element end
@@ -947,14 +779,14 @@ do
    local function on_notify(obj, info, newval)
       if newval then
 	 -- Assignment means 'connect signal for all properties'.
-	 core.connect(obj, info:get_name(), info, get_notifier(newval))
+	 core.connect(obj, info.name, info, get_notifier(newval))
       else
 	 -- Reading yields table with signal operations.
 	 local pad = {
 	    connect = function(_, target, property)
-			 return core.connect(obj, info:get_name(), info,
+			 return core.connect(obj, info.name, info,
 					     get_notifier(target),
-					     property:get_name())
+					     property.name)
 		      end,
 	 }
 
@@ -962,10 +794,10 @@ do
 	 -- always specified as a property for this signal.
 	 setmetatable(pad, {
 			 __newindex = function(_, property, target)
-					 core.connect(obj, info:get_name(),
+					 core.connect(obj, info.name,
 						      info,
 						      get_notifier(target),
-						      property:get_name())
+						      property.name)
 				      end
 			 })
 
@@ -976,15 +808,13 @@ do
 
    -- Install 'notify' signal.  Unfortunately typelib does not contain its
    -- declaration, so we borrow it from callback GObject.ObjectClass.notify.
-   local obj_struct = ir:find_by_name('GObject', 'ObjectClass')
-   for i = 0, gi.struct_info_get_n_fields(obj_struct) - 1 do
-      local field = gi.struct_info_get_field(obj_struct, i)
-      if field:get_name() == 'notify' then
+   local obj_fields = gi.GObject.ObjectClass.fields
+   for i = 1, #obj_fields do
+      if obj_fields[i].name == 'notify' then
 	 obj._signals = {
 	    on_notify = function(obj, _, newval)
-			   return on_notify(obj, gi.type_info_get_interface(
-					       gi.field_info_get_type(field)),
-					    newval)
+			   return on_notify(
+			      obj, obj_fields[i].typeinfo.interface, newval)
 			end,
 	 }
 	 break
@@ -999,7 +829,7 @@ do
    -- fields, but it must have constructor creating it from any kind
    -- of Lua callable.
    local closure = repo.GObject.Closure
-   local closure_info = ir:find_by_name('GObject', 'Closure')
+   local closure_info = gi.GObject.Closure
    closure._methods = nil
    closure._fields = nil
    setmetatable(closure, { __index = getmetatable(closure).__index,
@@ -1016,7 +846,7 @@ do
    -- Value is constructible from any kind of source Lua
    -- value, and the type of the value can be hinted by type name.
    local value = repo.GObject.Value
-   local value_info = ir:find_by_name('GObject', 'Value')
+   local value_info = gi.GObject.Value
 
    -- Tries to deduce the gtype according to Lua value.
    local function gettype(source)
@@ -1027,7 +857,7 @@ do
       elseif type(source) == 'number' then
 	 -- If the number fits in integer, use it, otherwise use double.
 	 local _, fract = math.modf(source)
-	 local maxint32 = -bit.lshift(1, 31)
+	 local maxint32 = 0x80000000
 	 return ((fract == 0 and source >= -maxint32 and source < maxint32)
 	      and 'gint' or 'gdouble')
       elseif type(source) == 'string' then
@@ -1042,7 +872,7 @@ do
 	    -- It seems that it is possible to call on this, so generate
 	    -- closure.
 	    return closure[0].gtype
-	 elseif meta == getmetatable(value_info) then
+	 else
 	    -- Some kind of compound, get its real gtype from core.
 	    return core.gtype(source)
 	 end

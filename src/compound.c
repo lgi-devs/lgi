@@ -253,29 +253,19 @@ lgi_compound_object_new (lua_State *L, GIObjectInfo *oi, int argtable)
 	  for (lua_pushnil (L); lua_next (L, 2) != 0; lua_pop (L, 1), param++)
 	    {
 	      /* Get property info. */
-	      Compound *compound = lua_touserdata (L, -2);
-	      if (G_UNLIKELY (compound == NULL ||
-			      (pi = compound->addr) == NULL))
-		{
-		  lua_pushfstring (L, "bad ctor property for %s.%s",
-				   g_base_info_get_namespace (oi),
-				   g_base_info_get_name (oi));
-		  luaL_argerror (L, argtable, lua_tostring (L, -1));
-		}
-	      else
-		{
-		  /* Extract property name. */
-		  param->name = g_base_info_get_name (pi);
+	      pi = *(GIBaseInfo **) luaL_checkudata (L, -2, LGI_GI_INFO);
 
-		  /* Initialize and load parameter value from the table
-		     contents. */
-		  ti = g_property_info_get_type (pi);
-		  lgi_guard_create_baseinfo (L, ti);
-		  g_value_init (&param->value, lgi_get_gtype (L, ti));
-		  lgi_marshal_val_2c (L, ti, GI_TRANSFER_NOTHING,
-				      &param->value, -2);
-		  lua_pop (L, 1);
-		}
+	      /* Extract property name. */
+	      param->name = g_base_info_get_name (pi);
+
+	      /* Initialize and load parameter value from the table
+		 contents. */
+	      ti = g_property_info_get_type (pi);
+	      lgi_gi_info_new (L, ti);
+	      g_value_init (&param->value, lgi_get_gtype (L, ti));
+	      lgi_marshal_val_2c (L, ti, GI_TRANSFER_NOTHING,
+				  &param->value, -2);
+	      lua_pop (L, 1);
 	    }
 
 	  /* Pop the repo class table. */
@@ -526,7 +516,6 @@ compound_interfaces(lua_State *L)
 {
   guint n_interfaces, i, pos;
   GType gtype, *interfaces;
-  GIBaseInfo *bi_info;
 
   /* Get gtype to inspect. */
   Compound *compound = compound_prepare (L, 1, TRUE);
@@ -538,19 +527,17 @@ compound_interfaces(lua_State *L)
     /* Get real dynamic gtype. */
     gtype = G_OBJECT_TYPE (compound->addr);
 
-  /* Prepare GIBaseInfo of GIBaseInfo, to wrap returning
-     GIInterfaceInfos in them. */
-  bi_info = g_irepository_find_by_gtype (NULL, GI_TYPE_BASE_INFO);
-  lgi_guard_create_baseinfo (L, bi_info);
-
   /* Create table with resulting interfaces. */
   lua_newtable (L);
   interfaces = g_type_interfaces (gtype, &n_interfaces);
   for (i = 0, pos = 1; i < n_interfaces; i++)
     {
       GIBaseInfo *iface = g_irepository_find_by_gtype (NULL, interfaces[i]);
-      if (iface != NULL && lgi_compound_create (L, bi_info, iface, TRUE, 0))
-	lua_rawseti (L, -2, pos++);
+      if (iface != NULL)
+	{
+	  lgi_gi_info_new (L, iface);
+	  lua_rawseti (L, -2, pos++);
+	}
     }
 
   return 1;
@@ -569,7 +556,7 @@ compound_properties(lua_State *L)
 
   lua_pop (L, lgi_compound_get(L, 1, &gtype, &obj, 0));
   pspec_info = g_irepository_find_by_name (NULL, "GObject", "ParamSpec");
-  lgi_guard_create_baseinfo (L, pspec_info);
+  lgi_gi_info_new (L, pspec_info);
   if (list)
     {
       /* List all properties of the object, store them into the table. */
@@ -644,81 +631,67 @@ compound_elementof (lua_State *L)
   GIBaseInfo *ei;
   GType gtype;
   int vals = 0;
+  GITypeInfo *ti;
+  GParamSpec *pspec;
 
   /* Prepare arg 1 - object on while we want access element. */
   compound = compound_prepare (L, 1, TRUE);
 
-  /* Check argument 2; is it GIBaseInfo? */
-  gtype = GI_TYPE_BASE_INFO;
-  ei = lgi_compound_check (L, 2, &gtype);
-  if (ei != NULL)
+  /* Check argument 2 - pspec? */
+  gtype = G_TYPE_PARAM;
+  pspec = lgi_compound_check (L, 2, &gtype);
+  if (pspec != NULL)
+    return compound_propertyof (L, compound, NULL, pspec->value_type,
+				pspec->name, pspec->flags);
+
+  /* Otherwise it must be some info. */
+  ei = *(GIBaseInfo **) luaL_checkudata (L, 2, LGI_GI_INFO);
+  switch (g_base_info_get_type (ei))
     {
-      GITypeInfo *ti;
-      int ti_guard;
-      switch (g_base_info_get_type (ei))
-	{
-	case GI_INFO_TYPE_PROPERTY:
+    case GI_INFO_TYPE_PROPERTY:
+      {
+	ti = g_property_info_get_type (ei);
+	lgi_gi_info_new (L, ti);
+	vals = compound_propertyof (L, compound, ti, lgi_get_gtype (L, ti),
+				    g_base_info_get_name (ei),
+				    g_property_info_get_flags (ei));
+	break;
+      }
+
+    case GI_INFO_TYPE_FIELD:
+      {
+	GIArgument *val = G_STRUCT_MEMBER_P (compound->addr,
+					     g_field_info_get_offset (ei));
+	gint flags = g_field_info_get_flags (ei);
+
+	ti = g_field_info_get_type (ei);
+	lgi_gi_info_new (L, ti);
+
+	if (!lua_toboolean (L, 3))
 	  {
-	    ti = g_property_info_get_type (ei);
-	    ti_guard = lgi_guard_create_baseinfo (L, ti);
-	    vals = compound_propertyof (L, compound, ti, lgi_get_gtype (L, ti),
-					g_base_info_get_name (ei),
-					g_property_info_get_flags (ei));
-	    lua_remove (L, ti_guard);
-	    break;
+	    if ((flags & GI_FIELD_IS_READABLE) == 0)
+	      return luaL_argerror (L, 2, "not readable");
+
+	    lgi_marshal_arg_2lua (L, ti, GI_TRANSFER_NOTHING, val, 1,
+				  FALSE, NULL, NULL);
+	    vals = 1;
+	  }
+	else
+	  {
+	    if ((flags & GI_FIELD_IS_WRITABLE) == 0)
+	      return luaL_argerror (L, 2, "not writable");
+
+	    lua_pop (L, lgi_marshal_arg_2c (L, ti, NULL,
+					    GI_TRANSFER_NOTHING,
+					    val, 4, FALSE, NULL, NULL));
+	    vals = 0;
 	  }
 
-	case GI_INFO_TYPE_FIELD:
-	  {
-	    GIArgument *val = G_STRUCT_MEMBER_P (compound->addr,
-						 g_field_info_get_offset (ei));
-	    gint flags = g_field_info_get_flags (ei);
+	break;
+      }
 
-	    ti = g_field_info_get_type (ei);
-	    ti_guard = lgi_guard_create_baseinfo (L, ti);
-
-	    if (!lua_toboolean (L, 3))
-	      {
-		if ((flags & GI_FIELD_IS_READABLE) == 0)
-		  return luaL_argerror (L, 2, "not readable");
-
-		lgi_marshal_arg_2lua (L, ti, GI_TRANSFER_NOTHING, val, 1,
-				      FALSE, NULL, NULL);
-		vals = 1;
-	      }
-	    else
-	      {
-		if ((flags & GI_FIELD_IS_WRITABLE) == 0)
-		  return luaL_argerror (L, 2, "not writable");
-
-		lua_pop (L, lgi_marshal_arg_2c (L, ti, NULL,
-						GI_TRANSFER_NOTHING,
-						val, 4, FALSE, NULL, NULL));
-		vals = 0;
-	      }
-
-	    lua_remove (L, ti_guard);
-	    break;
-	  }
-
-	default:
-	  g_assert_not_reached ();
-	}
-
-      /* Do not g_base_info_unref (ei), because it is owned by
-	 compound passed as 2nd argument. */
-    }
-  else
-    {
-      /* Arg 2 is not GIBaseInfo, it might be a pspec. */
-      GParamSpec *pspec;
-      gtype = G_TYPE_PARAM;
-      pspec = lgi_compound_check (L, 2, &gtype);
-      if (pspec != NULL)
-	vals = compound_propertyof (L, compound, NULL, pspec->value_type,
-				    pspec->name, pspec->flags);
-      else
-	luaL_typerror (L, 2, "GIBaseInfo or GParamSpec");
+    default:
+      g_assert_not_reached ();
     }
 
   return vals;

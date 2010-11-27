@@ -1,9 +1,11 @@
 /*
  * Dynamic Lua binding to GObject using dynamic gobject-introspection.
  *
- * Author: Pavel Holejsovsky (pavel.holejsovsky@gmail.com)
+ * Copyright (c) 2010 Pavel Holejsovsky
+ * Licensed under the MIT license:
+ * http://www.opensource.org/licenses/mit-license.php
  *
- * License: MIT.
+ * Core C utility API.
  */
 
 #include "lgi.h"
@@ -59,7 +61,8 @@ lgi_type_get_name (lua_State *L, GIBaseInfo *info)
 
   /* Add names on the whole path, but in reverse order. */
   for (; info != NULL; info = g_base_info_get_container (info))
-    list = g_slist_prepend (list, info);
+    if (!GI_IS_TYPE_INFO (info))
+      list = g_slist_prepend (list, info);
 
   for (i = list; i != NULL; i = g_slist_next (i))
     {
@@ -111,74 +114,14 @@ lgi_guard_get_data (lua_State *L, int pos, gpointer **data)
   *data = &guard->data;
 }
 
-int
-lgi_guard_create_baseinfo (lua_State *L, GIBaseInfo *info)
-{
-  gpointer *data;
-  int res = lgi_guard_create (L, &data, (GDestroyNotify) g_base_info_unref);
-  *data = info;
-  return res;
-}
-
-static int
-lgi_find (lua_State *L)
-{
-  const gchar *symbol = luaL_checkstring (L, 1);
-  const gchar *container = luaL_optstring (L, 2, NULL);
-  GIBaseInfo *info, *fi, *baseinfo;
-  int info_guard;
-
-  /* Get information about the symbol. */
-  info = g_irepository_find_by_name (NULL, "GIRepository",
-				     container != NULL ? container : symbol);
-
-  /* In case that container was specified, look the symbol up in it. */
-  if (container != NULL && info != NULL)
-    {
-      switch (g_base_info_get_type (info))
-	{
-	case GI_INFO_TYPE_OBJECT:
-	  fi = g_object_info_find_method (info, symbol);
-	  break;
-
-	case GI_INFO_TYPE_INTERFACE:
-	  fi = g_interface_info_find_method (info, symbol);
-	  break;
-
-	case GI_INFO_TYPE_STRUCT:
-	  fi = g_struct_info_find_method (info, symbol);
-	  break;
-
-	default:
-	  fi = NULL;
-	}
-
-      g_base_info_unref (info);
-      info = fi;
-    }
-
-  if (info == NULL)
-    return luaL_error (L, "unable to resolve GIRepository.%s%s%s",
-		       container != NULL ? container : "",
-		       container != NULL ? ":" : "",
-		       symbol);
-
-  /* Create new IBaseInfo structure and return it. */
-  baseinfo = g_irepository_find_by_name (NULL, "GIRepository", "BaseInfo");
-  info_guard = lgi_guard_create_baseinfo (L, baseinfo);
-  lgi_record_2lua (L, baseinfo, info, LGI_RECORD_OWN, 0);
-  lua_remove (L, info_guard);
-  return 1;
-}
-
 static int
 lgi_construct (lua_State* L)
 {
   /* Create new instance based on the embedded typeinfo. */
   int vals = 0;
-  GIBaseInfo *bi;
-  GType gtype;
+  GIBaseInfo **info;
   GValue *val;
+  GType gtype;
 
   /* Check, whether arg1 is GValue. */
   gtype = G_TYPE_VALUE;
@@ -191,85 +134,78 @@ lgi_construct (lua_State* L)
     }
 
   /* Check whether arg1 is baseinfo. */
-  gtype = GI_TYPE_BASE_INFO;
-  bi = lgi_compound_check (L, 1, &gtype);
-  if (bi != NULL)
+  info = luaL_checkudata (L, 1, LGI_GI_INFO);
+  switch (g_base_info_get_type (*info))
     {
-      switch (g_base_info_get_type (bi))
-	{
-	case GI_INFO_TYPE_FUNCTION:
-	  vals = lgi_callable_create (L, bi);
-	  break;
+    case GI_INFO_TYPE_FUNCTION:
+      vals = lgi_callable_create (L, *info);
+      break;
 
-	case GI_INFO_TYPE_STRUCT:
-	case GI_INFO_TYPE_UNION:
+    case GI_INFO_TYPE_STRUCT:
+    case GI_INFO_TYPE_UNION:
+      {
+	GType type = g_registered_type_info_get_g_type (*info);
+	if (g_type_is_a (type, G_TYPE_CLOSURE))
+	  /* Create closure instance wrapping 2nd argument and return it. */
+	  vals = lgi_compound_create (L, *info, lgi_gclosure_create (L, 2),
+				      TRUE, 0);
+	else if (g_type_is_a (type, G_TYPE_VALUE))
 	  {
-	    GType type = g_registered_type_info_get_g_type (bi);
-	    if (g_type_is_a (type, G_TYPE_CLOSURE))
-	      /* Create closure instance wrapping 2nd argument and return it. */
-	      vals = lgi_compound_create (L, bi, lgi_gclosure_create (L, 2),
-					  TRUE, 0);
-	    else if (g_type_is_a (type, G_TYPE_VALUE))
+	    /* Get requested GType, construct and fill in GValue
+	       and return it wrapped in a GBoxed which is wrapped in
+	       a compound. */
+	    GValue val = {0};
+	    type = luaL_checknumber (L, 2);
+	    if (G_TYPE_IS_VALUE (type))
 	      {
-		/* Get requested GType, construct and fill in GValue
-		   and return it wrapped in a GBoxed which is wrapped in
-		   a compound. */
-		GValue val = {0};
-		type = luaL_checknumber (L, 2);
-		if (G_TYPE_IS_VALUE (type))
-		  {
-		    g_value_init (&val, type);
-		    lgi_marshal_val_2c (L, NULL, GI_TRANSFER_NOTHING,
-					&val, 3);
-		  }
+		g_value_init (&val, type);
+		lgi_marshal_val_2c (L, NULL, GI_TRANSFER_NOTHING,
+				    &val, 3);
+	      }
 
-		vals = lgi_compound_create (L, bi,
-					    g_boxed_copy (G_TYPE_VALUE, &val),
-					    TRUE, 0);
-		if (G_IS_VALUE (&val))
-		  g_value_unset (&val);
-	      }
-	    else
-	      {
-		/* Create common struct. */
-		lgi_record_2lua (L, bi, NULL, LGI_RECORD_ALLOCATE, 0);
-		vals = 1;
-	      }
-	    break;
+	    vals = lgi_compound_create (L, *info,
+					g_boxed_copy (G_TYPE_VALUE, &val),
+					TRUE, 0);
+	    if (G_IS_VALUE (&val))
+	      g_value_unset (&val);
 	  }
-
-	case GI_INFO_TYPE_OBJECT:
-	  lgi_compound_object_new (L, bi, 2);
-	  vals = 1;
-	  break;
-
-	case GI_INFO_TYPE_CONSTANT:
+	else
 	  {
-	    GITypeInfo *ti = g_constant_info_get_type (bi);
-	    GIArgument val;
-	    int ti_guard = lgi_guard_create_baseinfo (L, ti);
-	    g_constant_info_get_value (bi, &val);
-	    lgi_marshal_arg_2lua (L, ti, GI_TRANSFER_NOTHING, &val, 0, FALSE,
-				  NULL, NULL);
+	    /* Create common struct. */
+	    lgi_record_2lua (L, *info, NULL, LGI_RECORD_ALLOCATE, 0);
 	    vals = 1;
-	    lua_remove (L, ti_guard);
 	  }
-	  break;
+	break;
+      }
 
-	default:
-	  lua_pushfstring (L, "failing to construct unknown type %d (%s.%s)",
-			   g_base_info_get_type (bi),
-			   g_base_info_get_namespace (bi),
-			   g_base_info_get_name (bi));
-	  g_warning ("%s", lua_tostring (L, -1));
-	  lua_error (L);
-	  break;
-	}
+    case GI_INFO_TYPE_OBJECT:
+      lgi_compound_object_new (L, *info, 2);
+      vals = 1;
+      break;
 
-      return vals;
+    case GI_INFO_TYPE_CONSTANT:
+      {
+	GITypeInfo *ti = g_constant_info_get_type (*info);
+	GIArgument val;
+	lgi_gi_info_new (L, ti);
+	g_constant_info_get_value (*info, &val);
+	lgi_marshal_arg_2lua (L, ti, GI_TRANSFER_NOTHING, &val, 0, FALSE,
+			      NULL, NULL);
+	vals = 1;
+      }
+      break;
+
+    default:
+      lua_pushfstring (L, "failing to construct unknown type %d (%s.%s)",
+		       g_base_info_get_type (*info),
+		       g_base_info_get_namespace (*info),
+		       g_base_info_get_name (*info));
+      g_warning ("%s", lua_tostring (L, -1));
+      lua_error (L);
+      break;
     }
 
-  return luaL_typerror (L, 1, "(lgi userdata)");
+  return vals;
 }
 
 static int
@@ -321,12 +257,11 @@ lgi_connect (lua_State *L)
   GClosure *gclosure;
   guint signal_id;
   gulong handler_id;
-  GType gt_obj = G_TYPE_OBJECT, gt_bi = GI_TYPE_BASE_INFO;
+  GType gt_obj = G_TYPE_OBJECT;
 
   /* Get target objects. */
-  if (lgi_compound_get (L, 1, &gt_obj, &obj, 0)
-      || lgi_compound_get (L, 3, &gt_bi, (gpointer *) &ci, 0))
-      g_assert_not_reached ();
+  lgi_compound_get (L, 1, &gt_obj, &obj, 0);
+  ci = *(GIBaseInfo **) luaL_checkudata (L, 3, LGI_GI_INFO);
 
   /* Create GClosure instance to be used.  This is fast'n'dirty method; it
      requires less lines of code to write, but a lot of code to execute when
@@ -434,7 +369,6 @@ log_handler (const gchar *log_domain, GLogLevelFlags log_level,
 }
 
 static const struct luaL_reg lgi_reg[] = {
-  { "find", lgi_find },
   { "construct", lgi_construct },
   { "gtype", lgi_gtype },
   { "connect", lgi_connect },
@@ -528,6 +462,7 @@ luaopen_lgi__core (lua_State* L)
   g_log_set_default_handler (log_handler, L);
 
   /* Initialize modules. */
+  lgi_gi_init (L);
   lgi_record_init (L);
   lgi_compound_init (L);
   lgi_callable_init (L);

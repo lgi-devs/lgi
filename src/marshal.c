@@ -306,7 +306,8 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 
       /* Get element type info, create guard for it. */
       eti = g_type_info_get_param_type (ti, 0);
-      eti_guard = lgi_guard_create_baseinfo (L, eti);
+      lgi_gi_info_new (L, eti);
+      eti_guard = lua_gettop (L);
       esize = array_get_elt_size (eti);
 
       /* Find out how long array should we allocate. */
@@ -406,7 +407,8 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
   /* Get array element type info, wrap it in the guard so that we
      don't leak it. */
   eti = g_type_info_get_param_type (ti, 0);
-  eti_guard = lgi_guard_create_baseinfo (L, eti);
+  lgi_gi_info_new (L, eti);
+  eti_guard = lua_gettop (L);
   esize = array_get_elt_size (eti);
 
   /* Create Lua table which will hold the array. */
@@ -468,7 +470,8 @@ marshal_2c_list (lua_State *L, GITypeInfo *ti, GITypeTag list_tag,
   /* Get list element type info, create guard for it so that we don't
      leak it. */
   eti = g_type_info_get_param_type (ti, 0);
-  eti_guard = lgi_guard_create_baseinfo (L, eti);
+  lgi_gi_info_new (L, eti);
+  eti_guard = lua_gettop (L);
   etag = g_type_info_get_tag (eti);
 
   /* Go from back and prepend to the list, which is cheaper than
@@ -513,7 +516,8 @@ marshal_2lua_list (lua_State *L, GITypeInfo *ti, GITypeTag list_tag,
 
   /* Get element type info, guard it so that we don't leak it. */
   eti = g_type_info_get_param_type (ti, 0);
-  eti_guard = lgi_guard_create_baseinfo (L, eti);
+  lgi_gi_info_new (L, eti);
+  eti_guard = lua_gettop (L);
 
   /* Create table to which we will deserialize the list. */
   lua_newtable (L);
@@ -571,7 +575,7 @@ marshal_2c_hash (lua_State *L, GITypeInfo *ti, GHashTable **table, int narg,
       for (i = 0; i < 2; i++)
 	{
 	  eti[i] = g_type_info_get_param_type (ti, i);
-	  lgi_guard_create_baseinfo (L, eti[i]);
+	  lgi_gi_info_new (L, eti[i]);
 	}
 
       /* Create the hashtable and guard it so that it is destroyed in
@@ -657,7 +661,7 @@ marshal_2lua_hash (lua_State *L, GITypeInfo *ti, GITransfer xfer,
       for (i = 0; i < 2; i++)
 	{
 	  eti[i] = g_type_info_get_param_type (ti, i);
-	  lgi_guard_create_baseinfo (L, eti[i]);
+	  lgi_gi_info_new (L, eti[i]);
 	}
 
       /* Create table to which we will deserialize the hashtable. */
@@ -817,8 +821,10 @@ lgi_marshal_arg_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
     case GI_TYPE_TAG_INTERFACE:
       {
 	GIBaseInfo *info = g_type_info_get_interface (ti);
-	int info_guard = lgi_guard_create_baseinfo (L, info);
 	GIInfoType type = g_base_info_get_type (info);
+	int info_guard;
+	lgi_gi_info_new (L, info);
+	info_guard = lua_gettop (L);
 	switch (type)
 	  {
 	  case GI_INFO_TYPE_ENUM:
@@ -986,7 +992,7 @@ lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
     case G_TYPE_BOXED:
       {
 	GIBaseInfo *info = g_irepository_find_by_gtype (NULL, type);
-	lgi_guard_create_baseinfo (L, info);
+	lgi_gi_info_new (L, info);
 	vals = lgi_record_2c (L, info, narg, &obj, TRUE);
 	g_value_set_boxed (val, obj);
 	lua_pop (L, vals + 1);
@@ -1168,8 +1174,10 @@ lgi_marshal_arg_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
     case GI_TYPE_TAG_INTERFACE:
       {
 	GIBaseInfo *info = g_type_info_get_interface (ti);
-	int info_guard = lgi_guard_create_baseinfo (L, info);
 	GIInfoType type = g_base_info_get_type (info);
+	int info_guard;
+	lgi_gi_info_new (L, info);
+	info_guard = lua_gettop (L);
 	switch (type)
 	  {
 	  case GI_INFO_TYPE_ENUM:
@@ -1357,7 +1365,9 @@ lgi_marshal_val_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
     case G_TYPE_BOXED:
       {
 	GIBaseInfo *bi = g_irepository_find_by_gtype (NULL, type);
-	int bi_guard = lgi_guard_create_baseinfo (L, bi);
+	int bi_guard;
+	lgi_gi_info_new (L, bi);
+	bi_guard = lua_gettop (L);
 	if (bi != NULL)
 	  {
 	    gpointer obj = g_value_dup_boxed (val);

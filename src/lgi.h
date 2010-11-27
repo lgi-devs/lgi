@@ -35,9 +35,6 @@ int lgi_guard_create (lua_State *L, gpointer **data, GDestroyNotify destroy);
 /* Returns data of specified guard. */
 void lgi_guard_get_data (lua_State *L, int pos, gpointer **data);
 
-/* Allocates guard which guards specified GIBaseInfo instance. */
-int lgi_guard_create_baseinfo (lua_State *L, GIBaseInfo *info);
-
 /* Key in registry, containing table with all our private data. */
 extern int lgi_regkey;
 typedef enum lgi_reg
@@ -67,6 +64,13 @@ enum _LgiFlags
 void lgi_record_init (lua_State *L);
 void lgi_compound_init (lua_State *L);
 void lgi_callable_init (lua_State *L);
+void lgi_gi_init (lua_State *L);
+
+/* Metatable name of userdata - gi wrapped 'GIBaseInfo*' */
+#define LGI_GI_INFO "lgi.gi.info"
+
+/* Creates new instance of info from given GIBaseInfo pointer. */
+int lgi_gi_info_new (lua_State *L, GIBaseInfo *info);
 
 /* Gets gtype of the type represented by typeinfo. */
 GType lgi_get_gtype (lua_State *L, GITypeInfo *ti);

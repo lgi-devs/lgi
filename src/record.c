@@ -309,7 +309,7 @@ record_field (lua_State *L)
   val = (GIArgument *) (((char *) record->addr)
 			+ g_field_info_get_offset (fi));
   ti = g_field_info_get_type (fi);
-  lgi_guard_create_baseinfo (L, ti);
+  lgi_gi_info_new (L, ti);
   if (get)
     {
       lgi_marshal_arg_2lua (L, ti, GI_TRANSFER_NOTHING, val, 1,

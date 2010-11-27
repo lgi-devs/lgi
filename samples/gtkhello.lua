@@ -46,8 +46,8 @@ toolbar:insert(
 			 copyright = '(C) Copyright 2010 Pavel Holejsovsky',
 			 authors = { 'Pavel Holejsovsky', 
 				     'Adrian Perez de Castro' },
-			 license_type = Gtk.License.MIT_X11,
 		      }
+		      dlg.license_type = Gtk.License.MIT_X11
 		      dlg:run()
 		      dlg:hide()
 		   end
