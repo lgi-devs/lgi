@@ -14,13 +14,13 @@
 typedef GIBaseInfo *(* InfosItemGet)(GIBaseInfo* info, gint item);
 
 /* Creates new instance of info from given GIBaseInfo pointer. */
-static int
-info_new (lua_State *L, GIBaseInfo *info)
+int
+lgi_gi_info_new (lua_State *L, GIBaseInfo *info)
 {
   if (info)
     {
       GIBaseInfo **ud_info;
-      
+
       if (g_base_info_get_type (info) == GI_INFO_TYPE_INVALID)
 	{
 	  g_base_info_unref (info);
@@ -64,7 +64,7 @@ infos_index (lua_State *L)
   Infos* infos = luaL_checkudata (L, 1, LGI_GI_INFOS);
   gint n = luaL_checkinteger (L, 2) - 1;
   luaL_argcheck (L, n >= 0 && n < infos->count, 2, "out of bounds");
-  return info_new (L, infos->item_get (infos->info, n));
+  return lgi_gi_info_new (L, infos->item_get (infos->info, n));
 }
 
 static int
@@ -191,7 +191,7 @@ info_index (lua_State *L)
       lua_concat (L, lgi_type_get_name (L, *info));
       return 1;
     }
-  
+
   if (strcmp (prop, "deprecated") == 0)
     {
       lua_pushboolean (L, g_base_info_is_deprecated (*info));
@@ -202,7 +202,7 @@ info_index (lua_State *L)
       GIBaseInfo *container = g_base_info_get_container (*info);
       if (container)
 	g_base_info_ref (container);
-      return info_new (L, container);
+      return lgi_gi_info_new (L, container);
     }
   else if (strcmp (prop, "typeinfo") == 0)
     {
@@ -217,9 +217,9 @@ info_index (lua_State *L)
 	ti = g_field_info_get_type (*info);
 
       if (ti)
-	return info_new (L, ti);
+	return lgi_gi_info_new (L, ti);
     }
-  
+
   if (GI_IS_REGISTERED_TYPE_INFO (*info))
     {
       if (strcmp (prop, "gtype") == 0)
@@ -255,7 +255,7 @@ info_index (lua_State *L)
       else if (GI_IS_OBJECT_INFO (*info))
 	{
 	  if (strcmp (prop, "parent") == 0)
-	    return info_new (L, g_object_info_get_parent (*info));
+	    return lgi_gi_info_new (L, g_object_info_get_parent (*info));
 	  INFOS (object, interface)
 	    INFOS (object, field)
 	    INFOS (object, method)
@@ -264,11 +264,11 @@ info_index (lua_State *L)
 	    INFOS (object, signal);
 	}
     }
-  
+
   if (GI_IS_CALLABLE_INFO (*info))
     {
       if (strcmp (prop, "return_type") == 0)
-	return info_new (L, g_callable_info_get_return_type (*info));
+	return lgi_gi_info_new (L, g_callable_info_get_return_type (*info));
       INFOS (callable, arg);
 
       if (GI_IS_SIGNAL_INFO (*info))
@@ -331,7 +331,7 @@ info_index (lua_State *L)
 	}
       INFOS (enum, value);
     }
-  
+
   if (GI_IS_VALUE_INFO (*info))
     {
       if (strcmp (prop, "value") == 0)
@@ -340,7 +340,7 @@ info_index (lua_State *L)
 	  return 1;
 	}
     }
-  
+
   if (GI_IS_TYPE_INFO (*info))
     {
       GITypeTag tag = g_type_info_get_tag (*info);
@@ -360,11 +360,11 @@ info_index (lua_State *L)
 	      tag == GI_TYPE_TAG_GSLIST || tag == GI_TYPE_TAG_GHASH)
 	    {
 	      lua_newtable (L);
-	      info_new (L, g_type_info_get_param_type (*info, 0));
+	      lgi_gi_info_new (L, g_type_info_get_param_type (*info, 0));
 	      lua_rawseti (L, -2, 1);
 	      if (tag == GI_TYPE_TAG_GHASH)
 		{
-		  info_new (L, g_type_info_get_param_type (*info, 1));
+		  lgi_gi_info_new (L, g_type_info_get_param_type (*info, 1));
 		  lua_rawseti (L, -2, 2);
 		}
 	      return 1;
@@ -372,7 +372,7 @@ info_index (lua_State *L)
 	}
       else if (strcmp (prop, "interface") == 0 && tag == GI_TYPE_TAG_INTERFACE)
 	{
-	  info_new (L, g_type_info_get_interface (*info));
+	  lgi_gi_info_new (L, g_type_info_get_interface (*info));
 	  return 1;
 	}
       else if (strcmp (prop, "array_type") == 0 && tag == GI_TYPE_TAG_ARRAY)
@@ -433,8 +433,11 @@ namespace_index (lua_State *L)
   const gchar *ns = luaL_checkudata (L, 1, LGI_GI_NAMESPACE);
   const gchar *prop;
   if (lua_isnumber (L, 2))
-    return info_new (L, g_irepository_get_info (NULL, ns,
-						lua_tointeger (L, 2) - 1));
+    {
+      GIBaseInfo *info = g_irepository_get_info (NULL, ns,
+						 lua_tointeger (L, 2) - 1);
+      return lgi_gi_info_new (L, info);
+    }
   prop = luaL_checkstring (L, 2);
   if (strcmp (prop, "dependencies") == 0)
     {
@@ -465,7 +468,7 @@ namespace_index (lua_State *L)
     }
   else
     /* Try to lookup the symbol. */
-    return info_new (L, g_irepository_find_by_name (NULL, ns, prop));
+    return lgi_gi_info_new (L, g_irepository_find_by_name (NULL, ns, prop));
 }
 
 static int
@@ -518,8 +521,11 @@ static int
 gi_index (lua_State *L)
 {
   if (lua_isnumber (L, 2))
-    return info_new (L, g_irepository_find_by_gtype (NULL,
-						     luaL_checknumber (L, 2)));
+    {
+      GIBaseInfo *info =
+	g_irepository_find_by_gtype (NULL, luaL_checknumber (L, 2));
+      return lgi_gi_info_new (L, info);
+    }
   else
     {
       const gchar *ns = luaL_checkstring (L, 2);

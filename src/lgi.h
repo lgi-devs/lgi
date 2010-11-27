@@ -71,6 +71,9 @@ void lgi_gi_init (lua_State *L);
 /* Metatable name of userdata - gi wrapped 'GIBaseInfo*' */
 #define LGI_GI_INFO "lgi.gi.info"
 
+/* Creates new instance of info from given GIBaseInfo pointer. */
+int lgi_gi_info_new (lua_State *L, GIBaseInfo *info);
+
 /* Gets gtype of the type represented by typeinfo. */
 GType lgi_get_gtype (lua_State *L, GITypeInfo *ti);
 
