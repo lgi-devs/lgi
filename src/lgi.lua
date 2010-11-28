@@ -425,38 +425,6 @@ local function load_compound(compound, info, mt)
    compound._name = compound[0].name
 end
 
-local function load_element_field(fi)
-   -- Check the type of the field.
-   local ti = fi.typeinfo
-   if ti.tag == 'interface' then
-      local ii = ti.interface
-      local type = ii.type
-      if type == 'struct' or type == 'union' then
-	 -- Nested structure, handle assignment to it specially.
-	 return function(obj, _, mode, newval)
-		   -- If reading the type, read it directly.
-		   if mode == nil then return fi end
-
-		   -- Get access to underlying nested structure.
-		   local sub = core.elementof(obj, fi, false)
-
-		   -- Reading it is simple, we are done.
-		   if not mode then return sub end
-
-		   -- Writing means assigning all fields from the
-		   -- source table.
-		   for name, value in pairs(newval) do sub[name] = value end
-		end
-      end
-   end
-
-   -- For other types, simple closure around elementof() is sufficient.
-   return function(obj, _, mode, newval)
-	     if mode == nil then return fi end
-	     return core.elementof(obj, fi, mode, newval)
-	  end
-end
-
 local function load_element_property(pi)
    return function(obj, _, mode, newval)
 	     if mode == nil then return pi end
@@ -506,17 +474,54 @@ local function load_element_signal(info)
    end
 end
 
+local function load_element_field(fi)
+   -- Check the type of the field.
+   local ti = fi.typeinfo
+   if ti.tag == 'interface' then
+      local ii = ti.interface
+      local type = ii.type
+      if type == 'struct' or type == 'union' then
+	 -- Nested structure, handle assignment to it specially.
+	 return function(obj, mode, newval)
+		   -- If reading the type, read it directly.
+		   if mode == nil then return fi end
+
+		   -- Get access to underlying nested structure.
+		   local sub = core.record.field(obj, fi)
+
+		   -- Reading it is simple, we are done.
+		   if not mode then return sub end
+
+		   -- Writing means assigning all fields from the
+		   -- source table.
+		   for name, value in pairs(newval) do sub[name] = value end
+		end
+      end
+   end
+
+   -- For other types, simple closure around elementof() is sufficient.
+   return function(obj, mode, newval)
+	     if mode == nil then return fi end
+	     if mode then
+		return core.record.field(obj, fi, newval)
+	     else
+		return core.record.field(obj, fi)
+	     end
+	  end
+end
+
 -- Implementation of _access method for structs.
 local function struct_access(typetable, instance, name, ...)
    local setmode = select('#', ...) > 0
    local val = typetable[name]
+   if val == nil then error(("%s: no `%s'"):format(typetable._name, name)) end
    if type(val) ~= 'function' then
       if setmode then
 	 error(("%s: `%s' is not writable"):format(typetable._name, name))
       end
       return val 
    end
-   return val(instance, typetable, setmode, ...)
+   return val(instance, setmode, ...)
 end
 
 -- Loads structure information into table representing the structure
