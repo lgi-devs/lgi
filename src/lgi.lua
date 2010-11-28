@@ -157,7 +157,7 @@ function struct_mt.__call(type, fields)
       local ns, name = type[0].name:match('^(.-)%.(.+)$')
       info = assert(gi[ns][name])
    end
-   local struct = core.construct(info)
+   local struct = core.record.new(info)
 
    -- Set values of fields.
    for name, value in pairs(fields or {}) do
@@ -831,15 +831,17 @@ do
    local closure_info = gi.GObject.Closure
    closure._methods = nil
    closure._fields = nil
-   setmetatable(closure, { __index = getmetatable(closure).__index,
-			   __tostring = getmetatable(closure).__tostring,
-			   __call = function(_, arg)
-				       return core.construct(closure_info, arg)
-				    end })
+   local closure_mt = { __index = getmetatable(closure).__index,
+			__tostring = getmetatable(closure).__tostring }
+   function closure_mt:__call(arg)
+      return core.record.new(closure_info, arg)
+   end
+   setmetatable(closure, closure_mt)
+
    -- Implicit conversion constructor, allows using Lua function
    -- directly at the places where GClosure is expected.
    function closure:_construct(arg)
-      return core.construct(closure_info, arg)
+      return core.record.new(closure_info, arg)
    end
 
    -- Value is constructible from any kind of source Lua
@@ -884,8 +886,8 @@ do
       end
 
       -- No idea to what type should this be mapped.
-      error(string.format("unclear type for GValue from argument `%s'",
-			  tostring(source)))
+      error(("unclear type for GValue from argument `%s'"):format(
+	       tostring(source)))
    end
 
    -- Implement constructor, taking any source value and optionally type of the
@@ -896,12 +898,10 @@ do
       if type(stype) == 'string' then
 	 stype = repo.GObject.type_from_name(stype)
       end
-      return core.construct(value_info, stype, source)
+      return core.record.new(value_info, stype, source)
    end
    setmetatable(value, value_mt)
-   function value:_construct(arg)
-      return core.construct(value_info, gettype(arg), arg)
-   end
+   value._construct = value_mt.__call
    value._methods = nil
    value._fields = nil
    function value:_access(instance, name, ...)
@@ -909,9 +909,9 @@ do
 	     ("GObject.Value: `%s' not writable"):format(name));
       if name == 'type' then
 	 return repo.GObject.type_name(
-	    core.record.field(instance, value_info.fields.g_type))
+	    core.record.field(instance, value_info.fields.g_type)) or ''
       elseif name == 'value' then
-	 return core.construct(instance)
+	 return core.record.valueof(instance)
       end
    end
 end

@@ -120,18 +120,6 @@ lgi_construct (lua_State* L)
   /* Create new instance based on the embedded typeinfo. */
   int vals = 0;
   GIBaseInfo **info;
-  GValue *val;
-  GType gtype;
-
-  /* Check, whether arg1 is GValue. */
-  gtype = G_TYPE_VALUE;
-  val = lgi_compound_check (L, 1, &gtype);
-  if (val != NULL)
-    {
-      /* Construct from value just unboxes the real value from it. */
-      lgi_marshal_val_2lua (L, NULL, GI_TRANSFER_NOTHING, val);
-      return 1;
-    }
 
   /* Check whether arg1 is baseinfo. */
   info = luaL_checkudata (L, 1, LGI_GI_INFO);
@@ -140,49 +128,6 @@ lgi_construct (lua_State* L)
     case GI_INFO_TYPE_FUNCTION:
       vals = lgi_callable_create (L, *info);
       break;
-
-    case GI_INFO_TYPE_STRUCT:
-    case GI_INFO_TYPE_UNION:
-      {
-	GType type = g_registered_type_info_get_g_type (*info);
-	if (g_type_is_a (type, G_TYPE_CLOSURE))
-	  {
-	    /* Create closure instance wrapping 2nd argument and
-	       return it. */
-	    lgi_record_2lua (L, *info, lgi_gclosure_create (L, 2),
-			     LGI_RECORD_OWN, 0);
-	    vals = 1;
-	  }
-
-
-	else if (g_type_is_a (type, G_TYPE_VALUE))
-	  {
-	    /* Get requested GType, construct and fill in GValue
-	       and return it wrapped in a GBoxed which is wrapped in
-	       a compound. */
-	    GValue val = {0};
-	    type = luaL_checknumber (L, 2);
-	    if (G_TYPE_IS_VALUE (type))
-	      {
-		g_value_init (&val, type);
-		lgi_marshal_val_2c (L, NULL, GI_TRANSFER_NOTHING,
-				    &val, 3);
-	      }
-
-	    lgi_record_2lua (L, *info, g_boxed_copy (G_TYPE_VALUE, &val),
-			     LGI_RECORD_OWN, 0);
-	    vals = 1;
-	    if (G_IS_VALUE (&val))
-	      g_value_unset (&val);
-	  }
-	else
-	  {
-	    /* Create common struct. */
-	    lgi_record_2lua (L, *info, NULL, LGI_RECORD_ALLOCATE, 0);
-	    vals = 1;
-	  }
-	break;
-      }
 
     case GI_INFO_TYPE_OBJECT:
       lgi_compound_object_new (L, *info, 2);

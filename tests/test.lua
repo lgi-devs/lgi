@@ -1057,6 +1057,8 @@ end
 
 function gireg.closure()
    local R = lgi.Regress
+   checkv(R.test_closure(GObject.Closure(function() return 42 end)),
+	  42, 'number')
    checkv(R.test_closure(function() return 42 end), 42, 'number')
 end
 
