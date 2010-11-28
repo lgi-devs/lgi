@@ -278,7 +278,7 @@ record_tostring (lua_State *L)
   return 1;
 }
 
-/* Implements gwnwric record creation. Lua prototype:
+/* Implements generic record creation. Lua prototype:
    recordinstance = core.record.new(structinfo|unioninfo) */
 static int
 record_new (lua_State *L)
@@ -306,7 +306,7 @@ record_field (lua_State *L)
 
   /* Get record and field instances. */
   record = record_get (L, 1, 2);
-  fi = record_get (L, 2, 2)->addr;
+  fi = *(GIFieldInfo **) luaL_checkudata (L, 2, LGI_GI_INFO);
 
   /* Check, whether field is readable/writable. */
   flags = g_field_info_get_flags (fi);
@@ -356,13 +356,13 @@ record_access (lua_State *L)
   lua_pushvalue (L, 2);
   if (get)
     {
-      lua_call (L, 4, 1);
+      lua_call (L, 3, 1);
       return 1;
     }
   else
     {
       lua_pushvalue (L, 3);
-      lua_call (L, 5, 0);
+      lua_call (L, 4, 0);
       return 0;
     }
 }
