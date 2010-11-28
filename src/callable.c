@@ -803,7 +803,7 @@ lgi_gclosure_create (lua_State *L, int target)
   /* Check that target is something we can call. */
   if (type != LUA_TFUNCTION && type != LUA_TTABLE && type != LUA_TUSERDATA)
     {
-	luaL_typerror (L, target, lua_typename (L, LUA_TFUNCTION));
+      luaL_typerror (L, target, lua_typename (L, LUA_TFUNCTION));
       return NULL;
     }
 
