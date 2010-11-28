@@ -527,6 +527,7 @@ local function load_struct(namespace, struct, info)
       struct._methods = get_category(
 	 info.methods, core.construct, nil, nil, rawget(struct, '_methods'))
       struct._fields = get_category(info.fields, load_element_field)
+      struct._access = struct_access
    end
 end
 
