@@ -838,9 +838,9 @@ do
 				    end })
    -- Implicit conversion constructor, allows using Lua function
    -- directly at the places where GClosure is expected.
-   closure._construct = function(arg)
-			     return core.construct(closure_info, arg)
-			  end
+   function closure:_construct(arg)
+      return core.construct(closure_info, arg)
+   end
 
    -- Value is constructible from any kind of source Lua
    -- value, and the type of the value can be hinted by type name.
@@ -863,14 +863,14 @@ do
 	 return 'gchararray'
       elseif type(source) == 'function' then
 	 -- Generate closure for any kind of function.
-	 return closure[0].gtype
+	 return closure._gtype
       elseif type(source) == 'userdata' then
 	 -- Examine type of userdata.
 	 local meta = getmetatable(source)
 	 if meta and meta.__call then
 	    -- It seems that it is possible to call on this, so generate
 	    -- closure.
-	    return closure[0].gtype
+	    return closure._gtype
 	 else
 	    -- Some kind of compound, get its real gtype from core.
 	    return core.gtype(source)
@@ -879,7 +879,7 @@ do
 	 -- Check, whether we can call it.
 	 local meta = getmetatable(source)
 	 if meta and meta.__call then
-	    return closure[0].gtype
+	    return closure._gtype
 	 end
       end
 
@@ -899,16 +899,20 @@ do
       return core.construct(value_info, stype, source)
    end
    setmetatable(value, value_mt)
-   value._construct = function(arg) return value_mt.__call(nil, arg) end
-   value._methods = nil
-   value._fields = { _g_type = value._fields.g_type }
-   function value._fields.type(val, _, mode)
-      assert(mode == false, "GObject.Value: `type' not writable")
-      return repo.GObject.type_name(val._fields__g_type) or ''
+   function value:_construct(arg)
+      return core.construct(value_info, gettype(arg), arg)
    end
-   function value._fields.value(val, _, mode)
-      assert(mode == false, "GObject.Value: `value' not writable")
-      return core.construct(val)
+   value._methods = nil
+   value._fields = nil
+   function value:_access(instance, name, ...)
+      assert(select('#', ...) == 0,
+	     ("GObject.Value: `%s' not writable"):format(name));
+      if name == 'type' then
+	 return repo.GObject.type_name(
+	    core.record.field(instance, value_info.fields.g_type))
+      elseif name == 'value' then
+	 return core.construct(instance)
+      end
    end
 end
 
