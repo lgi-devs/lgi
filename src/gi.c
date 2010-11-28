@@ -62,9 +62,28 @@ static int
 infos_index (lua_State *L)
 {
   Infos* infos = luaL_checkudata (L, 1, LGI_GI_INFOS);
-  gint n = luaL_checkinteger (L, 2) - 1;
-  luaL_argcheck (L, n >= 0 && n < infos->count, 2, "out of bounds");
-  return lgi_gi_info_new (L, infos->item_get (infos->info, n));
+  gint n;
+  if (lua_isnumber (L, 2))
+    {
+      n = lua_tointeger (L, 2) - 1;
+      luaL_argcheck (L, n >= 0 && n < infos->count, 2, "out of bounds");
+      return lgi_gi_info_new (L, infos->item_get (infos->info, n));
+    }
+  else
+    {
+      const gchar *name = luaL_checkstring (L, 2);
+      for (n = 0; n < infos->count; n++)
+	{
+	  GIBaseInfo *info = infos->item_get (infos->info, n);
+	  if (strcmp (g_base_info_get_name (info), name) == 0)
+	    return lgi_gi_info_new (L, info);
+
+	  g_base_info_unref (info);
+	}
+
+      lua_concat (L, lgi_type_get_name (L, infos->info));
+      return luaL_error (L, "%s: `%s' not found", lua_tostring (L, -1), name);
+    }
 }
 
 static int
