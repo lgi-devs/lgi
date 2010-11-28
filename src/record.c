@@ -360,8 +360,8 @@ record_access (lua_State *L)
   gboolean get = lua_isnone (L, 3);
 
   /* Check that 1st arg is a record and invoke one of the forms:
-     result = type:_access(type, recordinstance, name)
-     type:_access(type, recordinstance, name, val) */
+     result = type:_access(recordinstance, name)
+     type:_access(recordinstance, name, val) */
   record_get (L, 1);
   lua_getfenv (L, 1);
   lua_getfield (L, -1, "_access");
