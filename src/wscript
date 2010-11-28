@@ -13,7 +13,8 @@ def apply_lua_so_name(self):
 def build(bld):
     bld(
         features = 'c cshlib luaext',
-        source = 'core.c callable.c marshal.c compound.c',
+
+        source = 'core.c gi.c callable.c marshal.c record.c object.c',
         target = 'lgi',
         uselib = ['LUA', 'GI'],
         cflags = bld.env.CCFLAGS,

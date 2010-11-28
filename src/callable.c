@@ -57,7 +57,9 @@ typedef struct _Callable
   /* ffi_type* array here, contains ffi_type[nargs + 2] entries. */
   /* params points here, contains Param[nargs] entries. */
 } Callable;
-#define UD_CALLABLE "lgi.callable"
+
+/* Address is lightuserdata of Callable metatable in Lua registry. */
+static int callable_mt;
 
 /* Structure containing basic callback information. */
 typedef struct _Callback
@@ -89,6 +91,9 @@ typedef struct _FfiClosure
      called. */
   gboolean autodestroy;
 } FfiClosure;
+
+/* lightuserdata key to callable cache table. */
+static int callable_cache;
 
 /* Gets ffi_type for given tag, returns NULL if it cannot be handled. */
 static ffi_type *
@@ -182,10 +187,11 @@ lgi_callable_create (lua_State *L, GICallableInfo *info)
   ffi_type *ffi_retval;
   gint nargs, argi, arg;
 
-  /* Check cache, whether this callable object is already present. */
-  luaL_checkstack (L, 5, "");
-  lua_rawgeti (L, LUA_REGISTRYINDEX, lgi_regkey);
-  lua_rawgeti (L, -1, LGI_REG_CACHE);
+  /* Check cache, whether this callable object is already present in
+     the cache. */
+  luaL_checkstack (L, 6, "");
+  lua_pushlightuserdata (L, &callable_cache);
+  lua_rawget (L, LUA_REGISTRYINDEX);
   lua_pushinteger (L, g_base_info_get_type (info));
   lua_pushstring (L, ":");
   lua_concat (L, lgi_type_get_name(L, info) + 2);
@@ -193,8 +199,8 @@ lgi_callable_create (lua_State *L, GICallableInfo *info)
   lua_gettable (L, -3);
   if (!lua_isnil (L, -1))
     {
-      lua_replace (L, -4);
-      lua_pop (L, 2);
+      lua_replace (L, -3);
+      lua_pop (L, 1);
       return 1;
     }
 
@@ -203,7 +209,8 @@ lgi_callable_create (lua_State *L, GICallableInfo *info)
   callable = lua_newuserdata (L, sizeof (Callable) +
 			      sizeof (ffi_type) * (nargs + 2) +
 			      sizeof (Param) * nargs);
-  luaL_getmetatable (L, UD_CALLABLE);
+  lua_pushlightuserdata (L, &callable_mt);
+  lua_rawget (L, LUA_REGISTRYINDEX);
   lua_setmetatable (L, -2);
 
   /* Fill in callable with proper contents. */
@@ -300,9 +307,31 @@ lgi_callable_create (lua_State *L, GICallableInfo *info)
   lua_settable (L, -6);
 
   /* Final stack cleanup. */
-  lua_replace (L, -5);
-  lua_pop (L, 3);
+  lua_replace (L, -4);
+  lua_pop (L, 2);
   return 1;
+}
+
+/* Checks whether given argument is Callable userdata. */
+static Callable *
+callable_get (lua_State *L, int narg)
+{
+  luaL_checkstack (L, 3, "");
+  if (lua_getmetatable (L, narg))
+    {
+      lua_pushlightuserdata (L, &callable_mt);
+      lua_rawget (L, LUA_REGISTRYINDEX);
+      if (lua_rawequal (L, -1, -2))
+	{
+	  lua_pop (L, 2);
+	  return lua_touserdata (L, narg);
+	}
+    }
+
+  lua_pushfstring (L, "expected lgi.callable, got %s",
+		   lua_typename (L, lua_type (L, narg)));
+  luaL_argerror (L, narg, lua_tostring (L, -1));
+  return NULL;
 }
 
 int
@@ -314,7 +343,7 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
   GIArgument *args;
   void **ffi_args, **redirect_out;
   GError *err = NULL;
-  Callable *callable = luaL_checkudata (L, func_index, UD_CALLABLE);
+  Callable *callable = callable_get (L, func_index);
 
   /* Make sure that all unspecified arguments are set as nil; during
      marhsalling we might create temporary values on the stack, which
@@ -349,9 +378,18 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
   if (callable->has_self)
     {
       GIBaseInfo *parent = g_base_info_get_container (callable->info);
-      GType parent_gtype = g_registered_type_info_get_g_type (parent);
-      nret += lgi_compound_get (L, args_index, &parent_gtype,
-				&args[0].v_pointer, 0);
+      GIInfoType type = g_base_info_get_type (parent);
+      if (type == GI_INFO_TYPE_OBJECT || type == GI_INFO_TYPE_INTERFACE)
+	{
+	  args[0].v_pointer = 
+	    lgi_object_2c (L, args_index,
+			   g_registered_type_info_get_g_type (parent), FALSE);
+	  nret++;
+	}
+      else
+	nret += lgi_record_2c (L, parent, args_index,
+			       &args[0].v_pointer, FALSE);
+
       ffi_args[0] = &args[0];
       lua_argi++;
     }
@@ -474,7 +512,7 @@ static int
 callable_gc (lua_State *L)
 {
   /* Just unref embedded 'info' field. */
-  Callable *callable = luaL_checkudata (L, 1, UD_CALLABLE);
+  Callable *callable = callable_get (L, 1);
   g_base_info_unref (callable->info);
   return 0;
 }
@@ -482,7 +520,7 @@ callable_gc (lua_State *L)
 static int
 callable_tostring (lua_State *L)
 {
-  Callable *callable = luaL_checkudata (L, 1, UD_CALLABLE);
+  Callable *callable = callable_get (L, 1);
   lua_pushfstring (L, "lgi.%s (%p): ",
 		   (GI_IS_FUNCTION_INFO (callable->info) ? "fun" :
 		    (GI_IS_SIGNAL_INFO (callable->info) ? "sig" :
@@ -562,7 +600,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 {
   Callable *callable;
   FfiClosure *closure = closure_arg;
-  gint res, npos, i, stacktop;
+  gint res = 0, npos, i, stacktop;
   Param *param;
 
   /* Get access to proper Lua context. */
@@ -582,9 +620,16 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   npos = 0;
   if (callable->has_self)
     {
-      if (lgi_compound_create (L, g_base_info_get_container(callable->info),
-			       ((GIArgument*) args[0])->v_pointer, FALSE, 0))
-	npos++;
+      GIBaseInfo *parent = g_base_info_get_container (callable->info);
+      GIInfoType type = g_base_info_get_type (parent);
+      gpointer addr = ((GIArgument*) args[0])->v_pointer;
+      npos++;
+      if (type == GI_INFO_TYPE_OBJECT || type == GI_INFO_TYPE_INTERFACE)
+	lgi_object_2lua (L, addr, FALSE);
+      else if (type == GI_INFO_TYPE_STRUCT || type == GI_INFO_TYPE_UNION)
+	lgi_record_2lua (L, parent, addr, LGI_RECORD_PEEK, 0);
+      else
+	g_assert_not_reached ();
     }
 
   /* Marshal input arguments to lua. */
@@ -600,7 +645,10 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
       }
 
   /* Call it. */
-  res = 0; lua_call (L, npos, LUA_MULTRET);
+  if (callable->throws)
+    res = lua_pcall (L, npos, LUA_MULTRET, 0);
+  else
+    lua_call (L, npos, LUA_MULTRET);
   npos = stacktop;
 
   /* Check, whether we can report an error here. */
@@ -647,7 +695,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	    npos++;
 	  }
     }
-  else if (callable->throws)
+  else
     {
       /* If the function is expected to return errors, create proper error. */
       GQuark q = g_quark_from_static_string ("lgi-callback-error-quark");
@@ -656,8 +704,6 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
       g_set_error_literal (err, q, 1, lua_tostring(L, -1));
       lua_pop (L, 1);
     }
-  else
-    g_warning ("ignoring error from closure: %s", lua_tostring (L, -1));
 
   /* If the closure is marked as autodestroy, destroy it now.  Note that it is
      unfortunately not possible to destroy it directly here, because we would
@@ -665,7 +711,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
      marshal guard and leave it to GC to destroy the closure later. */
   if (closure->autodestroy)
     {
-      lgi_closure_guard (L, closure);
+      *lgi_guard_create (L, lgi_closure_destroy) = closure;
       lua_pop (L, 1);
     }
 
@@ -721,31 +767,6 @@ lgi_closure_create (lua_State *L, GICallableInfo *ci, int target,
   return closure;
 }
 
-static int
-closureguard_gc(lua_State *L)
-{
-  gpointer closure = *(gpointer *) lua_touserdata (L, 1);
-  lgi_closure_destroy (closure);
-  return 0;
-}
-
-#define UD_CLOSUREGUARD "lgi.closureguard"
-static const struct luaL_reg closureguard_reg[] = {
-  { "__gc", closureguard_gc },
-  { NULL, NULL }
-};
-
-void
-lgi_closure_guard (lua_State *L, gpointer user_data)
-{
-  gpointer *closureguard;
-  luaL_checkstack (L, 1, "");
-  closureguard = lua_newuserdata (L, sizeof (gpointer));
-  *closureguard = user_data;
-  luaL_getmetatable (L, UD_CLOSUREGUARD);
-  lua_setmetatable (L, -2);
-}
-
 typedef struct _GlibClosure
 {
   GClosure closure;
@@ -795,7 +816,7 @@ lgi_gclosure_create (lua_State *L, int target)
   /* Check that target is something we can call. */
   if (type != LUA_TFUNCTION && type != LUA_TTABLE && type != LUA_TUSERDATA)
     {
-	luaL_typerror (L, target, lua_typename (L, LUA_TFUNCTION));
+      luaL_typerror (L, target, lua_typename (L, LUA_TFUNCTION));
       return NULL;
     }
 
@@ -817,16 +838,30 @@ lgi_gclosure_create (lua_State *L, int target)
   return &c->closure;
 }
 
+/* Creates new Callable instance according to given gi.info. Lua prototype:
+   callable = callable.new(callable_info) */
+static int
+callable_new (lua_State *L)
+{
+  return lgi_callable_create (L,  *(GICallableInfo **)
+			      luaL_checkudata (L, 1, LGI_GI_INFO));
+}
+
 void
 lgi_callable_init (lua_State *L)
 {
   /* Register callable metatable. */
-  luaL_newmetatable (L, UD_CALLABLE);
+  lua_pushlightuserdata (L, &callable_mt);
+  lua_newtable (L);
   luaL_register (L, NULL, callable_reg);
-  lua_pop (L, 1);
+  lua_rawset (L, LUA_REGISTRYINDEX);
 
-  /* Register closureguard metatable. */
-  luaL_newmetatable (L, UD_CLOSUREGUARD);
-  luaL_register (L, NULL, closureguard_reg);
-  lua_pop (L, 1);
+  /* Create cache for callables. */
+  lgi_cache_create (L, &callable_cache, NULL);
+
+  /* Create public api for callable module. */
+  lua_newtable (L);
+  lua_pushcfunction (L, callable_new);
+  lua_setfield (L, -2, "new");
+  lua_setfield (L, -2, "callable");
 }

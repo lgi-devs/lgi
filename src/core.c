@@ -1,9 +1,11 @@
 /*
  * Dynamic Lua binding to GObject using dynamic gobject-introspection.
  *
- * Author: Pavel Holejsovsky (pavel.holejsovsky@gmail.com)
+ * Copyright (c) 2010 Pavel Holejsovsky
+ * Licensed under the MIT license:
+ * http://www.opensource.org/licenses/mit-license.php
  *
- * License: MIT.
+ * Core C utility API.
  */
 
 #include "lgi.h"
@@ -48,8 +50,21 @@ const char *lgi_sd (lua_State *L)
 }
 #endif
 
-/* Puts parts of the name to the stack, to be concatenated by lua_concat.
-   Returns number of pushed elements. */
+void
+lgi_cache_create (lua_State *L, gpointer key, const char *mode)
+{
+  lua_pushlightuserdata (L, key);
+  lua_newtable (L);
+  if (mode)
+    {
+      lua_newtable (L);
+      lua_pushstring (L, mode);
+      lua_setfield (L, -2, "__mode");
+      lua_setmetatable (L, -2);
+    }
+  lua_rawset (L, LUA_REGISTRYINDEX);
+}
+
 int
 lgi_type_get_name (lua_State *L, GIBaseInfo *info)
 {
@@ -59,7 +74,8 @@ lgi_type_get_name (lua_State *L, GIBaseInfo *info)
 
   /* Add names on the whole path, but in reverse order. */
   for (; info != NULL; info = g_base_info_get_container (info))
-    list = g_slist_prepend (list, info);
+    if (!GI_IS_TYPE_INFO (info))
+      list = g_slist_prepend (list, info);
 
   for (i = list; i != NULL; i = g_slist_next (i))
     {
@@ -91,8 +107,8 @@ guard_gc (lua_State *L)
   return 0;
 }
 
-int
-lgi_guard_create (lua_State *L, gpointer **data, GDestroyNotify destroy)
+gpointer *
+lgi_guard_create (lua_State *L, GDestroyNotify destroy)
 {
   Guard *guard = lua_newuserdata (L, sizeof (Guard));
   g_assert (destroy != NULL);
@@ -100,8 +116,7 @@ lgi_guard_create (lua_State *L, gpointer **data, GDestroyNotify destroy)
   lua_setmetatable (L, -2);
   guard->data = NULL;
   guard->destroy = destroy;
-  *data = &guard->data;
-  return lua_gettop (L);
+  return &guard->data;
 }
 
 void
@@ -111,257 +126,29 @@ lgi_guard_get_data (lua_State *L, int pos, gpointer **data)
   *data = &guard->data;
 }
 
-int
-lgi_guard_create_baseinfo (lua_State *L, GIBaseInfo *info)
-{
-  gpointer *data;
-  int res = lgi_guard_create (L, &data, (GDestroyNotify) g_base_info_unref);
-  *data = info;
-  return res;
-}
-
 static int
-lgi_find (lua_State *L)
+lgi_constant (lua_State* L)
 {
-  const gchar *symbol = luaL_checkstring (L, 1);
-  const gchar *container = luaL_optstring (L, 2, NULL);
-  GIBaseInfo *info, *fi, *baseinfo;
-  int vals, info_guard;
-
-  /* Get information about the symbol. */
-  info = g_irepository_find_by_name (NULL, "GIRepository",
-				     container != NULL ? container : symbol);
-
-  /* In case that container was specified, look the symbol up in it. */
-  if (container != NULL && info != NULL)
-    {
-      switch (g_base_info_get_type (info))
-	{
-	case GI_INFO_TYPE_OBJECT:
-	  fi = g_object_info_find_method (info, symbol);
-	  break;
-
-	case GI_INFO_TYPE_INTERFACE:
-	  fi = g_interface_info_find_method (info, symbol);
-	  break;
-
-	case GI_INFO_TYPE_STRUCT:
-	  fi = g_struct_info_find_method (info, symbol);
-	  break;
-
-	default:
-	  fi = NULL;
-	}
-
-      g_base_info_unref (info);
-      info = fi;
-    }
-
-  if (info == NULL)
-    return luaL_error (L, "unable to resolve GIRepository.%s%s%s",
-		       container != NULL ? container : "",
-		       container != NULL ? ":" : "",
-		       symbol);
-
-  /* Create new IBaseInfo structure and return it. */
-  baseinfo = g_irepository_find_by_name (NULL, "GIRepository", "BaseInfo");
-  info_guard = lgi_guard_create_baseinfo (L, baseinfo);
-  vals = lgi_compound_create (L, baseinfo, info, TRUE, 0);
-  lua_remove (L, info_guard);
-  return vals;
-}
-
-static int
-lgi_construct (lua_State* L)
-{
-  /* Create new instance based on the embedded typeinfo. */
-  int vals = 0;
-  GIBaseInfo *bi;
-  GType gtype;
-  GValue *val;
-
-  /* Check, whether arg1 is GValue. */
-  gtype = G_TYPE_VALUE;
-  val = lgi_compound_check (L, 1, &gtype);
-  if (val != NULL)
-    {
-      /* Construct from value just unboxes the real value from it. */
-      lgi_marshal_val_2lua (L, NULL, GI_TRANSFER_NOTHING, val);
-      return 1;
-    }
-
-  /* Check whether arg1 is baseinfo. */
-  gtype = GI_TYPE_BASE_INFO;
-  bi = lgi_compound_check (L, 1, &gtype);
-  if (bi != NULL)
-    {
-      switch (g_base_info_get_type (bi))
-	{
-	case GI_INFO_TYPE_FUNCTION:
-	  vals = lgi_callable_create (L, bi);
-	  break;
-
-	case GI_INFO_TYPE_STRUCT:
-	case GI_INFO_TYPE_UNION:
-	  {
-	    GType type = g_registered_type_info_get_g_type (bi);
-	    if (g_type_is_a (type, G_TYPE_CLOSURE))
-	      /* Create closure instance wrapping 2nd argument and return it. */
-	      vals = lgi_compound_create (L, bi, lgi_gclosure_create (L, 2),
-					  TRUE, 0);
-	    else if (g_type_is_a (type, G_TYPE_VALUE))
-	      {
-		/* Get requested GType, construct and fill in GValue
-		   and return it wrapped in a GBoxed which is wrapped in
-		   a compound. */
-		GValue val = {0};
-		type = luaL_checknumber (L, 2);
-		if (G_TYPE_IS_VALUE (type))
-		  {
-		    g_value_init (&val, type);
-		    lgi_marshal_val_2c (L, NULL, GI_TRANSFER_NOTHING,
-					&val, 3);
-		  }
-
-		vals = lgi_compound_create (L, bi,
-					    g_boxed_copy (G_TYPE_VALUE, &val),
-					    TRUE, 0);
-		if (G_IS_VALUE (&val))
-		  g_value_unset (&val);
-	      }
-	    else
-	      {
-		/* Create common struct. */
-		lgi_compound_struct_new (L, bi);
-		vals = 1;
-	      }
-	    break;
-	  }
-
-	case GI_INFO_TYPE_OBJECT:
-	  lgi_compound_object_new (L, bi, 2);
-	  vals = 1;
-	  break;
-
-	case GI_INFO_TYPE_CONSTANT:
-	  {
-	    GITypeInfo *ti = g_constant_info_get_type (bi);
-	    GIArgument val;
-	    int ti_guard = lgi_guard_create_baseinfo (L, ti);
-	    g_constant_info_get_value (bi, &val);
-	    lgi_marshal_arg_2lua (L, ti, GI_TRANSFER_NOTHING, &val, 0, FALSE,
-				  NULL, NULL);
-	    vals = 1;
-	    lua_remove (L, ti_guard);
-	  }
-	  break;
-
-	default:
-	  lua_pushfstring (L, "failing to construct unknown type %d (%s.%s)",
-			   g_base_info_get_type (bi),
-			   g_base_info_get_namespace (bi),
-			   g_base_info_get_name (bi));
-	  g_warning ("%s", lua_tostring (L, -1));
-	  lua_error (L);
-	  break;
-	}
-
-      return vals;
-    }
-
-  return luaL_typerror (L, 1, "(lgi userdata)");
-}
-
-static int
-lgi_gtype (lua_State *L)
-{
-  GType gtype = G_TYPE_NONE;
-
-  if (lua_type (L, 1) == LUA_TSTRING)
-    {
-      /* Get information about the name. */
-      const gchar *name = luaL_checkstring (L, 1);
-      GIBaseInfo *info;
-
-      info = g_irepository_find_by_name (NULL, "GIRepository", name);
-      if (info == NULL)
-	return luaL_error (L, "unable to resolve GIRepository.%s", name);
-
-      gtype = g_registered_type_info_get_g_type (info);
-      g_base_info_unref (info);
-    }
-  else
-    {
-      /* Get information by compound. */
-      gpointer unused;
-      lua_pop (L, lgi_compound_get (L, 1, &gtype, &unused, 0));
-    }
-
-  lua_pushnumber (L, gtype);
+  /* Get typeinfo of the constant. */
+  GIArgument val;
+  GIConstantInfo *ci = * (GIConstantInfo **) luaL_checkudata (L, 1,
+							      LGI_GI_INFO);
+  GITypeInfo *ti = g_constant_info_get_type (ci);
+  lgi_gi_info_new (L, ti);
+  g_constant_info_get_value (ci, &val);
+  lgi_marshal_arg_2lua (L, ti, GI_TRANSFER_NOTHING, &val, 0, FALSE,
+			NULL, NULL);
   return 1;
 }
 
-static void
-gclosure_destroy (gpointer user_data, GClosure *closure)
-{
-  lgi_closure_destroy (user_data);
-}
-
-/* Connects signal to given compound.
- * Signature is:
- * handler_id = core.connect(obj, signame, callable, func, detail, after) */
-static int
-lgi_connect (lua_State *L)
-{
-  gpointer obj;
-  const char *signame = luaL_checkstring (L, 2);
-  GICallableInfo *ci;
-  const char *detail = lua_tostring (L, 5);
-  gpointer call_addr, lgi_closure;
-  GClosure *gclosure;
-  guint signal_id;
-  gulong handler_id;
-  GType gt_obj = G_TYPE_OBJECT, gt_bi = GI_TYPE_BASE_INFO;
-
-  /* Get target objects. */
-  if (lgi_compound_get (L, 1, &gt_obj, &obj, 0)
-      || lgi_compound_get (L, 3, &gt_bi, (gpointer *) &ci, 0))
-      g_assert_not_reached ();
-
-  /* Create GClosure instance to be used.  This is fast'n'dirty method; it
-     requires less lines of code to write, but a lot of code to execute when
-     the signal is emitted; the signal goes like this:
-
-     1) emitter prepares params as an array of GValues.
-     2) GLib's marshaller converts it to C function call.
-     3) this call lands in libffi's trampoline (closure)
-     4) this trampoline converts arguments to libffi array of args
-     5) LGI libffi glue code unmarshalls them to Lua stack and calls Lua func.
-
-     much better solution would be writing custom GClosure Lua marshaller, in
-     which case the scenraio would be following:
-
-     1) emitter prepares params as an array of GValues.
-     2) LGI custom marshaller marshalls then to Lua stack and calls Lua
-	function. */
-  lgi_closure = lgi_closure_create (L, ci, 4, FALSE, &call_addr);
-  gclosure = g_cclosure_new (call_addr, lgi_closure, gclosure_destroy);
-
-  /* Connect closure to the signal. */
-  signal_id = g_signal_lookup (signame, G_OBJECT_TYPE (obj));
-  handler_id =  g_signal_connect_closure_by_id (obj, signal_id,
-						g_quark_from_string (detail),
-						gclosure, lua_toboolean (L, 6));
-  lua_pushnumber (L, handler_id);
-  return 1;
-}
+static int core_addr_logger;
 
 static int
 lgi_setlogger(lua_State *L)
 {
-  lua_rawgeti (L, LUA_REGISTRYINDEX, lgi_regkey);
+  lua_pushlightuserdata (L, &core_addr_logger);
   lua_pushvalue (L, 1);
-  lua_rawseti (L, -2, LGI_REG_LOG_HANDLER);
+  lua_rawset (L, LUA_REGISTRYINDEX);
   return 0;
 }
 
@@ -396,8 +183,9 @@ log_handler (const gchar *log_domain, GLogLevelFlags log_level,
       break;
 
   /* Check, whether there is handler registered in Lua. */
-  lua_rawgeti (L, LUA_REGISTRYINDEX, lgi_regkey);
-  lua_rawgeti (L, -1, LGI_REG_LOG_HANDLER);
+  luaL_checkstack (L, 4, "");
+  lua_pushlightuserdata (L, &core_addr_logger);
+  lua_rawget (L, LUA_REGISTRYINDEX);
   if (!lua_isnil (L, -1))
     {
       /* Push arguments and invoke custom log handler. */
@@ -421,8 +209,8 @@ log_handler (const gchar *log_domain, GLogLevelFlags log_level,
 	}
     }
 
-  /* Stack cleanup; either (reg,nil) or (reg,err) are popped. */
-  lua_pop (L, 2);
+  /* Stack cleanup; either nil, boolean or err is popped. */
+  lua_pop (L, 1);
 
   /* In case that the level was fatal, throw a lua error. */
   if (throw || log_level & (G_LOG_FLAG_FATAL | G_LOG_LEVEL_ERROR))
@@ -434,43 +222,13 @@ log_handler (const gchar *log_domain, GLogLevelFlags log_level,
 }
 
 static const struct luaL_reg lgi_reg[] = {
-  { "find", lgi_find },
-  { "construct", lgi_construct },
-  { "gtype", lgi_gtype },
-  { "connect", lgi_connect },
+  { "constant", lgi_constant },
   { "log",  lgi_log },
   { "setlogger", lgi_setlogger },
   { NULL, NULL }
 };
 
-static void
-lgi_create_reg (lua_State* L, enum lgi_reg reg, const char* exportname,
-		gboolean withmeta)
-{
-  /* Create the table. */
-  lua_newtable (L);
-
-  /* Assign the metatable, if requested. */
-  if (withmeta)
-    {
-      lua_pushvalue (L, -2);
-      lua_setmetatable (L, -2);
-      lua_replace (L, -2);
-    }
-
-  /* Assign table into the exported package table. */
-  if (exportname != NULL)
-    {
-      lua_pushstring (L, exportname);
-      lua_pushvalue (L, -2);
-      lua_rawset (L, -5);
-    }
-
-  /* Assign new table into registry and leave it out from stack. */
-  lua_rawseti (L, -2, reg);
-}
-
-int lgi_regkey;
+int lgi_addr_repo;
 
 int
 luaopen_lgi__core (lua_State* L)
@@ -496,39 +254,20 @@ luaopen_lgi__core (lua_State* L)
   /* Register _core interface. */
   luaL_register (L, "lgi._core", lgi_reg);
 
-  /* Prepare registry table (avoid polluting global registry, make
-     private table in it instead.*/
-  lua_newtable (L);
-  lua_pushvalue (L, -1);
-  lgi_regkey = luaL_ref (L, LUA_REGISTRYINDEX);
-
-  /* Create object cache, which has weak values. */
-  lua_newtable (L);
-  lua_pushstring (L, "v");
-  lua_setfield (L, -2, "__mode");
-  lgi_create_reg (L, LGI_REG_CACHE, NULL, TRUE);
-
-  /* Create typeinfo table. */
-  lgi_create_reg (L, LGI_REG_TYPEINFO, NULL, FALSE);
-
   /* Create repo table. */
-  lgi_create_reg (L, LGI_REG_REPO, "repo", FALSE);
-
-  /* In debug version, make our private registry browsable. */
-#ifndef NDEBUG
-  lua_pushstring (L, "reg");
+  lua_newtable (L);
+  lua_pushlightuserdata (L, &lgi_addr_repo);
   lua_pushvalue (L, -2);
-  lua_rawset (L, -4);
-#endif
-
-  /* Pop the registry table. */
-  lua_pop (L, 1);
+  lua_rawset (L, LUA_REGISTRYINDEX);
+  lua_setfield (L, -2, "repo");
 
   /* Install custom log handler. */
   g_log_set_default_handler (log_handler, L);
 
   /* Initialize modules. */
-  lgi_compound_init (L);
+  lgi_gi_init (L);
+  lgi_record_init (L);
+  lgi_object_init (L);
   lgi_callable_init (L);
 
   /* Return registration table. */

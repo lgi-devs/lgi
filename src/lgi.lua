@@ -1,22 +1,28 @@
---[[--------------------------------------------------------------------------
-
-  LGI Lua-side core.
-
-  Copyright (c) 2010 Pavel Holejsovsky
-  Licensed under the MIT license:
-  http://www.opensource.org/licenses/mit-license.php
-
---]]--------------------------------------------------------------------------
+------------------------------------------------------------------------------
+--
+--  LGI Lua-side core.
+--
+--  Copyright (c) 2010 Pavel Holejsovsky
+--  Licensed under the MIT license:
+--  http://www.opensource.org/licenses/mit-license.php
+--
+------------------------------------------------------------------------------
 
 local assert, setmetatable, getmetatable, type, pairs, string, rawget,
-table, require, tostring, error, pcall, ipairs, unpack, next =
+table, require, tostring, error, pcall, ipairs, unpack,
+next, select =
    assert, setmetatable, getmetatable, type, pairs, string, rawget,
-table, require, tostring, error, pcall, ipairs, unpack or table.unpack, next
+   table, require, tostring, error, pcall, ipairs, unpack or table.unpack,
+   next, select
 local package, math = package, math
-local bit = require 'bit'
 
 -- Require core lgi utilities, used during bootstrap.
 local core = require 'lgi._core'
+
+-- Initialize GI wrapper from the core.
+local gi = core.gi
+assert(gi.require ('GLib', '2.0'))
+assert(gi.require ('GObject', '2.0'))
 
 -- Create lgi table, containing the module.
 local lgi = {}
@@ -68,91 +74,371 @@ local log = logtable.domain('Lgi')
 
 log.message('Lgi: Lua to GObject-Introspection binding v0.1')
 
-local ir
-
 -- Repository, table with all loaded namespaces.  Its metatable takes care of
 -- loading on-demand.  Created by C-side bootstrap.
 local repo = core.repo
 
-local function default_element_impl(compound, _, symbol)
-   return compound[symbol]
+-- Weak table containing symbols which currently being loaded. It is used
+-- mainly to avoid assorted kinds of infinite recursion which might happen
+-- during symbol dependencies loading.
+local in_check = setmetatable({}, { __mode = 'v' })
+
+-- Loads the type and all dependent subtypes.  Returns nil if it cannot be
+-- loaded or the type itself if it is ok.
+local function check_type(info)
+   if not info then return nil end
+   local type = info.type
+   if type == 'type' then
+      -- Check the embedded typeinfo.
+      local tag = info.tag
+      if info.is_basic then
+	 return info
+      elseif tag == 'array' then
+	 return check_type(info.params[1]) and info
+      elseif tag == 'interface' then
+	 return check_type(info.interface) and info
+      elseif tag == 'glist' or tag == 'gslist' then
+	 return check_type(info.params[1]) and info
+      elseif tag == 'ghash' then
+	 return ((check_type(info.params[1]) and check_type(info.params[2]))
+	      and info)
+      elseif tag == 'error' then
+	 return info
+      else
+	 log.warning('unknown typetag %s', tag)
+	 return nil
+      end
+   elseif info.is_callable then
+      -- Check all callable arguments and return value.
+      if not check_type(info.return_type) then return nil end
+      local args = info.args
+      for i = 1, #args do
+	 if not check_type(args[i].typeinfo) then return nil end
+      end
+   elseif type == 'constant' or type == 'property' or type == 'field' then
+      if not check_type(info.typeinfo) then info = nil end
+   elseif info.is_registered_type then
+      -- Check, whether we can reach the symbol in the repo.
+      in_check[info.fullname] = info
+      if not in_check[info.fullname]
+	 and not repo[info.namespace][info.name] then
+	 info = nil
+      end
+      in_check[info.fullname] = nil
+   else
+      log.warning("unknown type `%s' of %s", type, info.fullname)
+      return nil
+   end
+   return info
 end
 
--- Loads symbol from specified compound (object, struct or interface).
--- Recursively looks up inherited elements.
-local function find_in_compound(compound, symbol, categories)
-   -- Tries to get symbol from specified category.
-   local function from_category(compound, category, symbol)
-      local cat = rawget(compound, category)
-      return cat and cat[symbol]
+-- Gets table for category of compound (i.e. _fields of struct or _properties
+-- for class etc).  Installs metatable which performs on-demand lookup of
+-- symbols.
+local function get_category(children, xform_value,
+			    xform_name, xform_name_reverse)
+   -- Either none or both transform methods must be provided.
+   assert(not xform_name or xform_name_reverse)
+
+   -- Early shortcircuit; no elements, no table needed at all.
+   if #children == 0 then return nil end
+
+   -- Index contains array of indices which were still not retrieved
+   -- from 'children' table, and table part contains name->index
+   -- mapping.
+   local index, mt = {}, {}
+   for i = 1, #children do index[i] = i end
+
+   -- Fully resolves the category (i.e. loads everything remaining to
+   -- be loaded in given category) and disconnects on-demand loading
+   -- metatable.
+   local function resolve(category)
+      -- Load al values from unknown indices.
+      local ei, en, val
+      local function xvalue(arg)
+	 if not xform_value then return arg end
+	 if arg then
+	    local ok, res = pcall(xform_value, arg)
+	    return ok and res
+	 end
+      end
+      while #index > 0 do
+	 ei = check_type(children[table.remove(index)])
+	 val = xvalue(ei)
+	 if val then
+	    en = ei.name
+	    if xform_name_reverse then
+	       en = xform_name_reverse(en, ei)
+	    end
+	    if en then category[en] = val end
+	 end
+      end
+
+      -- Load all known indices.
+      for en, idx in pairs(index) do
+	 val = xvalue(check_type(children[idx]))
+	 category[en] = val
+      end
+
+      -- Metatable is no longer needed, disconnect it.
+      setmetatable(category, nil)
    end
 
-   -- Check fields of this compound.
-   local prefix, name = string.match(symbol, '^(_.-)_(.*)$')
-   if prefix and name then
-      -- Look in specified category.
-      local val = from_category(compound, prefix, name)
+   function mt:__index(requested_name)
+      -- Check if closure for fully resolving the category is needed.
+      if requested_name == '_resolve' then
+	 return resolve
+      end
+
+      -- Transform name by transform function.
+      local name = not xform_name and requested_name
+	 or xform_name(requested_name)
+      if not name then return end
+
+      -- Check, whether we already know its index.
+      local idx, val = index[name]
+      if idx then
+	 -- We know at least the index, so get info directly.
+	 val = children[idx]
+	 index[name] = nil
+      else
+	 -- Not yet, go through unknown indices and try to find the
+	 -- name.
+	 while #index > 0 do
+	    idx = table.remove(index)
+	    val = children[idx]
+	    local en = val.name
+	    if en == name then break end
+	    val = nil
+	    index[en] = idx
+	 end
+      end
+
+      -- If there is nothing in the index, we can disconnect
+      -- metatable, because everything is already loaded.
+      if not next(index) then
+	 setmetatable(self, nil)
+      end
+
+      -- Transform found value and store it into the category (self)
+      -- table.
+      if not check_type(val) then return nil end
+      if xform_value then val = xform_value(val) end
+      if not val then return nil end
+      self[requested_name] = val
+      return val
+   end
+   return setmetatable({}, mt)
+end
+
+-- Loads element from specified compound typetable.
+local function get_element(typetable, symbol)
+   -- Decompose symbol name, in case that it contains category prefix
+   -- (e.g. '_field_name' when requesting explicitely field called
+   -- name).
+   local category, name = string.match(symbol, '^(_.-)_(.*)$')
+   if category and name then
+      -- Check requested category.
+      local cat = rawget(typetable, category)
+      local val = cat and cat[name]
       if val then return val end
    elseif string.sub(symbol, 1, 1) ~= '_' then
       -- Check all available categories.
+      local categories = typetable._categories or {}
       for i = 1, #categories do
-	 local val = from_category(compound, categories[i], symbol)
+	 local cat = rawget(typetable, categories[i])
+	 local val = cat and cat[symbol]
 	 if val then return val end
       end
    end
 
-   -- Check parent and all implemented compounds.
-   local val = (rawget(compound, '_parent') or {})[symbol]
+   -- Check parent and all implemented interfaces.
+   local parent = rawget(typetable, '_parent')
+   val = parent and parent[symbol]
    if val then return val end
-   for _, implemented in pairs(rawget(compound, '_implements') or {}) do
-      val = implemented[symbol]
-      if val then return val end
+   local implements = rawget(typetable, '_implements')
+   if implements then
+      for _, implemented in pairs(implements) do
+	 val = implemented[symbol]
+	 if val then return val end
+      end
    end
 
-   -- '_element' is pseudo-method, its default implementation here
-   -- does just return compound[symbol], but can be overriden for
-   -- specific compounds to find symbol dynamically according to
-   -- compound instance.
-   if symbol == '_element' then
-      return default_element_impl
+   -- As a last resort, metatable might contain fallback implementation.
+   local meta = getmetatable(typetable)
+   return meta and meta[symbol]
+end
+
+-- Fully resolves the whole typetable, i.e. load all symbols normally
+-- loaded on-demand at once.
+local function resolve_elements(typetable)
+   local categories = typetable._categories or {}
+   for i = 1, #categories do
+      local category = rawget(typetable, categories[i])
+      local resolve = type(category) == 'table' and category._resolve
+      local _ = resolve and resolve(category)
    end
 end
 
--- Fully resolves the whole compound, i.e. load all symbols normally loaded
--- on-demand at once.
-local function resolve_compound(compound_meta)
-   local ns, name = string.match(compound_meta.name, '(.+)%.(.+)')
-   for _, category in pairs(repo[ns][name]) do
-      if type(category) == 'table' then local _ = category[0] end
+-- Metatables for assorted repo components.
+local function create_component_meta(categories)
+   return { _categories = categories, _resolve = resolve_elements,
+	    __index = get_element }
+end
+
+local component_mt = {
+   namespace = create_component_meta {
+      '_classes', '_interfaces', '_structs', '_unions', '_enums',
+      '_functions', '_constants', },
+   record = create_component_meta {
+      '_methods', '_fields'
+   },
+   interface = create_component_meta {
+      '_properties', '_methods', '_signals', '_constants' },
+   class = create_component_meta {
+      '_properties', '_methods', '_signals', '_constants', '_fields' },
+   bitflags = {},
+   enum = {},
+}
+
+-- Resolving arbitrary number to the table containing symbolic names
+-- of contained bits.
+function component_mt.bitflags:__index(value)
+   if type(value) ~= 'number' then return end
+   local t = {}
+   for name, flag in pairs(self) do
+      if type(flag) == 'number' and value % (2 * flag) >= flag then
+	 t[name] = flag
+      end
+   end
+   return t
+end
+
+-- Enum reverse mapping, value->name.
+function component_mt.enum:__index(value)
+   for name, val in pairs(self) do
+      if val == value then return name end
    end
 end
 
--- Metatable for namespaces.
-local namespace_mt = {}
-function namespace_mt.__index(namespace, symbol)
-   return find_in_compound(namespace, symbol,
-			   { '_classes', '_interfaces', '_structs', '_unions',
-			     '_enums', '_functions', '_constants', })
+-- _access part for fields.
+local function access_field(field_accessor, instance, info, ...)
+   -- Check the type of the field.
+   local ii = info.typeinfo.interface
+   if ii and (ii.type == 'struct' or ii.type == 'union') then
+      -- Nested structure, handle assignment to it specially.  Get
+      -- access to underlying nested structure.
+      local subrecord = field_accessor(instance, info)
+
+      -- Reading it is simple, we are done.
+      if select('#', ...) == 0 then return subrecord end
+
+      -- Writing means assigning all fields from the source table.
+      for name, value in pairs(...) do subrecord[name] = value end
+   else
+      -- For other types, simple closure around elementof() is
+      -- sufficient.
+      return field_accessor(instance, info, ...)
+   end
 end
 
--- Metatable for structs, allowing to 'call' structure, which is
--- translating to creating new structure instance (i.e. constructor).
-local struct_mt = {}
-function struct_mt.__index(struct, symbol)
-   return find_in_compound(struct, symbol, { '_methods', '_fields' })
+-- _access part for signals.
+local function access_signal(instance, info, ...)
+   if select('#', ...) > 0 then
+      -- Assignment means 'connect signal without detail'.
+      core.object.connect(instance, info.name, info, ...)
+   else
+      -- Reading yields table with signal operations.
+      local pad = {}
+      function pad:connect(target, detail, after)
+	 return core.object.connect(instance, info.name, info,
+				    target, detail, after)
+      end
+
+      -- If signal supports details, add metatable implementing
+      -- __newindex for connecting in the 'on_signal['detail'] =
+      -- handler' form.
+      if info.is_signal and info.flags.detailed then
+	 local meta = {}
+	 function meta:__newindex(detail, target)
+	    core.object.connect(instance, info.name, info, target, detail)
+	 end
+	 setmetatable(pad, meta);
+      end
+
+      -- Return created signal pad.
+      return pad
+   end
 end
 
-function struct_mt.__call(type, fields)
+-- _access method for records.
+function component_mt.record:_access(instance, name, ...)
+   local element = self[name]
+   if element == nil then error(("%s: no `%s'"):format(self._name, name)) end
+   if gi.isinfo(element) then
+      if element.is_field then
+	 return access_field(core.record.field, instance, element, ...)
+      end
+   elseif type(element) == 'function' then
+      return element(instance, ...)
+   end
+   assert(select('#', ...) == 0, ("%s: `s' is not writable"):format(
+	     self._name, name))
+   return element
+end
+
+-- _access method for raw objects (fundamentals).  Specific behavior
+-- for GObject will be overriden in GObject.Object._access().
+function component_mt.class:_access(instance, name, ...)
+   local element = self[name]
+   if element == nil then error(("%s: no `%s'"):format(self._name, name)) end
+   if gi.isinfo(element) then
+      if element.is_field then
+	 return access_field(core.object.field, instance, element, ...)
+      elseif element.is_signal then
+	 return access_signal(instance, element, ...)
+      end
+   elseif type(element) == 'function' then
+      return element(instance, ...)
+   end
+   assert(select('#', ...) == 0, ("%s: `s' is not writable"):format(
+	     self._name, name))
+   return element
+end
+
+-- If member of interface cannot be found normally, try to look it up
+-- in parent namespace too; this allows to overcome IMHO gir-compiler
+-- flaw, causing that we can see e.g. Gio.file_new_for_path() instead
+-- of Gio.File.new_for_path().
+function component_mt.interface:__index(symbol)
+   local val = get_element(self, symbol)
+   if not val then
+      -- Convert name from CamelCase to underscore_delimited form.
+      local ns_name, iface_name = self._name:match('^([%w_]+)%.([%w_]+)$')
+      local method_name = {}
+      for part in iface_name:gmatch('[%u%d][%l%d]*') do
+	 method_name[#method_name + 1] = part:lower()
+      end
+      method_name[#method_name + 1] = symbol
+      val = repo[ns_name][table.concat(method_name, '_')]
+      self[symbol] = val
+   end
+   return val
+end
+
+-- Create structure instance and initialize it with given fields.
+function component_mt.record:__call(fields)
    -- Create the structure instance.
    local info
-   if type[0].type then
+   if self._gtype then
       -- Lookup info by gtype.
-      info = assert(ir:find_by_gtype(type[0].gtype))
+      info = assert(gi[self._gtype])
    else
       -- GType is not available, so lookup info by name.
-      info = assert(ir:find_by_name(type[0].name:match('^(.-)%.(.+)$')))
+      local ns, name = self._name:match('^(.-)%.(.+)$')
+      info = assert(gi[ns][name])
    end
-   local struct = core.construct(info)
+   local struct = core.record.new(info)
 
    -- Set values of fields.
    for name, value in pairs(fields or {}) do
@@ -161,276 +447,61 @@ function struct_mt.__call(type, fields)
    return struct
 end
 
--- Metatable for bitflags tables, resolving arbitrary number to the
--- table containing symbolic names of contained bits.
-local bitflags_mt = {}
-function bitflags_mt.__index(bitflags, value)
-   local t = {}
-   for name, flag in pairs(bitflags) do
-      if type(flag) == 'number' and bit.band(flag, value) == flag then
-	 t[name] = flag
-      end
-   end
-   return t
-end
-
--- Metatable for enum type tables.
-local enum_mt = {}
-function enum_mt.__index(enum, value)
-   for name, val in pairs(enum) do
-      if val == value then return name end
-   end
-end
-
--- Namespace table for GIRepository, populated with basic methods
--- manually.  Later it will be converted to full-featured repo namespace.
-local gi = setmetatable({ [0] = { name = 'GIRepository' } }, namespace_mt)
-core.repo.GIRepository = gi
-
-gi._enums = { InfoType = setmetatable({
-					 FUNCTION = 1,
-					 CALLBACK = 2,
-					 STRUCT = 3,
-					 ENUM = 5,
-					 FLAGS = 6,
-					 OBJECT = 7,
-					 INTERFACE = 8,
-					 CONSTANT = 9,
-					 UNION = 11,
-					 SIGNAL = 13,
-					 VFUNC = 14,
-					 PROPERTY = 15,
-					 FIELD = 16,
-					 TYPE = 18,
-				      }, enum_mt),
-	      TypeTag = setmetatable({
-					ARRAY = 15,
-					INTERFACE = 16,
-					GLIST = 17,
-					GSLIST = 18,
-					GHASH = 19,
-					ERROR = 20,
-				     }, enum_mt),
-	      ArrayType = setmetatable({
-					  C = 0,
-					  ARRAY = 1,
-				       }, enum_mt),
-	      FunctionInfoFlags = setmetatable({
-						  IS_CONSTRUCTOR = 2,
-						  IS_GETTER = 4,
-						  IS_SETTER = 8
-					       }, bitflags_mt),
-	   }
-
-gi._structs = {
-   BaseInfo = setmetatable(
-      { [0] = { name = 'GIRepository.BaseInfo',
-		gtype = core.gtype('BaseInfo') },
-	_methods = {}
-     }, struct_mt),
-   Typelib = setmetatable(
-      { [0] = { name = 'GIRepository.Typelib',
-		gtype = core.gtype('Typelib') },
-	_methods = {}
-     }, struct_mt),
-}
-
--- Loads given set of symbols into table.
-local function get_symbols(into, symbols, container)
-   for _, symbol in pairs(symbols) do
-      into[symbol] = core.construct(core.find(symbol, container))
-   end
-end
-
--- Metatable for interfaces.
-local interface_mt = {}
-function interface_mt.__index(iface, symbol)
-   return find_in_compound(iface, symbol, { '_properties', '_methods',
-					    '_signals', '_constants' })
-end
-
--- Metatable for classes, implementing object construction on __call.
-local class_mt = {}
-function class_mt.__index(class, symbol)
-   return find_in_compound(class, symbol, {
-			      '_properties', '_methods',
-			      '_signals', '_constants', '_fields' })
-end
-
 -- Object constructor, 'param' contains table with properties/signals
 -- to initialize.
-function class_mt.__call(class, param)
-   local params = {}
-   local others = {}
-
-   -- Get BaseInfo from gtype.
-   local info = assert(ir:find_by_gtype(class[0].gtype))
-
-   -- Process 'param' table, create constructor property table and signals
-   -- table.
-   for name, value in pairs(param or {}) do
-      local paramtype = class[name]
-      if type(paramtype) == 'function' then paramtype = paramtype() end
-      if (type(paramtype) == 'userdata' and
-       gi.base_info_get_type(paramtype) == gi.InfoType.PROPERTY) then
-	 params[paramtype] = value
+function component_mt.class:__call(args)
+   -- Process 'args' table, separate properties from other fields.
+   local props, others = {}, {}
+   for name, value in pairs(args or {}) do
+      local argtype = self[name]
+      if gi.isinfo(argtype) and argtype.is_property then
+	 props[argtype] = value
       else
 	 others[name] = value
       end
    end
 
    -- Create the object.
-   local obj = core.construct(info, params)
+   local object = core.object.new(self._gtype, props)
 
    -- Attach signals previously filtered out from creation.
-   for name, func in pairs(others) do obj[name] = func end
-   return obj
+   for name, func in pairs(others) do object[name] = func end
+   return object
 end
 
-gi._classes = {
-   Repository = setmetatable(
-      { [0] = { name = 'GIRepository.Repository',
-		gtype = core.gtype('Repository')
-	     },
-	_methods = {}
-     }, class_mt),
-}
-get_symbols(gi._classes.Repository._methods,
-	    { 'get_default', 'require', 'find_by_name', 'find_by_gtype',
-	      'get_n_infos', 'get_info', 'get_dependencies', 'get_version', },
-	    'Repository')
-get_symbols(gi._structs.BaseInfo._methods,
-	    { 'is_deprecated', 'get_name', 'get_namespace',
-	      'get_container' }, 'BaseInfo')
-gi._functions = {}
-get_symbols(
-   gi._functions, {
-      'base_info_get_type',
-      'enum_info_get_n_values', 'enum_info_get_value',
-      'value_info_get_value',
-      'registered_type_info_get_g_type',
-      'struct_info_is_gtype_struct',
-      'struct_info_get_n_fields', 'struct_info_get_field',
-      'struct_info_get_n_methods', 'struct_info_get_method',
-      'interface_info_get_n_prerequisites', 'interface_info_get_prerequisite',
-      'interface_info_get_n_methods', 'interface_info_get_method',
-      'interface_info_get_n_constants', 'interface_info_get_constant',
-      'interface_info_get_n_properties', 'interface_info_get_property',
-      'interface_info_get_n_signals', 'interface_info_get_signal',
-      'object_info_get_parent',
-      'object_info_get_n_interfaces', 'object_info_get_interface',
-      'object_info_get_n_fields', 'object_info_get_field',
-      'object_info_get_n_methods', 'object_info_get_method',
-      'object_info_get_n_constants', 'object_info_get_constant',
-      'object_info_get_n_properties', 'object_info_get_property',
-      'object_info_get_n_signals', 'object_info_get_signal',
-      'type_info_get_tag', 'type_info_get_param_type',
-      'type_info_get_interface', 'type_info_get_array_type',
-      'callable_info_get_return_type', 'callable_info_get_n_args',
-      'callable_info_get_arg',
-      'function_info_get_flags',
-      'signal_info_get_flags',
-      'arg_info_get_type',
-      'constant_info_get_type',
-      'property_info_get_type',
-      'field_info_get_type',
-      })
-
--- Remember default repository.
-ir = gi.Repository.get_default()
-
-log.debug 'repo.GIRepository pre-populated'
-
--- Weak table containing symbols which currently being loaded. It is used
--- mainly to avoid assorted kinds of infinite recursion which might happen
--- during symbol dependencies loading.
-local in_load = setmetatable({}, { __mode = 'v' })
+-- Creates new component and sets up common parts according to given
+-- info.
+local function create_component(info, mt)
+   -- Fill in meta of the compound.
+   local component = { _name = info.fullname or info.name }
+   if info.gtype then
+      component._gtype = info.gtype
+      repo[rawget(component, '_gtype')] = component
+   end
+   return setmetatable(component, mt)
+end
 
 -- Table containing loaders for various GI types, indexed by
 -- gi.InfoType constants.
 local typeloader = {}
 
--- Loads the type and all dependent subtypes.  Returns nil if it cannot be
--- loaded or the type itself if it is ok.
-local function check_type(info)
-   if not info then return nil end
-   local type = gi.base_info_get_type(info)
-   if type == gi.InfoType.TYPE then
-      -- Check the embedded typeinfo.
-      local tag = gi.type_info_get_tag(info)
-      if tag < gi.TypeTag.ARRAY then return info
-      elseif tag == gi.TypeTag.ARRAY then
-	 return check_type(gi.type_info_get_param_type(info, 0)) and info
-      elseif tag == gi.TypeTag.INTERFACE then
-	 return check_type(gi.type_info_get_interface(info)) and info
-      elseif tag == gi.TypeTag.GLIST or tag == gi.TypeTag.GSLIST then
-	 return check_type(gi.type_info_get_param_type(info, 0)) and info
-      elseif tag == gi.TypeTag.GHASH then
-	 return (check_type(gi.type_info_get_param_type(info, 0)) and
-	      check_type(gi.type_info_get_param_type(info, 1))) and info
-      elseif tag == gi.TypeTag.ERROR then
-	 return true
-      else
-	 log.warning('unknown typetag %s(%d)', tostring(gi.TypeTag[tag]), tag)
-	 return nil
-      end
-   elseif (type == gi.InfoType.FUNCTION or type == gi.InfoType.CALLBACK or
-	   type == gi.InfoType.SIGNAL or type == gi.InfoType.VFUNC) then
-      -- Check all callable arguments and return value.
-      if not check_type(gi.callable_info_get_return_type(info)) then
-	 return nil
-      end
-      for i = 0, gi.callable_info_get_n_args(info) - 1 do
-	 local ai = gi.callable_info_get_arg(info, i)
-	 if not check_type(gi.arg_info_get_type(ai)) then
-	    return nil
-	 end
-      end
-      return info
-   elseif type == gi.InfoType.CONSTANT then
-      return check_type(gi.constant_info_get_type(info)) and info
-   elseif type == gi.InfoType.PROPERTY then
-      return check_type(gi.property_info_get_type(info)) and info
-   elseif type == gi.InfoType.FIELD then
-      return check_type(gi.field_info_get_type(info)) and info
-   elseif (type == gi.InfoType.STRUCT or type == gi.InfoType.ENUM or
-	   type == gi.InfoType.FLAGS or type == gi.InfoType.OBJECT or
-	   type == gi.InfoType.INTERFACE or type == gi.InfoType.UNION) then
-      -- Check, whether we can reach the symbol in the repo.
-      local ns, n = info:get_namespace(), info:get_name()
-      return (in_load[ns .. '.' .. n] or repo[ns][n]) and info
-   else
-      local name = {}
-      while info do
-	 if gi.base_info_get_type(info) ~= gi.InfoType.TYPE then
-	    table.insert(name, 1, info:get_name())
-	 end
-	 info = info:get_container()
-      end
-      log.warning("unknown type %s of %s", gi.InfoType[type],
-		  table.concat(name, '.'))
-      return nil
+typeloader['function'] =
+   function(namespace, info)
+      return check_type(info) and core.callable.new(info), '_functions'
    end
+
+function typeloader.constant(namespace, info)
+   return check_type(info) and core.constant(info), '_constants'
 end
-
-typeloader[gi.InfoType.FUNCTION] =
-   function(namespace, info)
-      return check_type(info) and core.construct(info), '_functions'
-   end
-
-typeloader[gi.InfoType.CONSTANT] =
-   function(namespace, info)
-      return check_type(info) and core.construct(info), '_constants'
-   end
 
 local function load_enum(info, meta)
    local value = {}
 
    -- Load all enum values.
-   for i = 0, gi.enum_info_get_n_values(info) - 1 do
-      local mi = gi.enum_info_get_value(info, i)
-      local name = string.upper(mi:get_name())
-      value[name] = gi.value_info_get_value(mi)
+   local values = info.values
+   for i = 1, #values do
+      local mi = values[i]
+      value[mi.name:upper()] = mi.value
    end
 
    -- Install metatable providing reverse lookup (i.e name(s) by
@@ -439,157 +510,12 @@ local function load_enum(info, meta)
    return value
 end
 
-typeloader[gi.InfoType.ENUM] =
-   function(namespace, info)
-      return load_enum(info, enum_mt), '_enums'
-   end
-
-typeloader[gi.InfoType.FLAGS] =
-   function(namespace, info)
-      return load_enum(info, bitflags_mt), '_enums'
-   end
-
--- Gets table for category of compound (i.e. _fields of struct or _properties
--- for class etc).  Installs metatable which performs on-demand lookup of
--- symbols.
-local function get_category(info, count, get_item, xform_value, xform_name,
-			    xform_name_reverse, original_table)
-   assert(not xform_name or xform_name_reverse)
-
-   -- Early shortcircuit; no elements, no table needed at all.
-   if count == 0 then return original_table end
-
-   -- Index contains array of indices which were still not retrieved
-   -- by get_info method, and table part contains name->index mapping.
-   local index = {}
-   for i = 1, count do index[i] = i - 1 end
-   return setmetatable(
-      original_table or {}, { __index =
-	    function(category, req_name)
-	       -- Querying index 0 has special semantics; makes the
-	       -- whole table fully loaded.
-	       if req_name == 0 then
-		  local ei, en, val, ok
-
-		  -- Load al values from unknown indices.
-		  while #index > 0 do
-		     ok, ei = pcall(get_item, info, table.remove(index))
-		     if not ok then ei = nil else ei = check_type(ei) end
-		     val = ei and (not xform_value and ei or xform_value(ei))
-		     if val then
-			en = ei:get_name()
-			if xform_name_reverse then
-			   en = xform_name_reverse(en, ei)
-			end
-			if en then category[en] = val end
-		     end
-		  end
-
-		  -- Load all known indices.
-		  for en, idx in pairs(index) do
-		     ok, val = pcall(get_item, info, idx)
-		     if not ok then val = nil else val = check_type(val) end
-		     val = not xform_value and val or xform_value(val)
-		     category[en] = val
-		  end
-
-		  -- Metatable is no longer needed, disconnect it.
-		  setmetatable(category, nil)
-		  return nil
-	       end
-
-	       -- Transform name by transform function.
-	       local name = not xform_name and req_name or xform_name(req_name)
-	       if not name then return end
-
-	       -- Check, whether we already know its index.
-	       local idx, val = index[name]
-	       if idx then
-		  -- We know at least the index, so get info directly.
-		  val = get_item(info, idx)
-		  index[name] = nil
-	       else
-		  -- Not yet, go through unknown indices and try to
-		  -- find the name.
-		  while #index > 0 do
-		     idx = table.remove(index)
-		     val = get_item(info, idx)
-		     local en = val:get_name()
-		     if en == name then break end
-		     val = nil
-		     index[en] = idx
-		  end
-		  if not val then return nil end
-	       end
-
-	       -- If there is nothing in the index, we can disconnect
-	       -- metatable, because everything is already loaded.
-	       if not next(index) then
-		  setmetatable(category, nil)
-	       end
-
-	       -- Transform found value and store it into the category table.
-	       if not check_type(val) then return nil end
-	       if xform_value then val = xform_value(val) end
-	       if not val then return nil end
-	       category[req_name] = val
-	       return val
-	    end
-      })
+function typeloader.enum(namespace, info)
+   return load_enum(info, component_mt.enum), '_enums'
 end
 
--- Sets up compound header (field 0) and metatable for the compound table.
-local function load_compound(compound, info, mt)
-   -- Fill in meta of the compound.
-   compound[0] = compound[0] or {}
-   compound[0].gtype = gi.registered_type_info_get_g_type(info)
-   if compound[0].gtype == 4 then
-      -- Non-boxed struct, it doesn't have any gtype.
-      compound[0].gtype = nil
-   end
-   compound[0].name = (info:get_namespace() .. '.'  .. info:get_name())
-   compound[0].resolve = resolve_compound
-   setmetatable(compound, mt)
-end
-
-local function load_element_field(fi)
-   -- Check the type of the field.
-   local ti = gi.field_info_get_type(fi)
-   local tag = gi.type_info_get_tag(ti)
-   if tag == gi.TypeTag.INTERFACE then
-      local ii = gi.type_info_get_interface(ti)
-      local type = gi.base_info_get_type(ii)
-      if type == gi.InfoType.STRUCT or type == gi.InfoType.UNION then
-	 -- Nested structure, handle assignment to it specially.
-	 return function(obj, _, mode, newval)
-		   -- If reading the type, read it directly.
-		   if mode == nil then return fi end
-
-		   -- Get access to underlying nested structure.
-		   local sub = core.elementof(obj, fi, false)
-
-		   -- Reading it is simple, we are done.
-		   if not mode then return sub end
-
-		   -- Writing means assigning all fields from the
-		   -- source table.
-		   for name, value in pairs(newval) do sub[name] = value end
-		end
-      end
-   end
-
-   -- For other types, simple closure around elementof() is sufficient.
-   return function(obj, _, mode, newval)
-	     if mode == nil then return fi end
-	     return core.elementof(obj, fi, mode, newval)
-	  end
-end
-
-local function load_element_property(pi)
-   return function(obj, _, mode, newval)
-	     if mode == nil then return pi end
-	     return core.elementof(obj, pi, mode, newval)
-	  end
+function typeloader.flags(namespace, info)
+   return load_enum(info, component_mt.bitflags), '_enums'
 end
 
 local function load_signal_name(name)
@@ -601,310 +527,206 @@ local function load_signal_name_reverse(name)
    return 'on_' .. string.gsub(name, '%-', '_')
 end
 
-local function load_element_signal(info)
-   return
-   function(obj, _, mode, newval)
-      if mode == nil then return info end
-      if mode then
-	 -- Assignment means 'connect signal without detail'.
-	 core.connect(obj, info:get_name(), info, newval)
-      else
-	 -- Reading yields table with signal operations.
-	 local pad = {
-	    connect = function(_, target, detail, after)
-			 return core.connect(obj, info:get_name(), info, target,
-					     detail, after)
-		      end,
-	 }
-
-	 -- If signal supports details, add metatable implementing __newindex
-	 -- for connecting in the 'on_signal['detail'] = handler' form.
-	 if (gi.base_info_get_type(info) == gi.InfoType.SIGNAL and
-	  bit.band(gi.signal_info_get_flags(info), 16) ~= 0) then
-	    setmetatable(pad, {
-			    __newindex = function(obj, detail, target)
-					    core.connect(obj, info:get_name(),
-							 info, newval, detail)
-					 end
-			 })
-	 end
-
-	 -- Return created signal pad.
-	 return pad
-      end
+local function load_method(mi)
+   local flags = mi.flags
+   if not flags.is_getter and not flags.is_setter then
+      return core.callable.new(mi)
    end
 end
 
 -- Loads structure information into table representing the structure
-local function load_struct(namespace, struct, info)
+local function load_record(namespace, info)
    -- Avoid exposing internal structs created for object implementations.
-   if not gi.struct_info_is_gtype_struct(info) then
-      load_compound(struct, info, struct_mt)
-      struct._methods = get_category(
-	 info, gi.struct_info_get_n_methods(info), gi.struct_info_get_method,
-	 core.construct, nil, nil, rawget(struct, '_methods'))
-      struct._fields = get_category(
-	 info, gi.struct_info_get_n_fields(info), gi.struct_info_get_field,
-	 load_element_field)
+   if not info.is_gtype_struct then
+      local record = create_component(info, component_mt.record)
+      record._methods = get_category(info.methods, core.callable.new)
+      record._fields = get_category(info.fields)
+      return record
    end
 end
 
-typeloader[gi.InfoType.STRUCT] =
-   function(namespace, info)
-      local struct = {}
-      load_struct(namespace, struct, info)
-      return struct, '_structs'
-   end
+function typeloader.struct(namespace, info)
+   return load_record(namespace, info), '_structs'
+end
 
-typeloader[gi.InfoType.UNION] =
-   function(namespace, info)
-      local union = {}
-      load_compound(union, info, struct_mt)
-      union._methods = get_category(
-	 info, gi.union_info_get_n_methods(info), gi.union_info_get_method,
-	 core.construct)
-      union._fields = get_category(
-	 info, gi.union_info_get_n_fields(info), gi.union_info_get_field,
-	 load_element_field)
-      return union, '_unions'
-   end
+function typeloader.union(namespace, info)
+   return load_record(namespace, info), '_unions'
+end
 
-typeloader[gi.InfoType.INTERFACE] =
-   function(namespace, info)
-      -- Load all components of the interface.
-      local interface = {}
-      load_compound(interface, info, interface_mt)
-      interface._properties = get_category(
-	 info, gi.interface_info_get_n_properties(info),
-	 gi.interface_info_get_property, load_element_property,
-	 function(name) return string.gsub(name, '_', '%-') end,
-	 function(name) return string.gsub(name, '%-', '_') end)
-      interface._methods = get_category(
-	 info, gi.interface_info_get_n_methods(info),
-	 gi.interface_info_get_method,
-	 function(ii)
-	    local flags = gi.function_info_get_flags(ii)
-	    if bit.band(flags, gi.FunctionInfoFlags.IS_GETTER
-			+ gi.FunctionInfoFlags.IS_SETTER) == 0 then
-	       return core.construct(ii)
-	    end
-	 end) or {}
-      -- If method is not found normal way, try to look it up in
-      -- parent namespace (e.g. g_file_new_for_path is exported in
-      -- typelib as Gio.file_new_for_path, while we really want it
-      -- accessible as Gio.File.new_for_path).
-      local meta = getmetatable(interface._methods) or {}
-      local old_index = meta.__index
-      function meta:__index(symbol)
-	 local val
-	 if old_index then val = old_index(self, symbol) end
-	 if not val then
-	    -- Convert name from CamelCase to underscore_delimited form.
-	    local method_name = {}
-	    for part in info:get_name():gmatch('%u%l*') do
-	       method_name[#method_name + 1] = part:lower()
-	    end
-	    method_name[#method_name + 1] = symbol
-	    val = namespace[table.concat(method_name, '_')]
-	    self[symbol] = val
-	 end
-	 return val
-      end
-      setmetatable(interface._methods, meta)
-      interface._signals = get_category(
-	 info, gi.interface_info_get_n_signals(info),
-	 gi.interface_info_get_signal, load_element_signal,
-	 load_signal_name, load_signal_name_reverse)
-      interface._constants = get_category(
-	 info, gi.interface_info_get_n_constants(info),
-	 gi.interface_info_get_constant, core.construct)
-      return interface, '_interfaces'
-   end
+local function load_properties(info)
+   return get_category(
+      info.properties, nil,
+      function(name) return string.gsub(name, '_', '%-') end,
+      function(name) return string.gsub(name, '%-', '_') end)
+end
 
--- Loads structure information into table representing the structure
-local function load_class(namespace, class, info)
-   -- Load components of the object.
-   load_compound(class, info, class_mt)
-   class._properties = get_category(
-      info, gi.object_info_get_n_properties(info), gi.object_info_get_property,
-      load_element_property,
-      function(n) return (string.gsub(n, '_', '%-')) end,
-      function(n) return (string.gsub(n, '%-', '_')) end)
-   class._methods = get_category(
-      info, gi.object_info_get_n_methods(info), gi.object_info_get_method,
-      function(mi)
-	 local flags = gi.function_info_get_flags(mi)
-	 if bit.band( flags, (gi.FunctionInfoFlags.IS_GETTER
-			      + gi.FunctionInfoFlags.IS_SETTER)) == 0 then
-	    return core.construct(mi)
-	 end
-      end, nil, nil, rawget(class, '_methods'))
-   class._signals = get_category(
-      info, gi.object_info_get_n_signals(info), gi.object_info_get_signal,
-      load_element_signal, load_signal_name, load_signal_name_reverse)
-   class._constants = get_category(
-      info, gi.object_info_get_n_constants(info), gi.object_info_get_constant,
-      core.construct)
-   class._implements = get_category(
-      info, gi.object_info_get_n_interfaces(info), gi.object_info_get_interface,
-      function(ii) return repo[ii:get_namespace(ii)][ii:get_name()] end,
-      nil,
-      function(n, ii) return ii:get_namespace() .. '.' .. n end)
-   class._fields = get_category(
-      info, gi.object_info_get_n_fields(info), gi.object_info_get_field,
-      load_element_field)
-   local _ = rawget(class, '_inherits') and class._inherits[0]
+function typeloader.interface(namespace, info)
+   -- Load all components of the interface.
+   local interface = create_component(info, component_mt.interface)
+   interface._properties = load_properties(info)
+   interface._methods = get_category(info.methods, load_method)
+   interface._signals = get_category(
+      info.signals, nil, load_signal_name, load_signal_name_reverse)
+   interface._constants = get_category(info.constants, core.constant)
+   return interface, '_interfaces'
+end
+
+function typeloader.object(namespace, info)
+   local class = create_component(info, component_mt.class)
+   class._properties = load_properties(info)
+   class._methods = get_category(info.methods, load_method)
+   class._signals = get_category(info.signals, nil,
+				 load_signal_name, load_signal_name_reverse)
+   class._constants = get_category(info.constants, core.constant)
+   class._fields = get_category(info.fields)
+   local interfaces, implements = info.interfaces, {}
+   for i = 1, #interfaces do
+      local iface = interfaces[i]
+      implements[iface.fullname] = repo[iface.namespace][iface.name]
+   end
+   class._implements = implements
 
    -- Add parent (if any) into _inherits table.
-   local parent = gi.object_info_get_parent(info)
+   local parent = info.parent
    if parent then
-      local ns, name = parent:get_namespace(), parent:get_name()
-      if ns ~= namespace[0].name or name ~= info:get_name() then
+      local ns, name = parent.namespace, parent.name
+      if ns ~= namespace._name or name ~= info.name then
 	 class._parent = repo[ns][name]
       end
    end
+   return class, '_classes'
 end
-
-typeloader[gi.InfoType.OBJECT] =
-   function(namespace, info)
-      local class = {}
-      load_class(namespace, class, info)
-      return class, '_classes'
-   end
 
 -- Gets symbol of the specified namespace, if not present yet, tries to load it
 -- on-demand.
-local namespace_lookup = namespace_mt.__index
-function namespace_mt.__index(namespace, symbol)
+function component_mt.namespace:__index(symbol)
    -- Check, whether symbol is already loaded.
-   local value = namespace_lookup(namespace, symbol)
-   if value then return value end
+   local val = get_element(self, symbol)
+   if val then return val end
 
-   -- Lookup baseinfo of requested symbol in the repo.
-   local info = ir:find_by_name(namespace[0].name, symbol)
-
-   -- Store the symbol into the in-load table, because we have to
-   -- avoid infinte recursion which might happen during symbol loading (mainly
-   -- when prerequisity of the interface is the class which implements said
-   -- interface).
-   local fullname = namespace[0].name .. '.' .. symbol
-   in_load[fullname] = info
+   -- Lookup baseinfo of requested symbol in the GIRepository.
+   local info = gi[self._name][symbol]
+   if not info then return nil end
 
    -- Decide according to symbol type what to do.
-   if info and not info:is_deprecated() then
-      local infotype = gi.base_info_get_type(info)
-      local loader = typeloader[infotype]
-      if loader then
-	 local category
-	 value, category = loader(namespace, info)
+   local loader = typeloader[info.type]
+   if loader then
+      local category
+      val, category = loader(self, info)
 
-	 -- Cache the symbol in specified category in the namespace.
-	 local cat = rawget(namespace, category) or {}
-	 namespace[category] = cat
-	 cat[symbol] = value
-      end
+      -- Cache the symbol in specified category in the namespace.
+      local cat = rawget(self, category) or {}
+      self[category] = cat
+      cat[symbol] = val
    end
-
-   in_load[fullname] = nil
-   return value
+   return val
 end
 
 -- Resolves everything in the namespace by iterating through it.
-local function resolve_namespace(ns_meta)
+function component_mt.namespace:_resolve(deep)
    -- Iterate through all items in the namespace and dereference them,
    -- which causes them to be loaded in and cached inside the namespace
    -- table.
-   local name = ns_meta.name
-   local ns = repo[name]
-   for i = 0, ir:get_n_infos(name) - 1 do
-      pcall(function() local _ = ns[ir:get_info(name, i):get_name()] end)
+   local gi_ns = gi[self._name]
+   for i = 1, #gi_ns do
+      local ok, component = pcall(function() return self[gi_ns[i].name] end)
+      if ok and deep and type(component) == 'table' then
+	 local resolve = component._resolve
+	 if resolve then resolve(component, deep) end
+      end
    end
 end
 
--- Loads namespace, optionally with specified version and returns table which
--- represents it (usable as package table for Lua package loader).
-local function load_namespace(into, name)
-   -- If package does not exist yet, create and store it into packages.
-   assert(name ~= 'val')
-   if not into then
-      into = {}
-      repo[name] = into
+-- Makes sure that the namespace (optionally with requested version)
+-- is properly loaded.
+function lgi.require(name, version)
+   -- Load the namespace info for GIRepository.
+   local ns_info = gi.require(name, version)
+
+   -- If the repository table does not exist yet, create it.
+   local ns = rawget(repo, name)
+   if not ns then
+      ns = create_component(ns_info, component_mt.namespace)
+      ns._version = ns_info.version
+      ns._dependencies = ns_info.dependencies
+      repo[name] = ns
+   else
+      assert(ns._version == version)
    end
 
-   -- Create _meta table containing auxiliary information
-   -- and data for the namespace.
-   into[0] = { name = name, dependencies = {} }
-   setmetatable(into, namespace_mt)
-
-   -- Load the typelibrary for the namespace.
-   if not ir:require(name, nil, 0) then return nil end
-   into[0].version = ir:get_version(name)
-
-   -- Load all namespace dependencies.
-   for _, name in pairs(ir:get_dependencies(name) or {}) do
-      into[0].dependencies[name] = repo[string.match(name, '(.+)-.+')]
+   -- Make sure that all dependent namespaces are also loaded.
+   for name, version in pairs(ns._dependencies or {}) do
+      local _ = repo[name]
    end
-
-   -- Install 'resolve' closure, which forces loading this namespace.
-   -- Useful when someone wants to inspect what's inside (e.g. some
-   -- kind of source browser or smart editor).
-   into[0].resolve = resolve_namespace
-   return into
+   return ns
 end
 
 -- Install metatable into repo table, so that on-demand loading works.
-setmetatable(repo, { __index = function(repo, name)
-				  return load_namespace(nil, name)
-			       end })
-
--- Convert our poor-man's GIRepository namespace into full-featured one.
-log.debug('upgrading repo.GIRepository to full-featured namespace')
-gi._enums.InfoType = nil
-gi._enums.TypeTag = nil
-gi._enums.ArrayType = nil
-gi._enums.FunctionInfoFlags = nil
-load_namespace(gi, 'GIRepository')
-load_class(gi, gi._classes.Repository,
-	   ir:find_by_name(gi[0].name, 'Repository'))
-load_struct(gi, gi._structs.Typelib,
-	    ir:find_by_name(gi[0].name, 'Typelib'))
-load_struct(gi, gi._structs.BaseInfo,
-	    ir:find_by_name(gi[0].name, 'BaseInfo'))
+local repo_mt = {}
+function repo_mt:__index(name)
+   return lgi.require(name)
+end
+setmetatable(repo, repo_mt)
 
 -- GObject modifications.
 do
-   local obj = repo.GObject.Object
+   local object = repo.GObject.Object
 
    -- No methods are needed (yet).
-   obj._methods = nil
+   object._methods = nil
 
-   -- Install custom _element handler, which is used to handle dynamic
-   -- properties (the ones which are present on the real instance, but
-   -- not in the typelibs).
-   function obj._element(type, obj, name)
-      local element = type[name]
+   -- _access handler for object handles properties, dynamic
+   -- interfaces etc.
+   function object:_access(instance, name, ...)
+      local element = self[name]
       if not element then
 	 -- List all interfaces implemented by this object and try
 	 -- whether they can handle specified _element request.
-	 local interfaces = core.interfaces(obj)
+	 local interfaces = core.object.interfaces(instance)
 	 for i = 1, #interfaces do
-	    local interface_type = 
-	       repo[interfaces[i]:get_namespace()][interfaces[i]:get_name()]
-	    if interface_type then
-	       element = interface_type:_element(obj, name)
-	       if element then return element end
+	    local iface = repo[interfaces[i].namespace][interfaces[i].name]
+	    element = iface and iface[name]
+	    if element then break end
+	 end
+	 if not element then
+	    -- Element not found in the repo (typelib), try whether
+	    -- dynamic property of the specified name exists.
+	    local pspec = core.object.properties(
+	       instance, name:gsub('_', '%-'))
+	    if pspec then return
+	       core.object.property(instance, pspec, ...)
 	    end
 	 end
-
-	 -- Element not found in the repo (typelib), try whether
-	 -- dynamic property of the specified name exists.
-	 local pspec = core.properties(obj, string.gsub(name, '_', '%-'))
-	 if pspec then
-	    element = function(obj, _, mode, newval)
-			 return core.elementof(obj, pspec, mode, newval)
-		      end
+      end
+      if element == nil then
+	 -- Check custom object's environment.
+	 local env = core.object.env(instance)
+	 if not env then error(("%s: no `%s'"):format(self._name, name)) end
+	 if select('#', ...) > 0 then
+	    env[name] = ...
+	    return
+	 else
+	    return env[name]
+	 end
+      elseif type(element) == 'function' then
+	 -- Custom accessor, invoke the function to get result.
+	 return element(instance, ...)
+      elseif gi.isinfo(element) then
+	 if element.is_property then
+	    return core.object.property(instance, element, ...)
+	 elseif element.is_signal then
+	    return access_signal(instance, element, ...)
+	 elseif element.is_field then
+	    return access_field(core.object.field, instance, element, ...)
+	 else
+	    error(("`%s': unhandled field `%s' of gi info type `%s'"):format(
+		     self._name, name, element.type))
 	 end
       end
+
+      -- Other field type means class-static field, so return it.
+      assert(select('#', ...) == 0,
+	     ("%s: `s' is not writable"):format(self._name, name))
       return element
    end
 
@@ -920,147 +742,119 @@ do
    -- property name.
    local function get_notifier(target)
       return function(obj, pspec)
-		return target(obj, (string.gsub(pspec.name, '%-', '_')))
+		return target(obj, pspec.name:gsub('%-', '_'))
 	     end
-   end
-
-   -- Implementation of on_notify worker function.
-   local function on_notify(obj, info, newval)
-      if newval then
-	 -- Assignment means 'connect signal for all properties'.
-	 core.connect(obj, info:get_name(), info, get_notifier(newval))
-      else
-	 -- Reading yields table with signal operations.
-	 local pad = {
-	    connect = function(_, target, property)
-			 return core.connect(obj, info:get_name(), info,
-					     get_notifier(target),
-					     property:get_name())
-		      end,
-	 }
-
-	 -- Add metatable allowing connection on specified detail.  Detail is
-	 -- always specified as a property for this signal.
-	 setmetatable(pad, {
-			 __newindex = function(_, property, target)
-					 core.connect(obj, info:get_name(),
-						      info,
-						      get_notifier(target),
-						      property:get_name())
-				      end
-			 })
-
-	 -- Return created signal pad.
-	 return pad
-      end
    end
 
    -- Install 'notify' signal.  Unfortunately typelib does not contain its
    -- declaration, so we borrow it from callback GObject.ObjectClass.notify.
-   local obj_struct = ir:find_by_name('GObject', 'ObjectClass')
-   for i = 0, gi.struct_info_get_n_fields(obj_struct) - 1 do
-      local field = gi.struct_info_get_field(obj_struct, i)
-      if field:get_name() == 'notify' then
-	 obj._signals = {
-	    on_notify = function(obj, _, newval)
-			   return on_notify(obj, gi.type_info_get_interface(
-					       gi.field_info_get_type(field)),
-					    newval)
-			end,
-	 }
-	 break
+   object._signals = {}
+   function object._signals.on_notify(instance, ...)
+      local info = gi.GObject.ObjectClass.fields.notify.typeinfo.interface
+      if select('#', ...) > 0 then
+	 -- Assignment means 'connect signal for all properties'.
+	 core.object.connect(instance, info.name, info, get_notifier(...))
+      else
+	 -- Reading yields table with signal operations.
+	 local pad = {}
+	 function pad:connect(target, property)
+	    return core.object.connect(instance, info.name, info,
+				       get_notifier(target), property.name)
+	 end
+
+	 -- Add metatable allowing connection on specified detail.  Detail is
+	 -- always specified as a property for this signal.
+	 local padmeta = {}
+	 function padmeta:__newindex(property, target)
+	    core.object.connect(instance, info.name, info,
+				get_notifier(target), property.name)
+	 end
+	 return setmetatable(pad, padmeta)
       end
    end
-
-   -- ParamSpec.  Manually add its gtype, because it is not present in
-   -- the typelib and is vital to dynamic elementof() innards.
-   repo.GObject.ParamSpec[0].gtype = repo.GObject.type_from_name('GParam')
 
    -- Closure modifications.  Closure does not need any methods nor
    -- fields, but it must have constructor creating it from any kind
    -- of Lua callable.
    local closure = repo.GObject.Closure
-   local closure_info = ir:find_by_name('GObject', 'Closure')
+   local closure_info = gi.GObject.Closure
    closure._methods = nil
    closure._fields = nil
-   setmetatable(closure, { __index = getmetatable(closure).__index,
-			   __tostring = getmetatable(closure).__tostring,
-			   __call = function(_, arg)
-				       return core.construct(closure_info, arg)
-				    end })
+   local closure_mt = { __index = getmetatable(closure).__index,
+			_access = getmetatable(closure)._access }
+   function closure_mt:__call(arg)
+      return core.record.new(closure_info, arg)
+   end
+   setmetatable(closure, closure_mt)
+
    -- Implicit conversion constructor, allows using Lua function
    -- directly at the places where GClosure is expected.
-   closure[0].construct = function(arg)
-			     return core.construct(closure_info, arg)
-			  end
+   function closure:_construct(arg)
+      return core.record.new(closure_info, arg)
+   end
 
    -- Value is constructible from any kind of source Lua
    -- value, and the type of the value can be hinted by type name.
    local value = repo.GObject.Value
-   local value_info = ir:find_by_name('GObject', 'Value')
+   local value_info = gi.GObject.Value
 
    -- Tries to deduce the gtype according to Lua value.
    local function gettype(source)
-      if source == nil then
-	 return 'void'
-      elseif type(source) == 'boolean' then
-	 return 'gboolean'
+      if source == nil then return 'void'
+      elseif type(source) == 'boolean' then return 'gboolean'
       elseif type(source) == 'number' then
 	 -- If the number fits in integer, use it, otherwise use double.
 	 local _, fract = math.modf(source)
-	 local maxint32 = -bit.lshift(1, 31)
+	 local maxint32 = 0x80000000
 	 return ((fract == 0 and source >= -maxint32 and source < maxint32)
 	      and 'gint' or 'gdouble')
-      elseif type(source) == 'string' then
-	 return 'gchararray'
-      elseif type(source) == 'function' then
-	 -- Generate closure for any kind of function.
-	 return closure[0].gtype
+      elseif type(source) == 'string' then return 'gchararray'
+      elseif type(source) == 'function' then return closure._gtype
       elseif type(source) == 'userdata' then
-	 -- Examine type of userdata.
+	 -- Check whether is it record or object.
+	 local typetable, gtype = core.record.typeof(source)
+	 if typetable then return typetable._gtype end
+	 typetable, gtype = core.object.typeof(source)
+	 if typetable then return gtype end
+
+	 -- Check whether we can call this userdata.  If yes, generate
+	 -- closure.
 	 local meta = getmetatable(source)
-	 if meta and meta.__call then
-	    -- It seems that it is possible to call on this, so generate
-	    -- closure.
-	    return closure[0].gtype
-	 elseif meta == getmetatable(value_info) then
-	    -- Some kind of compound, get its real gtype from core.
-	    return core.gtype(source)
-	 end
+	 if meta and meta.__call then return closure._gtype end
       elseif type(source) == 'table' then
 	 -- Check, whether we can call it.
 	 local meta = getmetatable(source)
-	 if meta and meta.__call then
-	    return closure[0].gtype
-	 end
+	 if meta and meta.__call then return closure._gtype end
       end
 
       -- No idea to what type should this be mapped.
-      error(string.format("unclear type for GValue from argument `%s'",
-			  tostring(source)))
+      error(("unclear type for GObject.Value from argument `%s'"):format(
+	       tostring(source)))
    end
 
    -- Implement constructor, taking any source value and optionally type of the
    -- source.
-   local value_mt = { __index = struct_mt.__index }
+   local value_mt = {}
    function value_mt:__call(source, stype)
       stype = stype or gettype(source)
       if type(stype) == 'string' then
 	 stype = repo.GObject.type_from_name(stype)
       end
-      return core.construct(value_info, stype, source)
+      return core.record.new(value_info, stype, source)
    end
    setmetatable(value, value_mt)
-   value[0].construct = function(arg) return value_mt.__call(nil, arg) end
+   value._construct = value_mt.__call
    value._methods = nil
-   value._fields = { _g_type = value._fields.g_type }
-   function value._fields.type(val, _, mode)
-      assert(mode == false, "GObject.Value: `type' not writable")
-      return repo.GObject.type_name(val._fields__g_type) or ''
-   end
-   function value._fields.value(val, _, mode)
-      assert(mode == false, "GObject.Value: `value' not writable")
-      return core.construct(val)
+   value._fields = nil
+   function value:_access(instance, name, ...)
+      assert(select('#', ...) == 0,
+	     ("GObject.Value: `%s' not writable"):format(name));
+      if name == 'type' then
+	 return repo.GObject.type_name(
+	    core.record.field(instance, value_info.fields.g_type)) or ''
+      elseif name == 'value' then
+	 return core.record.valueof(instance)
+      end
    end
 end
 
