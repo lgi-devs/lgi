@@ -49,6 +49,7 @@ lgi_record_2lua (lua_State *L, GIBaseInfo *info, gpointer addr,
   gboolean is_union;
 
   /* Convert 'parent' index to an absolute one. */
+  luaL_checkstack (L, 7, "");
   lgi_makeabs (L, parent);
 
   /* NULL pointer results in 'nil'. */
@@ -68,8 +69,8 @@ lgi_record_2lua (lua_State *L, GIBaseInfo *info, gpointer addr,
   if (!lua_isnil (L, -1))
     {
       /* Remove unneeded tables under our requested object. */
-      lua_replace (L, -3);
-      lua_pop (L, 1);
+      lua_replace (L, -4);
+      lua_pop (L, 2);
 
       /* In case that we want to own the record, make sure that the
 	 ownership is properly updated. */
@@ -101,20 +102,23 @@ lgi_record_2lua (lua_State *L, GIBaseInfo *info, gpointer addr,
 	       record_mt_ref [mode == LGI_RECORD_ALLOCATE
 			      || mode == LGI_RECORD_PEEK]);
   lua_setmetatable (L, -2);
-  record->addr = addr;
-  record->mode = mode;
-  record->is_union = is_union ? 1 : 0;
   if (mode == LGI_RECORD_ALLOCATE)
-    memset (record->data.data, 0, size - G_STRUCT_OFFSET (Record, data));
+    {
+      addr = record->data.data;
+      memset (addr, 0, size - G_STRUCT_OFFSET (Record, data));
+    }
   else if (mode == LGI_RECORD_PARENT)
     {
       /* Store reference to the parent argument. */
       lua_pushvalue (L, parent);
       record->data.parent = luaL_ref (L, LUA_REGISTRYINDEX);
     }
+  record->addr = addr;
+  record->mode = mode;
+  record->is_union = is_union ? 1 : 0;
 
   /* Get ref_repo table according to the 'info'. */
-  lua_rawgeti (L, -3, LGI_REG_REPO);
+  lua_rawgeti (L, -4, LGI_REG_REPO);
   lua_getfield (L, -1, g_base_info_get_namespace (info));
   lua_getfield (L, -1, g_base_info_get_name (info));
   g_assert (!lua_isnil (L, -1));
@@ -126,12 +130,12 @@ lgi_record_2lua (lua_State *L, GIBaseInfo *info, gpointer addr,
   /* Store newly created record into the cache. */
   lua_pushlightuserdata (L, addr);
   lua_pushvalue (L, -2);
-  lua_rawset (L, -4);
+  lua_rawset (L, -5);
 
   /* Clean up the stack; remove reg and cache tables from under our
      result. */
-  lua_replace (L, -3);
-  lua_pop (L, 1);
+  lua_replace (L, -4);
+  lua_pop (L, 2);
   return addr;
 }
 
