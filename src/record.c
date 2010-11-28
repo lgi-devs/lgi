@@ -141,11 +141,11 @@ lgi_record_2lua (lua_State *L, GIBaseInfo *info, gpointer addr,
 /* Checks that given argument is Record userdata and returns pointer
    to it. Returns NULL if narg has bad type. */
 static Record *
-record_check (lua_State *L, int narg, int stackalloc)
+record_check (lua_State *L, int narg)
 {
   /* Check using metatable that narg is really Record type. */
   Record *record = lua_touserdata (L, narg);
-  luaL_checkstack (L, MIN (3, stackalloc), "");
+  luaL_checkstack (L, 3, "");
   if (!lua_getmetatable (L, narg))
     return NULL;
   lua_rawgeti (L, LUA_REGISTRYINDEX, record_mt_ref [0]);
@@ -161,17 +161,28 @@ record_check (lua_State *L, int narg, int stackalloc)
   return record;
 }
 
+/* Throws error that narg is not of expected type. */
+static int
+record_error (lua_State *L, int narg, GIBaseInfo *ri)
+{
+  luaL_checkstack (L, 3, "");
+  lua_pushstring (L, lua_typename (L, lua_type (L, narg)));
+  if (ri)
+    lua_concat (L, lgi_type_get_name (L, ri));
+  else
+    lua_pushliteral (L, "lgi.record");
+  lua_pushfstring (L, "%s expected, got %s", lua_tostring (L, -1),
+		   lua_tostring (L, -2));
+  return luaL_argerror (L, narg, lua_tostring (L, -1));
+}
+
 /* Similar to record_check, but throws in case of failure. */
 static Record *
-record_get (lua_State *L, int narg, int stackalloc)
+record_get (lua_State *L, int narg)
 {
-  Record *record = record_check (L, narg, stackalloc);
+  Record *record = record_check (L, narg);
   if (record == NULL)
-    {
-      lua_pushfstring (L, "lgi.record expected, got %s",
-		       lua_typename (L, lua_type (L, narg)));
-      luaL_argerror (L, narg, lua_tostring (L, -1));
-    }
+    record_error (L, narg, NULL);
 
   return record;
 }
@@ -191,7 +202,8 @@ lgi_record_2c (lua_State *L, GIBaseInfo *ri, int narg, gpointer *addr,
 
   /* Get record and check its type. */
   lgi_makeabs (L, narg);
-  record = record_check (L, narg, 9);
+  luaL_checkstack (L, 9, "");
+  record = record_check (L, narg);
   if (ri)
     {
       /* Get repo type for ri GIBaseInfo. */
@@ -228,7 +240,10 @@ lgi_record_2c (lua_State *L, GIBaseInfo *ri, int narg, gpointer *addr,
       lua_pop (L, 5);
     }
 
-  *addr = record ? record->addr : NULL;
+  if (!record)
+    record_error (L, narg, ri);
+
+  *addr = record->addr;
   return 0;
 }
 
@@ -236,7 +251,7 @@ GType
 lgi_record_gtype (lua_State *L, int narg)
 {
   GType gtype;
-  record_get (L, narg, 2);
+  record_get (L, narg);
   lua_getfenv (L, narg);
   lua_getfield (L, -1, "_gtype");
   gtype = lua_tonumber (L, -1);
@@ -247,7 +262,7 @@ lgi_record_gtype (lua_State *L, int narg)
 static int
 record_gc (lua_State *L)
 {
-  Record *record = record_get (L, 1, 2);
+  Record *record = record_get (L, 1);
   if (record->mode == LGI_RECORD_OWN)
     {
       /* Free the owned record. */
@@ -268,7 +283,7 @@ record_gc (lua_State *L)
 static int
 record_tostring (lua_State *L)
 {
-  Record *record = record_get (L, 1, 3);
+  Record *record = record_get (L, 1);
   lua_pushfstring (L, "lgi.%s %p:", record->is_union ? "uni" : "rec",
 		   record->addr);
   lua_getfenv (L, 1);
@@ -283,8 +298,7 @@ record_tostring (lua_State *L)
 static int
 record_new (lua_State *L)
 {
-  lgi_record_2lua (L, record_get (L, 1, 3)->addr, NULL,
-		   LGI_RECORD_ALLOCATE, 0);
+  lgi_record_2lua (L, record_get (L, 1)->addr, NULL, LGI_RECORD_ALLOCATE, 0);
   return 1;
 }
 
@@ -305,7 +319,7 @@ record_field (lua_State *L)
   get = lua_isnone (L, 3);
 
   /* Get record and field instances. */
-  record = record_get (L, 1, 2);
+  record = record_get (L, 1);
   fi = *(GIFieldInfo **) luaL_checkudata (L, 2, LGI_GI_INFO);
 
   /* Check, whether field is readable/writable. */
@@ -348,7 +362,7 @@ record_access (lua_State *L)
   /* Check that 1st arg is a record and invoke one of the forms:
      result = type:_access(type, recordinstance, name)
      type:_access(type, recordinstance, name, val) */
-  record_get (L, 1, 7);
+  record_get (L, 1);
   lua_getfenv (L, 1);
   lua_getfield (L, -1, "_access");
   lua_pushvalue (L, -2);
