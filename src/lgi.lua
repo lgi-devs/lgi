@@ -519,7 +519,7 @@ local function struct_access(typetable, instance, name, ...)
       if setmode then
 	 error(("%s: `%s' is not writable"):format(typetable._name, name))
       end
-      return val 
+      return val
    end
    return val(instance, setmode, ...)
 end
@@ -814,17 +814,10 @@ do
 
    -- Install 'notify' signal.  Unfortunately typelib does not contain its
    -- declaration, so we borrow it from callback GObject.ObjectClass.notify.
-   local obj_fields = gi.GObject.ObjectClass.fields
-   for i = 1, #obj_fields do
-      if obj_fields[i].name == 'notify' then
-	 obj._signals = {
-	    on_notify = function(obj, _, newval)
-			   return on_notify(
-			      obj, obj_fields[i].typeinfo.interface, newval)
-			end,
-	 }
-	 break
-      end
+   obj._signals = {}
+   function obj._signals.on_notify(obj, _, newval)
+      return on_notify(
+	 obj, gi.GObject.ObjectClass.fields.notify.typeinfo.interface, newval)
    end
 
    -- ParamSpec.  Manually add its gtype, because it is not present in
