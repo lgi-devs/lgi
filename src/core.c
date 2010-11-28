@@ -169,9 +169,9 @@ lgi_construct (lua_State* L)
 				    &val, 3);
 	      }
 
-	    vals = lgi_compound_create (L, *info,
-					g_boxed_copy (G_TYPE_VALUE, &val),
-					TRUE, 0);
+	    lgi_record_2lua (L, *info, g_boxed_copy (G_TYPE_VALUE, &val),
+			     LGI_RECORD_OWN, 0);
+	    vals = 1;
 	    if (G_IS_VALUE (&val))
 	      g_value_unset (&val);
 	  }
