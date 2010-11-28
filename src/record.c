@@ -66,22 +66,18 @@ lgi_record_2lua (lua_State *L, GIBaseInfo *info, gpointer addr,
   /* Check whether the record is already cached. */
   lua_pushlightuserdata (L, addr);
   lua_rawget (L, -2);
-  if (!lua_isnil (L, -1))
+  if (!lua_isnil (L, -1) && mode != LGI_RECORD_PARENT)
     {
       /* Remove unneeded tables under our requested object. */
-      lua_replace (L, -4);
-      lua_pop (L, 2);
+      lua_replace (L, -3);
+      lua_pop (L, 1);
 
       /* In case that we want to own the record, make sure that the
 	 ownership is properly updated. */
       record = lua_touserdata (L, -1);
       g_assert (record->addr == addr);
-      if (mode == LGI_RECORD_OWN)
-	{
-	  g_assert (mode != LGI_RECORD_PARENT);
-	  if (record->mode == LGI_RECORD_PEEK)
-	    record->mode = mode;
-	}
+      if (mode == LGI_RECORD_OWN && record->mode == LGI_RECORD_PEEK)
+	record->mode = mode;
 
       return addr;
     }
@@ -128,9 +124,12 @@ lgi_record_2lua (lua_State *L, GIBaseInfo *info, gpointer addr,
   lua_pop (L, 2);
 
   /* Store newly created record into the cache. */
-  lua_pushlightuserdata (L, addr);
-  lua_pushvalue (L, -2);
-  lua_rawset (L, -5);
+  if (mode != LGI_RECORD_PARENT)
+    {
+      lua_pushlightuserdata (L, addr);
+      lua_pushvalue (L, -2);
+      lua_rawset (L, -5);
+    }
 
   /* Clean up the stack; remove reg and cache tables from under our
      result. */
