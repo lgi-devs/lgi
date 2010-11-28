@@ -1197,8 +1197,6 @@ lgi_marshal_arg_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
 		   address is actually address of argument itself, not
 		   the pointer inside. */
 		addr = val;
-
-	      lgi_compound_create (L, info, addr, own, parent);
 	      if (own)
 		mode = LGI_RECORD_OWN;
 	      else
