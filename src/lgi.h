@@ -57,6 +57,11 @@ typedef enum lgi_reg
 /* ref in LUA_REGISTRYINDEX table to global repo table. */
 extern int lgi_ref_repo;
 
+/* Creates cache table (optionally with given table __mode), stores it into
+   registry and returns ref to it. */
+int
+lgi_create_cache (lua_State *L, const char *mode);
+
 /* Generic flags used in the interface. */
 enum _LgiFlags
   {

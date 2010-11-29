@@ -50,8 +50,20 @@ const char *lgi_sd (lua_State *L)
 }
 #endif
 
-/* Puts parts of the name to the stack, to be concatenated by lua_concat.
-   Returns number of pushed elements. */
+int
+lgi_create_cache (lua_State *L, const char *mode)
+{
+  lua_newtable (L);
+  if (mode)
+    {
+      lua_newtable (L);
+      lua_pushstring (L, mode);
+      lua_setfield (L, -2, "__mode");
+      lua_setmetatable (L, -2);
+    }
+  return luaL_ref (L, LUA_REGISTRYINDEX);
+}
+
 int
 lgi_type_get_name (lua_State *L, GIBaseInfo *info)
 {
