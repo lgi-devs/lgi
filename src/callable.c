@@ -676,9 +676,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
      marshal guard and leave it to GC to destroy the closure later. */
   if (closure->autodestroy)
     {
-      gpointer *closure_data;
-      lgi_guard_create (L, &closure_data, lgi_closure_destroy);
-      *closure_data = closure;
+      *lgi_guard_create (L, lgi_closure_destroy) = closure;
       lua_pop (L, 1);
     }
 

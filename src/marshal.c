@@ -322,12 +322,9 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
       /* Allocate the array and wrap it into the userdata guard, if needed. */
       if (len > 0 || zero_terminated)
 	{
-	  GArray **guard;
 	  array = g_array_sized_new (zero_terminated, TRUE, esize, len);
 	  g_array_set_size (array, len);
-	  lgi_guard_create (L, (gpointer **) &guard,
-			    (GDestroyNotify) g_array_unref);
-	  *guard = array;
+	  *lgi_guard_create (L, (GDestroyNotify) g_array_unref) = array;
 	  vals = 1;
 	}
 
@@ -476,10 +473,9 @@ marshal_2c_list (lua_State *L, GITypeInfo *ti, GITypeTag list_tag,
 
   /* Go from back and prepend to the list, which is cheaper than
      appending. */
-  lgi_guard_create (L, (gpointer **) &guard,
-		    list_tag == GI_TYPE_TAG_GSLIST
-		    ? (GDestroyNotify) g_slist_free
-		    : (GDestroyNotify) g_list_free);
+  guard = (GSList **) lgi_guard_create (L, list_tag == GI_TYPE_TAG_GSLIST
+					? (GDestroyNotify) g_slist_free
+					: (GDestroyNotify) g_list_free);
   while (index > 0)
     {
       /* Retrieve index-th element from the source table and marshall
@@ -580,8 +576,9 @@ marshal_2c_hash (lua_State *L, GITypeInfo *ti, GHashTable **table, int narg,
 
       /* Create the hashtable and guard it so that it is destroyed in
 	 case something goes wrong during marshalling. */
-      table_guard = lgi_guard_create (L, (gpointer **) &guarded_table,
-				      (GDestroyNotify) g_hash_table_destroy);
+      guarded_table = (GHashTable **)
+	lgi_guard_create (L, (GDestroyNotify) g_hash_table_destroy);
+      table_guard = lua_gettop (L);
       vals++;
 
       /* Find out which hash_func and equal_func should be used,
@@ -743,9 +740,7 @@ marshal_2c_callable (lua_State *L, GICallableInfo *ci, GIArgInfo *ai,
      stack helper Lua userdata which destroy the closure in its gc. */
   if (scope == GI_SCOPE_TYPE_CALL)
     {
-      gpointer *closure_data;
-      lgi_guard_create (L, &closure_data, lgi_closure_destroy);
-      *closure_data = closure;
+      *lgi_guard_create (L, lgi_closure_destroy) = closure;
       nret = 1;
     }
 
@@ -1077,10 +1072,9 @@ lgi_marshal_arg_2c_caller_alloc (lua_State *L, GITypeInfo *ti, GIArgument *val,
 
 		/* Allocate underlying array.  It is temporary,
 		   existing only for the duration of the call. */
-		lgi_guard_create (L, &array_guard,
-				  (GDestroyNotify) g_array_unref);
-		*array_guard = g_array_sized_new (FALSE, FALSE, elt_size,
-						  size);
+		array_guard =
+		  lgi_guard_create (L, (GDestroyNotify) g_array_unref);
+		*array_guard = g_array_sized_new (FALSE, FALSE, elt_size, size);
 		g_array_set_size (*array_guard, size);
 	      }
 	    else

@@ -106,8 +106,8 @@ guard_gc (lua_State *L)
   return 0;
 }
 
-int
-lgi_guard_create (lua_State *L, gpointer **data, GDestroyNotify destroy)
+gpointer *
+lgi_guard_create (lua_State *L, GDestroyNotify destroy)
 {
   Guard *guard = lua_newuserdata (L, sizeof (Guard));
   g_assert (destroy != NULL);
@@ -115,8 +115,7 @@ lgi_guard_create (lua_State *L, gpointer **data, GDestroyNotify destroy)
   lua_setmetatable (L, -2);
   guard->data = NULL;
   guard->destroy = destroy;
-  *data = &guard->data;
-  return lua_gettop (L);
+  return &guard->data;
 }
 
 void
