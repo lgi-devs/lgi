@@ -54,6 +54,9 @@ typedef enum lgi_reg
   LGI_REG__LAST
 } LgiRegType;
 
+/* ref in LUA_REGISTRYINDEX table to global repo table. */
+extern int lgi_ref_repo;
+
 /* Generic flags used in the interface. */
 enum _LgiFlags
   {

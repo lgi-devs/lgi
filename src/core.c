@@ -356,6 +356,7 @@ lgi_create_reg (lua_State* L, enum lgi_reg reg, const char* exportname,
 }
 
 int lgi_regkey;
+int lgi_ref_repo;
 
 int
 luaopen_lgi__core (lua_State* L)
@@ -398,6 +399,8 @@ luaopen_lgi__core (lua_State* L)
 
   /* Create repo table. */
   lgi_create_reg (L, LGI_REG_REPO, "repo", FALSE);
+  lua_rawgeti (L, -1, LGI_REG_REPO);
+  lgi_ref_repo = luaL_ref (L, LUA_REGISTRYINDEX);
 
   /* In debug version, make our private registry browsable. */
 #ifndef NDEBUG
