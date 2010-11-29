@@ -40,6 +40,9 @@ typedef struct _Record
    metatable for Record objects (1st is full, 2nd is without __gc). */
 static int record_mt_ref[2];
 
+/* ref to cache table containing lightuserdata(record->addr)->weak(record) */
+static int record_ref_cache;
+
 gpointer
 lgi_record_2lua (lua_State *L, GIBaseInfo *info, gpointer addr,
 		 LgiRecordMode mode, int parent)
@@ -49,7 +52,7 @@ lgi_record_2lua (lua_State *L, GIBaseInfo *info, gpointer addr,
   gboolean is_union;
 
   /* Convert 'parent' index to an absolute one. */
-  luaL_checkstack (L, 7, "");
+  luaL_checkstack (L, 6, "");
   lgi_makeabs (L, parent);
 
   /* NULL pointer results in 'nil'. */
@@ -60,8 +63,7 @@ lgi_record_2lua (lua_State *L, GIBaseInfo *info, gpointer addr,
     }
 
   /* Prepare access to registry and cache. */
-  lua_rawgeti (L, LUA_REGISTRYINDEX, lgi_regkey);
-  lua_rawgeti (L, -1, LGI_REG_CACHE);
+  lua_rawgeti (L, LUA_REGISTRYINDEX, record_ref_cache);
 
   /* Check whether the record is already cached. */
   lua_pushlightuserdata (L, addr);
@@ -69,8 +71,7 @@ lgi_record_2lua (lua_State *L, GIBaseInfo *info, gpointer addr,
   if (!lua_isnil (L, -1) && mode != LGI_RECORD_PARENT)
     {
       /* Remove unneeded tables under our requested object. */
-      lua_replace (L, -3);
-      lua_pop (L, 1);
+      lua_replace (L, -2);
 
       /* In case that we want to own the record, make sure that the
 	 ownership is properly updated. */
@@ -114,7 +115,7 @@ lgi_record_2lua (lua_State *L, GIBaseInfo *info, gpointer addr,
   record->is_union = is_union ? 1 : 0;
 
   /* Get ref_repo table according to the 'info'. */
-  lua_rawgeti (L, -4, LGI_REG_REPO);
+  lua_rawgeti (L, LUA_REGISTRYINDEX, lgi_ref_repo);
   lua_getfield (L, -1, g_base_info_get_namespace (info));
   lua_getfield (L, -1, g_base_info_get_name (info));
   g_assert (!lua_isnil (L, -1));
@@ -131,10 +132,9 @@ lgi_record_2lua (lua_State *L, GIBaseInfo *info, gpointer addr,
       lua_rawset (L, -5);
     }
 
-  /* Clean up the stack; remove reg and cache tables from under our
-     result. */
-  lua_replace (L, -4);
-  lua_pop (L, 2);
+  /* Clean up the stack; remove cache table from under our result. */
+  lua_replace (L, -3);
+  lua_pop (L, 1);
   return addr;
 }
 
@@ -202,13 +202,12 @@ lgi_record_2c (lua_State *L, GIBaseInfo *ri, int narg, gpointer *addr,
 
   /* Get record and check its type. */
   lgi_makeabs (L, narg);
-  luaL_checkstack (L, 9, "");
+  luaL_checkstack (L, 8, "");
   record = record_check (L, narg);
   if (ri)
     {
       /* Get repo type for ri GIBaseInfo. */
-      lua_rawgeti (L, LUA_REGISTRYINDEX, lgi_regkey);
-      lua_rawgeti (L, -1, LGI_REG_REPO);
+      lua_rawgeti (L, LUA_REGISTRYINDEX, lgi_ref_repo);
       lua_getfield (L, -1, g_base_info_get_namespace (ri));
       lua_getfield (L, -1, g_base_info_get_name (ri));
       lua_getfenv (L, narg);
@@ -229,15 +228,15 @@ lgi_record_2c (lua_State *L, GIBaseInfo *ri, int narg, gpointer *addr,
 	      lua_call (L, 2, 1);
 	      if (!lua_isnil (L, -1))
 		{
-		  lua_replace (L, -6);
-		  lua_pop (L, 4);
+		  lua_replace (L, -5);
+		  lua_pop (L, 3);
 		  return lgi_record_2c (L, ri, -1, addr, optional) + 1;
 		}
 	    }
 	  lua_pop (L, 1);
 	}
 
-      lua_pop (L, 5);
+      lua_pop (L, 4);
     }
 
   if (!record)
@@ -462,6 +461,14 @@ lgi_record_init (lua_State *L)
       luaL_register (L, NULL, record_meta_reg + i);
       record_mt_ref [i] = luaL_ref (L, LUA_REGISTRYINDEX);
     }
+
+  /* Create ref_cache. */
+  lua_newtable (L);
+  lua_newtable (L);
+  lua_pushliteral (L, "v");
+  lua_setfield (L, -2, "__mode");
+  lua_setmetatable (L, -2);
+  record_ref_cache = luaL_ref (L, LUA_REGISTRYINDEX);
 
   /* Create 'record' API table in main core API table. */
   lua_newtable (L);
