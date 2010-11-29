@@ -253,12 +253,13 @@ lgi_connect (lua_State *L)
   return 1;
 }
 
+static int ref_logger;
+
 static int
 lgi_setlogger(lua_State *L)
 {
-  lua_rawgeti (L, LUA_REGISTRYINDEX, lgi_regkey);
   lua_pushvalue (L, 1);
-  lua_rawseti (L, -2, LGI_REG_LOG_HANDLER);
+  ref_logger = luaL_ref (L, LUA_REGISTRYINDEX);
   return 0;
 }
 
@@ -293,8 +294,8 @@ log_handler (const gchar *log_domain, GLogLevelFlags log_level,
       break;
 
   /* Check, whether there is handler registered in Lua. */
-  lua_rawgeti (L, LUA_REGISTRYINDEX, lgi_regkey);
-  lua_rawgeti (L, -1, LGI_REG_LOG_HANDLER);
+  luaL_checkstack (L, 4, "");
+  lua_rawgeti (L, LUA_REGISTRYINDEX, ref_logger);
   if (!lua_isnil (L, -1))
     {
       /* Push arguments and invoke custom log handler. */
@@ -318,8 +319,8 @@ log_handler (const gchar *log_domain, GLogLevelFlags log_level,
 	}
     }
 
-  /* Stack cleanup; either (reg,nil) or (reg,err) are popped. */
-  lua_pop (L, 2);
+  /* Stack cleanup; either nil, boolean or err is popped. */
+  lua_pop (L, 1);
 
   /* In case that the level was fatal, throw a lua error. */
   if (throw || log_level & (G_LOG_FLAG_FATAL | G_LOG_LEVEL_ERROR))
