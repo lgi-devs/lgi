@@ -463,12 +463,7 @@ lgi_record_init (lua_State *L)
     }
 
   /* Create ref_cache. */
-  lua_newtable (L);
-  lua_newtable (L);
-  lua_pushliteral (L, "v");
-  lua_setfield (L, -2, "__mode");
-  lua_setmetatable (L, -2);
-  record_ref_cache = luaL_ref (L, LUA_REGISTRYINDEX);
+  record_ref_cache = lgi_create_cache (L, "v");
 
   /* Create 'record' API table in main core API table. */
   lua_newtable (L);
