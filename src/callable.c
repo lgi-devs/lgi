@@ -90,6 +90,9 @@ typedef struct _FfiClosure
   gboolean autodestroy;
 } FfiClosure;
 
+/* ref to callable cache table. */
+static int callable_ref_cache;
+
 /* Gets ffi_type for given tag, returns NULL if it cannot be handled. */
 static ffi_type *
 get_simple_ffi_type (GITypeTag tag)
@@ -182,10 +185,10 @@ lgi_callable_create (lua_State *L, GICallableInfo *info)
   ffi_type *ffi_retval;
   gint nargs, argi, arg;
 
-  /* Check cache, whether this callable object is already present. */
-  luaL_checkstack (L, 5, "");
-  lua_rawgeti (L, LUA_REGISTRYINDEX, lgi_regkey);
-  lua_rawgeti (L, -1, LGI_REG_CACHE);
+  /* Check cache, whether this callable object is already present in
+     the cache. */
+  luaL_checkstack (L, 6, "");
+  lua_rawgeti (L, LUA_REGISTRYINDEX, callable_ref_cache);
   lua_pushinteger (L, g_base_info_get_type (info));
   lua_pushstring (L, ":");
   lua_concat (L, lgi_type_get_name(L, info) + 2);
@@ -193,8 +196,8 @@ lgi_callable_create (lua_State *L, GICallableInfo *info)
   lua_gettable (L, -3);
   if (!lua_isnil (L, -1))
     {
-      lua_replace (L, -4);
-      lua_pop (L, 2);
+      lua_replace (L, -3);
+      lua_pop (L, 1);
       return 1;
     }
 
@@ -300,8 +303,8 @@ lgi_callable_create (lua_State *L, GICallableInfo *info)
   lua_settable (L, -6);
 
   /* Final stack cleanup. */
-  lua_replace (L, -5);
-  lua_pop (L, 3);
+  lua_replace (L, -4);
+  lua_pop (L, 2);
   return 1;
 }
 
@@ -832,6 +835,9 @@ lgi_callable_init (lua_State *L)
   luaL_newmetatable (L, UD_CALLABLE);
   luaL_register (L, NULL, callable_reg);
   lua_pop (L, 1);
+
+  /* Create cache for callables. */
+  callable_ref_cache = lgi_create_cache (L, NULL);
 
   /* Register closureguard metatable. */
   luaL_newmetatable (L, UD_CLOSUREGUARD);
