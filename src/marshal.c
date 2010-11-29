@@ -1418,3 +1418,44 @@ lgi_marshal_val_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
   luaL_error (L, "g_value_get: no handling of %s(%s)",
 	      g_type_name (type), g_type_name (G_TYPE_FUNDAMENTAL (type)));
 }
+
+int
+lgi_marshal_field (lua_State *L, gpointer object, gboolean getmode,
+		   int parent_arg, int field_arg, int val_arg)
+{
+  GIFieldInfo *fi;
+  GIFieldInfoFlags flags;
+  GITypeInfo *ti;
+  GIArgument *val;
+
+  /* Get field information. */
+  fi = *(GIFieldInfo **) luaL_checkudata (L, field_arg, LGI_GI_INFO);
+
+  /* Check, whether field is readable/writable. */
+  flags = g_field_info_get_flags (fi);
+  if ((flags & (getmode ? GI_FIELD_IS_READABLE : GI_FIELD_IS_WRITABLE)) == 0)
+    {
+      /* Prepare proper error message. */
+      lua_concat (L, lgi_type_get_name (L, g_base_info_get_container (fi)));
+      luaL_error (L, "%s: field `%s' is not %s", lua_tostring (L, -1),
+		  g_base_info_get_name (fi), getmode ? "readable" : "writable");
+    }
+
+  /* Map GIArgument to proper memory location, get typeinfo of the
+     field and perform actual marshalling. */
+  val = (GIArgument *) (((char *) object) + g_field_info_get_offset (fi));
+  ti = g_field_info_get_type (fi);
+  lgi_gi_info_new (L, ti);
+  if (getmode)
+    {
+      lgi_marshal_arg_2lua (L, ti, GI_TRANSFER_NOTHING, val, parent_arg,
+			    FALSE, NULL, NULL);
+      return 1;
+    }
+  else
+    {
+      lgi_marshal_arg_2c (L, ti, NULL, GI_TRANSFER_NOTHING, val, val_arg,
+			  FALSE, NULL, NULL);
+      return 0;
+    }
+}

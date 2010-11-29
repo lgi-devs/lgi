@@ -389,49 +389,17 @@ record_new (lua_State *L)
 static int
 record_field (lua_State *L)
 {
-  gboolean get;
+  gboolean getmode;
   Record *record;
-  GIFieldInfo *fi;
-  GIFieldInfoFlags flags;
-  GITypeInfo *ti;
-  GIArgument *val;
 
   /* Check, whether we are doing set or get operation. */
-  get = lua_isnone (L, 3);
+  getmode = lua_isnone (L, 3);
 
-  /* Get record and field instances. */
+  /* Get record instance. */
   record = record_get (L, 1);
-  fi = *(GIFieldInfo **) luaL_checkudata (L, 2, LGI_GI_INFO);
 
-  /* Check, whether field is readable/writable. */
-  flags = g_field_info_get_flags (fi);
-  if ((flags & (get ? GI_FIELD_IS_READABLE : GI_FIELD_IS_WRITABLE)) == 0)
-    {
-      /* Prepare proper error message. */
-      lua_getfenv (L, 1);
-      lua_getfield (L, -1, "_name");
-      luaL_error (L, "%s: field `%s' is not %s", lua_tostring (L, -1),
-		  g_base_info_get_name (fi), get ? "readable" : "writable");
-    }
-
-  /* Map GIArgument to proper memory location, get typeinfo of the
-     field and perform actual marshalling. */
-  val = (GIArgument *) (((char *) record->addr)
-			+ g_field_info_get_offset (fi));
-  ti = g_field_info_get_type (fi);
-  lgi_gi_info_new (L, ti);
-  if (get)
-    {
-      lgi_marshal_arg_2lua (L, ti, GI_TRANSFER_NOTHING, val, 1,
-			    FALSE, NULL, NULL);
-      return 1;
-    }
-  else
-    {
-      lgi_marshal_arg_2c (L, ti, NULL, GI_TRANSFER_NOTHING, val, 3,
-			  FALSE, NULL, NULL);
-      return 0;
-    }
+  /* Call field marshalling worker. */
+  return lgi_marshal_field (L, record->addr, getmode, 1, 2, 3);
 }
 
 /* Returns contents of the GObject.Value record. */

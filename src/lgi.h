@@ -111,6 +111,11 @@ void lgi_marshal_arg_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 void lgi_marshal_val_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 			   const GValue *val);
 
+/* Marshalls field to/from given memory (struct, union or
+   object). Returns number of results pushed to the stack (0 or 1). */
+int lgi_marshal_field (lua_State *L, gpointer object, gboolean getmode,
+		       int parent_arg, int field_arg, int val_arg);
+
 /* Parses given GICallableInfo, creates new userdata for it and stores
    it to the stack. Uses cache, so already parsed callable held in the
    cache is reused if possible. */
