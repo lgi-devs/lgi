@@ -743,7 +743,9 @@ marshal_2c_callable (lua_State *L, GICallableInfo *ci, GIArgInfo *ai,
      stack helper Lua userdata which destroy the closure in its gc. */
   if (scope == GI_SCOPE_TYPE_CALL)
     {
-      lgi_closure_guard (L, closure);
+      gpointer *closure_data;
+      lgi_guard_create (L, &closure_data, lgi_closure_destroy);
+      *closure_data = closure;
       nret = 1;
     }
 

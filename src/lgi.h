@@ -131,11 +131,6 @@ gpointer lgi_closure_create (lua_State* L, GICallableInfo* ci, int target,
 /* GDestroyNotify-compatible callback for destroying closure. */
 void lgi_closure_destroy (gpointer user_data);
 
-/* Creates closure guard Lua userdata object and puts it on the stack.
-   Closure guard automatically destroys the closure in its __gc
-   metamethod. */
-void lgi_closure_guard (lua_State *L, gpointer user_data);
-
 /* Creates new compound of given address and type, pushes its userdata
    on the lua stack. Parent is 0 or stack index of parent item, which
    owns memory in which registered compound lives.  Returns 1 if

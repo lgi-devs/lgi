@@ -676,7 +676,9 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
      marshal guard and leave it to GC to destroy the closure later. */
   if (closure->autodestroy)
     {
-      lgi_closure_guard (L, closure);
+      gpointer *closure_data;
+      lgi_guard_create (L, &closure_data, lgi_closure_destroy);
+      *closure_data = closure;
       lua_pop (L, 1);
     }
 
@@ -730,31 +732,6 @@ lgi_closure_create (lua_State *L, GICallableInfo *ci, int target,
     }
 
   return closure;
-}
-
-static int
-closureguard_gc(lua_State *L)
-{
-  gpointer closure = *(gpointer *) lua_touserdata (L, 1);
-  lgi_closure_destroy (closure);
-  return 0;
-}
-
-#define UD_CLOSUREGUARD "lgi.closureguard"
-static const struct luaL_reg closureguard_reg[] = {
-  { "__gc", closureguard_gc },
-  { NULL, NULL }
-};
-
-void
-lgi_closure_guard (lua_State *L, gpointer user_data)
-{
-  gpointer *closureguard;
-  luaL_checkstack (L, 1, "");
-  closureguard = lua_newuserdata (L, sizeof (gpointer));
-  *closureguard = user_data;
-  luaL_getmetatable (L, UD_CLOSUREGUARD);
-  lua_setmetatable (L, -2);
 }
 
 typedef struct _GlibClosure
@@ -838,9 +815,4 @@ lgi_callable_init (lua_State *L)
 
   /* Create cache for callables. */
   callable_ref_cache = lgi_create_cache (L, NULL);
-
-  /* Register closureguard metatable. */
-  luaL_newmetatable (L, UD_CLOSUREGUARD);
-  luaL_register (L, NULL, closureguard_reg);
-  lua_pop (L, 1);
 }
