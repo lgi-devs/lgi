@@ -118,6 +118,10 @@ void lgi_marshal_val_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 int lgi_marshal_field (lua_State *L, gpointer object, gboolean getmode,
 		       int parent_arg, int field_arg, int val_arg);
 
+/* Implementation of object/record _access invocation. */
+int lgi_marshal_access (lua_State *L, gboolean getmode,
+			int compound_arg, int element_arg, int val_arg);
+
 /* Parses given GICallableInfo, creates new userdata for it and stores
    it to the stack. Uses cache, so already parsed callable held in the
    cache is reused if possible. */

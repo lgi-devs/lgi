@@ -294,28 +294,14 @@ record_tostring (lua_State *L)
 static int
 record_access (lua_State *L)
 {
-  gboolean get = lua_isnone (L, 3);
+  gboolean getmode = lua_isnone (L, 3);
 
   /* Check that 1st arg is a record and invoke one of the forms:
      result = type:_access(recordinstance, name)
      type:_access(recordinstance, name, val) */
   record_get (L, 1);
   lua_getfenv (L, 1);
-  lua_getfield (L, -1, "_access");
-  lua_pushvalue (L, -2);
-  lua_pushvalue (L, 1);
-  lua_pushvalue (L, 2);
-  if (get)
-    {
-      lua_call (L, 3, 1);
-      return 1;
-    }
-  else
-    {
-      lua_pushvalue (L, 3);
-      lua_call (L, 4, 0);
-      return 0;
-    }
+  return lgi_marshal_access (L, getmode, 1, 2, 3);
 }
 
 static const struct luaL_Reg record_meta_reg[] = {

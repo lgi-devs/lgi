@@ -1459,3 +1459,24 @@ lgi_marshal_field (lua_State *L, gpointer object, gboolean getmode,
       return 0;
     }
 }
+
+int
+lgi_marshal_access (lua_State *L, gboolean getmode,
+		    int compound_arg, int element_arg, int val_arg)
+{
+  lua_getfield (L, -1, "_access");
+  lua_pushvalue (L, -2);
+  lua_pushvalue (L, compound_arg);
+  lua_pushvalue (L, element_arg);
+  if (getmode)
+    {
+      lua_call (L, 3, 1);
+      return 1;
+    }
+  else
+    {
+      lua_pushvalue (L, val_arg);
+      lua_call (L, 4, 0);
+      return 0;
+    }
+}
