@@ -132,6 +132,84 @@ lgi_object_2c (lua_State *L, int narg, GType gtype, gboolean optional)
   return obj;
 }
 
+/* GObject toggle-ref notification callback.  Inserts or removes given
+   object from/to strong reference cache. */
+static void
+object_toggle_notify (gpointer data, GObject *object, gboolean is_last_ref)
+{
+}
+
+void
+lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
+{
+  GType gtype;
+
+  /* Check, whether the object is already created (in the cache). */
+  luaL_checkstack (L, 6, "");
+  lua_rawgeti (L, LUA_REGISTRYINDEX, ref_weak_cache);
+  lua_pushlightuserdata (L, obj);
+  lua_rawget (L, -2);
+  if (!lua_isnil (L, -1))
+    {
+      /* Use the object from the cache. */
+      lua_replace (L, -2);
+      return;
+    }
+
+  /* Create new userdata object and attach empty table as its environment. */
+  *(gpointer *) lua_newuserdata (L, sizeof (obj)) = obj;
+  lua_rawgeti (L, LUA_REGISTRYINDEX, object_mt_ref);
+  lua_setmetatable (L, -2);
+  lua_newtable (L);
+  lua_setfenv (L, -2);
+
+  gtype = G_TYPE_FROM_INSTANCE (obj);
+  if (G_TYPE_IS_OBJECT (gtype))
+    {
+      /* Make sure that floating and/or initially-unowned objects are
+	 converted to regular reference; we are not intereseted in
+	 floating refs, they just complicate stuff for us. */
+      if (g_type_is_a (gtype, G_TYPE_INITIALLY_UNOWNED)
+	  || g_object_is_floating (obj))
+	g_object_ref_sink (obj);
+
+      /* Create toggle reference and add object to the strong cache. */
+      g_object_add_toggle_ref (obj, object_toggle_notify, NULL);
+      lua_rawgeti (L, LUA_REGISTRYINDEX, ref_strong_cache);
+      lua_pushlightuserdata (L, obj);
+      lua_pushvalue (L, -3);
+      lua_rawset (L, -3);
+      lua_pop (L, 1);
+
+      /* If the object was already pre-owned, remove one reference
+	 (because we have one owning toggle reference). */
+      if (own)
+	g_object_unref (obj);
+    }
+  else if (!own)
+    {
+      /* Unowned fundamental non-GObject, try to get its ownership. */
+      GIObjectInfo *info = g_irepository_find_by_gtype (NULL, gtype);
+      if (info != NULL)
+	{
+	  GIObjectInfoRefFunction ref;
+	  if (g_object_info_get_fundamental (info)
+	      && (ref = g_object_info_get_ref_function_pointer (info)))
+	    ref (obj);
+	  g_base_info_unref (info);
+	}
+    }
+
+  /* Store newly created proxy into weak cache. */
+  lua_pushlightuserdata (L, obj);
+  lua_pushvalue (L, -2);
+  lua_rawset (L, -5);
+
+  /* Final stack cleanup. */
+  lua_replace (L, -3);
+  lua_pop (L, 1);
+}
+
 /* Registration table. */
 static const luaL_Reg object_mt_reg[] = {
   { "__gc", object_gc },
