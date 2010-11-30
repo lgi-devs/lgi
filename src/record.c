@@ -36,11 +36,13 @@ typedef struct _Record
   } data;
 } Record;
 
-/* ref to LUA_REGISTRYINDEX containing metatable for record. */
-static int record_mt_ref;
+/* lightuserdata key to LUA_REGISTRYINDEX containing metatable for
+   record. */
+static int record_mt;
 
-/* ref to cache table containing lightuserdata(record->addr)->weak(record) */
-static int record_ref_cache;
+/* lightuserdata key to cache table containing
+   lightuserdata(record->addr)->weak(record) */
+static int record_cache;
 
 gpointer
 lgi_record_2lua (lua_State *L, GIBaseInfo *info, gpointer addr,
@@ -62,7 +64,8 @@ lgi_record_2lua (lua_State *L, GIBaseInfo *info, gpointer addr,
     }
 
   /* Prepare access to registry and cache. */
-  lua_rawgeti (L, LUA_REGISTRYINDEX, record_ref_cache);
+  lua_pushlightuserdata (L, &record_cache);
+  lua_rawget (L, LUA_REGISTRYINDEX);
 
   /* Check whether the record is already cached. */
   lua_pushlightuserdata (L, addr);
@@ -94,7 +97,8 @@ lgi_record_2lua (lua_State *L, GIBaseInfo *info, gpointer addr,
   /* Allocate new userdata for record object, attach proper
      metatable. */
   record = lua_newuserdata (L, size);
-  lua_rawgeti (L, LUA_REGISTRYINDEX, record_mt_ref);
+  lua_pushlightuserdata (L, &record_mt);
+  lua_rawget (L, LUA_REGISTRYINDEX);
   lua_setmetatable (L, -2);
   if (mode == LGI_RECORD_ALLOCATE)
     {
@@ -112,7 +116,8 @@ lgi_record_2lua (lua_State *L, GIBaseInfo *info, gpointer addr,
   record->is_union = is_union ? 1 : 0;
 
   /* Get ref_repo table according to the 'info'. */
-  lua_rawgeti (L, LUA_REGISTRYINDEX, lgi_ref_repo);
+  lua_pushlightuserdata (L, &lgi_addr_repo);
+  lua_rawget (L, LUA_REGISTRYINDEX);
   lua_getfield (L, -1, g_base_info_get_namespace (info));
   lua_getfield (L, -1, g_base_info_get_name (info));
   g_assert (!lua_isnil (L, -1));
@@ -145,7 +150,8 @@ record_check (lua_State *L, int narg)
   luaL_checkstack (L, 3, "");
   if (!lua_getmetatable (L, narg))
     return NULL;
-  lua_rawgeti (L, LUA_REGISTRYINDEX, record_mt_ref);
+  lua_pushlightuserdata (L, &record_mt);
+  lua_rawget (L, LUA_REGISTRYINDEX);
   if (!lua_equal (L, -1, -2))
     record = NULL;
   lua_pop (L, 2);
@@ -198,7 +204,8 @@ lgi_record_2c (lua_State *L, GIBaseInfo *ri, int narg, gpointer *addr,
   if (ri)
     {
       /* Get repo type for ri GIBaseInfo. */
-      lua_rawgeti (L, LUA_REGISTRYINDEX, lgi_ref_repo);
+      lua_pushlightuserdata (L, &lgi_addr_repo);
+      lua_rawget (L, LUA_REGISTRYINDEX);
       lua_getfield (L, -1, g_base_info_get_namespace (ri));
       lua_getfield (L, -1, g_base_info_get_name (ri));
       lua_getfenv (L, narg);
@@ -413,12 +420,13 @@ void
 lgi_record_init (lua_State *L)
 {
   /* Register record metatable. */
+  lua_pushlightuserdata (L, &record_mt);
   lua_newtable (L);
   luaL_register (L, NULL, record_meta_reg);
-  record_mt_ref = luaL_ref (L, LUA_REGISTRYINDEX);
+  lua_rawset (L, LUA_REGISTRYINDEX);
 
   /* Create ref_cache. */
-  record_ref_cache = lgi_create_cache (L, "v");
+  lgi_cache_create (L, &record_cache, "v");
 
   /* Create 'record' API table in main core API table. */
   lua_newtable (L);

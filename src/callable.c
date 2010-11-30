@@ -90,8 +90,8 @@ typedef struct _FfiClosure
   gboolean autodestroy;
 } FfiClosure;
 
-/* ref to callable cache table. */
-static int callable_ref_cache;
+/* lightuserdata key to callable cache table. */
+static int callable_cache;
 
 /* Gets ffi_type for given tag, returns NULL if it cannot be handled. */
 static ffi_type *
@@ -188,7 +188,8 @@ lgi_callable_create (lua_State *L, GICallableInfo *info)
   /* Check cache, whether this callable object is already present in
      the cache. */
   luaL_checkstack (L, 6, "");
-  lua_rawgeti (L, LUA_REGISTRYINDEX, callable_ref_cache);
+  lua_pushlightuserdata (L, &callable_cache);
+  lua_rawget (L, LUA_REGISTRYINDEX);
   lua_pushinteger (L, g_base_info_get_type (info));
   lua_pushstring (L, ":");
   lua_concat (L, lgi_type_get_name(L, info) + 2);
@@ -812,5 +813,5 @@ lgi_callable_init (lua_State *L)
   lua_pop (L, 1);
 
   /* Create cache for callables. */
-  callable_ref_cache = lgi_create_cache (L, NULL);
+  lgi_cache_create (L, &callable_cache, NULL);
 }

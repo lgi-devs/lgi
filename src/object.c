@@ -10,13 +10,14 @@
 
 #include "lgi.h"
 
-/* Strong and weak cache.  Objects are always in weak cache, and
+/* lightuserdata keys to registry, containing tables representing
+   strong and weak caches.  Objects are always in weak cache, and
    added/removed from strong cache according to gobject's toggle_ref
    notifications. */
-static int ref_weak_cache, ref_strong_cache;
+static int cache_weak, cache_strong;
 
-/* Lua register ref for metatable of objects. */
-static int object_mt_ref;
+/* lightuserdata key to registry for metatable of objects. */
+static int object_mt;
 
 /* Checks that given narg is object type and returns pointer to type
    instance representing it. */
@@ -27,7 +28,8 @@ object_check (lua_State *L, int narg)
   luaL_checkstack (L, 3, "");
   if (!lua_getmetatable (L, narg))
     return NULL;
-  lua_rawgeti (L, LUA_REGISTRYINDEX, object_mt_ref);
+  lua_pushlightuserdata (L, &object_mt);
+  lua_rawget (L, LUA_REGISTRYINDEX);
   if (!lua_equal (L, -1, -2))
     obj = NULL;
 
@@ -45,7 +47,8 @@ object_type_error (lua_State *L, int narg, GType gtype)
      predecessor (if available). */
   GType type_walker;
   luaL_checkstack (L, 5, "");
-  lua_rawgeti (L, LUA_REGISTRYINDEX, lgi_ref_repo);
+  lua_pushlightuserdata (L, &lgi_addr_repo);
+  lua_rawget (L, LUA_REGISTRYINDEX);
   for (type_walker = gtype;;)
     {
       if (type_walker == G_TYPE_INVALID)
@@ -146,7 +149,8 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
 
   /* Check, whether the object is already created (in the cache). */
   luaL_checkstack (L, 6, "");
-  lua_rawgeti (L, LUA_REGISTRYINDEX, ref_weak_cache);
+  lua_pushlightuserdata (L, &cache_weak);
+  lua_rawget (L, LUA_REGISTRYINDEX);
   lua_pushlightuserdata (L, obj);
   lua_rawget (L, -2);
   if (!lua_isnil (L, -1))
@@ -158,7 +162,8 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
 
   /* Create new userdata object and attach empty table as its environment. */
   *(gpointer *) lua_newuserdata (L, sizeof (obj)) = obj;
-  lua_rawgeti (L, LUA_REGISTRYINDEX, object_mt_ref);
+  lua_pushlightuserdata (L, &object_mt);
+  lua_rawget (L, LUA_REGISTRYINDEX);
   lua_setmetatable (L, -2);
   lua_newtable (L);
   lua_setfenv (L, -2);
@@ -175,11 +180,7 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
 
       /* Create toggle reference and add object to the strong cache. */
       g_object_add_toggle_ref (obj, object_toggle_notify, NULL);
-      lua_rawgeti (L, LUA_REGISTRYINDEX, ref_strong_cache);
-      lua_pushlightuserdata (L, obj);
-      lua_pushvalue (L, -3);
-      lua_rawset (L, -3);
-      lua_pop (L, 1);
+      object_toggle_notify (NULL, obj, FALSE);
 
       /* If the object was already pre-owned, remove one reference
 	 (because we have one owning toggle reference). */
@@ -220,11 +221,12 @@ void
 lgi_object_init (lua_State *L)
 {
   /* Register metatable. */
+  lua_pushlightuserdata (L, &object_mt);
   lua_newtable (L);
   luaL_register (L, NULL, object_mt_reg);
-  object_mt_ref = luaL_ref (L, LUA_REGISTRYINDEX);
+  lua_rawset (L, LUA_REGISTRYINDEX);
 
   /* Initialize caches. */
-  ref_weak_cache = lgi_create_cache (L, "v");
-  ref_strong_cache = lgi_create_cache (L, NULL);
+  lgi_cache_create (L, &cache_weak, "v");
+  lgi_cache_create (L, &cache_strong, NULL);
 }

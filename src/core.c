@@ -50,9 +50,10 @@ const char *lgi_sd (lua_State *L)
 }
 #endif
 
-int
-lgi_create_cache (lua_State *L, const char *mode)
+void
+lgi_cache_create (lua_State *L, gpointer key, const char *mode)
 {
+  lua_pushlightuserdata (L, key);
   lua_newtable (L);
   if (mode)
     {
@@ -61,7 +62,7 @@ lgi_create_cache (lua_State *L, const char *mode)
       lua_setfield (L, -2, "__mode");
       lua_setmetatable (L, -2);
     }
-  return luaL_ref (L, LUA_REGISTRYINDEX);
+  lua_rawset (L, LUA_REGISTRYINDEX);
 }
 
 int
@@ -253,13 +254,14 @@ lgi_connect (lua_State *L)
   return 1;
 }
 
-static int ref_logger;
+static int core_addr_logger;
 
 static int
 lgi_setlogger(lua_State *L)
 {
+  lua_pushlightuserdata (L, &core_addr_logger);
   lua_pushvalue (L, 1);
-  ref_logger = luaL_ref (L, LUA_REGISTRYINDEX);
+  lua_rawset (L, LUA_REGISTRYINDEX);
   return 0;
 }
 
@@ -295,7 +297,8 @@ log_handler (const gchar *log_domain, GLogLevelFlags log_level,
 
   /* Check, whether there is handler registered in Lua. */
   luaL_checkstack (L, 4, "");
-  lua_rawgeti (L, LUA_REGISTRYINDEX, ref_logger);
+  lua_pushlightuserdata (L, &core_addr_logger);
+  lua_rawget (L, LUA_REGISTRYINDEX);
   if (!lua_isnil (L, -1))
     {
       /* Push arguments and invoke custom log handler. */
@@ -368,7 +371,7 @@ lgi_create_reg (lua_State* L, enum lgi_reg reg, const char* exportname,
 }
 
 int lgi_regkey;
-int lgi_ref_repo;
+int lgi_addr_repo;
 
 int
 luaopen_lgi__core (lua_State* L)
@@ -411,8 +414,9 @@ luaopen_lgi__core (lua_State* L)
 
   /* Create repo table. */
   lgi_create_reg (L, LGI_REG_REPO, "repo", FALSE);
-  lua_rawgeti (L, -1, LGI_REG_REPO);
-  lgi_ref_repo = luaL_ref (L, LUA_REGISTRYINDEX);
+  lua_pushlightuserdata (L, &lgi_addr_repo);
+  lua_rawgeti (L, -2, LGI_REG_REPO);
+  lua_rawset (L, LUA_REGISTRYINDEX);
 
   /* In debug version, make our private registry browsable. */
 #ifndef NDEBUG

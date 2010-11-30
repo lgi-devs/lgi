@@ -54,13 +54,14 @@ typedef enum lgi_reg
   LGI_REG__LAST
 } LgiRegType;
 
-/* ref in LUA_REGISTRYINDEX table to global repo table. */
-extern int lgi_ref_repo;
+/* lightuserdata of this address is a key in LUA_REGISTRYINDEX table
+   to global repo table. */
+extern int lgi_addr_repo;
 
 /* Creates cache table (optionally with given table __mode), stores it into
    registry and returns ref to it. */
-int
-lgi_create_cache (lua_State *L, const char *mode);
+void
+lgi_cache_create (lua_State *L, gpointer key, const char *mode);
 
 /* Generic flags used in the interface. */
 enum _LgiFlags
