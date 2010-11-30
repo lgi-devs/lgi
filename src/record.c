@@ -36,9 +36,8 @@ typedef struct _Record
   } data;
 } Record;
 
-/* Address of this field is used as lightuserdata identifier of
-   metatable for Record objects (1st is full, 2nd is without __gc). */
-static int record_mt_ref[2];
+/* ref to LUA_REGISTRYINDEX containing metatable for record. */
+static int record_mt_ref;
 
 /* ref to cache table containing lightuserdata(record->addr)->weak(record) */
 static int record_ref_cache;
@@ -95,9 +94,7 @@ lgi_record_2lua (lua_State *L, GIBaseInfo *info, gpointer addr,
   /* Allocate new userdata for record object, attach proper
      metatable. */
   record = lua_newuserdata (L, size);
-  lua_rawgeti (L, LUA_REGISTRYINDEX,
-	       record_mt_ref [mode == LGI_RECORD_ALLOCATE
-			      || mode == LGI_RECORD_PEEK]);
+  lua_rawgeti (L, LUA_REGISTRYINDEX, record_mt_ref);
   lua_setmetatable (L, -2);
   if (mode == LGI_RECORD_ALLOCATE)
     {
@@ -148,15 +145,9 @@ record_check (lua_State *L, int narg)
   luaL_checkstack (L, 3, "");
   if (!lua_getmetatable (L, narg))
     return NULL;
-  lua_rawgeti (L, LUA_REGISTRYINDEX, record_mt_ref [0]);
+  lua_rawgeti (L, LUA_REGISTRYINDEX, record_mt_ref);
   if (!lua_equal (L, -1, -2))
-    {
-      lua_pop (L, 1);
-      lua_rawgeti (L, LUA_REGISTRYINDEX, record_mt_ref [1]);
-      if (!lua_equal (L, -1, -2))
-	record = NULL;
-    }
-
+    record = NULL;
   lua_pop (L, 2);
   return record;
 }
@@ -421,14 +412,10 @@ static const struct luaL_Reg record_api_reg[] = {
 void
 lgi_record_init (lua_State *L)
 {
-  /* Register record metatables. */
-  int i;
-  for (i = 0; i < 2; i++)
-    {
-      lua_newtable (L);
-      luaL_register (L, NULL, record_meta_reg + i);
-      record_mt_ref [i] = luaL_ref (L, LUA_REGISTRYINDEX);
-    }
+  /* Register record metatable. */
+  lua_newtable (L);
+  luaL_register (L, NULL, record_meta_reg);
+  record_mt_ref = luaL_ref (L, LUA_REGISTRYINDEX);
 
   /* Create ref_cache. */
   record_ref_cache = lgi_create_cache (L, "v");

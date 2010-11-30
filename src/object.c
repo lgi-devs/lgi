@@ -15,9 +15,8 @@
    notifications. */
 static int ref_weak_cache, ref_strong_cache;
 
-/* Lua register refs for metatables of objects (1st is full, 2nd is
-   without __gc). */
-static int object_mt_ref[2];
+/* Lua register ref for metatable of objects. */
+static int object_mt_ref;
 
 /* Checks that given narg is object type and returns pointer to type
    instance representing it. */
@@ -28,14 +27,9 @@ object_check (lua_State *L, int narg)
   luaL_checkstack (L, 3, "");
   if (!lua_getmetatable (L, narg))
     return NULL;
-  lua_rawgeti (L, LUA_REGISTRYINDEX, object_mt_ref [0]);
+  lua_rawgeti (L, LUA_REGISTRYINDEX, object_mt_ref);
   if (!lua_equal (L, -1, -2))
-    {
-      lua_pop (L, 1);
-      lua_rawgeti (L, LUA_REGISTRYINDEX, object_mt_ref [1]);
-      if (!lua_equal (L, -1, -2))
-	obj = NULL;
-    }
+    obj = NULL;
 
   lua_pop (L, 2);
   g_assert (obj == NULL || *obj != NULL);
@@ -147,15 +141,10 @@ static const luaL_Reg object_mt_reg[] = {
 void
 lgi_object_init (lua_State *L)
 {
-  int i;
-
-  /* Register metatables. */
-  for (i = 0; i < 2; ++i)
-    {
-      lua_newtable (L);
-      luaL_register (L, NULL, object_mt_reg + i);
-      object_mt_ref[i] = luaL_ref (L, LUA_REGISTRYINDEX);
-    }
+  /* Register metatable. */
+  lua_newtable (L);
+  luaL_register (L, NULL, object_mt_reg);
+  object_mt_ref = luaL_ref (L, LUA_REGISTRYINDEX);
 
   /* Initialize caches. */
   ref_weak_cache = lgi_create_cache (L, "v");
