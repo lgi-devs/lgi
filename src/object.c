@@ -8,6 +8,7 @@
  * GObject and GTypeInstance handling.
  */
 
+#include <string.h>
 #include "lgi.h"
 
 /* lightuserdata keys to registry, containing tables representing
@@ -277,6 +278,77 @@ static const luaL_Reg object_mt_reg[] = {
   { NULL, NULL }
 };
 
+/* Creation of specified object with given construction-time properties.
+   obj = object.new(gtype[, {gi.prop->val}]) */
+static int
+object_new (lua_State *L)
+{
+  gint n_params = 0;
+  GParameter *params = NULL, *param;
+  GIPropertyInfo *pi;
+  GITypeInfo *ti;
+  gpointer obj;
+  GType gtype = luaL_checknumber (L, 1);
+
+  g_assert (G_TYPE_IS_OBJECT (gtype));
+  if (!lua_isnoneornil (L, 2))
+    {
+      /* Go through the table and extract and prepare
+	 construction-time properties. */
+      luaL_checktype (L, 2, LUA_TTABLE);
+
+      /* Find out how many parameters we have. */
+      lua_pushnil (L);
+      for (lua_pushnil (L); lua_next (L, 2) != 0; lua_pop (L, 1))
+	n_params++;
+
+      if (n_params > 0)
+	{
+	  /* Allocate GParameter array (on the stack) and fill it
+	     with parameters. */
+	  param = params = g_newa (GParameter, n_params);
+	  memset (params, 0, sizeof (GParameter) * n_params);
+	  for (lua_pushnil (L); lua_next (L, 2) != 0; lua_pop (L, 1), param++)
+	    {
+	      /* Get property info. */
+	      pi = *(GIBaseInfo **) luaL_checkudata (L, -2, LGI_GI_INFO);
+
+	      /* Extract property name. */
+	      param->name = g_base_info_get_name (pi);
+
+	      /* Initialize and load parameter value from the table
+		 contents. */
+	      ti = g_property_info_get_type (pi);
+	      lgi_gi_info_new (L, ti);
+	      g_value_init (&param->value, lgi_get_gtype (L, ti));
+	      lgi_marshal_val_2c (L, ti, GI_TRANSFER_NOTHING,
+				  &param->value, -2);
+	      lua_pop (L, 1);
+	    }
+
+	  /* Pop the repo class table. */
+	  lua_pop (L, 1);
+	}
+    }
+
+  /* Create the object. */
+  obj = g_object_newv (gtype, n_params, params);
+
+  /* Free all parameters from params array. */
+  for (param = params; n_params > 0; param++, n_params--)
+    g_value_unset (&param->value);
+
+  /* Wrap Lua proxy around created object. */
+  lgi_object_2lua (L, obj, TRUE);
+  return 1;
+}
+
+/* Object API table. */
+static const luaL_Reg object_api_reg[] = {
+  { "new", object_new },
+  { NULL, NULL }
+};
+
 void
 lgi_object_init (lua_State *L)
 {
@@ -295,4 +367,9 @@ lgi_object_init (lua_State *L)
   lua_pushlightuserdata (L, &callback_thread);
   lua_newthread (L);
   lua_rawset (L, LUA_REGISTRYINDEX);
+
+  /* Create object API table and set it to the parent. */
+  lua_newtable (L);
+  luaL_register (L, NULL, object_api_reg);
+  lua_setfield (L, -2, "object");
 }
