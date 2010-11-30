@@ -16,6 +16,10 @@
    notifications. */
 static int cache_weak, cache_strong;
 
+/* lightuserdata key to registry containing thread to be used for
+   toggle reference callback. */
+static int callback_thread;
+
 /* lightuserdata key to registry for metatable of objects. */
 static int object_mt;
 
@@ -38,41 +42,55 @@ object_check (lua_State *L, int narg)
   return obj ? *obj : NULL;
 }
 
+/* Walks given type and tries to find the closest known match of the
+   object present in the repo. If found, leaves found type table on
+   the stack and returns real found gtype, otherwise returns
+   G_TYPE_INVALID. */
+static GType
+object_type (lua_State *L, GType gtype)
+{
+  luaL_checkstack (L, 2, "");
+  lua_pushlightuserdata (L, &lgi_addr_repo);
+  for (; gtype != G_TYPE_INVALID; gtype = g_type_parent (gtype))
+    {
+      /* Try to find type in the repo table. */
+      lua_pushnumber (L, gtype);
+      lua_rawget (L, -2);
+      if (!lua_isnil (L, -1))
+	{
+	  lua_replace (L, -2);
+	  return gtype;
+	}
+      else
+	lua_pop (L, 1);
+    }
+
+  /* Not found, remove repo table from the stack. */
+  lua_pop (L, 1);
+  return G_TYPE_INVALID;
+}
+
 /* Throws type error for object at given argument, gtype can
    optionally contain name of requested type. */
 static int
 object_type_error (lua_State *L, int narg, GType gtype)
 {
-  /* Look up type table for given object gtype or any of its
-     predecessor (if available). */
-  GType type_walker;
-  luaL_checkstack (L, 5, "");
-  lua_pushlightuserdata (L, &lgi_addr_repo);
-  lua_rawget (L, LUA_REGISTRYINDEX);
-  for (type_walker = gtype;;)
+  GType found_gtype;
+  /* Look up type table and get name from it. */
+  luaL_checkstack (L, 4, "");
+  found_gtype = object_type (L, gtype);
+  if (found_gtype != G_TYPE_INVALID)
     {
-      if (type_walker == G_TYPE_INVALID)
-	{
-	  if (gtype == G_TYPE_INVALID)
-	    lua_pushliteral (L, "lgi.object");
-	  else
-	    lua_pushstring (L, g_type_name (gtype));
-	  break;
-	}
-
-      /* Try to lookup table by gtype in repo. */
-      lua_pushnumber (L, type_walker);
-      lua_rawget (L, -2);
-      if (!lua_isnil (L, -1))
-	{
-	  lua_getfield (L, -1, "_name");
-	  lua_pushfstring (L, gtype == type_walker ? "%s" : "%s(%s)",
-			   lua_tostring (L, -1), g_type_name (gtype));
-	  break;
-	}
-
-      lua_pop (L, 1);
-      type_walker = g_type_parent (type_walker);
+      lua_getfield (L, -1, "_name");
+      lua_pushfstring (L, gtype == found_gtype ? "%s" : "%s(%s)",
+		       lua_tostring (L, -1), g_type_name (gtype));
+    }
+  else
+    {
+      if (gtype == G_TYPE_INVALID)
+	lua_pushliteral (L, "lgi.object");
+      else
+	lua_pushstring (L, g_type_name (gtype));
     }
 
   /* Create error message. */
@@ -85,7 +103,7 @@ object_type_error (lua_State *L, int narg, GType gtype)
 static gpointer
 object_get (lua_State *L, int narg)
 {
-  gpointer obj = object_get (L, narg);
+  gpointer obj = object_check (L, narg);
   if (G_UNLIKELY (!obj))
     object_type_error (L, narg, G_TYPE_INVALID);
   return obj;
@@ -140,6 +158,30 @@ lgi_object_2c (lua_State *L, int narg, GType gtype, gboolean optional)
 static void
 object_toggle_notify (gpointer data, GObject *object, gboolean is_last_ref)
 {
+  lua_State *L = data;
+  luaL_checkstack (L, 3, "");
+  lua_pushlightuserdata (L, &cache_strong);
+  lua_rawget (L, LUA_REGISTRYINDEX);
+  lua_pushlightuserdata (L, object);
+  if (is_last_ref)
+    {
+      /* Remove from strong cache (i.e. assign nil to that slot). */
+      lua_pushnil (L);
+    }
+  else
+    {
+      /* Find proxy object in the weak table and assign it to the
+	 strong table. */
+      lua_pushlightuserdata (L, &cache_weak);
+      lua_rawget (L, LUA_REGISTRYINDEX);
+      lua_pushvalue (L, -2);
+      lua_rawget (L, -2);
+      lua_replace (L, -2);
+    }
+
+  /* Store new value to the strong cache. */
+  lua_rawset (L, -3);
+  lua_pop (L, 1);
 }
 
 void
@@ -168,6 +210,15 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
   lua_newtable (L);
   lua_setfenv (L, -2);
 
+  /* Store newly created userdata proxy into weak cache. */
+  lua_pushlightuserdata (L, obj);
+  lua_pushvalue (L, -2);
+  lua_rawset (L, -5);
+
+  /* Stack cleanup, remove unnecessary weak cache and nil under userdata. */
+  lua_replace (L, -3);
+  lua_pop (L, 1);
+
   gtype = G_TYPE_FROM_INSTANCE (obj);
   if (G_TYPE_IS_OBJECT (gtype))
     {
@@ -179,8 +230,11 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
 	g_object_ref_sink (obj);
 
       /* Create toggle reference and add object to the strong cache. */
-      g_object_add_toggle_ref (obj, object_toggle_notify, NULL);
-      object_toggle_notify (NULL, obj, FALSE);
+      lua_pushlightuserdata (L, &callback_thread);
+      lua_rawget (L, LUA_REGISTRYINDEX);
+      g_object_add_toggle_ref (obj, object_toggle_notify, lua_tothread (L, -1));
+      object_toggle_notify (L, obj, FALSE);
+      lua_pop (L, 1);
 
       /* If the object was already pre-owned, remove one reference
 	 (because we have one owning toggle reference). */
@@ -200,15 +254,6 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
 	  g_base_info_unref (info);
 	}
     }
-
-  /* Store newly created proxy into weak cache. */
-  lua_pushlightuserdata (L, obj);
-  lua_pushvalue (L, -2);
-  lua_rawset (L, -5);
-
-  /* Final stack cleanup. */
-  lua_replace (L, -3);
-  lua_pop (L, 1);
 }
 
 /* Registration table. */
@@ -229,4 +274,10 @@ lgi_object_init (lua_State *L)
   /* Initialize caches. */
   lgi_cache_create (L, &cache_weak, "v");
   lgi_cache_create (L, &cache_strong, NULL);
+
+  /* Create new service helper thread which is used solely for
+     invoking toggle reference notification. */
+  lua_pushlightuserdata (L, &callback_thread);
+  lua_newthread (L);
+  lua_rawset (L, LUA_REGISTRYINDEX);
 }

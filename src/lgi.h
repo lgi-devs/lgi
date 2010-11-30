@@ -182,7 +182,7 @@ typedef enum
 /* Creates Lua-side part of given record. Pushes the object
    representing it on the stack. In 'allocate' mode, new instance of
    the record is allocated and managed in Lua heap. If parent not
-   zero, it is stack index of record parent (i.e. reocrd of which the
+   zero, it is stack index of record parent (i.e. record of which the
    arg record is part of). */
 gpointer lgi_record_2lua (lua_State *L, GIBaseInfo *ri, gpointer addr,
 			  LgiRecordMode mode, int parent);
@@ -195,3 +195,14 @@ int lgi_record_2c (lua_State *L, GIBaseInfo *ri, int narg, gpointer *addr,
 /* Retrieves gtype of given record, returns G_TYPE_INVALID if the
    record does not have gtype. */
 GType lgi_record_gtype (lua_State *L, int narg);
+
+/* Creates Lua-side part (proxy) of given object. If the object is not
+   owned (own == FALSE), an ownership is automatically acquired. */
+void
+lgi_object_2lua (lua_State *L, gpointer obj, gboolean own);
+
+/* Gets pointer to C-side object represented by given Lua proxy. If
+   gtype is not G_TYPE_INVALID, the real type is checked to conform to
+   requested type. */
+gpointer
+lgi_object_2c (lua_State *L, int narg, GType gtype, gboolean optional);
