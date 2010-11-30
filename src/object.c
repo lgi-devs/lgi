@@ -271,10 +271,28 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
     }
 }
 
+/* Worker method for __index and __newindex implementation. */
+static int
+object_access (lua_State *L)
+{
+  gboolean getmode = lua_isnone (L, 3);
+
+  /* Check that 1st arg is an object and invoke one of the forms:
+     result = type:_access(objectinstance, name)
+     type:_access(objectinstance, name, val) */
+  gpointer object = object_get (L, 1);
+  GType gtype = G_TYPE_FROM_INSTANCE (object);
+  if (object_type (L, gtype) == G_TYPE_INVALID)
+    object_type_error (L, 1, gtype);
+  return lgi_marshal_access (L, getmode, 1, 2, 3);
+}
+
 /* Registration table. */
 static const luaL_Reg object_mt_reg[] = {
   { "__gc", object_gc },
   { "__tostring", object_tostring },
+  { "__index", object_access },
+  { "__newindex", object_access },
   { NULL, NULL }
 };
 
@@ -343,9 +361,23 @@ object_new (lua_State *L)
   return 1;
 }
 
+static int
+object_field (lua_State *L)
+{
+  /* Check, whether we are doing set or get operation. */
+  gboolean getmode = lua_isnone (L, 3);
+
+  /* Get object instance. */
+  gpointer object = object_get (L, 1);
+
+  /* Call field marshalling worker. */
+  return lgi_marshal_field (L, object, getmode, 1, 2, 3);
+}
+
 /* Object API table. */
 static const luaL_Reg object_api_reg[] = {
   { "new", object_new },
+  { "field", object_field },
   { NULL, NULL }
 };
 
