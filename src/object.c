@@ -134,6 +134,20 @@ object_gc (lua_State *L)
   return 0;
 }
 
+static int
+object_tostring (lua_State *L)
+{
+  gpointer obj = object_get (L, 1);
+  GType gtype = G_TYPE_FROM_INSTANCE (obj);
+  if (object_type (L, gtype) != G_TYPE_INVALID)
+    lua_getfield (L, -1, "_name");
+  else
+    lua_pushliteral (L, "<??\?>");
+  lua_pushfstring (L, "lgi.obj %p:%s(%s)", obj, lua_tostring (L, -1),
+		   g_type_name (gtype));
+  return 1;
+}
+
 gpointer
 lgi_object_2c (lua_State *L, int narg, GType gtype, gboolean optional)
 {
@@ -259,6 +273,7 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
 /* Registration table. */
 static const luaL_Reg object_mt_reg[] = {
   { "__gc", object_gc },
+  { "__tostring", object_tostring },
   { NULL, NULL }
 };
 
