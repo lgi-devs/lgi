@@ -511,6 +511,17 @@ object_interfaces(lua_State *L)
   return 1;
 }
 
+/* Returns internal custom object's table, free to store/load anything
+   into it. Lua-side prototype:
+   env_table = object.env(objectinstance) */
+static int
+object_env (lua_State *L)
+{
+  object_get (L, 1);
+  lua_getfenv (L, 1);
+  return 1;
+}
+
 /* Object API table. */
 static const luaL_Reg object_api_reg[] = {
   { "new", object_new },
@@ -518,6 +529,7 @@ static const luaL_Reg object_api_reg[] = {
   { "property", object_property },
   { "properties", object_properties },
   { "interfaces", object_interfaces },
+  { "env", object_env },
   { NULL, NULL }
 };
 
