@@ -52,6 +52,7 @@ object_type (lua_State *L, GType gtype)
 {
   luaL_checkstack (L, 2, "");
   lua_pushlightuserdata (L, &lgi_addr_repo);
+  lua_rawget (L, LUA_REGISTRYINDEX);
   for (; gtype != G_TYPE_INVALID; gtype = g_type_parent (gtype))
     {
       /* Try to find type in the repo table. */
@@ -204,6 +205,13 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
 {
   GType gtype;
 
+  /* NULL pointer results in nil. */
+  if (!obj)
+    {
+      lua_pushnil (L);
+      return;
+    }
+
   /* Check, whether the object is already created (in the cache). */
   luaL_checkstack (L, 6, "");
   lua_pushlightuserdata (L, &cache_weak);
@@ -309,44 +317,41 @@ object_new (lua_State *L)
   GType gtype = luaL_checknumber (L, 1);
 
   g_assert (G_TYPE_IS_OBJECT (gtype));
-  if (!lua_isnoneornil (L, 2))
+
+  /* Go through the table and extract and prepare
+     construction-time properties. */
+  luaL_checktype (L, 2, LUA_TTABLE);
+
+  /* Find out how many parameters we have. */
+  lua_pushnil (L);
+  for (lua_pushnil (L); lua_next (L, 2) != 0; lua_pop (L, 1))
+    n_params++;
+
+  if (n_params > 0)
     {
-      /* Go through the table and extract and prepare
-	 construction-time properties. */
-      luaL_checktype (L, 2, LUA_TTABLE);
-
-      /* Find out how many parameters we have. */
-      lua_pushnil (L);
-      for (lua_pushnil (L); lua_next (L, 2) != 0; lua_pop (L, 1))
-	n_params++;
-
-      if (n_params > 0)
+      /* Allocate GParameter array (on the stack) and fill it with
+	 parameters. */
+      param = params = g_newa (GParameter, n_params);
+      memset (params, 0, sizeof (GParameter) * n_params);
+      for (lua_pushnil (L); lua_next (L, 2) != 0; lua_pop (L, 1), param++)
 	{
-	  /* Allocate GParameter array (on the stack) and fill it
-	     with parameters. */
-	  param = params = g_newa (GParameter, n_params);
-	  memset (params, 0, sizeof (GParameter) * n_params);
-	  for (lua_pushnil (L); lua_next (L, 2) != 0; lua_pop (L, 1), param++)
-	    {
-	      /* Get property info. */
-	      pi = *(GIBaseInfo **) luaL_checkudata (L, -2, LGI_GI_INFO);
+	  /* Get property info. */
+	  pi = *(GIBaseInfo **) luaL_checkudata (L, -2, LGI_GI_INFO);
 
-	      /* Extract property name. */
-	      param->name = g_base_info_get_name (pi);
+	  /* Extract property name. */
+	  param->name = g_base_info_get_name (pi);
 
-	      /* Initialize and load parameter value from the table
-		 contents. */
-	      ti = g_property_info_get_type (pi);
-	      lgi_gi_info_new (L, ti);
-	      g_value_init (&param->value, lgi_get_gtype (L, ti));
-	      lgi_marshal_val_2c (L, ti, GI_TRANSFER_NOTHING,
-				  &param->value, -2);
-	      lua_pop (L, 1);
-	    }
-
-	  /* Pop the repo class table. */
+	  /* Initialize and load parameter value from the table
+	     contents. */
+	  ti = g_property_info_get_type (pi);
+	  lgi_gi_info_new (L, ti);
+	  g_value_init (&param->value, lgi_get_gtype (L, ti));
+	  lgi_marshal_val_2c (L, ti, GI_TRANSFER_NOTHING, &param->value, -2);
 	  lua_pop (L, 1);
 	}
+
+      /* Pop the repo class table. */
+      lua_pop (L, 1);
     }
 
   /* Create the object. */
