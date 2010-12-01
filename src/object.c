@@ -495,7 +495,7 @@ object_properties (lua_State *L)
       pspecs = g_object_class_list_properties (klass, &n_properties);
       for (i = 0; i < n_properties; ++i)
 	{
-	  lgi_record_2lua (L, pspec_info, pspecs[i], LGI_RECORD_OWN, 0);
+	  lgi_record_2lua (L, pspec_info, pspecs[i], LGI_RECORD_PEEK, 0);
 	  lua_setfield (L, -2, pspecs[i]->name);
 	}
 
@@ -508,7 +508,7 @@ object_properties (lua_State *L)
       GParamSpec *pspec =
 	g_object_class_find_property (klass, lua_tostring (L, 2));
       if (pspec != NULL)
-	lgi_record_2lua (L, pspec_info, pspec, LGI_RECORD_OWN, 0);
+	lgi_record_2lua (L, pspec_info, pspec, LGI_RECORD_PEEK, 0);
       else
 	lua_pushnil (L);
     }
