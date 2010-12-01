@@ -522,6 +522,59 @@ object_env (lua_State *L)
   return 1;
 }
 
+static void
+gclosure_destroy (gpointer user_data, GClosure *closure)
+{
+  lgi_closure_destroy (user_data);
+}
+
+/* Connects signal to given compound.
+ * Signature is:
+ * handler_id = object.connect(obj, signame, callable, func, detail, after) */
+static int
+object_connect (lua_State *L)
+{
+  GObject *object;
+  const char *signame = luaL_checkstring (L, 2);
+  GICallableInfo *ci;
+  const char *detail = lua_tostring (L, 5);
+  gpointer call_addr, lgi_closure;
+  GClosure *gclosure;
+  guint signal_id;
+  gulong handler_id;
+
+  /* Get target objects. */
+  object = lgi_object_2c (L, 1, G_TYPE_OBJECT, FALSE);
+  ci = *(GIBaseInfo **) luaL_checkudata (L, 3, LGI_GI_INFO);
+
+  /* Create GClosure instance to be used.  This is fast'n'dirty method; it
+     requires less lines of code to write, but a lot of code to execute when
+     the signal is emitted; the signal goes like this:
+
+     1) emitter prepares params as an array of GValues.
+     2) GLib's marshaller converts it to C function call.
+     3) this call lands in libffi's trampoline (closure)
+     4) this trampoline converts arguments to libffi array of args
+     5) LGI libffi glue code unmarshalls them to Lua stack and calls Lua func.
+
+     much better solution would be writing custom GClosure Lua marshaller, in
+     which case the scenraio would be following:
+
+     1) emitter prepares params as an array of GValues.
+     2) LGI custom marshaller marshalls then to Lua stack and calls Lua
+	function. */
+  lgi_closure = lgi_closure_create (L, ci, 4, FALSE, &call_addr);
+  gclosure = g_cclosure_new (call_addr, lgi_closure, gclosure_destroy);
+
+  /* Connect closure to the signal. */
+  signal_id = g_signal_lookup (signame, G_OBJECT_TYPE (object));
+  handler_id =  g_signal_connect_closure_by_id (object, signal_id,
+						g_quark_from_string (detail),
+						gclosure, lua_toboolean (L, 6));
+  lua_pushnumber (L, handler_id);
+  return 1;
+}
+
 /* Object API table. */
 static const luaL_Reg object_api_reg[] = {
   { "new", object_new },
@@ -530,6 +583,7 @@ static const luaL_Reg object_api_reg[] = {
   { "properties", object_properties },
   { "interfaces", object_interfaces },
   { "env", object_env },
+  { "connect", object_connect },
   { NULL, NULL }
 };
 
