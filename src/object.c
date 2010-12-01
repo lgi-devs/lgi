@@ -493,12 +493,31 @@ object_properties (lua_State *L)
   return 1;
 }
 
+/* Returns table of interfaces implemented by given compound, exports
+   them as gi.info(GIInterfaceInfo) instances. */
+static int
+object_interfaces(lua_State *L)
+{
+  guint n_interfaces, i, pos;
+  GType *interfaces, gtype = G_OBJECT_TYPE (object_get (L, 1));
+
+  /* Create table with resulting interfaces. */
+  lua_newtable (L);
+  interfaces = g_type_interfaces (gtype, &n_interfaces);
+  for (i = 0, pos = 1; i < n_interfaces; i++)
+    if (lgi_gi_info_new (L, g_irepository_find_by_gtype (NULL, interfaces[i])))
+      lua_rawseti (L, -2, pos++);
+
+  return 1;
+}
+
 /* Object API table. */
 static const luaL_Reg object_api_reg[] = {
   { "new", object_new },
   { "field", object_field },
   { "property", object_property },
   { "properties", object_properties },
+  { "interfaces", object_interfaces },
   { NULL, NULL }
 };
 
