@@ -356,9 +356,10 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
       GIInfoType type = g_base_info_get_type (parent);
       if (type == GI_INFO_TYPE_OBJECT || type == GI_INFO_TYPE_INTERFACE)
 	{
-	  GType parent_gtype = g_registered_type_info_get_g_type (parent);
-	  nret += lgi_compound_get (L, args_index, &parent_gtype,
-				    &args[0].v_pointer, 0);
+	  args[0].v_pointer = 
+	    lgi_object_2c (L, args_index,
+			   g_registered_type_info_get_g_type (parent), FALSE);
+	  nret++;
 	}
       else
 	nret += lgi_record_2c (L, parent, args_index,
@@ -594,9 +595,16 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   npos = 0;
   if (callable->has_self)
     {
-      if (lgi_compound_create (L, g_base_info_get_container(callable->info),
-			       ((GIArgument*) args[0])->v_pointer, FALSE, 0))
-	npos++;
+      GIBaseInfo *parent = g_base_info_get_container (callable->info);
+      GIInfoType type = g_base_info_get_type (parent);
+      gpointer addr = ((GIArgument*) args[0])->v_pointer;
+      npos++;
+      if (type == GI_INFO_TYPE_OBJECT || type == GI_INFO_TYPE_INTERFACE)
+	lgi_object_2lua (L, addr, FALSE);
+      else if (type == GI_INFO_TYPE_STRUCT || type == GI_INFO_TYPE_UNION)
+	lgi_record_2lua (L, parent, addr, LGI_RECORD_PEEK, 0);
+      else
+	g_assert_not_reached ();
     }
 
   /* Marshal input arguments to lua. */
