@@ -543,7 +543,7 @@ end
 function gireg.array_gtype_in()
    local R = lgi.Regress
    local str = R.test_array_gtype_in {
-      lgi.GObject.Value[0].gtype,
+      lgi.GObject.Value._gtype,
       lgi.GObject.type_from_name('gchar')
    }
    check(str == '[GValue,gchar,]')
