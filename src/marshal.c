@@ -597,8 +597,8 @@ marshal_2c_hash (lua_State *L, GITypeInfo *ti, GHashTable **table, int narg,
 	  break;
 	case GI_TYPE_TAG_FLOAT:
 	case GI_TYPE_TAG_DOUBLE:
-	  luaL_error (L, "hashtable with float or double is not supported");
-	  break;
+	  return luaL_error (L, "hashtable with float or double is not "
+			     "supported");
 	default:
 	  /* For everything else, use direct hash of stored pointer. */
 	  hash_func = NULL;
@@ -841,9 +841,11 @@ lgi_marshal_arg_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 	  case GI_INFO_TYPE_OBJECT:
 	  case GI_INFO_TYPE_INTERFACE:
 	    {
-	      GType gtype = g_registered_type_info_get_g_type (info);
-	      nret = lgi_compound_get (L, narg, &gtype, &val->v_pointer,
-				       optional ? LGI_FLAGS_OPTIONAL : 0);
+	      val->v_pointer = 
+		lgi_object_2c (L, narg, 
+			       g_registered_type_info_get_g_type (info),
+			       optional);
+	      nret = 1;
 	      break;
 	    }
 
@@ -998,9 +1000,7 @@ lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 
     case G_TYPE_OBJECT:
       {
-	vals = lgi_compound_get (L, narg, &type, &obj, LGI_FLAGS_OPTIONAL);
-	g_value_set_object (val, obj);
-	lua_pop (L, vals);
+	g_value_set_object (val, lgi_object_2c (L, narg, type, TRUE));
 	return;
       }
 
@@ -1017,11 +1017,7 @@ lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 	    g_base_info_unref (info);
 	    if (set_value != NULL)
 	      {
-		gpointer obj;
-		vals = lgi_compound_get (L, narg, &type, &obj,
-					 LGI_FLAGS_OPTIONAL);
-		set_value (val, obj);
-		lua_pop (L, vals);
+		set_value (val, lgi_object_2c (L, narg, type, TRUE));
 		return;
 	      }
 	  }
@@ -1204,35 +1200,7 @@ lgi_marshal_arg_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
 	  case GI_INFO_TYPE_OBJECT:
 	  case GI_INFO_TYPE_INTERFACE:
 	    {
-	      gpointer addr = val->v_pointer;
-
-	      /* If we do not own the compound, we should try to take
-		 its ownership; keeping pointer to compound without
-		 owning it is dangerous, it might be destroyed under
-		 our hands. */
-	      if (!own && (type == GI_INFO_TYPE_OBJECT
-			   || type == GI_INFO_TYPE_INTERFACE))
-		{
-		  if (!g_object_info_get_fundamental (info))
-		    {
-		      /* Standard GObject, use standard method. */
-		      g_object_ref (addr);
-		      own = TRUE;
-		    }
-		  else
-		    {
-		      /* Try to use custom ref method. */
-		      GIObjectInfoRefFunction ref =
-			g_object_info_get_ref_function_pointer (info);
-		      if (ref != NULL)
-			{
-			  ref (addr);
-			  own = TRUE;
-			}
-		    }
-		}
-
-	      lgi_compound_create (L, info, addr, own, parent);
+	      lgi_object_2lua (L, val->v_pointer, own);
 	      break;
 	    }
 
@@ -1375,15 +1343,8 @@ lgi_marshal_val_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 
     case G_TYPE_OBJECT:
       {
-	GIBaseInfo *bi = g_irepository_find_by_gtype (NULL, type);
-	if (bi != NULL)
-	  {
-	    gpointer obj = g_value_dup_object (val);
-	    lgi_compound_create (L, bi, obj, TRUE, 0);
-	    g_base_info_unref (bi);
-	    return;
-	  }
-	break;
+	lgi_object_2lua (L, g_value_dup_object (val), TRUE);
+	return;
       }
 
     default:
@@ -1395,17 +1356,11 @@ lgi_marshal_val_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 	    if (g_base_info_get_type (info) == GI_INFO_TYPE_OBJECT
 		&& g_object_info_get_fundamental (info))
 	      {
-		GIObjectInfoGetValueFunction get_value;
-		GIObjectInfoRefFunction ref;
-		get_value =
+		GIObjectInfoGetValueFunction get_value = 
 		  g_object_info_get_get_value_function_pointer (info);
-		ref = g_object_info_get_ref_function_pointer (info);
-		if (get_value != NULL && ref != NULL)
+		if (get_value != NULL)
 		  {
-		    gpointer obj = get_value (val);
-		    if (obj != NULL)
-		      ref (obj);
-		    lgi_compound_create (L, info, obj, TRUE, 0);
+		    lgi_object_2lua (L, get_value (val), FALSE);
 		    g_base_info_unref (info);
 		    return;
 		  }

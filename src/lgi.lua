@@ -113,13 +113,9 @@ local function find_in_compound(compound, symbol, categories)
       if val then return val end
    end
 
-   -- '_element' is pseudo-method, its default implementation here
-   -- does just return compound[symbol], but can be overriden for
-   -- specific compounds to find symbol dynamically according to
-   -- compound instance.
-   if symbol == '_element' then
-      return default_element_impl
-   end
+   -- Metatable might implement some specific methods.
+   local meta = getmetatable(compound)
+   return meta and meta[symbol]
 end
 
 -- Fully resolves the whole compound, i.e. load all symbols normally loaded
@@ -142,19 +138,19 @@ end
 -- Metatable for structs, allowing to 'call' structure, which is
 -- translating to creating new structure instance (i.e. constructor).
 local struct_mt = {}
-function struct_mt.__index(struct, symbol)
-   return find_in_compound(struct, symbol, { '_methods', '_fields' })
+function struct_mt:__index(symbol)
+   return find_in_compound(self, symbol, { '_methods', '_fields' })
 end
 
-function struct_mt.__call(type, fields)
+function struct_mt:__call(fields)
    -- Create the structure instance.
    local info
-   if type[0].type then
+   if self._gtype then
       -- Lookup info by gtype.
-      info = assert(gi[type[0].gtype])
+      info = assert(gi[self._gtype])
    else
       -- GType is not available, so lookup info by name.
-      local ns, name = type[0].name:match('^(.-)%.(.+)$')
+      local ns, name = self._name:match('^(.-)%.(.+)$')
       info = assert(gi[ns][name])
    end
    local struct = core.record.new(info)
@@ -208,9 +204,6 @@ function class_mt.__call(class, param)
    local params = {}
    local others = {}
 
-   -- Get BaseInfo from gtype.
-   local info = assert(gi[class[0].gtype])
-
    -- Process 'param' table, create constructor property table and signals
    -- table.
    for name, value in pairs(param or {}) do
@@ -224,7 +217,7 @@ function class_mt.__call(class, param)
    end
 
    -- Create the object.
-   local obj = core.construct(info, params)
+   local obj = core.object.new(class._gtype, params)
 
    -- Attach signals previously filtered out from creation.
    for name, func in pairs(others) do obj[name] = func end
@@ -411,24 +404,23 @@ end
 -- Sets up compound header (field 0) and metatable for the compound table.
 local function load_compound(compound, info, mt)
    -- Fill in meta of the compound.
-   compound[0] = compound[0] or {}
-   compound[0].gtype = info.gtype
-   if compound[0].gtype == 4 then
-      -- Non-boxed struct, it doesn't have any gtype.
-      compound[0].gtype = nil
+   if info.gtype then
+      compound._gtype = info.gtype
+      repo[compound._gtype] = compound
    end
-   compound[0].name = (info.namespace .. '.'  .. info.name)
-   compound[0].resolve = resolve_compound
+   compound._name = info.fullname
+   compound._resolve = resolve_compound
    setmetatable(compound, mt)
-
-   compound._gtype = compound[0].gtype
-   compound._name = compound[0].name
 end
 
 local function load_element_property(pi)
-   return function(obj, _, mode, newval)
+   return function(obj, mode, newval)
 	     if mode == nil then return pi end
-	     return core.elementof(obj, pi, mode, newval)
+	     if mode then
+		return core.object.property(obj, pi, newval)
+	     else
+		return core.object.property(obj, pi)
+	     end
 	  end
 end
 
@@ -443,17 +435,17 @@ end
 
 local function load_element_signal(info)
    return
-   function(obj, _, mode, newval)
+   function(obj, mode, newval)
       if mode == nil then return info end
       if mode then
 	 -- Assignment means 'connect signal without detail'.
-	 core.connect(obj, info.name, info, newval)
+	 core.object.connect(obj, info.name, info, newval)
       else
 	 -- Reading yields table with signal operations.
 	 local pad = {
 	    connect = function(_, target, detail, after)
-			 return core.connect(obj, info.name, info, target,
-					     detail, after)
+			 return core.object.connect(obj, info.name, info,
+						    target, detail, after)
 		      end,
 	 }
 
@@ -461,10 +453,11 @@ local function load_element_signal(info)
 	 -- for connecting in the 'on_signal['detail'] = handler' form.
 	 if info.is_signal and info.flags.detailed then
 	    setmetatable(pad, {
-			    __newindex = function(obj, detail, target)
-					    core.connect(obj, info.name,
-							 info, newval, detail)
-					 end
+			    __newindex =
+			       function(obj, detail, target)
+				  core.object.connect(obj, info.name,
+						      info, newval, detail)
+			       end
 			 })
 	 end
 
@@ -474,54 +467,71 @@ local function load_element_signal(info)
    end
 end
 
-local function load_element_field(fi)
+local function load_field(fi, field_accessor)
    -- Check the type of the field.
-   local ti = fi.typeinfo
-   if ti.tag == 'interface' then
-      local ii = ti.interface
-      local type = ii.type
-      if type == 'struct' or type == 'union' then
-	 -- Nested structure, handle assignment to it specially.
-	 return function(obj, mode, newval)
-		   -- If reading the type, read it directly.
-		   if mode == nil then return fi end
+   local ii = fi.typeinfo.interface
+   if ii and (ii.type == 'struct' or ii.type == 'union') then
+      -- Nested structure, handle assignment to it specially.
+      return function(obj, mode, newval)
+		-- If reading the type, read it directly.
+		if mode == nil then return fi end
 
-		   -- Get access to underlying nested structure.
-		   local sub = core.record.field(obj, fi)
+		-- Get access to underlying nested structure.
+		local sub = field_accessor(obj, fi)
 
-		   -- Reading it is simple, we are done.
-		   if not mode then return sub end
+		-- Reading it is simple, we are done.
+		if not mode then return sub end
 
-		   -- Writing means assigning all fields from the
-		   -- source table.
-		   for name, value in pairs(newval) do sub[name] = value end
-		end
-      end
+		-- Writing means assigning all fields from the source
+		-- table.
+		for name, value in pairs(newval) do sub[name] = value end
+	     end
    end
 
    -- For other types, simple closure around elementof() is sufficient.
    return function(obj, mode, newval)
 	     if mode == nil then return fi end
 	     if mode then
-		return core.record.field(obj, fi, newval)
+		return field_accessor(obj, fi, newval)
 	     else
-		return core.record.field(obj, fi)
+		return field_accessor(obj, fi)
 	     end
 	  end
 end
 
+local function load_record_field(fi)
+   return load_field(fi, core.record.field)
+end
+
+local function load_object_field(fi)
+   return load_field(fi, core.object.field)
+end
+
 -- Implementation of _access method for structs.
-local function struct_access(typetable, instance, name, ...)
+function struct_mt:_access(instance, name, ...)
    local setmode = select('#', ...) > 0
-   local val = typetable[name]
-   if val == nil then error(("%s: no `%s'"):format(typetable._name, name)) end
+   local val = self[name]
+   if val == nil then error(("%s: no `%s'"):format(self._name, name)) end
    if type(val) ~= 'function' then
-      if setmode then
-	 error(("%s: `%s' is not writable"):format(typetable._name, name))
-      end
+      assert(not setmode, ("%s: `s' is not writable"):format(self._name, name))
       return val
    end
    return val(instance, setmode, ...)
+end
+
+-- Implementatin of _access method for objects.
+function class_mt:_access(instance, name, ...)
+   local setmode = select('#', ...) > 0
+   local val = self[name]
+   if val == nil then
+      -- TODO: Check for dynamic interfaces, properties etc.
+      error(("%s: no `%s'"):format(self._name, name))
+   elseif type(val) == 'function' then
+      return val(instance, setmode, ...)
+   else
+      assert(not setmode, ("%s: `s' is not writable"):format(self._name, name))
+      return val
+   end
 end
 
 -- Loads structure information into table representing the structure
@@ -531,7 +541,7 @@ local function load_struct(namespace, struct, info)
       load_compound(struct, info, struct_mt)
       struct._methods = get_category(
 	 info.methods, core.construct, nil, nil, rawget(struct, '_methods'))
-      struct._fields = get_category(info.fields, load_element_field)
+      struct._fields = get_category(info.fields, load_record_field)
       struct._access = struct_access
    end
 end
@@ -621,7 +631,7 @@ local function load_class(namespace, class, info)
       function(ii) return repo[ii.namespace][ii.name] end,
       nil,
       function(n, ii) return ii.namespace .. '.' .. n end)
-   class._fields = get_category(info.fields, load_element_field)
+   class._fields = get_category(info.fields, load_record_field)
    local _ = rawget(class, '_inherits') and class._inherits[0]
 
    -- Add parent (if any) into _inherits table.
@@ -822,7 +832,7 @@ do
 
    -- ParamSpec.  Manually add its gtype, because it is not present in
    -- the typelib and is vital to dynamic elementof() innards.
-   repo.GObject.ParamSpec[0].gtype = repo.GObject.type_from_name('GParam')
+   repo.GObject.ParamSpec._gtype = repo.GObject.type_from_name('GParam')
 
    -- Closure modifications.  Closure does not need any methods nor
    -- fields, but it must have constructor creating it from any kind
