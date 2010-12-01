@@ -575,7 +575,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 {
   Callable *callable;
   FfiClosure *closure = closure_arg;
-  gint res, npos, i, stacktop;
+  gint res = 0, npos, i, stacktop;
   Param *param;
 
   /* Get access to proper Lua context. */
@@ -620,7 +620,10 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
       }
 
   /* Call it. */
-  res = 0; lua_call (L, npos, LUA_MULTRET);
+  if (callable->throws)
+    res = lua_pcall (L, npos, LUA_MULTRET, 0);
+  else
+    lua_call (L, npos, LUA_MULTRET);
   npos = stacktop;
 
   /* Check, whether we can report an error here. */
@@ -667,7 +670,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	    npos++;
 	  }
     }
-  else if (callable->throws)
+  else
     {
       /* If the function is expected to return errors, create proper error. */
       GQuark q = g_quark_from_static_string ("lgi-callback-error-quark");
@@ -676,8 +679,6 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
       g_set_error_literal (err, q, 1, lua_tostring(L, -1));
       lua_pop (L, 1);
     }
-  else
-    g_warning ("ignoring error from closure: %s", lua_tostring (L, -1));
 
   /* If the closure is marked as autodestroy, destroy it now.  Note that it is
      unfortunately not possible to destroy it directly here, because we would
