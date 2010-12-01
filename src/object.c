@@ -366,6 +366,24 @@ object_new (lua_State *L)
   return 1;
 }
 
+/* Checks whether given value is object and returns its real gtype and
+   associated type table. */
+static int
+object_typeof (lua_State *L)
+{
+  gpointer object = object_check (L, 1);
+  if (object)
+    {
+      GType gtype = G_TYPE_FROM_INSTANCE (object);
+      if (object_type (L, gtype) != G_TYPE_INVALID)
+	{
+	  lua_pushnumber (L, gtype);
+	  return 2;
+	}
+    }
+  return 0;
+}
+
 /* Object field accessor.  Lua-side prototypes:
    res = object.field(objectinstance, gi.fieldinfo)
    object.field(objectinstance, gi.fieldinfo, newvalue) */
@@ -583,6 +601,7 @@ object_connect (lua_State *L)
 /* Object API table. */
 static const luaL_Reg object_api_reg[] = {
   { "new", object_new },
+  { "typeof", object_typeof },
   { "field", object_field },
   { "property", object_property },
   { "properties", object_properties },

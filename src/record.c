@@ -367,6 +367,17 @@ record_new (lua_State *L)
     }
 }
 
+/* Checks whether given value is record. */
+static int
+record_typeof (lua_State *L)
+{
+  Record *record = record_check (L, 1);
+  if (!record)
+    return 0;
+  lua_getfenv (L, 1);
+  return 1;
+}
+
 /* Implements set/get field operation. Lua prototypes:
    res = core.record.field(recordinstance, fieldinfo)
    core.record.field(recordinstance, fieldinfo, newval) */
@@ -396,8 +407,9 @@ record_valueof (lua_State *L)
 }
 
 static const struct luaL_Reg record_api_reg[] = {
-  { "field", record_field },
   { "new", record_new },
+  { "typeof", record_typeof },
+  { "field", record_field },
   { "valueof", record_valueof },
   { NULL, NULL }
 };
