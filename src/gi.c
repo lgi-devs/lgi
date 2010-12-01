@@ -258,7 +258,11 @@ info_index (lua_State *L)
     {
       if (strcmp (prop, "gtype") == 0)
 	{
-	  lua_pushnumber (L, g_registered_type_info_get_g_type (*info));
+	  GType gtype = g_registered_type_info_get_g_type (*info);
+	  if (gtype != G_TYPE_NONE)
+	    lua_pushnumber (L, gtype);
+	  else
+	    lua_pushnil (L);
 	  return 1;
 	}
       else if (GI_IS_STRUCT_INFO (*info))
