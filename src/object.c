@@ -361,6 +361,9 @@ object_new (lua_State *L)
   return 1;
 }
 
+/* Object field accessor.  Lua-side prototypes:
+   res = object.field(objectinstance, gi.fieldinfo)
+   object.field(objectinstance, gi.fieldinfo, newvalue) */
 static int
 object_field (lua_State *L)
 {
@@ -374,10 +377,55 @@ object_field (lua_State *L)
   return lgi_marshal_field (L, object, getmode, 1, 2, 3);
 }
 
+/* Lists all dynamic properties of given object. Lua-side prototype:
+   {name->record(ParamSpec)} = object.properties(objectinstance)
+   record(ParamSpec) = object.properties(objectinstance, name) */
+static int
+object_properties (lua_State *L)
+{
+  GIBaseInfo *pspec_info;
+  GObjectClass *klass;
+  gboolean list = lua_isnoneornil (L, 2);
+
+  klass = G_OBJECT_GET_CLASS (lgi_object_2c (L, 1, G_TYPE_OBJECT, FALSE));
+  pspec_info = g_irepository_find_by_name (NULL, "GObject", "ParamSpec");
+  lgi_gi_info_new (L, pspec_info);
+  if (list)
+    {
+      /* List all properties of the object, store them into the table. */
+      guint n_properties, i;
+      GParamSpec **pspecs;
+
+      lua_newtable (L);
+      pspecs = g_object_class_list_properties (klass, &n_properties);
+      for (i = 0; i < n_properties; ++i)
+	{
+	  lgi_record_2lua (L, pspec_info, pspecs[i], LGI_RECORD_OWN, 0);
+	  lua_setfield (L, -2, pspecs[i]->name);
+	}
+
+      /* Returned array has to be freed. */
+      g_free (pspecs);
+    }
+  else
+    {
+      /* Find specified property. */
+      GParamSpec *pspec =
+	g_object_class_find_property (klass, lua_tostring (L, 2));
+      if (pspec != NULL)
+	lgi_record_2lua (L, pspec_info, pspec, LGI_RECORD_OWN, 0);
+      else
+	lua_pushnil (L);
+    }
+
+  return 1;
+}
+
 /* Object API table. */
 static const luaL_Reg object_api_reg[] = {
   { "new", object_new },
   { "field", object_field },
+  { "properties", object_properties },
   { NULL, NULL }
 };
 
