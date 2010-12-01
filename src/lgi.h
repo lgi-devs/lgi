@@ -72,7 +72,6 @@ enum _LgiFlags
 /* Initialization of modules. */
 void lgi_record_init (lua_State *L);
 void lgi_object_init (lua_State *L);
-void lgi_compound_init (lua_State *L);
 void lgi_callable_init (lua_State *L);
 void lgi_gi_init (lua_State *L);
 
@@ -146,35 +145,6 @@ gpointer lgi_closure_create (lua_State* L, GICallableInfo* ci, int target,
 /* GDestroyNotify-compatible callback for destroying closure. */
 void lgi_closure_destroy (gpointer user_data);
 
-/* Creates new compound of given address and type, pushes its userdata
-   on the lua stack. Parent is 0 or stack index of parent item, which
-   owns memory in which registered compound lives.  Returns 1 if
-   successful, 0 otherwise. */
-int lgi_compound_create (lua_State *L, GIBaseInfo *ii, gpointer addr,
-			 gboolean own, int parent);
-
-/* Creates new struct including allocated place for it. When
-   owner_parent is not 0, it is stack position of the parent on which
-   is the structure allocated, so it is kept by this element. */
-gpointer lgi_compound_struct_new (lua_State *L, GIBaseInfo *ii);
-
-/* Creates new object, initializes with specified properties. */
-gpointer lgi_compound_object_new (lua_State *L, GIObjectInfo *ii, int argtable);
-
-/* Retrieves compound-type parameter from given Lua-stack position,
-   checks, whether it is suitable for requested gtype.  Fills in
-   pointer to the compound object, or NULL if Lua-stack value is nil
-   and optional is TRUE.  Returns number of temporary Lua objects
-   pushed to the stack. On return, fills gtype argument with real
-   gtype of returned compound. */
-int lgi_compound_get (lua_State *L, int arg, GType *gtype, gpointer *addr,
-		      unsigned flags);
-
-/* Checks, compound with reqeusted gtype lives at given stack position.  If
-   yes, returns its address and updates real compound's gtype, otherwise
-   returns NULL.  Does not do any conversions/errors. */
-gpointer lgi_compound_check (lua_State *L, int arg, GType *gtype);
-
 /* Creates GClosure which invokes specified target. */
 GClosure *lgi_gclosure_create (lua_State *L, int target);
 
@@ -199,10 +169,6 @@ gpointer lgi_record_2lua (lua_State *L, GIBaseInfo *ri, gpointer addr,
    number of temporary objects created pushed on the stack. */
 int lgi_record_2c (lua_State *L, GIBaseInfo *ri, int narg, gpointer *addr,
 		   gboolean optional);
-
-/* Retrieves gtype of given record, returns G_TYPE_INVALID if the
-   record does not have gtype. */
-GType lgi_record_gtype (lua_State *L, int narg);
 
 /* Creates Lua-side part (proxy) of given object. If the object is not
    owned (own == FALSE), an ownership is automatically acquired. */

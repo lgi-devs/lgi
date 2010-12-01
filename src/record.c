@@ -244,18 +244,6 @@ lgi_record_2c (lua_State *L, GIBaseInfo *ri, int narg, gpointer *addr,
   return 0;
 }
 
-GType
-lgi_record_gtype (lua_State *L, int narg)
-{
-  GType gtype;
-  record_get (L, narg);
-  lua_getfenv (L, narg);
-  lua_getfield (L, -1, "_gtype");
-  gtype = lua_tonumber (L, -1);
-  lua_pop (L, 2);
-  return gtype;
-}
-
 static int
 record_gc (lua_State *L)
 {

@@ -141,11 +141,6 @@ lgi_construct (lua_State* L)
       vals = lgi_callable_create (L, *info);
       break;
 
-    case GI_INFO_TYPE_OBJECT:
-      lgi_compound_object_new (L, *info, 2);
-      vals = 1;
-      break;
-
     case GI_INFO_TYPE_CONSTANT:
       {
 	GITypeInfo *ti = g_constant_info_get_type (*info);
@@ -169,89 +164,6 @@ lgi_construct (lua_State* L)
     }
 
   return vals;
-}
-
-static int
-lgi_gtype (lua_State *L)
-{
-  GType gtype = G_TYPE_NONE;
-
-  if (lua_type (L, 1) == LUA_TSTRING)
-    {
-      /* Get information about the name. */
-      const gchar *name = luaL_checkstring (L, 1);
-      GIBaseInfo *info;
-
-      info = g_irepository_find_by_name (NULL, "GIRepository", name);
-      if (info == NULL)
-	return luaL_error (L, "unable to resolve GIRepository.%s", name);
-
-      gtype = g_registered_type_info_get_g_type (info);
-      g_base_info_unref (info);
-    }
-  else
-    {
-      /* Get information by compound. */
-      if (!lgi_compound_check (L, 1, &gtype))
-	gtype = lgi_record_gtype (L, 1);
-    }
-
-  lua_pushnumber (L, gtype);
-  return 1;
-}
-
-static void
-gclosure_destroy (gpointer user_data, GClosure *closure)
-{
-  lgi_closure_destroy (user_data);
-}
-
-/* Connects signal to given compound.
- * Signature is:
- * handler_id = core.connect(obj, signame, callable, func, detail, after) */
-static int
-lgi_connect (lua_State *L)
-{
-  gpointer obj;
-  const char *signame = luaL_checkstring (L, 2);
-  GICallableInfo *ci;
-  const char *detail = lua_tostring (L, 5);
-  gpointer call_addr, lgi_closure;
-  GClosure *gclosure;
-  guint signal_id;
-  gulong handler_id;
-  GType gt_obj = G_TYPE_OBJECT;
-
-  /* Get target objects. */
-  lgi_compound_get (L, 1, &gt_obj, &obj, 0);
-  ci = *(GIBaseInfo **) luaL_checkudata (L, 3, LGI_GI_INFO);
-
-  /* Create GClosure instance to be used.  This is fast'n'dirty method; it
-     requires less lines of code to write, but a lot of code to execute when
-     the signal is emitted; the signal goes like this:
-
-     1) emitter prepares params as an array of GValues.
-     2) GLib's marshaller converts it to C function call.
-     3) this call lands in libffi's trampoline (closure)
-     4) this trampoline converts arguments to libffi array of args
-     5) LGI libffi glue code unmarshalls them to Lua stack and calls Lua func.
-
-     much better solution would be writing custom GClosure Lua marshaller, in
-     which case the scenraio would be following:
-
-     1) emitter prepares params as an array of GValues.
-     2) LGI custom marshaller marshalls then to Lua stack and calls Lua
-	function. */
-  lgi_closure = lgi_closure_create (L, ci, 4, FALSE, &call_addr);
-  gclosure = g_cclosure_new (call_addr, lgi_closure, gclosure_destroy);
-
-  /* Connect closure to the signal. */
-  signal_id = g_signal_lookup (signame, G_OBJECT_TYPE (obj));
-  handler_id =  g_signal_connect_closure_by_id (obj, signal_id,
-						g_quark_from_string (detail),
-						gclosure, lua_toboolean (L, 6));
-  lua_pushnumber (L, handler_id);
-  return 1;
 }
 
 static int core_addr_logger;
@@ -336,8 +248,6 @@ log_handler (const gchar *log_domain, GLogLevelFlags log_level,
 
 static const struct luaL_reg lgi_reg[] = {
   { "construct", lgi_construct },
-  { "gtype", lgi_gtype },
-  { "connect", lgi_connect },
   { "log",  lgi_log },
   { "setlogger", lgi_setlogger },
   { NULL, NULL }
