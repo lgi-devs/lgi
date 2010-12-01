@@ -14,7 +14,7 @@ def build(bld):
     bld(
         features = 'c cshlib luaext',
 
-        source = 'core.c gi.c callable.c marshal.c record.c object.c compound.c',
+        source = 'core.c gi.c callable.c marshal.c record.c object.c',
         target = 'lgi',
         uselib = ['LUA', 'GI'],
         cflags = bld.env.CCFLAGS,

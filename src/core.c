@@ -345,7 +345,6 @@ luaopen_lgi__core (lua_State* L)
   lgi_gi_init (L);
   lgi_record_init (L);
   lgi_object_init (L);
-  lgi_compound_init (L);
   lgi_callable_init (L);
 
   /* Return registration table. */
