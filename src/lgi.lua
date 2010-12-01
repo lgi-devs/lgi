@@ -631,7 +631,7 @@ local function load_class(namespace, class, info)
       function(ii) return repo[ii.namespace][ii.name] end,
       nil,
       function(n, ii) return ii.namespace .. '.' .. n end)
-   class._fields = get_category(info.fields, load_record_field)
+   class._fields = get_category(info.fields, load_object_field)
    local _ = rawget(class, '_inherits') and class._inherits[0]
 
    -- Add parent (if any) into _inherits table.
