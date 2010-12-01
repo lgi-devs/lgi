@@ -861,38 +861,31 @@ do
 
    -- Tries to deduce the gtype according to Lua value.
    local function gettype(source)
-      if source == nil then
-	 return 'void'
-      elseif type(source) == 'boolean' then
-	 return 'gboolean'
+      if source == nil then return 'void'
+      elseif type(source) == 'boolean' then return 'gboolean'
       elseif type(source) == 'number' then
 	 -- If the number fits in integer, use it, otherwise use double.
 	 local _, fract = math.modf(source)
 	 local maxint32 = 0x80000000
 	 return ((fract == 0 and source >= -maxint32 and source < maxint32)
 	      and 'gint' or 'gdouble')
-      elseif type(source) == 'string' then
-	 return 'gchararray'
-      elseif type(source) == 'function' then
-	 -- Generate closure for any kind of function.
-	 return closure._gtype
+      elseif type(source) == 'string' then return 'gchararray'
+      elseif type(source) == 'function' then return closure._gtype
       elseif type(source) == 'userdata' then
-	 -- Examine type of userdata.
+	 -- Check whether is it record or object.
+	 local typetable, gtype = core.record.typeof(source)
+	 if typetable then return typetable._gtype end
+	 typetable, gtype = core.object.typeof(source)
+	 if typetable then return gtype end
+
+	 -- Check whether we can call this userdata.  If yes, generate
+	 -- closure.
 	 local meta = getmetatable(source)
-	 if meta and meta.__call then
-	    -- It seems that it is possible to call on this, so generate
-	    -- closure.
-	    return closure._gtype
-	 else
-	    -- Some kind of compound, get its real gtype from core.
-	    return core.gtype(source)
-	 end
+	 if meta and meta.__call then return closure._gtype end
       elseif type(source) == 'table' then
 	 -- Check, whether we can call it.
 	 local meta = getmetatable(source)
-	 if meta and meta.__call then
-	    return closure._gtype
-	 end
+	 if meta and meta.__call then return closure._gtype end
       end
 
       -- No idea to what type should this be mapped.
