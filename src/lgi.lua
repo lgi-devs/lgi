@@ -507,7 +507,7 @@ local function load_object_field(fi)
    return load_field(fi, core.object.field)
 end
 
--- Implementation of _access method for structs.
+-- _access method for structs.
 function struct_mt:_access(instance, name, ...)
    local setmode = select('#', ...) > 0
    local val = self[name]
@@ -519,12 +519,16 @@ function struct_mt:_access(instance, name, ...)
    return val(instance, setmode, ...)
 end
 
--- Implementatin of _access method for objects.
+-- _access method for objects.
 function class_mt:_access(instance, name, ...)
    local setmode = select('#', ...) > 0
    local val = self[name]
    if val == nil then
-      -- TODO: Check for dynamic interfaces, properties etc.
+      -- Check for dynamic properties.
+      local prop = core.object.properties(instance, name:gsub('_', '%-'))
+      if prop then return core.object.property(instance, prop, ...) end
+
+      -- TODO: Check for dynamic interfaces.
       error(("%s: no `%s'"):format(self._name, name))
    elseif type(val) == 'function' then
       return val(instance, setmode, ...)
