@@ -377,6 +377,78 @@ object_field (lua_State *L)
   return lgi_marshal_field (L, object, getmode, 1, 2, 3);
 }
 
+/* Object property accessor.  Lua-side prototypes:
+   res = object.property(objectinstance, propref)
+   object.property(objectinstance, propref, newvalue)
+   where 'propref' is either gi.info of the property or record with
+   ParamSpec returned by object.properties() call. */
+static int
+object_property (lua_State *L)
+{
+  int vals = 0;
+  GValue val = {0};
+  GType gtype;
+  GITypeInfo *ti = NULL;
+  GParamFlags flags;
+  const gchar *name;
+
+  /* Check, whether we are doing set or get operation. */
+  gboolean getmode = lua_isnone (L, 3);
+
+  /* Get object instance. */
+  gpointer object = lgi_object_2c (L, 1, G_TYPE_OBJECT, FALSE);
+  GIPropertyInfo *pi = lgi_gi_info_test (L, 2);
+  if (pi)
+    {
+      ti = g_property_info_get_type (pi);
+      lgi_gi_info_new (L, ti);
+      gtype = lgi_get_gtype (L, ti);
+      flags = g_property_info_get_flags (pi);
+      name = g_base_info_get_name (pi);
+    }
+  else
+    {
+      /* If not gi.info, it must be record with pspec. */
+      GParamSpec *pspec;
+      GIBaseInfo *pspec_info =
+	g_irepository_find_by_name (NULL, "GObject", "ParamSpec");
+      lgi_gi_info_new (L, pspec_info);
+      if (lgi_record_2c (L, pspec_info, 2, (gpointer *) &pspec, FALSE) > 0)
+	g_assert_not_reached ();
+      gtype = pspec->value_type;
+      flags = pspec->flags;
+      name = pspec->name;
+    }
+
+  /* Check access control. */
+  if ((flags & (getmode ? G_PARAM_READABLE : G_PARAM_WRITABLE)) == 0)
+    {
+      /* Prepare proper error message. */
+      object_type (L, G_OBJECT_TYPE (object));
+      lua_getfield (L, -1, "_name");
+      return luaL_error (L, "%s: property `%s' is not %s",
+			 lua_tostring (L, -1), name,
+			 getmode ? "readable" : "writable");
+    }
+
+  /* Initialize worker value with correct type. */
+  g_value_init (&val, gtype);
+  if (getmode)
+    {
+      g_object_get_property (object, name, &val);
+      lgi_marshal_val_2lua (L, ti, GI_TRANSFER_NOTHING, &val);
+      vals = 1;
+    }
+  else
+    {
+      lgi_marshal_val_2c (L, ti, GI_TRANSFER_NOTHING, &val, 3);
+      g_object_set_property (object, name, &val);
+    }
+
+  g_value_unset (&val);
+  return vals;
+}
+
 /* Lists all dynamic properties of given object. Lua-side prototype:
    {name->record(ParamSpec)} = object.properties(objectinstance)
    record(ParamSpec) = object.properties(objectinstance, name) */
@@ -425,6 +497,7 @@ object_properties (lua_State *L)
 static const luaL_Reg object_api_reg[] = {
   { "new", object_new },
   { "field", object_field },
+  { "property", object_property },
   { "properties", object_properties },
   { NULL, NULL }
 };
