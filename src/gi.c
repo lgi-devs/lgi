@@ -49,7 +49,7 @@ lgi_gi_info_test (lua_State *L, int narg)
     {
       luaL_getmetatable (L, LGI_GI_INFO);
       if (lua_equal (L, -1, -2))
-	info = lua_touserdata (L, narg);
+	info = *(GIBaseInfo **) lua_touserdata (L, narg);
       lua_pop (L, 2);
     }
   return info;
