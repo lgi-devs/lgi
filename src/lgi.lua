@@ -672,15 +672,15 @@ function namespace_mt.__index(namespace, symbol)
    local value = namespace_lookup(namespace, symbol)
    if value then return value end
 
-   -- Lookup baseinfo of requested symbol in the repo.
+   -- Lookup baseinfo of requested symbol in the GIRepository.
    local info = gi[namespace[0].name][symbol]
+   if not info then return nil end
 
    -- Store the symbol into the in-load table, because we have to
    -- avoid infinte recursion which might happen during symbol loading (mainly
    -- when prerequisity of the interface is the class which implements said
    -- interface).
-   local fullname = namespace[0].name .. '.' .. symbol
-   in_load[fullname] = info
+   in_load[info.fullname] = info
 
    -- Decide according to symbol type what to do.
    if info and not info.deprecated then
@@ -696,7 +696,7 @@ function namespace_mt.__index(namespace, symbol)
       end
    end
 
-   in_load[fullname] = nil
+   in_load[info.fullname] = nil
    return value
 end
 
@@ -716,7 +716,6 @@ end
 -- represents it (usable as package table for Lua package loader).
 local function load_namespace(into, name)
    -- If package does not exist yet, create and store it into packages.
-   assert(name ~= 'val')
    if not into then
       into = {}
       repo[name] = into
