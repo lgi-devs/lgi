@@ -57,7 +57,9 @@ typedef struct _Callable
   /* ffi_type* array here, contains ffi_type[nargs + 2] entries. */
   /* params points here, contains Param[nargs] entries. */
 } Callable;
-#define UD_CALLABLE "lgi.callable"
+
+/* Address is lightuserdata of Callable metatable in Lua registry. */
+static int callable_mt;
 
 /* Structure containing basic callback information. */
 typedef struct _Callback
@@ -207,7 +209,8 @@ lgi_callable_create (lua_State *L, GICallableInfo *info)
   callable = lua_newuserdata (L, sizeof (Callable) +
 			      sizeof (ffi_type) * (nargs + 2) +
 			      sizeof (Param) * nargs);
-  luaL_getmetatable (L, UD_CALLABLE);
+  lua_pushlightuserdata (L, &callable_mt);
+  lua_rawget (L, LUA_REGISTRYINDEX);
   lua_setmetatable (L, -2);
 
   /* Fill in callable with proper contents. */
@@ -309,6 +312,28 @@ lgi_callable_create (lua_State *L, GICallableInfo *info)
   return 1;
 }
 
+/* Checks whether given argument is Callable userdata. */
+static Callable *
+callable_get (lua_State *L, int narg)
+{
+  luaL_checkstack (L, 3, "");
+  if (lua_getmetatable (L, narg))
+    {
+      lua_pushlightuserdata (L, &callable_mt);
+      lua_rawget (L, LUA_REGISTRYINDEX);
+      if (lua_rawequal (L, -1, -2))
+	{
+	  lua_pop (L, 2);
+	  return lua_touserdata (L, narg);
+	}
+    }
+
+  lua_pushfstring (L, "expected lgi.callable, got %s",
+		   lua_typename (L, lua_type (L, narg)));
+  luaL_argerror (L, narg, lua_tostring (L, -1));
+  return NULL;
+}
+
 int
 lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
 {
@@ -318,7 +343,7 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
   GIArgument *args;
   void **ffi_args, **redirect_out;
   GError *err = NULL;
-  Callable *callable = luaL_checkudata (L, func_index, UD_CALLABLE);
+  Callable *callable = callable_get (L, func_index);
 
   /* Make sure that all unspecified arguments are set as nil; during
      marhsalling we might create temporary values on the stack, which
@@ -487,7 +512,7 @@ static int
 callable_gc (lua_State *L)
 {
   /* Just unref embedded 'info' field. */
-  Callable *callable = luaL_checkudata (L, 1, UD_CALLABLE);
+  Callable *callable = callable_get (L, 1);
   g_base_info_unref (callable->info);
   return 0;
 }
@@ -495,7 +520,7 @@ callable_gc (lua_State *L)
 static int
 callable_tostring (lua_State *L)
 {
-  Callable *callable = luaL_checkudata (L, 1, UD_CALLABLE);
+  Callable *callable = callable_get (L, 1);
   lua_pushfstring (L, "lgi.%s (%p): ",
 		   (GI_IS_FUNCTION_INFO (callable->info) ? "fun" :
 		    (GI_IS_SIGNAL_INFO (callable->info) ? "sig" :
@@ -817,9 +842,10 @@ void
 lgi_callable_init (lua_State *L)
 {
   /* Register callable metatable. */
-  luaL_newmetatable (L, UD_CALLABLE);
+  lua_pushlightuserdata (L, &callable_mt);
+  lua_newtable (L);
   luaL_register (L, NULL, callable_reg);
-  lua_pop (L, 1);
+  lua_rawset (L, LUA_REGISTRYINDEX);
 
   /* Create cache for callables. */
   lgi_cache_create (L, &callable_cache, NULL);
