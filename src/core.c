@@ -127,39 +127,18 @@ lgi_guard_get_data (lua_State *L, int pos, gpointer **data)
 }
 
 static int
-lgi_construct (lua_State* L)
+lgi_constant (lua_State* L)
 {
-  /* Create new instance based on the embedded typeinfo. */
-  int vals = 0;
-  GIBaseInfo **info;
-
-  /* Check whether arg1 is baseinfo. */
-  info = luaL_checkudata (L, 1, LGI_GI_INFO);
-  switch (g_base_info_get_type (*info))
-    {
-    case GI_INFO_TYPE_CONSTANT:
-      {
-	GITypeInfo *ti = g_constant_info_get_type (*info);
-	GIArgument val;
-	lgi_gi_info_new (L, ti);
-	g_constant_info_get_value (*info, &val);
-	lgi_marshal_arg_2lua (L, ti, GI_TRANSFER_NOTHING, &val, 0, FALSE,
-			      NULL, NULL);
-	vals = 1;
-      }
-      break;
-
-    default:
-      lua_pushfstring (L, "failing to construct unknown type %d (%s.%s)",
-		       g_base_info_get_type (*info),
-		       g_base_info_get_namespace (*info),
-		       g_base_info_get_name (*info));
-      g_warning ("%s", lua_tostring (L, -1));
-      lua_error (L);
-      break;
-    }
-
-  return vals;
+  /* Get typeinfo of the constant. */
+  GIArgument val;
+  GIConstantInfo *ci = * (GIConstantInfo **) luaL_checkudata (L, 1,
+							      LGI_GI_INFO);
+  GITypeInfo *ti = g_constant_info_get_type (ci);
+  lgi_gi_info_new (L, ti);
+  g_constant_info_get_value (ci, &val);
+  lgi_marshal_arg_2lua (L, ti, GI_TRANSFER_NOTHING, &val, 0, FALSE,
+			NULL, NULL);
+  return 1;
 }
 
 static int core_addr_logger;
@@ -243,7 +222,7 @@ log_handler (const gchar *log_domain, GLogLevelFlags log_level,
 }
 
 static const struct luaL_reg lgi_reg[] = {
-  { "construct", lgi_construct },
+  { "constant", lgi_constant },
   { "log",  lgi_log },
   { "setlogger", lgi_setlogger },
   { NULL, NULL }

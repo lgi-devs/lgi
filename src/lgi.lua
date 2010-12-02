@@ -285,7 +285,7 @@ typeloader['function'] =
 
 typeloader['constant'] =
    function(namespace, info)
-      return check_type(info) and core.construct(info), '_constants'
+      return check_type(info) and core.constant(info), '_constants'
    end
 
 local function load_enum(info, meta)
@@ -615,7 +615,7 @@ typeloader['interface'] =
       interface._signals = get_category(
 	 info.signals, load_element_signal,
 	 load_signal_name, load_signal_name_reverse)
-      interface._constants = get_category(info.constants, core.construct)
+      interface._constants = get_category(info.constants, core.constant)
       return interface, '_interfaces'
    end
 
@@ -638,7 +638,7 @@ local function load_class(namespace, class, info)
    class._signals = get_category(
       info.signals, load_element_signal, load_signal_name,
       load_signal_name_reverse)
-   class._constants = get_category(info.constants, core.construct)
+   class._constants = get_category(info.constants, core.constant)
    class._implements = get_category(
       info.interfaces,
       function(ii) return repo[ii.namespace][ii.name] end,
