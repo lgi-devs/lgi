@@ -524,13 +524,22 @@ function class_mt:_access(instance, name, ...)
    local setmode = select('#', ...) > 0
    local val = self[name]
    if val == nil then
-      -- Check for dynamic properties.
-      local prop = core.object.properties(instance, name:gsub('_', '%-'))
-      if prop then return core.object.property(instance, prop, ...) end
+      -- Check for dynamic interfaces.
+      for _, iinfo in pairs(core.object.interfaces(instance)) do
+	 itype = repo[iinfo.namespace][iinfo.name]
+	 val = itype and itype[name]
+	 if val then break end
+      end
 
-      -- TODO: Check for dynamic interfaces.
-      error(("%s: no `%s'"):format(self._name, name))
-   elseif type(val) == 'function' then
+      if not val then
+	 -- Check for dynamic properties.
+	 local prop = core.object.properties(instance, name:gsub('_', '%-'))
+	 if prop then return core.object.property(instance, prop, ...) end
+	 error(("%s: no `%s'"):format(self._name, name))
+      end
+   end
+
+   if type(val) == 'function' then
       return val(instance, setmode, ...)
    else
       assert(not setmode, ("%s: `s' is not writable"):format(self._name, name))
