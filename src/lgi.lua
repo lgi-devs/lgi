@@ -120,8 +120,8 @@ end
 
 -- Fully resolves the whole compound, i.e. load all symbols normally loaded
 -- on-demand at once.
-local function resolve_compound(compound_meta)
-   local ns, name = string.match(compound_meta.name, '(.+)%.(.+)')
+local function resolve_compound(compound)
+   local ns, name = string.match(compound._name, '(.+)%.(.+)')
    for _, category in pairs(repo[ns][name]) do
       if type(category) == 'table' then local _ = category[0] end
    end
