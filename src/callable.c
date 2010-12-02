@@ -838,6 +838,15 @@ lgi_gclosure_create (lua_State *L, int target)
   return &c->closure;
 }
 
+/* Creates new Callable instance according to given gi.info. Lua prototype:
+   callable = callable.new(callable_info) */
+static int
+callable_new (lua_State *L)
+{
+  return lgi_callable_create (L,  *(GICallableInfo **)
+			      luaL_checkudata (L, 1, LGI_GI_INFO));
+}
+
 void
 lgi_callable_init (lua_State *L)
 {
@@ -849,4 +858,10 @@ lgi_callable_init (lua_State *L)
 
   /* Create cache for callables. */
   lgi_cache_create (L, &callable_cache, NULL);
+
+  /* Create public api for callable module. */
+  lua_newtable (L);
+  lua_pushcfunction (L, callable_new);
+  lua_setfield (L, -2, "new");
+  lua_setfield (L, -2, "callable");
 }

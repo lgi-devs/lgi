@@ -280,7 +280,7 @@ end
 
 typeloader['function'] =
    function(namespace, info)
-      return check_type(info) and core.construct(info), '_functions'
+      return check_type(info) and core.callable.new(info), '_functions'
    end
 
 typeloader['constant'] =
@@ -553,7 +553,7 @@ local function load_struct(namespace, struct, info)
    if not info.is_gtype_struct then
       load_compound(struct, info, struct_mt)
       struct._methods = get_category(
-	 info.methods, core.construct, nil, nil, rawget(struct, '_methods'))
+	 info.methods, core.callable.new, nil, nil, rawget(struct, '_methods'))
       struct._fields = get_category(info.fields, load_record_field)
       struct._access = struct_access
    end
@@ -587,7 +587,7 @@ typeloader['interface'] =
 	 function(ii)
 	    local flags = ii.flags
 	    if not flags.is_getter and not flags.is_setter then
-	       return core.construct(ii)
+	       return core.callable.new(ii)
 	    end
 	 end) or {}
       -- If method is not found normal way, try to look it up in
@@ -632,7 +632,7 @@ local function load_class(namespace, class, info)
       function(mi)
 	 local flags = mi.flags
 	 if not flags.is_getter and not flags.is_setter then
-	    return core.construct(mi)
+	    return core.callable.new(mi)
 	 end
       end, nil, nil, rawget(class, '_methods'))
    class._signals = get_category(

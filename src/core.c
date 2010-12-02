@@ -137,10 +137,6 @@ lgi_construct (lua_State* L)
   info = luaL_checkudata (L, 1, LGI_GI_INFO);
   switch (g_base_info_get_type (*info))
     {
-    case GI_INFO_TYPE_FUNCTION:
-      vals = lgi_callable_create (L, *info);
-      break;
-
     case GI_INFO_TYPE_CONSTANT:
       {
 	GITypeInfo *ti = g_constant_info_get_type (*info);
