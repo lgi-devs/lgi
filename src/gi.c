@@ -504,6 +504,11 @@ namespace_index (lua_State *L)
       lua_pushstring (L, g_irepository_get_version (NULL, ns));
       return 1;
     }
+  else if (strcmp (prop, "name") == 0)
+    {
+      lua_pushstring (L, ns);
+      return 1;
+    }
   else
     /* Try to lookup the symbol. */
     return lgi_gi_info_new (L, g_irepository_find_by_name (NULL, ns, prop));
