@@ -78,71 +78,224 @@ log.message('Lgi: Lua to GObject-Introspection binding v0.1')
 -- loading on-demand.  Created by C-side bootstrap.
 local repo = core.repo
 
-local function default_element_impl(compound, _, symbol)
-   return compound[symbol]
-end
+-- Gets table for category of compound (i.e. _fields of struct or _properties
+-- for class etc).  Installs metatable which performs on-demand lookup of
+-- symbols.
+local function get_category(children, xform_value,
+			    xform_name, xform_name_reverse)
+   -- Either none or both transform methods must be provided.
+   assert(not xform_name or xform_name_reverse)
 
--- Loads symbol from specified compound (object, struct or interface).
--- Recursively looks up inherited elements.
-local function find_in_compound(compound, symbol, categories)
-   -- Tries to get symbol from specified category.
-   local function from_category(compound, category, symbol)
-      local cat = rawget(compound, category)
-      return cat and cat[symbol]
+   -- Early shortcircuit; no elements, no table needed at all.
+   if #children == 0 then return nil end
+
+   -- Index contains array of indices which were still not retrieved
+   -- from 'children' table, and table part contains name->index
+   -- mapping.
+   local index, mt = {}, {}
+   for i = 1, #children do index[i] = i end
+
+   -- Fully resolves the category (i.e. loads everything remaining to
+   -- be loaded in given category) and disconnects on-demand loading
+   -- metatable.
+   local function resolve(category)
+      -- Load al values from unknown indices.
+      local ei, en, val
+      while #index > 0 do
+	 ei = check_type(children[table.remove(index)])
+	 val = ei and (not xform_value and ei or xform_value(ei))
+	 if val then
+	    en = ei.name
+	    if xform_name_reverse then
+	       en = xform_name_reverse(en, ei)
+	    end
+	    if en then self[en] = val end
+	 end
+      end
+
+      -- Load all known indices.
+      for en, idx in pairs(index) do
+	 val = check_type(children[idx])
+	 val = not xform_value and val or xform_value(val)
+	 self[en] = val
+      end
+
+      -- Metatable is no longer needed, disconnect it.
+      setmetatable(self, nil)
    end
 
-   -- Check fields of this compound.
-   local prefix, name = string.match(symbol, '^(_.-)_(.*)$')
-   if prefix and name then
-      -- Look in specified category.
-      local val = from_category(compound, prefix, name)
+   function mt:__index(requested_name)
+      -- Check if closure for fully resolving the category is needed.
+      if requested_name == '_resolve' then
+	 return resolve
+      end
+
+      -- Transform name by transform function.
+      local name = not xform_name and requested_name
+	 or xform_name(requested_name)
+      if not name then return end
+
+      -- Check, whether we already know its index.
+      local idx, val = index[name]
+      if idx then
+	 -- We know at least the index, so get info directly.
+	 val = children[idx]
+	 index[name] = nil
+      else
+	 -- Not yet, go through unknown indices and try to find the
+	 -- name.
+	 while #index > 0 do
+	    idx = table.remove(index)
+	    val = children[idx]
+	    local en = val.name
+	    if en == name then break end
+	    val = nil
+	    index[en] = idx
+	 end
+      end
+
+      -- If there is nothing in the index, we can disconnect
+      -- metatable, because everything is already loaded.
+      if not next(index) then
+	 setmetatable(self, nil)
+      end
+
+      -- Transform found value and store it into the category (self)
+      -- table.
+      if not check_type(val) then return nil end
+      if xform_value then val = xform_value(val) end
+      if not val then return nil end
+      self[requested_name] = val
+      return val
+   end
+   return setmetatable({}, mt)
+end
+
+-- Loads element from specified compound typetable.
+local function get_element(typetable, symbol)
+   -- Decompose symbol name, in case that it contains category prefix
+   -- (e.g. '_field_name' when requesting explicitely field called
+   -- name).
+   local category, name = string.match(symbol, '^(_.-)_(.*)$')
+   if category and name then
+      -- Check requested category.
+      local cat = rawget(typetable, category)
+      local val = cat and cat[name]
       if val then return val end
    elseif string.sub(symbol, 1, 1) ~= '_' then
       -- Check all available categories.
+      local categories = typetable._categories or {}
       for i = 1, #categories do
-	 local val = from_category(compound, categories[i], symbol)
+	 local cat = rawget(typetable, categories[i])
+	 local val = cat and cat[symbol]
 	 if val then return val end
       end
    end
 
-   -- Check parent and all implemented compounds.
-   local val = (rawget(compound, '_parent') or {})[symbol]
+   -- Check parent and all implemented interfaces.
+   local parent = rawget(typetable, '_parent')
+   val = parent and parent[symbol]
    if val then return val end
-   for _, implemented in pairs(rawget(compound, '_implements') or {}) do
-      val = implemented[symbol]
-      if val then return val end
+   local implements = rawget(typetable, '_implements')
+   if implements then
+      for _, implemented in pairs(implements) do
+	 val = implemented[symbol]
+	 if val then return val end
+      end
    end
 
-   -- Metatable might implement some specific methods.
-   local meta = getmetatable(compound)
+   -- As a last resort, metatable might contain fallback implementation.
+   local meta = getmetatable(typetable)
    return meta and meta[symbol]
 end
 
--- Fully resolves the whole compound, i.e. load all symbols normally loaded
--- on-demand at once.
-local function resolve_compound(compound)
-   local ns, name = string.match(compound._name, '(.+)%.(.+)')
-   for _, category in pairs(repo[ns][name]) do
-      if type(category) == 'table' then local _ = category[0] end
+-- Fully resolves the whole typetable, i.e. load all symbols normally
+-- loaded on-demand at once.
+local function resolve_elements(typetable)
+   local categories = typetable._categories or {}
+   for i = 1, #categories do
+      local category = rawget(typetable, categories[i])
+      local resolve = type(category) == 'table' and category._resolve
+      local _ = resolve and resolve(typetable)
    end
 end
 
--- Metatable for namespaces.
-local namespace_mt = {}
-function namespace_mt.__index(namespace, symbol)
-   return find_in_compound(namespace, symbol,
-			   { '_classes', '_interfaces', '_structs', '_unions',
-			     '_enums', '_functions', '_constants', })
+-- Metatables for assorted repo components.
+local function create_component_meta(categories)
+   return { _categories = categories, _resolve = resolve_elements,
+	    __index = get_element }
 end
 
--- Metatable for structs, allowing to 'call' structure, which is
--- translating to creating new structure instance (i.e. constructor).
-local struct_mt = {}
-function struct_mt:__index(symbol)
-   return find_in_compound(self, symbol, { '_methods', '_fields' })
+local component_mt = {
+   namespace = create_component_meta {
+      '_classes', '_interfaces', '_structs', '_unions', '_enums',
+      '_functions', '_constants', },
+   record = create_component_meta {
+      '_methods', '_fields'
+   },
+   interface = create_component_meta {
+      '_properties', '_methods', '_signals', '_constants' },
+   class = create_component_meta {
+      '_properties', '_methods', '_signals', '_constants', '_fields' },
+   bitflags = {},
+   enum = {},
+}
+
+-- Resolving arbitrary number to the table containing symbolic names
+-- of contained bits.
+function component_mt.bitflags:__index(value)
+   local t = {}
+   for name, flag in pairs(self) do
+      if type(flag) == 'number' and value % (2 * flag) >= flag then
+	 t[name] = flag
+      end
+   end
+   return t
 end
 
-function struct_mt:__call(fields)
+-- Implements reverse mapping, value->name.
+function component_mt.enum:__index(value)
+   for name, val in pairs(self) do
+      if val == value then return name end
+   end
+end
+
+-- _access method for records and simple objects.
+local function record_access(self, instance, name, ...)
+   local val = self[name]
+   if val == nil then error(("%s: no `%s'"):format(self._name, name)) end
+   if type(val) ~= 'function' then
+      assert(select('#', ...) == 0,
+	     ("%s: `s' is not writable"):format(self._name, name))
+      return val
+   end
+   return val(instance, ...)
+end
+
+component_mt.record._access = record_access
+component_mt.class._access = record_access
+
+-- If member of interface cannot be found normally, try to look it up
+-- in parent namespace too; this allows to overcome IMHO gir-compiler
+-- flaw, causing that we can see e.g. Gio.file_new_for_path() instead
+-- of Gio.File.new_for_path().
+function component_mt.interface:__index(symbol)
+   local val = get_element(self, symbol)
+   if not val then
+      -- Convert name from CamelCase to underscore_delimited form.
+      local method_name = {}
+      for part in info.name:gmatch('%u%l*') do
+	 method_name[#method_name + 1] = part:lower()
+      end
+      method_name[#method_name + 1] = symbol
+      val = repo[self._name:gsub('([%w_])')][table.concat(method_name, '_')]
+      self[symbol] = val
+   end
+   return val
+end
+
+-- Create structure instance and initialize it with given fields.
+function component_mt.record:__call(fields)
    -- Create the structure instance.
    local info
    if self._gtype then
@@ -162,62 +315,22 @@ function struct_mt:__call(fields)
    return struct
 end
 
--- Metatable for bitflags tables, resolving arbitrary number to the
--- table containing symbolic names of contained bits.
-local bitflags_mt = {}
-function bitflags_mt.__index(bitflags, value)
-   local t = {}
-   for name, flag in pairs(bitflags) do
-      if type(flag) == 'number' and value % (2 * flag) >= flag then
-	 t[name] = flag
-      end
-   end
-   return t
-end
-
--- Metatable for enum type tables.
-local enum_mt = {}
-function enum_mt.__index(enum, value)
-   for name, val in pairs(enum) do
-      if val == value then return name end
-   end
-end
-
--- Metatable for interfaces.
-local interface_mt = {}
-function interface_mt.__index(iface, symbol)
-   return find_in_compound(iface, symbol, { '_properties', '_methods',
-					    '_signals', '_constants' })
-end
-
--- Metatable for classes, implementing object construction on __call.
-local class_mt = {}
-function class_mt.__index(class, symbol)
-   return find_in_compound(class, symbol, {
-			      '_properties', '_methods',
-			      '_signals', '_constants', '_fields' })
-end
-
 -- Object constructor, 'param' contains table with properties/signals
 -- to initialize.
-function class_mt.__call(class, param)
-   local params = {}
-   local others = {}
-
-   -- Process 'param' table, create constructor property table and signals
-   -- table.
-   for name, value in pairs(param or {}) do
-      local paramtype = class[name]
-      if type(paramtype) == 'function' then paramtype = paramtype() end
+function component_mt.class:__call(args)
+   -- Process 'param' table, separate properties from other fields.
+   local props, others = {}, {}
+   for name, value in pairs(args or {}) do
+      local argtype = self[name]
       if type(paramtype) == 'userdata' and paramtype.is_property then
-	 params[paramtype] = value
+	 props[paramtype] = value
       else
 	 others[name] = value
       end
    end
 
    -- Create the object.
-   local obj = core.object.new(class._gtype, params)
+   local obj = core.object.new(self._gtype, props)
 
    -- Attach signals previously filtered out from creation.
    for name, func in pairs(others) do obj[name] = func end
@@ -227,11 +340,7 @@ end
 -- Weak table containing symbols which currently being loaded. It is used
 -- mainly to avoid assorted kinds of infinite recursion which might happen
 -- during symbol dependencies loading.
-local in_load = setmetatable({}, { __mode = 'v' })
-
--- Table containing loaders for various GI types, indexed by
--- gi.InfoType constants.
-local typeloader = {}
+local in_check = setmetatable({}, { __mode = 'v' })
 
 -- Loads the type and all dependent subtypes.  Returns nil if it cannot be
 -- loaded or the type itself if it is ok.
@@ -265,28 +374,46 @@ local function check_type(info)
       for i = 1, #args do
 	 if not check_type(args[i].typeinfo) then return nil end
       end
-      return info
    elseif type == 'constant' or type == 'property' or type == 'field' then
-      return check_type(info.typeinfo) and info
+      if not check_type(info.typeinfo) then info = nil end
    elseif info.is_registered_type then
       -- Check, whether we can reach the symbol in the repo.
-      local ns, n = info.namespace, info.name
-      return (in_load[ns .. '.' .. n] or repo[ns][n]) and info
+      in_check[info.fullname] = info
+      if not in_check[info.fullname]
+	 and not repo[info.namespace][info.name] then
+	 info = nil
+      end
+      in_check[info.fullname] = nil
    else
       log.warning("unknown type `%s' of %s", type, info.fullname)
       return nil
    end
 end
 
+-- Creates new component and sets up common parts according to given
+-- info.
+local function create_component(info, mt)
+   -- Fill in meta of the compound.
+   local component = { _name = info.fullname }
+   if info.gtype then
+      component._gtype = info.gtype
+      repo[rawget(component, _gtype)] = component
+   end
+   return setmetatable(compound, mt)
+end
+
+-- Table containing loaders for various GI types, indexed by
+-- gi.InfoType constants.
+local typeloader = {}
+
 typeloader['function'] =
    function(namespace, info)
       return check_type(info) and core.callable.new(info), '_functions'
    end
 
-typeloader['constant'] =
-   function(namespace, info)
-      return check_type(info) and core.constant(info), '_constants'
-   end
+function typeloader.constant(namespace, info)
+   return check_type(info) and core.constant(info), '_constants'
+end
 
 local function load_enum(info, meta)
    local value = {}
@@ -304,124 +431,12 @@ local function load_enum(info, meta)
    return value
 end
 
-typeloader['enum'] =
-   function(namespace, info)
-      return load_enum(info, enum_mt), '_enums'
-   end
-
-typeloader['flags'] =
-   function(namespace, info)
-      return load_enum(info, bitflags_mt), '_enums'
-   end
-
--- Gets table for category of compound (i.e. _fields of struct or _properties
--- for class etc).  Installs metatable which performs on-demand lookup of
--- symbols.
-local function get_category(children, xform_value, xform_name,
-			    xform_name_reverse, original_table)
-   assert(not xform_name or xform_name_reverse)
-
-   -- Early shortcircuit; no elements, no table needed at all.
-   if #children == 0 then return original_table end
-
-   -- Index contains array of indices which were still not retrieved
-   -- from 'children' table, and table part contains name->index
-   -- mapping.
-   local index = {}
-   for i = 1, #children do index[i] = i end
-   return setmetatable(
-      original_table or {}, { __index =
-	    function(category, req_name)
-	       -- Querying index 0 has special semantics; makes the
-	       -- whole table fully loaded.
-	       if req_name == 0 then
-		  local ei, en, val
-
-		  -- Load al values from unknown indices.
-		  while #index > 0 do
-		     ei = check_type(children[table.remove(index)])
-		     val = ei and (not xform_value and ei or xform_value(ei))
-		     if val then
-			en = ei.name
-			if xform_name_reverse then
-			   en = xform_name_reverse(en, ei)
-			end
-			if en then category[en] = val end
-		     end
-		  end
-
-		  -- Load all known indices.
-		  for en, idx in pairs(index) do
-		     val = check_type(children[idx])
-		     val = not xform_value and val or xform_value(val)
-		     category[en] = val
-		  end
-
-		  -- Metatable is no longer needed, disconnect it.
-		  setmetatable(category, nil)
-		  return nil
-	       end
-
-	       -- Transform name by transform function.
-	       local name = not xform_name and req_name or xform_name(req_name)
-	       if not name then return end
-
-	       -- Check, whether we already know its index.
-	       local idx, val = index[name]
-	       if idx then
-		  -- We know at least the index, so get info directly.
-		  val = children[idx]
-		  index[name] = nil
-	       else
-		  -- Not yet, go through unknown indices and try to
-		  -- find the name.
-		  while #index > 0 do
-		     idx = table.remove(index)
-		     val = children[idx]
-		     local en = val.name
-		     if en == name then break end
-		     val = nil
-		     index[en] = idx
-		  end
-	       end
-
-	       -- If there is nothing in the index, we can disconnect
-	       -- metatable, because everything is already loaded.
-	       if not next(index) then
-		  setmetatable(category, nil)
-	       end
-
-	       -- Transform found value and store it into the category table.
-	       if not check_type(val) then return nil end
-	       if xform_value then val = xform_value(val) end
-	       if not val then return nil end
-	       category[req_name] = val
-	       return val
-	    end
-      })
+function typeloader.enum(namespace, info)
+   return load_enum(info, component_mt.enum), '_enums'
 end
 
--- Sets up compound header (field 0) and metatable for the compound table.
-local function load_compound(compound, info, mt)
-   -- Fill in meta of the compound.
-   if info.gtype then
-      compound._gtype = info.gtype
-      repo[compound._gtype] = compound
-   end
-   compound._name = info.fullname
-   compound._resolve = resolve_compound
-   setmetatable(compound, mt)
-end
-
-local function load_element_property(pi)
-   return function(obj, mode, newval)
-	     if mode == nil then return pi end
-	     if mode then
-		return core.object.property(obj, pi, newval)
-	     else
-		return core.object.property(obj, pi)
-	     end
-	  end
+function typeloader.flags(namespace, info)
+   return load_enum(info, component_mt.bitflags), '_enums'
 end
 
 local function load_signal_name(name)
@@ -435,11 +450,10 @@ end
 
 local function load_element_signal(info)
    return
-   function(obj, mode, newval)
-      if mode == nil then return info end
-      if mode then
+   function(obj, ...)
+      if select('#', ...) > 0 then
 	 -- Assignment means 'connect signal without detail'.
-	 core.object.connect(obj, info.name, info, newval)
+	 core.object.connect(obj, info.name, info, ...)
       else
 	 -- Reading yields table with signal operations.
 	 local pad = {
@@ -472,15 +486,12 @@ local function load_field(fi, field_accessor)
    local ii = fi.typeinfo.interface
    if ii and (ii.type == 'struct' or ii.type == 'union') then
       -- Nested structure, handle assignment to it specially.
-      return function(obj, mode, newval)
-		-- If reading the type, read it directly.
-		if mode == nil then return fi end
-
+      return function(obj, ...)
 		-- Get access to underlying nested structure.
 		local sub = field_accessor(obj, fi)
 
 		-- Reading it is simple, we are done.
-		if not mode then return sub end
+		if select('#', ...) == 0 then return sub end
 
 		-- Writing means assigning all fields from the source
 		-- table.
@@ -489,14 +500,14 @@ local function load_field(fi, field_accessor)
    end
 
    -- For other types, simple closure around elementof() is sufficient.
-   return function(obj, mode, newval)
-	     if mode == nil then return fi end
-	     if mode then
-		return field_accessor(obj, fi, newval)
-	     else
-		return field_accessor(obj, fi)
-	     end
-	  end
+   return function(obj, ...) return field_accessor(obj, fi, ...) end
+end
+
+local function load_method(mi)
+   local flags = mi.flags
+   if not flags.is_getter and not flags.is_setter then
+      return core.callable.new(mi)
+   end
 end
 
 local function load_record_field(fi)
@@ -507,208 +518,107 @@ local function load_object_field(fi)
    return load_field(fi, core.object.field)
 end
 
--- _access method for structs.
-function struct_mt:_access(instance, name, ...)
-   local setmode = select('#', ...) > 0
-   local val = self[name]
-   if val == nil then error(("%s: no `%s'"):format(self._name, name)) end
-   if type(val) ~= 'function' then
-      assert(not setmode, ("%s: `s' is not writable"):format(self._name, name))
-      return val
-   end
-   return val(instance, setmode, ...)
-end
-
--- _access method for objects.
-function class_mt:_access(instance, name, ...)
-   local setmode = select('#', ...) > 0
-   local val = self[name]
-   if val == nil then
-      -- Check for dynamic interfaces.
-      for _, iinfo in pairs(core.object.interfaces(instance)) do
-	 itype = repo[iinfo.namespace][iinfo.name]
-	 val = itype and itype[name]
-	 if val then break end
-      end
-
-      if not val then
-	 -- Check for dynamic properties.
-	 local prop = core.object.properties(instance, name:gsub('_', '%-'))
-	 if prop then return core.object.property(instance, prop, ...) end
-	 error(("%s: no `%s'"):format(self._name, name))
-      end
-   end
-
-   if type(val) == 'function' then
-      return val(instance, setmode, ...)
-   else
-      assert(not setmode, ("%s: `s' is not writable"):format(self._name, name))
-      return val
-   end
-end
-
 -- Loads structure information into table representing the structure
-local function load_struct(namespace, struct, info)
+local function load_record(namespace, info)
    -- Avoid exposing internal structs created for object implementations.
    if not info.is_gtype_struct then
-      load_compound(struct, info, struct_mt)
-      struct._methods = get_category(
-	 info.methods, core.callable.new, nil, nil, rawget(struct, '_methods'))
-      struct._fields = get_category(info.fields, load_record_field)
-      struct._access = struct_access
+      local record = create_component(info, component_mt.record)
+      record._methods = get_category(info.methods, core.callable.new)
+      record._fields = get_category(info.fields, load_record_field)
    end
 end
 
-typeloader['struct'] =
-   function(namespace, info)
-      local struct = {}
-      load_struct(namespace, struct, info)
-      return struct, '_structs'
-   end
+function typeloader.struct(namespace, info)
+   return load_record(namespace, info), '_structs'
+end
 
-typeloader['union'] =
-   function(namespace, info)
-      local union = {}
-      load_struct(namespace, union, info)
-      return union, '_unions'
-   end
+function typeloader.union(namespace, info)
+   return load_record(namespace, info), '_unions'
+end
 
-typeloader['interface'] =
-   function(namespace, info)
-      -- Load all components of the interface.
-      local interface = {}
-      load_compound(interface, info, interface_mt)
-      interface._properties = get_category(
-	 info.properties, load_element_property,
-	 function(name) return string.gsub(name, '_', '%-') end,
-	 function(name) return string.gsub(name, '%-', '_') end)
-      interface._methods = get_category(
-	 info.methods,
-	 function(ii)
-	    local flags = ii.flags
-	    if not flags.is_getter and not flags.is_setter then
-	       return core.callable.new(ii)
-	    end
-	 end) or {}
-      -- If method is not found normal way, try to look it up in
-      -- parent namespace (e.g. g_file_new_for_path is exported in
-      -- typelib as Gio.file_new_for_path, while we really want it
-      -- accessible as Gio.File.new_for_path).
-      local meta = getmetatable(interface._methods) or {}
-      local old_index = meta.__index
-      function meta:__index(symbol)
-	 local val
-	 if old_index then val = old_index(self, symbol) end
-	 if not val then
-	    -- Convert name from CamelCase to underscore_delimited form.
-	    local method_name = {}
-	    for part in info.name:gmatch('%u%l*') do
-	       method_name[#method_name + 1] = part:lower()
-	    end
-	    method_name[#method_name + 1] = symbol
-	    val = namespace[table.concat(method_name, '_')]
-	    self[symbol] = val
-	 end
-	 return val
-      end
-      setmetatable(interface._methods, meta)
-      interface._signals = get_category(
-	 info.signals, load_element_signal,
-	 load_signal_name, load_signal_name_reverse)
-      interface._constants = get_category(info.constants, core.constant)
-      return interface, '_interfaces'
-   end
+local function load_properties(info)
+   return get_category(
+      info.properties, nil,
+      function(name) return string.gsub(name, '_', '%-') end,
+      function(name) return string.gsub(name, '%-', '_') end)
+end
 
--- Loads structure information into table representing the structure
-local function load_class(namespace, class, info)
-   -- Load components of the object.
-   load_compound(class, info, class_mt)
-   class._properties = get_category(
-      info.properties, load_element_property,
-      function(n) return (string.gsub(n, '_', '%-')) end,
-      function(n) return (string.gsub(n, '%-', '_')) end)
-   class._methods = get_category(
-      info.methods,
-      function(mi)
-	 local flags = mi.flags
-	 if not flags.is_getter and not flags.is_setter then
-	    return core.callable.new(mi)
-	 end
-      end, nil, nil, rawget(class, '_methods'))
+function typeloader.interface(namespace, info)
+   -- Load all components of the interface.
+   local interface = create_component(info, component_mt.interface)
+   interface._properties = load_properties(info)
+   interface._methods = get_category(info.methods, load_method)
+   interface._signals = get_category(
+      info.signals, load_element_signal,
+      load_signal_name, load_signal_name_reverse)
+   interface._constants = get_category(info.constants, core.constant)
+   return interface, '_interfaces'
+end
+
+function typeloader.object(namespace, info)
+   local class = create_component(info, component_mt.class)
+   class._properties = load_properties(info)
+   class._methods = get_category(info.methods, load_method)
    class._signals = get_category(
       info.signals, load_element_signal, load_signal_name,
       load_signal_name_reverse)
    class._constants = get_category(info.constants, core.constant)
-   class._implements = get_category(
-      info.interfaces,
-      function(ii) return repo[ii.namespace][ii.name] end,
-      nil,
-      function(n, ii) return ii.namespace .. '.' .. n end)
    class._fields = get_category(info.fields, load_object_field)
-   local _ = rawget(class, '_inherits') and class._inherits[0]
+   local implements = {}
+   for _, interface in pairs(info.interfaces) do
+      implements[interface.fullname] =
+	 repo[interface.namespace][interface.name]
+   end
+   class._implements = implements
 
    -- Add parent (if any) into _inherits table.
    local parent = info.parent
    if parent then
       local ns, name = parent.namespace, parent.name
-      if ns ~= namespace[0].name or name ~= info.name then
+      if ns ~= namespace._name or name ~= info.name then
 	 class._parent = repo[ns][name]
       end
    end
+   return class, '_classes'
 end
-
-typeloader['object'] =
-   function(namespace, info)
-      local class = {}
-      load_class(namespace, class, info)
-      return class, '_classes'
-   end
 
 -- Gets symbol of the specified namespace, if not present yet, tries to load it
 -- on-demand.
-local namespace_lookup = namespace_mt.__index
-function namespace_mt.__index(namespace, symbol)
+function component_mt.namespace:__index(symbol)
    -- Check, whether symbol is already loaded.
-   local value = namespace_lookup(namespace, symbol)
-   if value then return value end
+   local val = get_element(self, symbol)
+   if val then return val end
 
    -- Lookup baseinfo of requested symbol in the GIRepository.
-   local info = gi[namespace[0].name][symbol]
+   local info = gi[namespace._name][symbol]
    if not info then return nil end
 
-   -- Store the symbol into the in-load table, because we have to
-   -- avoid infinte recursion which might happen during symbol loading (mainly
-   -- when prerequisity of the interface is the class which implements said
-   -- interface).
-   in_load[info.fullname] = info
-
    -- Decide according to symbol type what to do.
-   if info and not info.deprecated then
-      local loader = typeloader[info.type]
-      if loader then
-	 local category
-	 value, category = loader(namespace, info)
+   local loader = typeloader[info.type]
+   if loader then
+      local val, category = loader(namespace, info)
 
-	 -- Cache the symbol in specified category in the namespace.
-	 local cat = rawget(namespace, category) or {}
-	 namespace[category] = cat
-	 cat[symbol] = value
-      end
+      -- Cache the symbol in specified category in the namespace.
+      local cat = rawget(namespace, category) or {}
+      namespace[category] = cat
+      cat[symbol] = value
    end
-
-   in_load[info.fullname] = nil
-   return value
+   return val
 end
 
 -- Resolves everything in the namespace by iterating through it.
-local function resolve_namespace(ns_meta)
+function component_mt.namespace:_resolve(deep)
    -- Iterate through all items in the namespace and dereference them,
    -- which causes them to be loaded in and cached inside the namespace
    -- table.
-   local name = ns_meta.name
-   local ns = repo[name]
-   for i = 1, #gi[name] do
-      pcall(function() local _ = ns[gi[name][i].name] end)
+   local gi_ns = gi[self._name]
+   for i = 1, #gi_ns do
+      local ok, component = pcall(function()
+				     return self[gi_ns[i].name]
+				  end)
+      if ok and deep and component then
+	 component:_resolve(deep)
+      end
    end
 end
 
@@ -728,20 +638,14 @@ local function load_namespace(into, name)
    -- Create _meta table containing auxiliary information and data for
    -- the namespace.
    setmetatable(into, namespace_mt)
-   into[0] = { name = name, dependencies = {} }
-   into[0].version = ns.version
-   into[0].dependencies = ns.dependencies
-
-   -- Install 'resolve' closure, which forces loading this namespace.
-   -- Useful when someone wants to inspect what's inside (e.g. some
-   -- kind of source browser or smart editor).
-   into[0].resolve = resolve_namespace
+   into._name = name
+   into._dependencies = ns.dependencies
+   into._version = ns.version
 
    -- Make sure that all dependent namespaces are also loaded.
-   for name, version in pairs(into[0].dependencies or {}) do
+   for name, version in pairs(into._dependencies or {}) do
       local _ = repo[name]
    end
-
    return into
 end
 
