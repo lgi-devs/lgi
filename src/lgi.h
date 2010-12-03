@@ -35,25 +35,6 @@ gpointer *lgi_guard_create (lua_State *L, GDestroyNotify destroy);
 /* Returns data of specified guard. */
 void lgi_guard_get_data (lua_State *L, int pos, gpointer **data);
 
-/* Key in registry, containing table with all our private data. */
-extern int lgi_regkey;
-typedef enum lgi_reg
-{
-  /* Cache of created userdata objects, __mode=v */
-  LGI_REG_CACHE = 1,
-
-  /* compound.ref_repo -> repo type table. */
-  LGI_REG_TYPEINFO = 2,
-
-  /* Whole repository, filled in by bootstrap. */
-  LGI_REG_REPO = 3,
-
-  /* GLib log_handler method. */
-  LGI_REG_LOG_HANDLER = 4,
-
-  LGI_REG__LAST
-} LgiRegType;
-
 /* lightuserdata of this address is a key in LUA_REGISTRYINDEX table
    to global repo table. */
 extern int lgi_addr_repo;
@@ -62,12 +43,6 @@ extern int lgi_addr_repo;
    registry and returns ref to it. */
 void
 lgi_cache_create (lua_State *L, gpointer key, const char *mode);
-
-/* Generic flags used in the interface. */
-enum _LgiFlags
-  {
-    LGI_FLAGS_OPTIONAL =    1 << 0
-  } LgiFlags;
 
 /* Initialization of modules. */
 void lgi_record_init (lua_State *L);

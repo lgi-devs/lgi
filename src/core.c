@@ -228,34 +228,6 @@ static const struct luaL_reg lgi_reg[] = {
   { NULL, NULL }
 };
 
-static void
-lgi_create_reg (lua_State* L, enum lgi_reg reg, const char* exportname,
-		gboolean withmeta)
-{
-  /* Create the table. */
-  lua_newtable (L);
-
-  /* Assign the metatable, if requested. */
-  if (withmeta)
-    {
-      lua_pushvalue (L, -2);
-      lua_setmetatable (L, -2);
-      lua_replace (L, -2);
-    }
-
-  /* Assign table into the exported package table. */
-  if (exportname != NULL)
-    {
-      lua_pushstring (L, exportname);
-      lua_pushvalue (L, -2);
-      lua_rawset (L, -5);
-    }
-
-  /* Assign new table into registry and leave it out from stack. */
-  lua_rawseti (L, -2, reg);
-}
-
-int lgi_regkey;
 int lgi_addr_repo;
 
 int
@@ -282,36 +254,12 @@ luaopen_lgi__core (lua_State* L)
   /* Register _core interface. */
   luaL_register (L, "lgi._core", lgi_reg);
 
-  /* Prepare registry table (avoid polluting global registry, make
-     private table in it instead.*/
-  lua_newtable (L);
-  lua_pushvalue (L, -1);
-  lgi_regkey = luaL_ref (L, LUA_REGISTRYINDEX);
-
-  /* Create object cache, which has weak values. */
-  lua_newtable (L);
-  lua_pushstring (L, "v");
-  lua_setfield (L, -2, "__mode");
-  lgi_create_reg (L, LGI_REG_CACHE, NULL, TRUE);
-
-  /* Create typeinfo table. */
-  lgi_create_reg (L, LGI_REG_TYPEINFO, NULL, FALSE);
-
   /* Create repo table. */
-  lgi_create_reg (L, LGI_REG_REPO, "repo", FALSE);
+  lua_newtable (L);
   lua_pushlightuserdata (L, &lgi_addr_repo);
-  lua_rawgeti (L, -2, LGI_REG_REPO);
-  lua_rawset (L, LUA_REGISTRYINDEX);
-
-  /* In debug version, make our private registry browsable. */
-#ifndef NDEBUG
-  lua_pushstring (L, "reg");
   lua_pushvalue (L, -2);
-  lua_rawset (L, -4);
-#endif
-
-  /* Pop the registry table. */
-  lua_pop (L, 1);
+  lua_rawset (L, LUA_REGISTRYINDEX);
+  lua_setfield (L, -2, "repo");
 
   /* Install custom log handler. */
   g_log_set_default_handler (log_handler, L);
