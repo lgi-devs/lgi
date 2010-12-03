@@ -78,6 +78,60 @@ log.message('Lgi: Lua to GObject-Introspection binding v0.1')
 -- loading on-demand.  Created by C-side bootstrap.
 local repo = core.repo
 
+-- Weak table containing symbols which currently being loaded. It is used
+-- mainly to avoid assorted kinds of infinite recursion which might happen
+-- during symbol dependencies loading.
+local in_check = setmetatable({}, { __mode = 'v' })
+
+-- Loads the type and all dependent subtypes.  Returns nil if it cannot be
+-- loaded or the type itself if it is ok.
+local function check_type(info)
+   if not info then return nil end
+   local type = info.type
+   if type == 'type' then
+      -- Check the embedded typeinfo.
+      local tag = info.tag
+      if info.is_basic then
+	 return info
+      elseif tag == 'array' then
+	 return check_type(info.params[1]) and info
+      elseif tag == 'interface' then
+	 return check_type(info.interface) and info
+      elseif tag == 'glist' or tag == 'gslist' then
+	 return check_type(info.params[1]) and info
+      elseif tag == 'ghash' then
+	 return ((check_type(info.params[1]) and check_type(info.params[2]))
+	      and info)
+      elseif tag == 'error' then
+	 return info
+      else
+	 log.warning('unknown typetag %s', tag)
+	 return nil
+      end
+   elseif info.is_callable then
+      -- Check all callable arguments and return value.
+      if not check_type(info.return_type) then return nil end
+      local args = info.args
+      for i = 1, #args do
+	 if not check_type(args[i].typeinfo) then return nil end
+      end
+   elseif type == 'constant' or type == 'property' or type == 'field' then
+      if not check_type(info.typeinfo) then info = nil end
+   elseif info.is_registered_type then
+      -- Check, whether we can reach the symbol in the repo.
+      in_check[info.fullname] = info
+      if not in_check[info.fullname]
+	 and not repo[info.namespace][info.name] then
+	 info = nil
+      end
+      in_check[info.fullname] = nil
+   else
+      log.warning("unknown type `%s' of %s", type, info.fullname)
+      return nil
+   end
+   return info
+end
+
 -- Gets table for category of compound (i.e. _fields of struct or _properties
 -- for class etc).  Installs metatable which performs on-demand lookup of
 -- symbols.
@@ -101,27 +155,33 @@ local function get_category(children, xform_value,
    local function resolve(category)
       -- Load al values from unknown indices.
       local ei, en, val
+      local function xvalue(arg)
+	 if not xform_value then return arg end
+	 if arg then
+	    local ok, res = pcall(xform_value, arg)
+	    return ok and res
+	 end
+      end
       while #index > 0 do
 	 ei = check_type(children[table.remove(index)])
-	 val = ei and (not xform_value and ei or xform_value(ei))
+	 val = xvalue(ei)
 	 if val then
 	    en = ei.name
 	    if xform_name_reverse then
 	       en = xform_name_reverse(en, ei)
 	    end
-	    if en then self[en] = val end
+	    if en then category[en] = val end
 	 end
       end
 
       -- Load all known indices.
       for en, idx in pairs(index) do
-	 val = check_type(children[idx])
-	 val = not xform_value and val or xform_value(val)
-	 self[en] = val
+	 val = xvalue(check_type(children[idx]))
+	 category[en] = val
       end
 
       -- Metatable is no longer needed, disconnect it.
-      setmetatable(self, nil)
+      setmetatable(category, nil)
    end
 
    function mt:__index(requested_name)
@@ -216,7 +276,7 @@ local function resolve_elements(typetable)
    for i = 1, #categories do
       local category = rawget(typetable, categories[i])
       local resolve = type(category) == 'table' and category._resolve
-      local _ = resolve and resolve(typetable)
+      local _ = resolve and resolve(category)
    end
 end
 
@@ -244,6 +304,7 @@ local component_mt = {
 -- Resolving arbitrary number to the table containing symbolic names
 -- of contained bits.
 function component_mt.bitflags:__index(value)
+   if type(value) ~= 'number' then return end
    local t = {}
    for name, flag in pairs(self) do
       if type(flag) == 'number' and value % (2 * flag) >= flag then
@@ -337,69 +398,16 @@ function component_mt.class:__call(args)
    return obj
 end
 
--- Weak table containing symbols which currently being loaded. It is used
--- mainly to avoid assorted kinds of infinite recursion which might happen
--- during symbol dependencies loading.
-local in_check = setmetatable({}, { __mode = 'v' })
-
--- Loads the type and all dependent subtypes.  Returns nil if it cannot be
--- loaded or the type itself if it is ok.
-local function check_type(info)
-   if not info then return nil end
-   local type = info.type
-   if type == 'type' then
-      -- Check the embedded typeinfo.
-      local tag = info.tag
-      if info.is_basic then
-	 return info
-      elseif tag == 'array' then
-	 return check_type(info.params[1]) and info
-      elseif tag == 'interface' then
-	 return check_type(info.interface) and info
-      elseif tag == 'glist' or tag == 'gslist' then
-	 return check_type(info.params[1]) and info
-      elseif tag == 'ghash' then
-	 return ((check_type(info.params[1]) and check_type(info.params[2]))
-	      and info)
-      elseif tag == 'error' then
-	 return info
-      else
-	 log.warning('unknown typetag %s', tag)
-	 return nil
-      end
-   elseif info.is_callable then
-      -- Check all callable arguments and return value.
-      if not check_type(info.return_type) then return nil end
-      local args = info.args
-      for i = 1, #args do
-	 if not check_type(args[i].typeinfo) then return nil end
-      end
-   elseif type == 'constant' or type == 'property' or type == 'field' then
-      if not check_type(info.typeinfo) then info = nil end
-   elseif info.is_registered_type then
-      -- Check, whether we can reach the symbol in the repo.
-      in_check[info.fullname] = info
-      if not in_check[info.fullname]
-	 and not repo[info.namespace][info.name] then
-	 info = nil
-      end
-      in_check[info.fullname] = nil
-   else
-      log.warning("unknown type `%s' of %s", type, info.fullname)
-      return nil
-   end
-end
-
 -- Creates new component and sets up common parts according to given
 -- info.
 local function create_component(info, mt)
    -- Fill in meta of the compound.
-   local component = { _name = info.fullname }
+   local component = { _name = info.fullname or info.name }
    if info.gtype then
       component._gtype = info.gtype
-      repo[rawget(component, _gtype)] = component
+      repo[rawget(component, '_gtype')] = component
    end
-   return setmetatable(compound, mt)
+   return setmetatable(component, mt)
 end
 
 -- Table containing loaders for various GI types, indexed by
@@ -525,6 +533,7 @@ local function load_record(namespace, info)
       local record = create_component(info, component_mt.record)
       record._methods = get_category(info.methods, core.callable.new)
       record._fields = get_category(info.fields, load_record_field)
+      return record
    end
 end
 
@@ -564,10 +573,10 @@ function typeloader.object(namespace, info)
       load_signal_name_reverse)
    class._constants = get_category(info.constants, core.constant)
    class._fields = get_category(info.fields, load_object_field)
-   local implements = {}
-   for _, interface in pairs(info.interfaces) do
-      implements[interface.fullname] =
-	 repo[interface.namespace][interface.name]
+   local interfaces, implements = info.interfaces, {}
+   for i = 1, #interfaces do
+      local iface = interfaces[i]
+      implements[iface.fullname] = repo[iface.namespace][iface.name]
    end
    class._implements = implements
 
@@ -590,18 +599,19 @@ function component_mt.namespace:__index(symbol)
    if val then return val end
 
    -- Lookup baseinfo of requested symbol in the GIRepository.
-   local info = gi[namespace._name][symbol]
+   local info = gi[self._name][symbol]
    if not info then return nil end
 
    -- Decide according to symbol type what to do.
    local loader = typeloader[info.type]
    if loader then
-      local val, category = loader(namespace, info)
+      local category
+      val, category = loader(self, info)
 
       -- Cache the symbol in specified category in the namespace.
-      local cat = rawget(namespace, category) or {}
-      namespace[category] = cat
-      cat[symbol] = value
+      local cat = rawget(self, category) or {}
+      self[category] = cat
+      cat[symbol] = val
    end
    return val
 end
@@ -613,46 +623,44 @@ function component_mt.namespace:_resolve(deep)
    -- table.
    local gi_ns = gi[self._name]
    for i = 1, #gi_ns do
-      local ok, component = pcall(function()
-				     return self[gi_ns[i].name]
-				  end)
-      if ok and deep and component then
-	 component:_resolve(deep)
+      local ok, component = pcall(function() return self[gi_ns[i].name] end)
+      if ok and deep and type(component) == 'table' then
+	 local resolve = component._resolve
+	 if resolve then resolve(component, deep) end
       end
    end
 end
 
--- Loads namespace, optionally with specified version and returns table which
--- represents it (usable as package table for Lua package loader).
-local function load_namespace(into, name)
-   -- If package does not exist yet, create and store it into packages.
-   if not into then
-      into = {}
-      repo[name] = into
+-- Makes sure that the namespace (optionally with requested version)
+-- is properly loaded.
+function lgi.require(name, version)
+   -- Load the namespace info for GIRepository.
+   local ns_info = gi.require(name, version)
+
+   -- If the repository table does not exist yet, create it.
+   local ns = rawget(repo, name)
+   if not ns then
+      ns = create_component(ns_info, component_mt.namespace)
+      ns._version = ns_info._version
+      ns._dependencies = ns_info.dependencies
+      repo[name] = ns
+   else
+      assert(ns._version == version)
    end
-
-   -- Load the typelibrary for the namespace.
-   local ns = gi.require(name)
-   if not ns then return nil end
-
-   -- Create _meta table containing auxiliary information and data for
-   -- the namespace.
-   setmetatable(into, namespace_mt)
-   into._name = name
-   into._dependencies = ns.dependencies
-   into._version = ns.version
 
    -- Make sure that all dependent namespaces are also loaded.
-   for name, version in pairs(into._dependencies or {}) do
+   for name, version in pairs(ns._dependencies or {}) do
       local _ = repo[name]
    end
-   return into
+   return ns
 end
 
 -- Install metatable into repo table, so that on-demand loading works.
-setmetatable(repo, { __index = function(repo, name)
-				  return load_namespace(nil, name)
-			       end })
+local repo_mt = {}
+function repo_mt:__index(name)
+   return lgi.require(name)
+end
+setmetatable(repo, repo_mt)
 
 -- GObject modifications.
 do
@@ -746,10 +754,6 @@ do
 	 obj, gi.GObject.ObjectClass.fields.notify.typeinfo.interface, newval)
    end
 
-   -- ParamSpec.  Manually add its gtype, because it is not present in
-   -- the typelib and is vital to dynamic elementof() innards.
-   repo.GObject.ParamSpec._gtype = repo.GObject.type_from_name('GParam')
-
    -- Closure modifications.  Closure does not need any methods nor
    -- fields, but it must have constructor creating it from any kind
    -- of Lua callable.
@@ -805,13 +809,13 @@ do
       end
 
       -- No idea to what type should this be mapped.
-      error(("unclear type for GValue from argument `%s'"):format(
+      error(("unclear type for GObject.Value from argument `%s'"):format(
 	       tostring(source)))
    end
 
    -- Implement constructor, taking any source value and optionally type of the
    -- source.
-   local value_mt = { __index = struct_mt.__index }
+   local value_mt = {}
    function value_mt:__call(source, stype)
       stype = stype or gettype(source)
       if type(stype) == 'string' then
