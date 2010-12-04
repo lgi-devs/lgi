@@ -414,12 +414,13 @@ function component_mt.interface:__index(symbol)
    local val = get_element(self, symbol)
    if not val then
       -- Convert name from CamelCase to underscore_delimited form.
+      local ns_name, iface_name = self._name:match('^([%w_]+)%.([%w_]+)$')
       local method_name = {}
-      for part in info.name:gmatch('%u%l*') do
+      for part in iface_name:gmatch('[%u%d][%l%d]*') do
 	 method_name[#method_name + 1] = part:lower()
       end
       method_name[#method_name + 1] = symbol
-      val = repo[self._name:gsub('([%w_])')][table.concat(method_name, '_')]
+      val = repo[ns_name][table.concat(method_name, '_')]
       self[symbol] = val
    end
    return val
@@ -681,7 +682,7 @@ do
       if not element then
 	 -- List all interfaces implemented by this object and try
 	 -- whether they can handle specified _element request.
-	 local interfaces = core.interfaces(instance)
+	 local interfaces = core.object.interfaces(instance)
 	 for i = 1, #interfaces do
 	    local iface = repo[interfaces[i].namespace][interfaces[i].name]
 	    element = iface and iface[name]
@@ -690,8 +691,11 @@ do
 	 if not element then
 	    -- Element not found in the repo (typelib), try whether
 	    -- dynamic property of the specified name exists.
-	    local pspec = core.properties(obj, name:gsub('_', '%-'))
-	    if pspec then return core.object.property(instance, pspec, ...) end
+	    local pspec = core.object.properties(
+	       instance, name:gsub('_', '%-'))
+	    if pspec then return
+	       core.object.property(instance, pspec, ...)
+	    end
 	 end
       end
       if element == nil then
@@ -712,6 +716,8 @@ do
 	    return core.object.property(instance, element, ...)
 	 elseif element.is_signal then
 	    return access_signal(instance, element, ...)
+	 elseif element.is_field then
+	    return access_field(core.object.field, instance, element, ...)
 	 else
 	    error(("`%s': unhandled field `%s' of gi info type `%s'"):format(
 		     self._name, name, element.type))
