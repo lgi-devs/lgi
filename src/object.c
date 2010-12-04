@@ -55,7 +55,9 @@ object_type (lua_State *L, GType gtype)
   lua_rawget (L, LUA_REGISTRYINDEX);
   for (; gtype != G_TYPE_INVALID; gtype = g_type_parent (gtype))
     {
-      /* Try to find type in the repo table. */
+      /* Try to find type in the repo table. First of all, try to
+	 lookup by gtype index in the repo, which is faster, but does
+	 not work if requested interface was not loaded yet. */
       lua_pushnumber (L, gtype);
       lua_rawget (L, -2);
       if (!lua_isnil (L, -1))
@@ -64,7 +66,24 @@ object_type (lua_State *L, GType gtype)
 	  return gtype;
 	}
       else
-	lua_pop (L, 1);
+	{
+	  lua_pop (L, 1);
+
+	  /* Not found, so try to find using names in the repo table.
+	     Because repo table contains metatables loading interfaces
+	     on-demand, this might work in case that requested
+	     class/interface was not referenced yet. */
+	  GIBaseInfo *info = g_irepository_find_by_gtype (NULL, gtype);
+	  if (info)
+	    {
+	      lgi_gi_info_new (L, info);
+	      lua_getfield (L, -2, g_base_info_get_namespace (info));
+	      lua_getfield (L, -1, g_base_info_get_name (info));
+	      lua_replace (L, -4);
+	      lua_pop (L, 2);
+	      return gtype;
+	    }
+	}
     }
 
   /* Not found, remove repo table from the stack. */
