@@ -560,6 +560,20 @@ gi_require (lua_State *L)
   return namespace_new (L, namespace);
 }
 
+/* Lua API: boolean = core.gi.isinfo(info) */
+static int
+gi_isinfo (lua_State *L)
+{
+  if (lua_getmetatable (L, 1))
+    {
+      luaL_getmetatable (L, LGI_GI_INFO);
+      lua_pushboolean (L, lua_rawequal (L, -1, -2));
+    }
+  else
+    lua_pushboolean (L, 0);
+  return 1;
+}
+
 static int
 gi_index (lua_State *L)
 {
@@ -593,6 +607,12 @@ static const Reg gi_reg[] = {
   { NULL, NULL }
 };
 
+static const luaL_Reg gi_api_reg[] = {
+  { "require", gi_require },
+  { "isinfo", gi_isinfo },
+  { NULL, NULL }
+};
+
 void
 lgi_gi_init (lua_State *L)
 {
@@ -608,8 +628,7 @@ lgi_gi_init (lua_State *L)
 
   /* Register global API. */
   lua_newtable (L);
-  lua_pushcfunction (L, gi_require);
-  lua_setfield (L, -2, "require");
+  luaL_register (L, NULL, gi_api_reg);
   lua_newtable (L);
   lua_pushcfunction (L, gi_index);
   lua_setfield (L, -2, "__index");
