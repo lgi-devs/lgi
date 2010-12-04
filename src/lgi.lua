@@ -314,27 +314,97 @@ function component_mt.bitflags:__index(value)
    return t
 end
 
--- Implements reverse mapping, value->name.
+-- Enum reverse mapping, value->name.
 function component_mt.enum:__index(value)
    for name, val in pairs(self) do
       if val == value then return name end
    end
 end
 
--- _access method for records and simple objects.
-local function record_access(self, instance, name, ...)
-   local val = self[name]
-   if val == nil then error(("%s: no `%s'"):format(self._name, name)) end
-   if type(val) ~= 'function' then
-      assert(select('#', ...) == 0,
-	     ("%s: `s' is not writable"):format(self._name, name))
-      return val
+-- _access part for fields.
+local function access_field(field_accessor, instance, info, ...)
+   -- Check the type of the field.
+   local ii = info.typeinfo.interface
+   if ii and (ii.type == 'struct' or ii.type == 'union') then
+      -- Nested structure, handle assignment to it specially.  Get
+      -- access to underlying nested structure.
+      local subrecord = field_accessor(instance, info)
+
+      -- Reading it is simple, we are done.
+      if select('#', ...) == 0 then return subrecord end
+
+      -- Writing means assigning all fields from the source table.
+      for name, value in pairs(...) do subrecord[name] = value end
+   else
+      -- For other types, simple closure around elementof() is
+      -- sufficient.
+      return field_accessor(instance, info, ...)
    end
-   return val(instance, ...)
 end
 
-component_mt.record._access = record_access
-component_mt.class._access = record_access
+-- _access part for signals.
+local function access_signal(instance, info, ...)
+   if select('#', ...) > 0 then
+      -- Assignment means 'connect signal without detail'.
+      core.object.connect(instance, info.name, info, ...)
+   else
+      -- Reading yields table with signal operations.
+      local pad = {}
+      function pad:connect(target, detail, after)
+	 return core.object.connect(instance, info.name, info,
+				    target, detail, after)
+      end
+
+      -- If signal supports details, add metatable implementing
+      -- __newindex for connecting in the 'on_signal['detail'] =
+      -- handler' form.
+      if info.is_signal and info.flags.detailed then
+	 local meta = {}
+	 function meta:__newindex(detail, target)
+	    core.object.connect(instance, info.name, info, target, detail)
+	 end
+	 setmetatable(pad, meta);
+      end
+
+      -- Return created signal pad.
+      return pad
+   end
+end
+
+-- _access method for records.
+function component_mt.record:_access(instance, name, ...)
+   local element = self[name]
+   if element == nil then error(("%s: no `%s'"):format(self._name, name)) end
+   if gi.isinfo(element) then
+      if element.is_field then
+	 return access_field(core.record.field, instance, element, ...)
+      end
+   elseif type(element) == 'function' then
+      return element(instance, ...)
+   end
+   assert(select('#', ...) == 0, ("%s: `s' is not writable"):format(
+	     self._name, name))
+   return element
+end
+
+-- _access method for raw objects (fundamentals).  Specific behavior
+-- for GObject will be overriden in GObject.Object._access().
+function component_mt.class:_access(instance, name, ...)
+   local element = self[name]
+   if element == nil then error(("%s: no `%s'"):format(self._name, name)) end
+   if gi.isinfo(element) then
+      if element.is_field then
+	 return access_field(core.object.field, instance, element, ...)
+      elseif element.is_signal then
+	 return access_signal(instance, element, ...)
+      end
+   elseif type(element) == 'function' then
+      return element(instance, ...)
+   end
+   assert(select('#', ...) == 0, ("%s: `s' is not writable"):format(
+	     self._name, name))
+   return element
+end
 
 -- If member of interface cannot be found normally, try to look it up
 -- in parent namespace too; this allows to overcome IMHO gir-compiler
@@ -456,74 +526,11 @@ local function load_signal_name_reverse(name)
    return 'on_' .. string.gsub(name, '%-', '_')
 end
 
-local function load_element_signal(info)
-   return
-   function(obj, ...)
-      if select('#', ...) > 0 then
-	 -- Assignment means 'connect signal without detail'.
-	 core.object.connect(obj, info.name, info, ...)
-      else
-	 -- Reading yields table with signal operations.
-	 local pad = {
-	    connect = function(_, target, detail, after)
-			 return core.object.connect(obj, info.name, info,
-						    target, detail, after)
-		      end,
-	 }
-
-	 -- If signal supports details, add metatable implementing __newindex
-	 -- for connecting in the 'on_signal['detail'] = handler' form.
-	 if info.is_signal and info.flags.detailed then
-	    setmetatable(pad, {
-			    __newindex =
-			       function(obj, detail, target)
-				  core.object.connect(obj, info.name,
-						      info, newval, detail)
-			       end
-			 })
-	 end
-
-	 -- Return created signal pad.
-	 return pad
-      end
-   end
-end
-
-local function load_field(fi, field_accessor)
-   -- Check the type of the field.
-   local ii = fi.typeinfo.interface
-   if ii and (ii.type == 'struct' or ii.type == 'union') then
-      -- Nested structure, handle assignment to it specially.
-      return function(obj, ...)
-		-- Get access to underlying nested structure.
-		local sub = field_accessor(obj, fi)
-
-		-- Reading it is simple, we are done.
-		if select('#', ...) == 0 then return sub end
-
-		-- Writing means assigning all fields from the source
-		-- table.
-		for name, value in pairs(newval) do sub[name] = value end
-	     end
-   end
-
-   -- For other types, simple closure around elementof() is sufficient.
-   return function(obj, ...) return field_accessor(obj, fi, ...) end
-end
-
 local function load_method(mi)
    local flags = mi.flags
    if not flags.is_getter and not flags.is_setter then
       return core.callable.new(mi)
    end
-end
-
-local function load_record_field(fi)
-   return load_field(fi, core.record.field)
-end
-
-local function load_object_field(fi)
-   return load_field(fi, core.object.field)
 end
 
 -- Loads structure information into table representing the structure
@@ -532,7 +539,7 @@ local function load_record(namespace, info)
    if not info.is_gtype_struct then
       local record = create_component(info, component_mt.record)
       record._methods = get_category(info.methods, core.callable.new)
-      record._fields = get_category(info.fields, load_record_field)
+      record._fields = get_category(info.fields)
       return record
    end
 end
@@ -558,8 +565,7 @@ function typeloader.interface(namespace, info)
    interface._properties = load_properties(info)
    interface._methods = get_category(info.methods, load_method)
    interface._signals = get_category(
-      info.signals, load_element_signal,
-      load_signal_name, load_signal_name_reverse)
+      info.signals, nil, load_signal_name, load_signal_name_reverse)
    interface._constants = get_category(info.constants, core.constant)
    return interface, '_interfaces'
 end
@@ -568,11 +574,10 @@ function typeloader.object(namespace, info)
    local class = create_component(info, component_mt.class)
    class._properties = load_properties(info)
    class._methods = get_category(info.methods, load_method)
-   class._signals = get_category(
-      info.signals, load_element_signal, load_signal_name,
-      load_signal_name_reverse)
+   class._signals = get_category(info.signals, nil,
+				 load_signal_name, load_signal_name_reverse)
    class._constants = get_category(info.constants, core.constant)
-   class._fields = get_category(info.fields, load_object_field)
+   class._fields = get_category(info.fields)
    local interfaces, implements = info.interfaces, {}
    for i = 1, #interfaces do
       local iface = interfaces[i]
@@ -641,7 +646,7 @@ function lgi.require(name, version)
    local ns = rawget(repo, name)
    if not ns then
       ns = create_component(ns_info, component_mt.namespace)
-      ns._version = ns_info._version
+      ns._version = ns_info.version
       ns._dependencies = ns_info.dependencies
       repo[name] = ns
    else
@@ -664,38 +669,58 @@ setmetatable(repo, repo_mt)
 
 -- GObject modifications.
 do
-   local obj = repo.GObject.Object
+   local object = repo.GObject.Object
 
    -- No methods are needed (yet).
-   obj._methods = nil
+   object._methods = nil
 
-   -- Install custom _element handler, which is used to handle dynamic
-   -- properties (the ones which are present on the real instance, but
-   -- not in the typelibs).
-   function obj._element(type, obj, name)
-      local element = type[name]
+   -- _access handler for object handles properties, dynamic
+   -- interfaces etc.
+   function object:_access(instance, name, ...)
+      local element = self[name]
       if not element then
 	 -- List all interfaces implemented by this object and try
 	 -- whether they can handle specified _element request.
-	 local interfaces = core.interfaces(obj)
+	 local interfaces = core.interfaces(instance)
 	 for i = 1, #interfaces do
-	    local interface_type =
-	       repo[interfaces[i].namespace][interfaces[i].name]
-	    if interface_type then
-	       element = interface_type:_element(obj, name)
-	       if element then return element end
-	    end
+	    local iface = repo[interfaces[i].namespace][interfaces[i].name]
+	    element = iface and iface[name]
+	    if element then break end
 	 end
-
-	 -- Element not found in the repo (typelib), try whether
-	 -- dynamic property of the specified name exists.
-	 local pspec = core.properties(obj, string.gsub(name, '_', '%-'))
-	 if pspec then
-	    element = function(obj, _, mode, newval)
-			 return core.elementof(obj, pspec, mode, newval)
-		      end
+	 if not element then
+	    -- Element not found in the repo (typelib), try whether
+	    -- dynamic property of the specified name exists.
+	    local pspec = core.properties(obj, name:gsub('_', '%-'))
+	    if pspec then return core.object.property(instance, pspec, ...) end
 	 end
       end
+      if element == nil then
+	 -- Check custom object's environment.
+	 local env = core.object.env(instance)
+	 if not env then error(("%s: no `%s'"):format(self._name, name)) end
+	 if select('#', ...) > 0 then
+	    env[name] = ...
+	    return
+	 else
+	    return env[name]
+	 end
+      elseif type(element) == 'function' then
+	 -- Custom accessor, invoke the function to get result.
+	 return element(instance, ...)
+      elseif gi.isinfo(element) then
+	 if element.is_property then
+	    return core.object.property(instance, element, ...)
+	 elseif element.is_signal then
+	    return access_signal(instance, element, ...)
+	 else
+	    error(("`%s': unhandled field `%s' of gi info type `%s'"):format(
+		     self._name, name, element.type))
+	 end
+      end
+
+      -- Other field type means class-static field, so return it.
+      assert(select('#', ...) == 0,
+	     ("%s: `s' is not writable"):format(self._name, name))
       return element
    end
 
@@ -711,47 +736,35 @@ do
    -- property name.
    local function get_notifier(target)
       return function(obj, pspec)
-		return target(obj, (string.gsub(pspec.name, '%-', '_')))
+		return target(obj, pspec.name:gsub('%-', '_'))
 	     end
-   end
-
-   -- Implementation of on_notify worker function.
-   local function on_notify(obj, info, newval)
-      if newval then
-	 -- Assignment means 'connect signal for all properties'.
-	 core.connect(obj, info.name, info, get_notifier(newval))
-      else
-	 -- Reading yields table with signal operations.
-	 local pad = {
-	    connect = function(_, target, property)
-			 return core.connect(obj, info.name, info,
-					     get_notifier(target),
-					     property.name)
-		      end,
-	 }
-
-	 -- Add metatable allowing connection on specified detail.  Detail is
-	 -- always specified as a property for this signal.
-	 setmetatable(pad, {
-			 __newindex = function(_, property, target)
-					 core.connect(obj, info.name,
-						      info,
-						      get_notifier(target),
-						      property.name)
-				      end
-			 })
-
-	 -- Return created signal pad.
-	 return pad
-      end
    end
 
    -- Install 'notify' signal.  Unfortunately typelib does not contain its
    -- declaration, so we borrow it from callback GObject.ObjectClass.notify.
-   obj._signals = {}
-   function obj._signals.on_notify(obj, _, newval)
-      return on_notify(
-	 obj, gi.GObject.ObjectClass.fields.notify.typeinfo.interface, newval)
+   object._signals = {}
+   function object._signals.on_notify(instance, ...)
+      local info = gi.GObject.ObjectClass.fields.notify.typeinfo.interface
+      if select('#', ...) > 0 then
+	 -- Assignment means 'connect signal for all properties'.
+	 core.object.connect(instance, info.name, info, get_notifier(...))
+      else
+	 -- Reading yields table with signal operations.
+	 local pad = {}
+	 function pad:connect(target, property)
+	    return core.object.connect(instance, info.name, info,
+				       get_notifier(target), property.name)
+	 end
+
+	 -- Add metatable allowing connection on specified detail.  Detail is
+	 -- always specified as a property for this signal.
+	 local padmeta = {}
+	 function padmeta:__newindex(property, target)
+	    core.object.connect(instance, info.name, info,
+				get_notifier(target), property.name)
+	 end
+	 return setmetatable(pad, padmeta)
+      end
    end
 
    -- Closure modifications.  Closure does not need any methods nor
@@ -762,7 +775,7 @@ do
    closure._methods = nil
    closure._fields = nil
    local closure_mt = { __index = getmetatable(closure).__index,
-			__tostring = getmetatable(closure).__tostring }
+			_access = getmetatable(closure)._access }
    function closure_mt:__call(arg)
       return core.record.new(closure_info, arg)
    end
