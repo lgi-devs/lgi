@@ -450,23 +450,23 @@ end
 -- Object constructor, 'param' contains table with properties/signals
 -- to initialize.
 function component_mt.class:__call(args)
-   -- Process 'param' table, separate properties from other fields.
+   -- Process 'args' table, separate properties from other fields.
    local props, others = {}, {}
    for name, value in pairs(args or {}) do
       local argtype = self[name]
-      if type(paramtype) == 'userdata' and paramtype.is_property then
-	 props[paramtype] = value
+      if gi.isinfo(argtype) and argtype.is_property then
+	 props[argtype] = value
       else
 	 others[name] = value
       end
    end
 
    -- Create the object.
-   local obj = core.object.new(self._gtype, props)
+   local object = core.object.new(self._gtype, props)
 
    -- Attach signals previously filtered out from creation.
-   for name, func in pairs(others) do obj[name] = func end
-   return obj
+   for name, func in pairs(others) do object[name] = func end
+   return object
 end
 
 -- Creates new component and sets up common parts according to given
