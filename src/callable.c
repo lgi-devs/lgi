@@ -39,7 +39,7 @@ typedef struct _Callable
   /* Stored callable info. */
   GICallableInfo *info;
 
-  /* Address of the function, if target is IFunctionInfo. */
+  /* Address of the function. */
   gpointer address;
 
   /* Flags with function characteristics. */
@@ -179,7 +179,7 @@ callable_mark_array_length (Callable *callable, GITypeInfo *ti)
 }
 
 int
-lgi_callable_create (lua_State *L, GICallableInfo *info)
+lgi_callable_create (lua_State *L, GICallableInfo *info, gpointer addr)
 {
   Callable *callable;
   Param *param;
@@ -220,7 +220,7 @@ lgi_callable_create (lua_State *L, GICallableInfo *info)
   callable->nargs = nargs;
   callable->has_self = 0;
   callable->throws = 0;
-  callable->address = NULL;
+  callable->address = addr;
   if (GI_IS_FUNCTION_INFO (info))
     {
       /* Get FunctionInfo flags. */
@@ -334,8 +334,30 @@ callable_get (lua_State *L, int narg)
   return NULL;
 }
 
-int
-lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
+static int
+callable_gc (lua_State *L)
+{
+  /* Just unref embedded 'info' field. */
+  Callable *callable = callable_get (L, 1);
+  g_base_info_unref (callable->info);
+  return 0;
+}
+
+static int
+callable_tostring (lua_State *L)
+{
+  Callable *callable = callable_get (L, 1);
+  lua_pushfstring (L, "lgi.%s (%p): ",
+		   (GI_IS_FUNCTION_INFO (callable->info) ? "fun" :
+		    (GI_IS_SIGNAL_INFO (callable->info) ? "sig" :
+		     (GI_IS_VFUNC_INFO (callable->info) ? "vfn" : "cbk"))),
+		  callable->address);
+  lua_concat (L, lgi_type_get_name (L, callable->info) + 1);
+  return 1;
+}
+
+static int
+callable_call (lua_State *L)
 {
   Param *param;
   int i, lua_argi, nret, caller_allocated = 0, nargs;
@@ -343,28 +365,16 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
   GIArgument *args;
   void **ffi_args, **redirect_out;
   GError *err = NULL;
-  Callable *callable = callable_get (L, func_index);
+  Callable *callable = callable_get (L, 1);
 
   /* Make sure that all unspecified arguments are set as nil; during
-     marhsalling we might create temporary values on the stack, which
+     marshalling we might create temporary values on the stack, which
      can be confused with input arguments expected but not passed by
      caller. */
   lua_settop(L, callable->has_self + callable->nargs + 1);
 
   /* We cannot push more stuff than count of arguments we have. */
   luaL_checkstack (L, callable->nargs, "");
-
-  /* Check that we know where to call. */
-  if (addr == NULL)
-    {
-      addr = callable->address;
-      if (addr == NULL)
-	{
-	  lua_concat (L, lgi_type_get_name (L, callable->info));
-	  return luaL_error (L, "`%s': no native addr to call",
-			     lua_tostring (L, -1));
-	}
-    }
 
   /* Prepare data for the call. */
   nargs = callable->nargs + callable->has_self;
@@ -373,7 +383,7 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
   ffi_args = g_newa (void *, nargs + callable->throws);
 
   /* Prepare 'self', if present. */
-  lua_argi = args_index;
+  lua_argi = 2;
   nret = 0;
   if (callable->has_self)
     {
@@ -382,13 +392,12 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
       if (type == GI_INFO_TYPE_OBJECT || type == GI_INFO_TYPE_INTERFACE)
 	{
 	  args[0].v_pointer = 
-	    lgi_object_2c (L, args_index,
-			   g_registered_type_info_get_g_type (parent), FALSE);
+	    lgi_object_2c (L, 2, g_registered_type_info_get_g_type (parent),
+			   FALSE);
 	  nret++;
 	}
       else
-	nret += lgi_record_2c (L, parent, args_index,
-			       &args[0].v_pointer, FALSE);
+	nret += lgi_record_2c (L, parent, 2, &args[0].v_pointer, FALSE);
 
       ffi_args[0] = &args[0];
       lua_argi++;
@@ -453,7 +462,7 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
     }
 
   /* Call the function. */
-  ffi_call (&callable->cif, addr, &retval, ffi_args);
+  ffi_call (&callable->cif, callable->address, &retval, ffi_args);
 
   /* Pop any temporary items from the stack which might be stored there by
      marshalling code. */
@@ -506,34 +515,6 @@ lgi_callable_call (lua_State *L, gpointer addr, int func_index, int args_index)
 
   g_assert (caller_allocated == 0);
   return nret;
-}
-
-static int
-callable_gc (lua_State *L)
-{
-  /* Just unref embedded 'info' field. */
-  Callable *callable = callable_get (L, 1);
-  g_base_info_unref (callable->info);
-  return 0;
-}
-
-static int
-callable_tostring (lua_State *L)
-{
-  Callable *callable = callable_get (L, 1);
-  lua_pushfstring (L, "lgi.%s (%p): ",
-		   (GI_IS_FUNCTION_INFO (callable->info) ? "fun" :
-		    (GI_IS_SIGNAL_INFO (callable->info) ? "sig" :
-		     (GI_IS_VFUNC_INFO (callable->info) ? "vfn" : "cbk"))),
-		  callable->address);
-  lua_concat (L, lgi_type_get_name (L, callable->info) + 1);
-  return 1;
-}
-
-static int
-callable_call (lua_State *L)
-{
-  return lgi_callable_call (L, NULL, 1, 2);
 }
 
 static const struct luaL_reg callable_reg[] = {
@@ -740,7 +721,7 @@ lgi_closure_create (lua_State *L, GICallableInfo *ci, int target,
   Callable *callable;
 
   /* Prepare callable and store reference to it. */
-  lgi_callable_create (L, ci);
+  lgi_callable_create (L, ci, NULL);
   callable = lua_touserdata (L, -1);
 
   /* Allocate closure space. */
@@ -844,7 +825,7 @@ static int
 callable_new (lua_State *L)
 {
   return lgi_callable_create (L,  *(GICallableInfo **)
-			      luaL_checkudata (L, 1, LGI_GI_INFO));
+			      luaL_checkudata (L, 1, LGI_GI_INFO), NULL);
 }
 
 void

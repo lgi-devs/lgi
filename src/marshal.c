@@ -712,8 +712,8 @@ marshal_2lua_error (lua_State *L, GITransfer xfer, GError *err)
 /* Marshalls given callable from Lua to C. */
 static int
 marshal_2c_callable (lua_State *L, GICallableInfo *ci, GIArgInfo *ai,
-		    GIArgument *val, int narg,
-		    GICallableInfo *argci, void **args)
+		     GIArgument *val, int narg,
+		     GICallableInfo *argci, void **args)
 {
   int nret = 0;
   GIScopeType scope = g_arg_info_get_scope (ai);
@@ -1201,6 +1201,12 @@ lgi_marshal_arg_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
 	  case GI_INFO_TYPE_INTERFACE:
 	    {
 	      lgi_object_2lua (L, val->v_pointer, own);
+	      break;
+	    }
+
+	  case GI_INFO_TYPE_CALLBACK:
+	    {
+	      lgi_callable_create (L, info, val->v_pointer);
 	      break;
 	    }
 

@@ -103,13 +103,7 @@ int lgi_marshal_access (lua_State *L, gboolean getmode,
 /* Parses given GICallableInfo, creates new userdata for it and stores
    it to the stack. Uses cache, so already parsed callable held in the
    cache is reused if possible. */
-int lgi_callable_create (lua_State *L, GICallableInfo *ci);
-
-/* Calls specified callable and arguments on the stack, using passed function
-   address.  If it is NULL, an address is attempted to get from the info (if it
-   is actually IFunctionInfo). func is stack index of callable object and args
-   is stack index of first argument. */
-int lgi_callable_call (lua_State *L, gpointer addr, int func, int args);
+int lgi_callable_create (lua_State *L, GICallableInfo *ci, gpointer addr);
 
 /* Creates closure for specified Lua function (or callable table or
    userdata). Returns user_data field for the closure and fills call_addr with
