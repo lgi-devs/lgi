@@ -26,14 +26,14 @@ local drawing_area = Gtk.DrawingArea()
 drawing_area:set_size_request(300, 150)
 vbox:pack_start(drawing_area, true, true, 0)
 local play_button = Gtk.Button.new_from_stock(Gtk.STOCK_MEDIA_PLAY)
-play_button.on_clicked = function()
-			    sink:set_window_handle(0)
-			    pipeline:set_state(Gst.State.PLAYING)
-			 end
+function play_button:on_clicked()
+   sink:set_window_handle(0)
+   pipeline:set_state(Gst.State.PLAYING)
+end
 local stop_button = Gtk.Button.new_from_stock(Gtk.STOCK_MEDIA_STOP)
-stop_button.on_clicked = function()
-			    pipeline:set_state(Gst.State.READY)
-			 end
+function stop_button:on_clicked()
+   pipeline:set_state(Gst.State.READY)
+end
 local quit_button = Gtk.Button.new_from_stock(Gtk.STOCK_QUIT)
 quit_button.on_clicked = Gtk.main_quit
 local button_box = Gtk.ButtonBox.new(Gtk.Orientation.HORIZONTAL)

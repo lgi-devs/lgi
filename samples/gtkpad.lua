@@ -34,13 +34,10 @@ end
 if false then
    local app = Gtk.Application.new('org.lgi.GtkPad',
 				   Gio.ApplicationFlags.HANDLES_OPEN)
-   app.on_activate = function(app)
-			new_editor(app)
-		     end
-
-   app.on_open = function(app, files)
-		    for i = 1, #files do new_editor(app, files[i]) end
-		 end
+   function app:on_activate() new_editor(self) end
+   function app:on_open(files)
+      for i = 1, #files do new_editor(self, files[i]) end
+   end
 
    return app:run(...)
 else
@@ -50,12 +47,12 @@ else
       if args[i] then args[i] = Gio.File.new_for_path(args[i]) end
       local window = new_editor(nil, args[i])
       running = running + 1
-      window.on_destroy = function()
-			     running = running - 1
-			     if running == 0 then
-				Gtk.main_quit()
-			     end
-			  end
+      function window:on_destroy()
+	 running = running - 1
+	 if running == 0 then
+	    Gtk.main_quit()
+	 end
+      end
    end
    Gtk.main()
 end
