@@ -1,8 +1,8 @@
-- unified marshalling of GIArgument and GValues
-- use it for properties access and signal marshalling.
+- Lua-C calls of callbacks and virtuals
 - signals using native lgi GClosure implementation instead of detour
   through libffi.
-- GValue - support for STRV and GValueArray.
-- Gio: async->coro wrappers.
-- Gio: modifiable buffer as input for _read methods.
-- Gtk: Container.child handling
+- override framework
+  - Gio: modifiable buffer as input for _read methods.
+  - Gtk: Container.child handling
+  - Gst: object sinking
+- unichar support.
