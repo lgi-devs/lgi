@@ -385,19 +385,26 @@ object_new (lua_State *L)
   return 1;
 }
 
-/* Checks whether given value is object and returns its real gtype and
-   associated type table. */
+/* Checks whether given value is object and returns its real gtype,
+   associated type table and type struct record.  Lua-side prototype:
+   typetable, gtype, typestruct = 
+   object.typeof(objectinstance[, iface-gtype]) */
 static int
 object_typeof (lua_State *L)
 {
   gpointer object = object_check (L, 1);
   if (object)
     {
-      GType gtype = G_TYPE_FROM_INSTANCE (object);
+      GType gtype = luaL_optnumber (L, 2, G_TYPE_FROM_INSTANCE (object));
       if (object_type (L, gtype) != G_TYPE_INVALID)
 	{
+	  gpointer typestruct;
 	  lua_pushnumber (L, gtype);
-	  return 2;
+	  typestruct = !G_TYPE_IS_INTERFACE (gtype)
+	    ? G_TYPE_INSTANCE_GET_CLASS (object, gtype, GTypeClass)
+	    : G_TYPE_INSTANCE_GET_INTERFACE (object, gtype, GTypeClass);
+	  lgi_record_2lua (L, NULL, typestruct, LGI_RECORD_PEEK, 0);
+	  return 3;
 	}
     }
   return 0;
