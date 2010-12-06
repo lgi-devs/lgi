@@ -86,7 +86,7 @@ lgi_record_2lua (lua_State *L, GIBaseInfo *info, gpointer addr,
     }
 
   /* Calculate size of the record to allocate. */
-  is_union = g_base_info_get_type (info) == GI_INFO_TYPE_UNION;
+  is_union = info && g_base_info_get_type (info) == GI_INFO_TYPE_UNION;
   if (mode == LGI_RECORD_ALLOCATE)
     size = G_STRUCT_OFFSET (Record, data) +  (is_union
 					      ? g_union_info_get_size (info)
@@ -116,15 +116,18 @@ lgi_record_2lua (lua_State *L, GIBaseInfo *info, gpointer addr,
   record->is_union = is_union ? 1 : 0;
 
   /* Get ref_repo table according to the 'info'. */
-  lua_pushlightuserdata (L, &lgi_addr_repo);
-  lua_rawget (L, LUA_REGISTRYINDEX);
-  lua_getfield (L, -1, g_base_info_get_namespace (info));
-  lua_getfield (L, -1, g_base_info_get_name (info));
-  g_assert (!lua_isnil (L, -1));
+  if (info)
+    {
+      lua_pushlightuserdata (L, &lgi_addr_repo);
+      lua_rawget (L, LUA_REGISTRYINDEX);
+      lua_getfield (L, -1, g_base_info_get_namespace (info));
+      lua_getfield (L, -1, g_base_info_get_name (info));
+      g_assert (!lua_isnil (L, -1));
 
-  /* Attach found table as environment data for created Record. */
-  lua_setfenv (L, -4);
-  lua_pop (L, 2);
+      /* Attach found table as environment data for created Record. */
+      lua_setfenv (L, -4);
+      lua_pop (L, 2);
+    }
 
   /* Store newly created record into the cache. */
   if (mode != LGI_RECORD_PARENT)
@@ -274,7 +277,10 @@ record_tostring (lua_State *L)
   lua_getfenv (L, 1);
   lua_getfield (L, -1, "_name");
   lua_replace (L, -2);
-  lua_concat (L, 2);
+  if (!lua_isnil (L, -1))
+    lua_concat (L, 2);
+  else
+    lua_pop (L, 1);
   return 1;
 }
 
