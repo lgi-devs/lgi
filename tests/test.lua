@@ -1112,6 +1112,44 @@ function gireg.obj_create()
    check(o)
    check(type(o) == 'userdata')
    check(select('#', R.TestObj()) == 1)
+   o = R.TestObj.new_from_file('unused')
+   check(type(o) == 'userdata')
+   check(select('#', R.TestObj.new_from_file('unused')) == 1)
+end
+
+function gireg.obj_methods()
+   local R = lgi.Regress
+   local o = R.TestObj()
+   check(o:instance_method() == -1)
+   check(o.static_method(42) == 42)
+   local y, z, q = o:torture_signature_0(1, 'foo', 2)
+   check(y == 1)
+   check(z == 2)
+   check(q == 5)
+   local res, y, z, q = o:torture_signature_1(1, 'foo', 2)
+   check(res == true)
+   check(y == 1)
+   check(z == 2)
+   check(q == 5)
+   local res, msg, code = o:torture_signature_1(1, 'foo', 3)
+   check(res == false)
+   check(type(msg) == 'string')
+   check(type(code) == 'number')
+   check(o:do_matrix('unused') == 42)
+end
+
+function gireg.obj_null_args()
+   local R = lgi.Regress
+   R.func_obj_null_in(nil)
+   R.func_obj_null_in()
+   check(R.TestObj.null_out() == nil)
+   check(select('#', R.TestObj.null_out()) == 1)
+end
+
+function gireg.obj_virtual_methods()
+   local R = lgi.Regress
+   local o = R.TestObj()
+   check(o:on_matrix('unused') == 42)
 end
 
 function gireg.obj_prop_int()
@@ -1175,6 +1213,10 @@ function gireg.obj_prop_bare()
    check(o.bare == pv)
    o.bare = nil
    check(o.bare == nil)
+   o:set_bare(pv)
+   check(o.bare == pv)
+   o.bare = nil
+   check(o.bare == nil)
    check(not pcall(function() o.bare = {} end))
    check(not pcall(function() o.bare = 42 end))
    check(not pcall(function() o.bare = 'lgi' end))
@@ -1227,6 +1269,22 @@ function gireg.obj_prop_list()
    check(not pcall(function() o.list = function() end end))
    check(not pcall(function() o.list = R.TestObj() end))
    check(not pcall(function() o.list = R.TestBoxed() end))
+end
+
+function gireg.obj_subobj()
+   local R = lgi.Regress
+   local o = R.TestSubObj()
+   local pv = R.TestObj()
+   check(o:instance_method() == 0)
+   o.bare = pv
+   check(o.bare == pv)
+   o:unset_bare()
+   check(o.bare == nil)
+   o = R.TestSubObj.new()
+   o:set_bare(pv)
+   check(o.bare == pv)
+   o:unset_bare()
+   check(o.bare == nil)
 end
 
 function gireg.obj_fundamental()
