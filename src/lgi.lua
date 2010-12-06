@@ -180,7 +180,7 @@ local function get_category(children, xform_value,
       end
 
       -- Metatable is no longer needed, disconnect it.
-      setmetatable(category, nil)
+      return setmetatable(category, nil)
    end
 
    function mt:__index(requested_name)
@@ -270,13 +270,22 @@ end
 
 -- Fully resolves the whole typetable, i.e. load all symbols normally
 -- loaded on-demand at once.
-local function resolve_elements(typetable)
+local function resolve_elements(typetable, recursive)
    local categories = typetable._categories or {}
    for i = 1, #categories do
       local category = rawget(typetable, categories[i])
       local resolve = type(category) == 'table' and category._resolve
       local _ = resolve and resolve(category)
    end
+   if recursive then
+      for _, iface in pairs(typetable._implements or {}) do
+	 iface:_resolve(recursive)
+      end
+      if typetable._parent then
+	 typetable._parent:_resolve(recursive)
+      end
+   end
+   return typetable
 end
 
 -- Metatables for assorted repo components.
@@ -634,6 +643,7 @@ function component_mt.namespace:_resolve(deep)
 	 if resolve then resolve(component, deep) end
       end
    end
+   return self
 end
 
 -- Makes sure that the namespace (optionally with requested version)
