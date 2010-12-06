@@ -283,8 +283,11 @@ info_index (lua_State *L)
 	}
       else if (GI_IS_INTERFACE_INFO (*info))
 	{
-	  if (0);
+	  if (strcmp (prop, "type_struct") == 0)
+	    return
+	      lgi_gi_info_new (L, g_interface_info_get_iface_struct (*info));
 	  INFOS (interface, prerequisite)
+	    INFOS (interface, vfunc)
 	    INFOS (interface, method)
 	    INFOS (interface, constant)
 	    INFOS2 (interface, property, properties)
@@ -294,8 +297,11 @@ info_index (lua_State *L)
 	{
 	  if (strcmp (prop, "parent") == 0)
 	    return lgi_gi_info_new (L, g_object_info_get_parent (*info));
+	  else if (strcmp (prop, "type_struct") == 0)
+	    return lgi_gi_info_new (L, g_object_info_get_class_struct (*info));
 	  INFOS (object, interface)
 	    INFOS (object, field)
+	    INFOS (object, vfunc)
 	    INFOS (object, method)
 	    INFOS (object, constant)
 	    INFOS2 (object, property, properties)
