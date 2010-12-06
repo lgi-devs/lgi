@@ -167,9 +167,7 @@ local function get_category(children, xform_value,
 	 val = xvalue(ei)
 	 if val then
 	    en = ei.name
-	    if xform_name_reverse then
-	       en = xform_name_reverse(en, ei)
-	    end
+	    en = not xform_name_reverse and en or xform_name_reverse(en)
 	    if en then category[en] = val end
 	 end
       end
@@ -177,7 +175,8 @@ local function get_category(children, xform_value,
       -- Load all known indices.
       for en, idx in pairs(index) do
 	 val = xvalue(check_type(children[idx]))
-	 category[en] = val
+	 en = not xform_name_reverse and en or xform_name_reverse(en)
+	 if en then category[en] = val end
       end
 
       -- Metatable is no longer needed, disconnect it.
