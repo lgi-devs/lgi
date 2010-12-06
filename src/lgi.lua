@@ -302,9 +302,10 @@ local component_mt = {
       '_methods', '_fields'
    },
    interface = create_component_meta {
-      '_properties', '_methods', '_signals', '_constants' },
+      '_properties', '_vfuncs', '_methods', '_signals', '_constants' },
    class = create_component_meta {
-      '_properties', '_methods', '_signals', '_constants', '_fields' },
+      '_properties', '_vfuncs', '_methods', '_signals', '_constants',
+      '_fields' },
    bitflags = {},
    enum = {},
 }
@@ -405,6 +406,10 @@ function component_mt.class:_access(instance, name, ...)
 	 return access_field(core.object.field, instance, element, ...)
       elseif element.is_signal then
 	 return access_signal(instance, element, ...)
+      elseif element.is_vfunc then
+	 local typetable, _, typestruct = core.object.typeof(
+	    instance, element.container.gtype)
+	 return core.record.field(typestruct, typetable._type[element.name])
       end
    elseif type(element) == 'function' then
       return element(instance, ...)
@@ -527,12 +532,20 @@ function typeloader.flags(namespace, info)
 end
 
 local function load_signal_name(name)
-   name = string.match(name, '^on_(.+)$')
-   return name and string.gsub(name, '_', '%-')
+   name = name:match('^on_(.+)$')
+   return name and name:gsub('_', '%-')
 end
 
 local function load_signal_name_reverse(name)
-   return 'on_' .. string.gsub(name, '%-', '_')
+   return 'on_' .. name:gsub('%-', '_')
+end
+
+local function load_vfunc_name(name)
+   return name:match('^on_(.+)$')
+end
+
+local function load_vfunc_name_reverse(name)
+   return 'on_' .. name
 end
 
 local function load_method(mi)
@@ -573,9 +586,15 @@ function typeloader.interface(namespace, info)
    local interface = create_component(info, component_mt.interface)
    interface._properties = load_properties(info)
    interface._methods = get_category(info.methods, load_method)
-   interface._signals = get_category(
-      info.signals, nil, load_signal_name, load_signal_name_reverse)
+   interface._signals = get_category(info.signals, nil, load_signal_name,
+				     load_signal_name_reverse)
    interface._constants = get_category(info.constants, core.constant)
+   local type_struct = info.type_struct
+   if type_struct then
+      interface._vfuncs = get_category(info.vfuncs, nil, load_vfunc_name,
+				       load_vfunc_name_reverse)
+      interface._type = get_category(type_struct.fields)
+   end
    return interface, '_interfaces'
 end
 
@@ -587,14 +606,20 @@ function typeloader.object(namespace, info)
 				 load_signal_name, load_signal_name_reverse)
    class._constants = get_category(info.constants, core.constant)
    class._fields = get_category(info.fields)
+   local type_struct = info.type_struct
+   if type_struct then
+      class._vfuncs = get_category(info.vfuncs, nil, load_vfunc_name,
+				   load_vfunc_name_reverse)
+      class._type = type_struct and get_category(type_struct.fields)
+   end
+
+   -- Populate inheritation information (_implements and _parent fields).
    local interfaces, implements = info.interfaces, {}
    for i = 1, #interfaces do
       local iface = interfaces[i]
       implements[iface.fullname] = repo[iface.namespace][iface.name]
    end
    class._implements = implements
-
-   -- Add parent (if any) into _inherits table.
    local parent = info.parent
    if parent then
       local ns, name = parent.namespace, parent.name
@@ -727,6 +752,10 @@ do
 	    return access_signal(instance, element, ...)
 	 elseif element.is_field then
 	    return access_field(core.object.field, instance, element, ...)
+	 elseif element.is_vfunc then
+	    local typetable, _, typestruct = core.object.typeof(
+	       instance, element.container.gtype)
+	    return core.record.field(typestruct, typetable._type[element.name])
 	 else
 	    error(("`%s': unhandled field `%s' of gi info type `%s'"):format(
 		     self._name, name, element.type))
