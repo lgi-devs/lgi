@@ -1298,6 +1298,62 @@ function gireg.obj_fundamental()
    collectgarbage()
 end
 
+function gireg.callback_simple()
+   local R = lgi.Regress
+   check(R.test_callback(function() return 42 end) == 42)
+   check(R.test_callback() == 0)
+   check(R.test_callback(nil) == 0)
+   check(not pcall(R.test_callback, 1))
+   check(not pcall(R.test_callback, 'foo'))
+   check(not pcall(R.test_callback, {}))
+   check(not pcall(R.test_callback, R))
+
+   check(R.test_multi_callback(function() return 22 end) == 44)
+   check(R.test_multi_callback() == 0)
+end
+
+function gireg.callback_data()
+   local R = lgi.Regress
+   local called
+   R.test_simple_callback(function() called = true end)
+   check(called)
+   check(R.test_callback_user_data(function() return 42 end) == 42)
+
+   called = nil
+   R.TestObj.static_method_callback(function() called = true return 42 end)
+   check(called)
+   local o = R.TestObj()
+   called = nil
+   o.static_method_callback(function() called = true return 42 end)
+   check(called)
+   called = nil
+   o:instance_method_callback(function() called = true return 42 end)
+   check(called)
+end
+
+function gireg.callback_notified()
+   local R = lgi.Regress
+   check(R.test_callback_destroy_notify(function() return 1 end) == 1)
+   check(R.test_callback_destroy_notify(function() return 2 end) == 2)
+   check(R.test_callback_destroy_notify(function() return 3 end) == 3)
+   collectgarbage()
+   collectgarbage()
+   check(R.test_callback_thaw_notifications() == 6)
+
+   R.TestObj.new_callback(function() return 1 end)
+   collectgarbage()
+   collectgarbage()
+   check(R.test_callback_thaw_notifications() == 1)
+end
+
+function gireg.callback_async()
+   local R = lgi.Regress
+   R.test_callback_async(function() return 1 end)
+   collectgarbage()
+   collectgarbage()
+   check(R.test_callback_thaw_async() == 1)
+end
+
 -- Available groups
 local groups = { 'gireg', gireg = gireg }
 
