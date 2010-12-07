@@ -849,8 +849,8 @@ lgi_marshal_arg_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 	  case GI_INFO_TYPE_OBJECT:
 	  case GI_INFO_TYPE_INTERFACE:
 	    {
-	      val->v_pointer = 
-		lgi_object_2c (L, narg, 
+	      val->v_pointer =
+		lgi_object_2c (L, narg,
 			       g_registered_type_info_get_g_type (info),
 			       optional);
 	      nret = 1;
@@ -1371,7 +1371,7 @@ lgi_marshal_val_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 	    if (g_base_info_get_type (info) == GI_INFO_TYPE_OBJECT
 		&& g_object_info_get_fundamental (info))
 	      {
-		GIObjectInfoGetValueFunction get_value = 
+		GIObjectInfoGetValueFunction get_value =
 		  g_object_info_get_get_value_function_pointer (info);
 		if (get_value != NULL)
 		  {

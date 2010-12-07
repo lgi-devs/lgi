@@ -691,10 +691,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
      delete the code under our feet and crash and burn :-(. Instead, we create
      marshal guard and leave it to GC to destroy the closure later. */
   if (closure->autodestroy)
-    {
-      *lgi_guard_create (L, lgi_closure_destroy) = closure;
-      lua_pop (L, 1);
-    }
+    *lgi_guard_create (L, lgi_closure_destroy) = closure;
 
   /* This is NOT called by Lua, so we better leave the Lua stack we
      used pretty much tidied. */
