@@ -712,16 +712,24 @@ marshal_2lua_error (lua_State *L, GITransfer xfer, GError *err)
 /* Marshalls given callable from Lua to C. */
 static int
 marshal_2c_callable (lua_State *L, GICallableInfo *ci, GIArgInfo *ai,
-		     GIArgument *val, int narg,
+		     gpointer *callback, int narg, gboolean optional,
 		     GICallableInfo *argci, void **args)
 {
   int nret = 0;
   GIScopeType scope = g_arg_info_get_scope (ai);
 
+  /* Check 'nil' in optional case.  In this case, return NULL as
+     callback. */
+  if (optional && lua_isnoneornil (L, narg))
+    {
+      *callback = NULL;
+      return 0;
+    }
+
   /* Create the closure. */
   gpointer closure = lgi_closure_create (L, ci, narg,
 					 scope == GI_SCOPE_TYPE_ASYNC,
-					 &val->v_pointer);
+					 callback);
 
   /* Store user_data and/or destroy_notify arguments. */
   if (argci != NULL && args != NULL)
@@ -850,7 +858,8 @@ lgi_marshal_arg_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 	    }
 
 	  case GI_INFO_TYPE_CALLBACK:
-	    nret = marshal_2c_callable (L, info, ai, val, narg, ci, args);
+	    nret = marshal_2c_callable (L, info, ai, &val->v_pointer, narg,
+					optional, ci, args);
 	    break;
 
 	  default:
