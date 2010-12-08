@@ -105,7 +105,8 @@ lgi_record_2lua (lua_State *L, gpointer addr, LgiRecordMode mode, int parent)
   if (!lua_isnil (L, -1) && mode != LGI_RECORD_PARENT)
     {
       /* Remove unneeded tables under our requested object. */
-      lua_replace (L, -2);
+      lua_replace (L, -3);
+      lua_pop (L, 1);
 
       /* In case that we want to own the record, make sure that the
 	 ownership is properly updated. */
