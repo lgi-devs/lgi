@@ -444,9 +444,10 @@ function component_mt.record:__call(fields)
    -- Create the structure instance.
    local info
    if self._gtype then
-      -- Lookup info by gtype.
-      info = assert(gi[self._gtype])
-   else
+      -- Try to lookup info by gtype.
+      info = gi[self._gtype]
+   end
+   if not info then
       -- GType is not available, so lookup info by name.
       local ns, name = self._name:match('^(.-)%.(.+)$')
       info = assert(gi[ns][name])
