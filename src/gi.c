@@ -585,8 +585,9 @@ gi_index (lua_State *L)
 {
   if (lua_isnumber (L, 2))
     {
-      GIBaseInfo *info =
-	g_irepository_find_by_gtype (NULL, luaL_checknumber (L, 2));
+      GType gtype = luaL_checknumber (L, 2);
+      GIBaseInfo *info = (gtype != G_TYPE_INVALID)
+	? g_irepository_find_by_gtype (NULL, gtype) : NULL;
       return lgi_gi_info_new (L, info);
     }
   else
