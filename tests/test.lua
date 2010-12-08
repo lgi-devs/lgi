@@ -1287,6 +1287,15 @@ function gireg.obj_subobj()
    check(o.bare == nil)
 end
 
+function gireg.obj_naming()
+   local R = lgi.Regress
+   local o = R.TestWi8021x()
+   o:set_testbool(true)
+   check(o.testbool == true)
+   o.testbool = false
+   check(o:get_testbool() == false)
+end
+
 function gireg.obj_fundamental()
    local R = lgi.Regress
    local f = R.TestFundamentalSubObject.new('foo-nda-mental')
