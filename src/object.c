@@ -432,10 +432,8 @@ object_property (lua_State *L)
     {
       /* If not gi.info, it must be record with pspec. */
       GParamSpec *pspec;
-      GIBaseInfo *pspec_info =
-	g_irepository_find_by_name (NULL, "GObject", "ParamSpec");
-      lgi_gi_info_new (L, pspec_info);
-      if (lgi_record_2c (L, pspec_info, 2, (gpointer *) &pspec, FALSE) > 0)
+      lgi_type_get_repotype (L, G_TYPE_PARAM, NULL);
+      if (lgi_record_2c (L, 2, (gpointer *) &pspec, FALSE) > 0)
 	g_assert_not_reached ();
       gtype = pspec->value_type;
       flags = pspec->flags;

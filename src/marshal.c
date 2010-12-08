@@ -842,7 +842,8 @@ lgi_marshal_arg_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 	  case GI_INFO_TYPE_STRUCT:
 	  case GI_INFO_TYPE_UNION:
 	    {
-	      nret = lgi_record_2c (L, info, narg, &val->v_pointer, optional);
+	      lgi_type_get_repotype (L, G_TYPE_INVALID, info);
+	      nret = lgi_record_2c (L, narg, &val->v_pointer, optional);
 	      break;
 	    }
 
@@ -999,11 +1000,10 @@ lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 
     case G_TYPE_BOXED:
       {
-	GIBaseInfo *info = g_irepository_find_by_gtype (NULL, type);
-	lgi_gi_info_new (L, info);
-	vals = lgi_record_2c (L, info, narg, &obj, TRUE);
+	lgi_type_get_repotype (L, type, NULL);
+	vals = lgi_record_2c (L, narg, &obj, TRUE);
 	g_value_set_boxed (val, obj);
-	lua_pop (L, vals + 1);
+	lua_pop (L, vals);
 	return;
       }
 

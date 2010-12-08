@@ -173,16 +173,13 @@ record_check (lua_State *L, int narg)
 
 /* Throws error that narg is not of expected type. */
 static int
-record_error (lua_State *L, int narg, GIBaseInfo *ri)
+record_error (lua_State *L, int narg, const gchar *expected_name)
 {
-  luaL_checkstack (L, 3, "");
+  luaL_checkstack (L, 2, "");
   lua_pushstring (L, lua_typename (L, lua_type (L, narg)));
-  if (ri)
-    lua_concat (L, lgi_type_get_name (L, ri));
-  else
-    lua_pushliteral (L, "lgi.record");
-  lua_pushfstring (L, "%s expected, got %s", lua_tostring (L, -1),
-		   lua_tostring (L, -2));
+  lua_pushfstring (L, "%s expected, got %s",
+		   expected_name ? expected_name : "lgi.record",
+		   lua_tostring (L, -1));
   return luaL_argerror (L, narg, lua_tostring (L, -1));
 }
 
@@ -198,8 +195,7 @@ record_get (lua_State *L, int narg)
 }
 
 int
-lgi_record_2c (lua_State *L, GIBaseInfo *ri, int narg, gpointer *addr,
-	       gboolean optional)
+lgi_record_2c (lua_State *L, int narg, gpointer *addr, gboolean optional)
 {
   Record *record;
 
@@ -212,18 +208,12 @@ lgi_record_2c (lua_State *L, GIBaseInfo *ri, int narg, gpointer *addr,
 
   /* Get record and check its type. */
   lgi_makeabs (L, narg);
-  luaL_checkstack (L, 8, "");
+  luaL_checkstack (L, 4, "");
   record = record_check (L, narg);
-  if (ri)
+  if (!lua_isnil (L, -1))
     {
-      /* Get repo type for ri GIBaseInfo. */
-      lua_pushlightuserdata (L, &lgi_addr_repo);
-      lua_rawget (L, LUA_REGISTRYINDEX);
-      lua_getfield (L, -1, g_base_info_get_namespace (ri));
-      lua_getfield (L, -1, g_base_info_get_name (ri));
-      lua_getfenv (L, narg);
-
       /* Check, whether type fits. */
+      lua_getfenv (L, narg);
       if (record && !lua_equal (L, -1, -2))
 	record = NULL;
 
@@ -239,21 +229,30 @@ lgi_record_2c (lua_State *L, GIBaseInfo *ri, int narg, gpointer *addr,
 	      lua_call (L, 2, 1);
 	      if (!lua_isnil (L, -1))
 		{
-		  lua_replace (L, -5);
-		  lua_pop (L, 3);
-		  return lgi_record_2c (L, ri, -1, addr, optional) + 1;
+		  lua_insert (L, -3);
+		  lua_pop (L, 1);
+		  return lgi_record_2c (L, -2, addr, optional) + 1;
 		}
 	    }
 	  lua_pop (L, 1);
 	}
 
-      lua_pop (L, 4);
+      lua_pop (L, 1);
     }
 
   if (!record)
-    record_error (L, narg, ri);
+    {
+      const gchar *name = NULL;
+      if (!lua_isnil (L, -1))
+	{
+	  lua_getfield (L, -1, "_name");
+	  name = lua_tostring (L, -1);
+	}
+      record_error (L, narg, name);
+    }
 
   *addr = record->addr;
+  lua_pop (L, 1);
   return 0;
 }
 
@@ -349,7 +348,7 @@ record_new (lua_State *L)
 				    &val, 3);
 	      }
 
-	    lgi_record_2lua (L, g_boxed_copy (G_TYPE_VALUE, &val), 
+	    lgi_record_2lua (L, g_boxed_copy (G_TYPE_VALUE, &val),
 			     LGI_RECORD_OWN, 0);
 	    if (G_IS_VALUE (&val))
 	      g_value_unset (&val);

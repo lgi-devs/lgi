@@ -140,10 +140,11 @@ typedef enum
 void lgi_record_2lua (lua_State *L, gpointer addr, LgiRecordMode mode,
 		      int parent);
 
-/* Gets pointer to C-structure from given Lua-side object. Returns
-   number of temporary objects created pushed on the stack. */
-int lgi_record_2c (lua_State *L, GIBaseInfo *ri, int narg, gpointer *addr,
-		   gboolean optional);
+/* Gets pointer to C-structure from given Lua-side object. Expects
+   repo typetable of expected argument pushed on the top of the stack,
+   removes it.  Returns number of temporary objects created pushed on
+   the stack. */
+int lgi_record_2c (lua_State *L, int narg, gpointer *addr, gboolean optional);
 
 /* Creates Lua-side part (proxy) of given object. If the object is not
    owned (own == FALSE), an ownership is automatically acquired. */
