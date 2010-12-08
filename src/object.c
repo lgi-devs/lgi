@@ -50,45 +50,17 @@ object_check (lua_State *L, int narg)
 static GType
 object_type (lua_State *L, GType gtype)
 {
-  luaL_checkstack (L, 2, "");
-  lua_pushlightuserdata (L, &lgi_addr_repo);
-  lua_rawget (L, LUA_REGISTRYINDEX);
   for (; gtype != G_TYPE_INVALID; gtype = g_type_parent (gtype))
     {
-      /* Try to find type in the repo table. First of all, try to
-	 lookup by gtype index in the repo, which is faster, but does
-	 not work if requested interface was not loaded yet. */
-      lua_pushnumber (L, gtype);
-      lua_rawget (L, -2);
+      /* Get appropriate repo table, if present. */
+      lgi_type_get_repotype (L, gtype);
       if (!lua_isnil (L, -1))
-	{
-	  lua_replace (L, -2);
-	  return gtype;
-	}
-      else
-	{
-	  lua_pop (L, 1);
+	break;
 
-	  /* Not found, so try to find using names in the repo table.
-	     Because repo table contains metatables loading interfaces
-	     on-demand, this might work in case that requested
-	     class/interface was not referenced yet. */
-	  GIBaseInfo *info = g_irepository_find_by_gtype (NULL, gtype);
-	  if (info)
-	    {
-	      lgi_gi_info_new (L, info);
-	      lua_getfield (L, -2, g_base_info_get_namespace (info));
-	      lua_getfield (L, -1, g_base_info_get_name (info));
-	      lua_replace (L, -4);
-	      lua_pop (L, 2);
-	      return gtype;
-	    }
-	}
+      lua_pop (L, 1);
     }
 
-  /* Not found, remove repo table from the stack. */
-  lua_pop (L, 1);
-  return G_TYPE_INVALID;
+  return gtype;
 }
 
 /* Throws type error for object at given argument, gtype can
@@ -387,7 +359,7 @@ object_new (lua_State *L)
 
 /* Checks whether given value is object and returns its real gtype,
    associated type table and type struct record.  Lua-side prototype:
-   typetable, gtype, typestruct = 
+   typetable, gtype, typestruct =
    object.typeof(objectinstance[, iface-gtype]) */
 static int
 object_typeof (lua_State *L)
