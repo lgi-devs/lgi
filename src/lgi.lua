@@ -676,7 +676,7 @@ end
 -- is properly loaded.
 function lgi.require(name, version)
    -- Load the namespace info for GIRepository.
-   local ns_info = gi.require(name, version)
+   local ns_info = assert(gi.require(name, version))
 
    -- If the repository table does not exist yet, create it.
    local ns = rawget(repo, name)
