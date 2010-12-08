@@ -28,6 +28,11 @@ const char *lgi_sd (lua_State* L);
    Returns number of pushed elements. */
 int lgi_type_get_name (lua_State *L, GIBaseInfo *info);
 
+/* Stores repo type table associated with specified gtype (or BaseInfo
+   if gtype is invalid). to the stack, or nil if no such table can be
+   found in the repo. */
+GType lgi_type_get_repotype (lua_State *L, GType gtype, GIBaseInfo *info);
+
 /* Allocates guard, a pointer-size userdata with associated destroy
    handler. Returns pointer to user_data stored inside guard. */
 gpointer *lgi_guard_create (lua_State *L, GDestroyNotify destroy);

@@ -91,6 +91,65 @@ lgi_type_get_name (lua_State *L, GIBaseInfo *info)
   return n;
 }
 
+GType
+lgi_type_get_repotype (lua_State *L, GType gtype, GIBaseInfo *info)
+{
+  luaL_checkstack (L, 4, "");
+
+  /* Get repo table. */
+  lua_pushlightuserdata (L, &lgi_addr_repo);
+  lua_rawget (L, LUA_REGISTRYINDEX);
+
+  /* Prepare gtype, if not given directly. */
+  if (gtype == G_TYPE_INVALID && info && GI_IS_REGISTERED_TYPE_INFO (info))
+    {
+      gtype = g_registered_type_info_get_g_type (info);
+      if (gtype == G_TYPE_NONE)
+	gtype = G_TYPE_INVALID;
+    }
+
+  /* First of all, check direct indexing of repo by gtype, is fastest. */
+  if (gtype != G_TYPE_INVALID)
+    {
+      lua_pushnumber (L, gtype);
+      lua_rawget (L, -2);
+    }
+  else
+    lua_pushnil (L);
+
+  if (lua_isnil (L, -1))
+    {
+      /* Not indexed yet.  Try to lookup by name - this works when
+	 lazy-loaded repo tables are not loaded yet. */
+      if (!info)
+	{
+	  info = g_irepository_find_by_gtype (NULL, gtype);
+	  lgi_gi_info_new (L, info);
+	}
+      else
+	/* Keep stack balanced as in the previous 'if' branch. */
+	lua_pushnil (L);
+
+      if (info)
+	{
+	  lua_getfield (L, -3, g_base_info_get_namespace (info));
+	  lua_getfield (L, -1, g_base_info_get_name (info));
+	  lua_replace (L, -4);
+	  lua_pop (L, 2);
+	  if (gtype == G_TYPE_INVALID)
+	    {
+	      lua_getfield (L, -1, "_gtype");
+	      gtype = luaL_optnumber (L, -1, G_TYPE_INVALID);
+	      lua_pop (L, 1);
+	    }
+	}
+      else
+	lua_pop (L, 1);
+    }
+  lua_replace (L, -2);
+  return gtype;
+}
+
 typedef struct _Guard
 {
   gpointer data;
