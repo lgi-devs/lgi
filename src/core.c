@@ -233,17 +233,15 @@ int lgi_addr_repo;
 int
 luaopen_lgi__core (lua_State* L)
 {
-  GError *err = NULL;
-
-  /* Early GLib initializations. */
+  /* Early GLib initializations. Make sure that following G_TYPEs are
+     already initialized, because GIRepo does not initialize them (it
+     does not know that they are boxed). */
   g_type_init ();
-  g_irepository_require (NULL, "GIRepository", NULL, 0, &err);
-  if (err != NULL)
-    {
-      lua_pushfstring (L, "%s (%d)", err->message, err->code);
-      g_error_free (err);
-      return luaL_error (L, "%s", lua_tostring (L, -1));
-    }
+  volatile GType unused;
+  unused = G_TYPE_DATE;
+  unused = G_TYPE_REGEX;
+  unused = G_TYPE_DATE_TIME;
+  unused = G_TYPE_VARIANT_TYPE;
 
   /* Register 'guard' metatable. */
   luaL_newmetatable (L, UD_GUARD);

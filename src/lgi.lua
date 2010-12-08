@@ -702,7 +702,24 @@ function repo_mt:__index(name)
 end
 setmetatable(repo, repo_mt)
 
--- GObject modifications.
+-- GLib overrides.
+do
+   local GLib = repo.GLib
+
+   -- Add gtype's to glib structures which are boxed inside GObject
+   -- (and currently GI does not know about this).
+   for glib_name, gi_name in pairs { 
+      GDate = 'Date', GRegex = 'Regex', GDateTime = 'DateTime',
+      GVariantType = 'VariantType',
+   } do
+      local gtype = repo.GObject.type_from_name(glib_name)
+      local gi_type = GLib[gi_name]
+      gi_type._gtype = gtype
+      repo[gtype] = gi_type
+   end
+end
+
+-- GObject overrides.
 do
    local object = repo.GObject.Object
 
