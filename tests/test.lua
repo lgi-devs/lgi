@@ -1296,6 +1296,15 @@ function gireg.obj_naming()
    check(o:get_testbool() == false)
 end
 
+function gireg.obj_floating()
+   local R = lgi.Regress
+   local o = R.TestFloating()
+   check(o)
+   o = nil
+   collectgarbage()
+   collectgarbage()
+end
+
 function gireg.obj_fundamental()
    local R = lgi.Regress
    local f = R.TestFundamentalSubObject.new('foo-nda-mental')
