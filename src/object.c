@@ -53,7 +53,7 @@ object_type (lua_State *L, GType gtype)
   for (; gtype != G_TYPE_INVALID; gtype = g_type_parent (gtype))
     {
       /* Get appropriate repo table, if present. */
-      lgi_type_get_repotype (L, gtype);
+      lgi_type_get_repotype (L, gtype, NULL);
       if (!lua_isnil (L, -1))
 	break;
 
@@ -375,7 +375,8 @@ object_typeof (lua_State *L)
 	  typestruct = !G_TYPE_IS_INTERFACE (gtype)
 	    ? G_TYPE_INSTANCE_GET_CLASS (object, gtype, GTypeClass)
 	    : G_TYPE_INSTANCE_GET_INTERFACE (object, gtype, GTypeClass);
-	  lgi_record_2lua (L, NULL, typestruct, LGI_RECORD_PEEK, 0);
+	  lua_newtable (L);
+	  lgi_record_2lua (L, typestruct, LGI_RECORD_PEEK, 0);
 	  return 3;
 	}
     }
@@ -476,13 +477,12 @@ object_property (lua_State *L)
 static int
 object_properties (lua_State *L)
 {
-  GIBaseInfo *pspec_info;
   GObjectClass *klass;
   gboolean list = lua_isnoneornil (L, 2);
 
   klass = G_OBJECT_GET_CLASS (lgi_object_2c (L, 1, G_TYPE_OBJECT, FALSE));
-  pspec_info = g_irepository_find_by_name (NULL, "GObject", "ParamSpec");
-  lgi_gi_info_new (L, pspec_info);
+  lgi_type_get_repotype (L, G_TYPE_PARAM, NULL);
+  g_assert (!lua_isnil (L, -1));
   if (list)
     {
       /* List all properties of the object, store them into the table. */
@@ -493,7 +493,8 @@ object_properties (lua_State *L)
       pspecs = g_object_class_list_properties (klass, &n_properties);
       for (i = 0; i < n_properties; ++i)
 	{
-	  lgi_record_2lua (L, pspec_info, pspecs[i], LGI_RECORD_PEEK, 0);
+	  lua_pushvalue (L, -2);
+	  lgi_record_2lua (L, pspecs[i], LGI_RECORD_PEEK, 0);
 	  lua_setfield (L, -2, pspecs[i]->name);
 	}
 
@@ -506,7 +507,7 @@ object_properties (lua_State *L)
       GParamSpec *pspec =
 	g_object_class_find_property (klass, lua_tostring (L, 2));
       if (pspec != NULL)
-	lgi_record_2lua (L, pspec_info, pspec, LGI_RECORD_PEEK, 0);
+	lgi_record_2lua (L, pspec, LGI_RECORD_PEEK, 0);
       else
 	lua_pushnil (L);
     }

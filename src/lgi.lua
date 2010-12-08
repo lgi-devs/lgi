@@ -702,21 +702,17 @@ function repo_mt:__index(name)
 end
 setmetatable(repo, repo_mt)
 
--- GLib overrides.
-do
-   local GLib = repo.GLib
-
-   -- Add gtype's to glib structures which are boxed inside GObject
-   -- (and currently GI does not know about this).
-   for glib_name, gi_name in pairs { 
-      GDate = 'Date', GRegex = 'Regex', GDateTime = 'DateTime',
-      GVariantType = 'VariantType',
-   } do
-      local gtype = repo.GObject.type_from_name(glib_name)
-      local gi_type = GLib[gi_name]
-      gi_type._gtype = gtype
-      repo[gtype] = gi_type
-   end
+-- Add gtypes to important GLib and GObject structures, for which the
+-- typelibs do not contain them.
+for gtype_name, gi_name in pairs { 
+      GDate = 'GLib.Date', GRegex = 'GLib.Regex', GDateTime = 'GLib.DateTime',
+      GVariantType = 'GLib.VariantType', GParam = 'GObject.ParamSpec',
+} do
+   local gtype = repo.GObject.type_from_name(gtype_name)
+   local ns, name = gi_name:match('^([%w_]+)%.([%w_]+)$')
+   local gi_type = repo[ns][name]
+   gi_type._gtype = gtype
+   repo[gtype] = gi_type
 end
 
 -- GObject overrides.

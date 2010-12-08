@@ -1051,8 +1051,7 @@ lgi_marshal_arg_2c_caller_alloc (lua_State *L, GITypeInfo *ti, GIArgument *val,
 	if (type == GI_INFO_TYPE_STRUCT || type == GI_INFO_TYPE_UNION)
 	  {
 	    if (pos == 0)
-	      val->v_pointer = lgi_record_2lua (L, ii, NULL,
-						LGI_RECORD_ALLOCATE, 0);
+	      val->v_pointer = lgi_record_new (L, ii);
 	    handled = TRUE;
 	  }
 
@@ -1202,7 +1201,8 @@ lgi_marshal_arg_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
 		mode = LGI_RECORD_OWN;
 	      else
 		mode = (parent != 0) ? LGI_RECORD_PARENT : LGI_RECORD_PEEK;
-	      lgi_record_2lua (L, info, addr, mode, parent);
+	      lgi_type_get_repotype (L, G_TYPE_INVALID, info);
+	      lgi_record_2lua (L, addr, mode, parent);
 	      break;
 	    }
 
@@ -1341,18 +1341,13 @@ lgi_marshal_val_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 
     case G_TYPE_BOXED:
       {
-	GIBaseInfo *bi = g_irepository_find_by_gtype (NULL, type);
-	int bi_guard;
-	lgi_gi_info_new (L, bi);
-	bi_guard = lua_gettop (L);
-	if (bi != NULL)
+	lgi_type_get_repotype (L, type, NULL);
+	if (!lua_isnil (L, -1))
 	  {
-	    gpointer obj = g_value_dup_boxed (val);
-	    lgi_record_2lua (L, bi, obj, LGI_RECORD_OWN, 0);
-	    lua_remove (L, bi_guard);
+	    lgi_record_2lua (L, g_value_dup_boxed (val), LGI_RECORD_OWN, 0);
 	    return;
 	  }
-	lua_remove (L, bi_guard);
+	lua_pop (L, 1);
 	break;
       }
 

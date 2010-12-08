@@ -21,9 +21,6 @@ typedef struct _Record
   /* Ownership mode of the record. */
   unsigned mode : 2;
 
-  /* Flag indicating whether this record is union. */
-  unsigned is_union : 1;
-
   union
   {
     /* If the record is allocated 'on the stack', its data is here. */
@@ -45,25 +42,60 @@ static int record_mt;
 static int record_cache;
 
 gpointer
-lgi_record_2lua (lua_State *L, GIBaseInfo *info, gpointer addr,
-		 LgiRecordMode mode, int parent)
+lgi_record_new (lua_State *L, GIBaseInfo *ri)
 {
-  size_t size;
   Record *record;
-  gboolean is_union;
+  size_t size;
 
-  /* Convert 'parent' index to an absolute one. */
-  luaL_checkstack (L, 6, "");
-  lgi_makeabs (L, parent);
+  luaL_checkstack (L, 4, "");
+
+  /* Calculate size of the record to allocate. */
+  size = G_STRUCT_OFFSET (Record, data)
+    + ((g_base_info_get_type (ri) == GI_INFO_TYPE_UNION)
+       ? g_union_info_get_size (ri) : g_struct_info_get_size (ri));
+
+  /* Allocate new userdata for record object, attach proper
+     metatable. */
+  record = lua_newuserdata (L, size);
+  lua_pushlightuserdata (L, &record_mt);
+  lua_rawget (L, LUA_REGISTRYINDEX);
+  lua_setmetatable (L, -2);
+  record->addr = record->data.data;
+  memset (record->addr, 0, size - G_STRUCT_OFFSET (Record, data));
+  record->mode = LGI_RECORD_PEEK;
+
+  /* Get ref_repo table, attach it as an environment. */
+  lgi_type_get_repotype (L, G_TYPE_NONE, ri);
+  lua_setfenv (L, -2);
+
+  /* Store newly created record into the cache. */
+  lua_pushlightuserdata (L, &record_cache);
+  lua_rawget (L, LUA_REGISTRYINDEX);
+  lua_pushlightuserdata (L, record->addr);
+  lua_pushvalue (L, -3);
+  lua_rawset (L, -3);
+  lua_pop (L, 1);
+  return record->addr;
+}
+
+void
+lgi_record_2lua (lua_State *L, gpointer addr, LgiRecordMode mode, int parent)
+{
+  Record *record;
+
+  luaL_checkstack (L, 5, "");
 
   /* NULL pointer results in 'nil'. */
-  if (mode != LGI_RECORD_ALLOCATE && addr == NULL)
+  if (addr == NULL)
     {
       lua_pushnil (L);
-      return NULL;
+      return;
     }
 
-  /* Prepare access to registry and cache. */
+  /* Convert 'parent' index to an absolute one. */
+  lgi_makeabs (L, parent);
+
+  /* Prepare access to cache. */
   lua_pushlightuserdata (L, &record_cache);
   lua_rawget (L, LUA_REGISTRYINDEX);
 
@@ -82,30 +114,18 @@ lgi_record_2lua (lua_State *L, GIBaseInfo *info, gpointer addr,
       if (mode == LGI_RECORD_OWN && record->mode == LGI_RECORD_PEEK)
 	record->mode = mode;
 
-      return addr;
+      return;
     }
-
-  /* Calculate size of the record to allocate. */
-  is_union = info && g_base_info_get_type (info) == GI_INFO_TYPE_UNION;
-  if (mode == LGI_RECORD_ALLOCATE)
-    size = G_STRUCT_OFFSET (Record, data) +  (is_union
-					      ? g_union_info_get_size (info)
-					      : g_struct_info_get_size (info));
-  else
-    size = (parent == 0) ? G_STRUCT_OFFSET (Record, data) : sizeof (Record);
 
   /* Allocate new userdata for record object, attach proper
      metatable. */
-  record = lua_newuserdata (L, size);
+  record = lua_newuserdata (L, (parent == 0)
+			    ? G_STRUCT_OFFSET (Record, data)
+			    : sizeof (Record));
   lua_pushlightuserdata (L, &record_mt);
   lua_rawget (L, LUA_REGISTRYINDEX);
   lua_setmetatable (L, -2);
-  if (mode == LGI_RECORD_ALLOCATE)
-    {
-      addr = record->data.data;
-      memset (addr, 0, size - G_STRUCT_OFFSET (Record, data));
-    }
-  else if (mode == LGI_RECORD_PARENT)
+  if (mode == LGI_RECORD_PARENT)
     {
       /* Store reference to the parent argument. */
       lua_pushvalue (L, parent);
@@ -113,21 +133,11 @@ lgi_record_2lua (lua_State *L, GIBaseInfo *info, gpointer addr,
     }
   record->addr = addr;
   record->mode = mode;
-  record->is_union = is_union ? 1 : 0;
 
-  /* Get ref_repo table according to the 'info'. */
-  if (info)
-    {
-      lua_pushlightuserdata (L, &lgi_addr_repo);
-      lua_rawget (L, LUA_REGISTRYINDEX);
-      lua_getfield (L, -1, g_base_info_get_namespace (info));
-      lua_getfield (L, -1, g_base_info_get_name (info));
-      g_assert (!lua_isnil (L, -1));
-
-      /* Attach found table as environment data for created Record. */
-      lua_setfenv (L, -4);
-      lua_pop (L, 2);
-    }
+  /* Assign refrepo table (on the stack when we are called) as
+     environment for our proxy. */
+  lua_pushvalue (L, -4);
+  lua_setfenv (L, -2);
 
   /* Store newly created record into the cache. */
   if (mode != LGI_RECORD_PARENT)
@@ -137,10 +147,10 @@ lgi_record_2lua (lua_State *L, GIBaseInfo *info, gpointer addr,
       lua_rawset (L, -5);
     }
 
-  /* Clean up the stack; remove cache table from under our result. */
-  lua_replace (L, -3);
-  lua_pop (L, 1);
-  return addr;
+  /* Clean up the stack; remove cache table from under our result, and
+     remove also typetable which was present when we were called. */
+  lua_replace (L, -4);
+  lua_pop (L, 2);
 }
 
 /* Checks that given argument is Record userdata and returns pointer
@@ -272,8 +282,7 @@ static int
 record_tostring (lua_State *L)
 {
   Record *record = record_get (L, 1);
-  lua_pushfstring (L, "lgi.%s %p:", record->is_union ? "uni" : "rec",
-		   record->addr);
+  lua_pushfstring (L, "lgi.rec %p:", record->addr);
   lua_getfenv (L, 1);
   lua_getfield (L, -1, "_name");
   lua_replace (L, -2);
@@ -317,13 +326,12 @@ record_new (lua_State *L)
     case GI_INFO_TYPE_STRUCT:
     case GI_INFO_TYPE_UNION:
       {
-	GType type = g_registered_type_info_get_g_type (*info);
+	GType type = lgi_type_get_repotype (L, G_TYPE_INVALID, *info);
 	if (g_type_is_a (type, G_TYPE_CLOSURE))
 	  {
 	    /* Create closure instance wrapping 2nd argument and
 	       return it. */
-	    lgi_record_2lua (L, *info, lgi_gclosure_create (L, 2),
-			     LGI_RECORD_OWN, 0);
+	    lgi_record_2lua (L, lgi_gclosure_create (L, 2), LGI_RECORD_OWN, 0);
 	    return 1;
 	  }
 
@@ -341,7 +349,7 @@ record_new (lua_State *L)
 				    &val, 3);
 	      }
 
-	    lgi_record_2lua (L, *info, g_boxed_copy (G_TYPE_VALUE, &val),
+	    lgi_record_2lua (L, g_boxed_copy (G_TYPE_VALUE, &val), 
 			     LGI_RECORD_OWN, 0);
 	    if (G_IS_VALUE (&val))
 	      g_value_unset (&val);
@@ -350,7 +358,8 @@ record_new (lua_State *L)
 	else
 	  {
 	    /* Create common struct. */
-	    lgi_record_2lua (L, *info, NULL, LGI_RECORD_ALLOCATE, 0);
+	    lgi_record_new (L, *info);
+	    lua_replace (L, -2);
 	    return 1;
 	  }
 	break;

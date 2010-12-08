@@ -122,22 +122,23 @@ void lgi_closure_destroy (gpointer user_data);
 /* Creates GClosure which invokes specified target. */
 GClosure *lgi_gclosure_create (lua_State *L, int target);
 
+/* Allocates and creates new record instance. */
+gpointer lgi_record_new (lua_State *L, GIBaseInfo *ri);
+
 /* Record ownership modes. */
 typedef enum
   {
     LGI_RECORD_PEEK,
     LGI_RECORD_PARENT,
     LGI_RECORD_OWN,
-    LGI_RECORD_ALLOCATE,
   } LgiRecordMode;
 
-/* Creates Lua-side part of given record. Pushes the object
-   representing it on the stack. In 'allocate' mode, new instance of
-   the record is allocated and managed in Lua heap. If parent not
-   zero, it is stack index of record parent (i.e. record of which the
-   arg record is part of). */
-gpointer lgi_record_2lua (lua_State *L, GIBaseInfo *ri, gpointer addr,
-			  LgiRecordMode mode, int parent);
+/* Creates Lua-side part of given record. Assumes that repotype table
+   is on the stack, replaces it with newly created proxy. If parent
+   not zero, it is stack index of record parent (i.e. record of which
+   the arg record is part of). */
+void lgi_record_2lua (lua_State *L, gpointer addr, LgiRecordMode mode,
+		      int parent);
 
 /* Gets pointer to C-structure from given Lua-side object. Returns
    number of temporary objects created pushed on the stack. */
