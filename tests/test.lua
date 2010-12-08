@@ -1106,6 +1106,22 @@ function gireg.gvalue_return()
    check(v.type == 'gint', 'incorrect value type')
 end
 
+function gireg.gvalue_date()
+   local R = lgi.Regress
+   local v = R.test_date_in_gvalue()
+   check(v.type == 'GDate')
+   check(v.value:get_day() == 5)
+   check(v.value:get_month() == 12)
+   check(v.value:get_year() == 1984)
+   local d = GLib.Date()
+   d:set_dmy(25, 1, 1975)
+   v = GObject.Value(d)
+   check(v.type == 'GDate')
+   check(v.value:get_day() == 25)
+   check(v.value:get_month() == 1)
+   check(v.value:get_year() == 1975)
+end
+
 function gireg.obj_create()
    local R = lgi.Regress
    local o = R.TestObj()
