@@ -914,7 +914,7 @@ lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
   int vals;
   gpointer obj;
   lgi_makeabs (L, narg);
-  GType type = G_VALUE_TYPE (val);
+  GType type = G_VALUE_TYPE (val), fundamental_type;
   if (!G_TYPE_IS_VALUE (type))
     return;
 #define HANDLE_GTYPE(gtype, getter, setter)		\
@@ -984,53 +984,71 @@ lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
     }
 
   /* Handle other cases. */
-  switch (G_TYPE_FUNDAMENTAL (type))
+  if (g_type_is_a (type, G_TYPE_STRV))
     {
-    case G_TYPE_ENUM:
-      {
-	g_value_set_enum (val, luaL_checkinteger (L, narg));
-	return;
-      }
-
-    case G_TYPE_FLAGS:
-      {
-	g_value_set_flags (val, luaL_checkinteger (L, narg));
-	return;
-      }
-
-    case G_TYPE_BOXED:
-      {
-	lgi_type_get_repotype (L, type, NULL);
-	vals = lgi_record_2c (L, narg, &obj, TRUE);
-	g_value_set_boxed (val, obj);
-	lua_pop (L, vals);
-	return;
-      }
-
-    case G_TYPE_OBJECT:
-      {
-	g_value_set_object (val, lgi_object_2c (L, narg, type, TRUE));
-	return;
-      }
-
-    default:
-      {
-	/* Try fundamentals; they have custom gtype. */
-	GIBaseInfo *info = g_irepository_find_by_gtype (NULL, type);
-	if (info != NULL)
-	  {
-	    GIObjectInfoSetValueFunction set_value = NULL;
-	    if (g_base_info_get_type (info) == GI_INFO_TYPE_OBJECT &&
-		g_object_info_get_fundamental (info))
-	      set_value = g_object_info_get_set_value_function_pointer (info);
-	    g_base_info_unref (info);
-	    if (set_value != NULL)
-	      {
-		set_value (val, lgi_object_2c (L, narg, type, TRUE));
-		return;
-	      }
-	  }
-      }
+      const gchar **array = NULL;
+      if (!lua_isnoneornil (L, narg))
+	{
+	  int index, objlen;
+	  luaL_checktype (L, narg, LUA_TTABLE);
+	  objlen = lua_objlen (L, narg);
+	  array = g_new0 (const gchar *, objlen + 1);
+	  for (index = 0; index < objlen; index++)
+	    {
+	      lua_pushinteger (L, index + 1);
+	      lua_gettable (L, narg);
+	      array[index] = g_strdup (luaL_checkstring (L, -1));
+	      lua_pop (L, 1);
+	    }
+	  array[index] = NULL;
+	}
+      g_value_take_boxed (val, array);
+      return;
+    }
+  fundamental_type = G_TYPE_FUNDAMENTAL (type);
+  if (fundamental_type == G_TYPE_ENUM)
+    {
+      g_value_set_enum (val, luaL_checkinteger (L, narg));
+      return;
+    }
+  else if (fundamental_type == G_TYPE_FLAGS)
+    {
+      g_value_set_flags (val, luaL_checkinteger (L, narg));
+      return;
+    }
+  else if (fundamental_type == G_TYPE_BOXED)
+    {
+      lgi_type_get_repotype (L, type, NULL);
+      if (!lua_isnil (L, -1))
+	{
+	  vals = lgi_record_2c (L, narg, &obj, TRUE);
+	  g_value_set_boxed (val, obj);
+	  lua_pop (L, vals);
+	  return;
+	}
+    }
+  else if (fundamental_type == G_TYPE_OBJECT)
+    {
+      g_value_set_object (val, lgi_object_2c (L, narg, type, TRUE));
+      return;
+    }
+  else
+    {
+      /* Try fundamentals; they have custom gtype. */
+      GIBaseInfo *info = g_irepository_find_by_gtype (NULL, type);
+      if (info != NULL)
+	{
+	  GIObjectInfoSetValueFunction set_value = NULL;
+	  if (g_base_info_get_type (info) == GI_INFO_TYPE_OBJECT &&
+	      g_object_info_get_fundamental (info))
+	    set_value = g_object_info_get_set_value_function_pointer (info);
+	  g_base_info_unref (info);
+	  if (set_value != NULL)
+	    {
+	      set_value (val, lgi_object_2c (L, narg, type, TRUE));
+	      return;
+	    }
+	}
     }
 
   luaL_error (L, "g_value_set: no handling of %s(%s)",
@@ -1265,119 +1283,134 @@ void
 lgi_marshal_val_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 		      const GValue *val)
 {
-  GType type = G_VALUE_TYPE (val);
+  GType type = G_VALUE_TYPE (val), fundamental_type;
   if (!G_TYPE_IS_VALUE (type))
     {
       lua_pushnil (L);
       return;
     }
-#define HANDLE_GTYPE(gtype, pusher, getter)		\
-  else if (type == G_TYPE_ ## gtype)			\
-    {							\
-      pusher (L, g_value_ ## getter (val));		\
-      return;						\
+#define HANDLE_GTYPE(gtype, pusher, getter)	\
+  else if (type == G_TYPE_ ## gtype)		\
+    {						\
+      pusher (L, g_value_ ## getter (val));	\
+      return;					\
     }
 
   HANDLE_GTYPE(BOOLEAN, lua_pushboolean, get_boolean)
-  HANDLE_GTYPE(CHAR, lua_pushinteger, get_char)
-  HANDLE_GTYPE(UCHAR, lua_pushinteger, get_uchar)
-  HANDLE_GTYPE(INT, lua_pushinteger, get_int)
-  HANDLE_GTYPE(UINT, lua_pushnumber, get_uint)
-  HANDLE_GTYPE(LONG, lua_pushnumber, get_long)
-  HANDLE_GTYPE(ULONG, lua_pushnumber, get_ulong)
-  HANDLE_GTYPE(INT64, lua_pushnumber, get_int64)
-  HANDLE_GTYPE(UINT64, lua_pushnumber, get_uint64)
-  HANDLE_GTYPE(FLOAT, lua_pushnumber, get_float)
-  HANDLE_GTYPE(DOUBLE, lua_pushnumber, get_double)
-  HANDLE_GTYPE(GTYPE, lua_pushnumber, get_gtype)
-  HANDLE_GTYPE(STRING, lua_pushstring, get_string)
-  HANDLE_GTYPE(ENUM, lua_pushinteger, get_enum)
-  HANDLE_GTYPE(FLAGS, lua_pushinteger, get_flags)
+    HANDLE_GTYPE(CHAR, lua_pushinteger, get_char)
+    HANDLE_GTYPE(UCHAR, lua_pushinteger, get_uchar)
+    HANDLE_GTYPE(INT, lua_pushinteger, get_int)
+    HANDLE_GTYPE(UINT, lua_pushnumber, get_uint)
+    HANDLE_GTYPE(LONG, lua_pushnumber, get_long)
+    HANDLE_GTYPE(ULONG, lua_pushnumber, get_ulong)
+    HANDLE_GTYPE(INT64, lua_pushnumber, get_int64)
+    HANDLE_GTYPE(UINT64, lua_pushnumber, get_uint64)
+    HANDLE_GTYPE(FLOAT, lua_pushnumber, get_float)
+    HANDLE_GTYPE(DOUBLE, lua_pushnumber, get_double)
+    HANDLE_GTYPE(GTYPE, lua_pushnumber, get_gtype)
+    HANDLE_GTYPE(STRING, lua_pushstring, get_string)
+    HANDLE_GTYPE(ENUM, lua_pushinteger, get_enum)
+    HANDLE_GTYPE(FLAGS, lua_pushinteger, get_flags)
 #undef HANDLE_GTYPE
 
-  /* If we have typeinfo, try to use it for some specific cases. */
-  if (ti != NULL)
-    {
-      GITypeTag tag = g_type_info_get_tag (ti);
-      switch (tag)
-	{
-	case GI_TYPE_TAG_ARRAY:
+    /* If we have typeinfo, try to use it for some specific cases. */
+    if (ti != NULL)
+      {
+	GITypeTag tag = g_type_info_get_tag (ti);
+	switch (tag)
 	  {
-	    gpointer array = (type == G_TYPE_POINTER)
-	      ? g_value_get_pointer (val) : g_value_get_boxed (val);
-	    marshal_2lua_array (L, ti, g_type_info_get_array_type (ti),
-				GI_TRANSFER_NOTHING, array, 0, NULL, NULL);
+	  case GI_TYPE_TAG_ARRAY:
+	    {
+	      gpointer array = (type == G_TYPE_POINTER)
+		? g_value_get_pointer (val) : g_value_get_boxed (val);
+	      marshal_2lua_array (L, ti, g_type_info_get_array_type (ti),
+				  GI_TRANSFER_NOTHING, array, 0, NULL, NULL);
+	      return;
+	    }
+
+	  case GI_TYPE_TAG_GLIST:
+	  case GI_TYPE_TAG_GSLIST:
+	    {
+	      marshal_2lua_list (L, ti, tag, GI_TRANSFER_NOTHING,
+				 g_value_get_pointer (val));
+	      return;
+	    }
+
+	  case GI_TYPE_TAG_GHASH:
+	    marshal_2lua_hash (L, ti, GI_TRANSFER_NOTHING,
+			       g_value_get_boxed (val));
 	    return;
+
+	  default:
+	    break;
 	  }
-
-	case GI_TYPE_TAG_GLIST:
-	case GI_TYPE_TAG_GSLIST:
-	  {
-	    marshal_2lua_list (L, ti, tag, GI_TRANSFER_NOTHING,
-			       g_value_get_pointer (val));
-	    return;
-	  }
-
-	case GI_TYPE_TAG_GHASH:
-	  marshal_2lua_hash (L, ti, GI_TRANSFER_NOTHING,
-			     g_value_get_boxed (val));
-	  return;
-
-	default:
-	  break;
-	}
-    }
+      }
 
   /* Handle other cases. */
-  switch (G_TYPE_FUNDAMENTAL (type))
+  if (g_type_is_a (type, G_TYPE_STRV))
     {
-    case G_TYPE_ENUM:
+      const gchar **array = g_value_get_boxed (val);
+      if (array)
+	{
+	  int index;
+	  lua_newtable (L);
+	  for (index = 1; *array; array++, index++)
+	    {
+	      lua_pushnumber (L, index);
+	      lua_pushstring (L, *array);
+	      lua_settable (L, -3);
+	    }
+	}
+      else
+	lua_pushnil (L);
+      return;
+    }
+  fundamental_type = G_TYPE_FUNDAMENTAL (type);
+  if (fundamental_type == G_TYPE_ENUM)
+    {
       lua_pushinteger (L, g_value_get_enum (val));
       return;
-
-    case G_TYPE_FLAGS:
+    }
+  else if (fundamental_type == G_TYPE_FLAGS)
+    {
       lua_pushinteger (L, g_value_get_flags (val));
       return;
-
-    case G_TYPE_BOXED:
-      {
-	lgi_type_get_repotype (L, type, NULL);
-	if (!lua_isnil (L, -1))
-	  {
-	    lgi_record_2lua (L, g_value_dup_boxed (val), LGI_RECORD_OWN, 0);
-	    return;
-	  }
-	lua_pop (L, 1);
-	break;
-      }
-
-    case G_TYPE_OBJECT:
-      {
-	lgi_object_2lua (L, g_value_dup_object (val), TRUE);
-	return;
-      }
-
-    default:
-      {
-	/* Fundamentals handling. */
-	GIBaseInfo *info = g_irepository_find_by_gtype (NULL, type);
-	if (info != NULL)
-	  {
-	    if (g_base_info_get_type (info) == GI_INFO_TYPE_OBJECT
-		&& g_object_info_get_fundamental (info))
-	      {
-		GIObjectInfoGetValueFunction get_value =
-		  g_object_info_get_get_value_function_pointer (info);
-		if (get_value != NULL)
-		  {
-		    lgi_object_2lua (L, get_value (val), FALSE);
-		    g_base_info_unref (info);
-		    return;
-		  }
-	      }
-	    g_base_info_unref (info);
-	  }
-      }
+    }
+  else if (fundamental_type == G_TYPE_BOXED)
+    {
+      lgi_type_get_repotype (L, type, NULL);
+      if (!lua_isnil (L, -1))
+	{
+	  lgi_record_2lua (L, g_value_dup_boxed (val), LGI_RECORD_OWN, 0);
+	  return;
+	}
+      lua_pop (L, 1);
+    }
+  else if (fundamental_type == G_TYPE_OBJECT)
+    {
+      lgi_object_2lua (L, g_value_dup_object (val), TRUE);
+      return;
+    }
+  else
+    {
+      /* Fundamentals handling. */
+      GIBaseInfo *info = g_irepository_find_by_gtype (NULL, type);
+      if (info != NULL)
+	{
+	  if (g_base_info_get_type (info) == GI_INFO_TYPE_OBJECT
+	      && g_object_info_get_fundamental (info))
+	    {
+	      GIObjectInfoGetValueFunction get_value =
+		g_object_info_get_get_value_function_pointer (info);
+	      if (get_value != NULL)
+		{
+		  lgi_object_2lua (L, get_value (val), FALSE);
+		  g_base_info_unref (info);
+		  return;
+		}
+	    }
+	  g_base_info_unref (info);
+	}
     }
 
   luaL_error (L, "g_value_get: no handling of %s(%s)",

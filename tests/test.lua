@@ -1122,6 +1122,21 @@ function gireg.gvalue_date()
    check(v.value:get_year() == 1975)
 end
 
+function gireg.gvalue_strv()
+   local R = lgi.Regress
+   local v = R.test_strv_in_gvalue()
+   check(v.type == 'GStrv')
+   check(#v.value == 3)
+   check(v.value[1] == 'one')
+   check(v.value[2] == 'two')
+   check(v.value[3] == 'three')
+   v = GObject.Value({ '1', '2', '3' }, 'GStrv')
+   check(#v.value == 3)
+   check(v.value[1] == '1')
+   check(v.value[2] == '2')
+   check(v.value[3] == '3')
+end
+
 function gireg.obj_create()
    local R = lgi.Regress
    local o = R.TestObj()
