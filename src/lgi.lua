@@ -701,13 +701,19 @@ function lgi.require(name, version)
       ns._version = ns_info.version
       ns._dependencies = ns_info.dependencies
       repo[name] = ns
-   else
-      assert(ns._version == version)
-   end
 
-   -- Make sure that all dependent namespaces are also loaded.
-   for name, version in pairs(ns._dependencies or {}) do
-      local _ = repo[name]
+      -- Make sure that all dependent namespaces are also loaded.
+      for name, version in pairs(ns._dependencies or {}) do
+	 local _ = repo[name]
+      end
+
+      -- Try to load override, if it is present.
+      pcall(require, ('lgix-%s-%s'):format(
+	       ns._name, ns._version:gsub('%.', '_')))
+   else
+      assert(not version or ns._version == version,
+	     ("loading '%s-%s', but version '%s' is already loaded"):format(
+	  ns._name, version, ns._version))
    end
    return ns
 end
@@ -908,4 +914,8 @@ function value:_access(instance, name, ...)
 end
 
 -- Access to module proxies the whole repo, for convenience.
-return setmetatable(lgi, { __index = function(_, name) return repo[name] end })
+local lgi_mt = {}
+function lgi_mt:__index(name)
+   return repo[name]
+end
+return setmetatable(lgi, lgi_mt)
