@@ -45,6 +45,7 @@ lgi_gi_info_test (lua_State *L, int narg)
 {
   GIBaseInfo *info = NULL;
   luaL_checkstack (L, 2, "");
+  lgi_makeabs (L, narg);
   if (lua_getmetatable (L, narg))
     {
       luaL_getmetatable (L, LGI_GI_INFO);
