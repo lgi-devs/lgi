@@ -733,192 +733,179 @@ for gtype_name, gi_name in pairs {
 end
 
 -- GObject overrides.
-do
-   local object = repo.GObject.Object
+local object = repo.GObject.Object
 
-   -- Custom _element implementation, checks dynamically inherited
-   -- interfaces and dynamic properties.
-   function object:_element(instance, name)
-      local element = component_mt.class._element(self, instance, name)
+-- Custom _element implementation, checks dynamically inherited
+-- interfaces and dynamic properties.
+function object:_element(instance, name)
+   local element = component_mt.class._element(self, instance, name)
+   if element then return element end
+
+   -- List all interfaces implemented by this object and try whether
+   -- they can handle specified _element request.
+   local interfaces = core.object.interfaces(instance)
+   for i = 1, #interfaces do
+      local iface = repo[interfaces[i].namespace][interfaces[i].name]
+      element = iface and iface:_element(instance, name)
       if element then return element end
-
-      -- List all interfaces implemented by this object and try
-      -- whether they can handle specified _element request.
-      local interfaces = core.object.interfaces(instance)
-      for i = 1, #interfaces do
-	 local iface = repo[interfaces[i].namespace][interfaces[i].name]
-	 element = iface and iface:_element(instance, name)
-	 if element then return element end
-      end
-
-      -- Element not found in the repo (typelib), try whether
-      -- dynamic property of the specified name exists.
-      local pspec = core.object.properties(instance, name:gsub('_', '%-'))
-      if pspec then return pspec end
    end
 
-   -- Custom access_element, reacts on dynamic properties
-   function object:_access_element(instance, name, element, ...)
-      if element == nil then
-	 -- Check custom object's environment.
-	 local env = core.object.env(instance)
-	 if not env then error(("%s: no `%s'"):format(self._name, name)) end
-	 if select('#', ...) > 0 then
-	    env[name] = ...
-	    return
-	 else
-	    return env[name]
-	 end
-      elseif (core.record.typeof(element) == repo.GObject.ParamSpec
-	   or (gi.isinfo(element) and element.is_property)) then
-	 -- Get value of property.
-	 return core.object.property(instance, element, ...)
-      else
-	 -- Forward to 'inherited' generic object implementation.
-	 return component_mt.class._access_element(
-	    self, instance, name, element, ...)
-      end
-   end
+   -- Element not found in the repo (typelib), try whether dynamic
+   -- property of the specified name exists.
+   local pspec = core.object.properties(instance, name:gsub('_', '%-'))
+   if pspec then return pspec end
+end
 
-   -- Install 'on_notify' signal.  There are a few gotchas causing that the
-   -- signal is handled separately from common signal handling above:
-   -- 1) There is no declaration of this signal in the typelib.
-   -- 2) Real notify works with glib-style property names as details.  We use
-   --    real type properties (e.g. Gtk.Window.has_focus) instead.
-   -- 3) notify handler gets pspec, but we pass Lgi-mangled property name
-   --    instead.
-
-   -- Real on_notify handler, converts its parameter from pspec to Lgi-style
-   -- property name.
-   local function get_notifier(target)
-      return function(obj, pspec)
-		return target(obj, pspec.name:gsub('%-', '_'))
-	     end
-   end
-
-   -- Install 'notify' signal.  Unfortunately typelib does not contain its
-   -- declaration, so we borrow it from callback GObject.ObjectClass.notify.
-   object._signals = {}
-   function object._signals.on_notify(instance, ...)
-      local info = gi.GObject.ObjectClass.fields.notify.typeinfo.interface
+-- Custom access_element, reacts on dynamic properties
+function object:_access_element(instance, name, element, ...)
+   if element == nil then
+      -- Check custom object's environment.
+      local env = core.object.env(instance)
+      if not env then error(("%s: no `%s'"):format(self._name, name)) end
       if select('#', ...) > 0 then
-	 -- Assignment means 'connect signal for all properties'.
-	 core.object.connect(instance, info.name, info, get_notifier(...))
+	 env[name] = ...
+	 return
       else
-	 -- Reading yields table with signal operations.
-	 local pad = {}
-	 function pad:connect(target, property)
-	    return core.object.connect(instance, info.name, info,
-				       get_notifier(target), property.name)
-	 end
-
-	 -- Add metatable allowing connection on specified detail.  Detail is
-	 -- always specified as a property for this signal.
-	 local padmeta = {}
-	 function padmeta:__newindex(property, target)
-	    core.object.connect(instance, info.name, info,
-				get_notifier(target), property.name)
-	 end
-	 return setmetatable(pad, padmeta)
+	 return env[name]
       end
-   end
-
-   -- Closure modifications.  Closure does not need any methods nor
-   -- fields, but it must have constructor creating it from any kind
-   -- of Lua callable.
-   local closure = repo.GObject.Closure
-   local closure_info = gi.GObject.Closure
-   closure._methods = nil
-   closure._fields = nil
-   local closure_mt = { __index = getmetatable(closure).__index,
-			_access = getmetatable(closure)._access }
-   function closure_mt:__call(arg)
-      return core.record.new(closure_info, arg)
-   end
-   setmetatable(closure, closure_mt)
-
-   -- Implicit conversion constructor, allows using Lua function
-   -- directly at the places where GClosure is expected.
-   function closure:_construct(arg)
-      return core.record.new(closure_info, arg)
-   end
-
-   -- Value is constructible from any kind of source Lua
-   -- value, and the type of the value can be hinted by type name.
-   local value = repo.GObject.Value
-   local value_info = gi.GObject.Value
-
-   -- Tries to deduce the gtype according to Lua value.
-   local function gettype(source)
-      if source == nil then return 'void'
-      elseif type(source) == 'boolean' then return 'gboolean'
-      elseif type(source) == 'number' then
-	 -- If the number fits in integer, use it, otherwise use double.
-	 local _, fract = math.modf(source)
-	 local maxint32 = 0x80000000
-	 return ((fract == 0 and source >= -maxint32 and source < maxint32)
-	      and 'gint' or 'gdouble')
-      elseif type(source) == 'string' then return 'gchararray'
-      elseif type(source) == 'function' then return closure._gtype
-      elseif type(source) == 'userdata' then
-	 -- Check whether is it record or object.
-	 local typetable, gtype = core.record.typeof(source)
-	 if typetable then return typetable._gtype end
-	 typetable, gtype = core.object.typeof(source)
-	 if typetable then return gtype end
-
-	 -- Check whether we can call this userdata.  If yes, generate
-	 -- closure.
-	 local meta = getmetatable(source)
-	 if meta and meta.__call then return closure._gtype end
-      elseif type(source) == 'table' then
-	 -- Check, whether we can call it.
-	 local meta = getmetatable(source)
-	 if meta and meta.__call then return closure._gtype end
-      end
-
-      -- No idea to what type should this be mapped.
-      error(("unclear type for GObject.Value from argument `%s'"):format(
-	       tostring(source)))
-   end
-
-   -- Implement constructor, taking any source value and optionally type of the
-   -- source.
-   local value_mt = {}
-   function value_mt:__call(source, stype)
-      stype = stype or gettype(source)
-      if type(stype) == 'string' then
-	 stype = repo.GObject.type_from_name(stype)
-      end
-      return core.record.new(value_info, stype, source)
-   end
-   setmetatable(value, value_mt)
-   value._construct = value_mt.__call
-   value._methods = nil
-   value._fields = nil
-   function value:_access(instance, name, ...)
-      assert(select('#', ...) == 0,
-	     ("GObject.Value: `%s' not writable"):format(name));
-      if name == 'type' then
-	 return repo.GObject.type_name(
-	    core.record.field(instance, value_info.fields.g_type)) or ''
-      elseif name == 'value' then
-	 return core.record.valueof(instance)
-      end
+   elseif (core.record.typeof(element) == repo.GObject.ParamSpec
+	or (gi.isinfo(element) and element.is_property)) then
+      -- Get value of property.
+      return core.object.property(instance, element, ...)
+   else
+      -- Forward to 'inherited' generic object implementation.
+      return component_mt.class._access_element(
+	 self, instance, name, element, ...)
    end
 end
 
--- Install new loader which will load lgi packages on-demand using 'repo'
--- table.
-log.debug('installing custom Lua package loader')
-package.loaders[#package.loaders + 1] =
-   function(name)
-      local prefix, name = string.match(name, '^(%w+)%.(%w+)$')
-      if prefix == 'lgi' then
-	 return function() return repo[name] end
+-- Install 'on_notify' signal.  There are a few gotchas causing that the
+-- signal is handled separately from common signal handling above:
+-- 1) There is no declaration of this signal in the typelib.
+-- 2) Real notify works with glib-style property names as details.  We
+--    use real type properties (e.g. Gtk.Window.has_focus) instead.
+-- 3) notify handler gets pspec, but we pass Lgi-mangled property name
+--    instead.
+
+-- Real on_notify handler, converts its parameter from pspec to
+-- Lgi-style property name.
+local function get_notifier(target)
+   return function(obj, pspec)
+	     return target(obj, pspec.name:gsub('%-', '_'))
+	  end
+end
+
+-- Install 'notify' signal.  Unfortunately typelib does not contain
+-- its declaration, so we borrow it from callback
+-- GObject.ObjectClass.notify.
+object._signals = {}
+function object._signals.on_notify(instance, ...)
+   local info = gi.GObject.ObjectClass.fields.notify.typeinfo.interface
+   if select('#', ...) > 0 then
+      -- Assignment means 'connect signal for all properties'.
+      core.object.connect(instance, info.name, info, get_notifier(...))
+   else
+      -- Reading yields table with signal operations.
+      local pad = {}
+      function pad:connect(target, property)
+	 return core.object.connect(instance, info.name, info,
+				    get_notifier(target), property.name)
       end
+
+      -- Add metatable allowing connection on specified detail.
+      -- Detail is always specified as a property for this signal.
+      local padmeta = {}
+      function padmeta:__newindex(property, target)
+	 core.object.connect(instance, info.name, info,
+			     get_notifier(target), property.name)
+      end
+      return setmetatable(pad, padmeta)
+   end
+end
+
+-- Closure modifications.  Closure does not need any methods nor
+-- fields, but it must have constructor creating it from any kind of
+-- Lua callable.
+local closure = repo.GObject.Closure
+local closure_info = gi.GObject.Closure
+closure._methods = nil
+closure._fields = nil
+local closure_mt = { __index = getmetatable(closure).__index,
+		     _access = getmetatable(closure)._access }
+function closure_mt:__call(arg)
+   return core.record.new(closure_info, arg)
+end
+setmetatable(closure, closure_mt)
+
+-- Implicit conversion constructor, allows using Lua function directly
+-- at the places where GClosure is expected.
+function closure:_construct(arg)
+   return core.record.new(closure_info, arg)
+end
+
+-- Value is constructible from any kind of source Lua value, and the
+-- type of the value can be hinted by type name.
+local value = repo.GObject.Value
+local value_info = gi.GObject.Value
+
+-- Tries to deduce the gtype according to Lua value.
+local function gettype(source)
+   if source == nil then return 'void'
+   elseif type(source) == 'boolean' then return 'gboolean'
+   elseif type(source) == 'number' then
+      -- If the number fits in integer, use it, otherwise use double.
+      local _, fract = math.modf(source)
+      local maxint32 = 0x80000000
+      return ((fract == 0 and source >= -maxint32 and source < maxint32)
+	   and 'gint' or 'gdouble')
+   elseif type(source) == 'string' then return 'gchararray'
+   elseif type(source) == 'function' then return closure._gtype
+   elseif type(source) == 'userdata' then
+      -- Check whether is it record or object.
+      local typetable, gtype = core.record.typeof(source)
+      if typetable then return typetable._gtype end
+      typetable, gtype = core.object.typeof(source)
+      if typetable then return gtype end
+
+      -- Check whether we can call this userdata.  If yes, generate
+      -- closure.
+      local meta = getmetatable(source)
+      if meta and meta.__call then return closure._gtype end
+   elseif type(source) == 'table' then
+      -- Check, whether we can call it.
+      local meta = getmetatable(source)
+      if meta and meta.__call then return closure._gtype end
    end
 
+   -- No idea to what type should this be mapped.
+   error(("unclear type for GObject.Value from argument `%s'"):format(
+	    tostring(source)))
+end
+
+-- Implement constructor, taking any source value and optionally type
+-- of the source.
+local value_mt = {}
+function value_mt:__call(source, stype)
+   stype = stype or gettype(source)
+   if type(stype) == 'string' then
+      stype = repo.GObject.type_from_name(stype)
+   end
+   return core.record.new(value_info, stype, source)
+end
+setmetatable(value, value_mt)
+value._construct = value_mt.__call
+value._methods = nil
+value._fields = nil
+function value:_access(instance, name, ...)
+   assert(select('#', ...) == 0,
+	  ("GObject.Value: `%s' not writable"):format(name));
+   if name == 'type' then
+      return repo.GObject.type_name(
+	 core.record.field(instance, value_info.fields.g_type)) or ''
+   elseif name == 'value' then
+      return core.record.valueof(instance)
+   end
+end
+
 -- Access to module proxies the whole repo, for convenience.
-setmetatable(lgi, { __index = function(_, name) return repo[name] end })
-return lgi
+return setmetatable(lgi, { __index = function(_, name) return repo[name] end })

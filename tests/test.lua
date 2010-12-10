@@ -9,9 +9,9 @@
 --]]--------------------------------------------------------------------------
 
 local lgi = require 'lgi'
-local GLib = require 'lgi.GLib'
-local Gio = require 'lgi.Gio'
-local GObject = require 'lgi.GObject'
+local GLib = lgi.GLib
+local Gio = lgi.Gio
+local GObject = lgi.GObject
 
 -- Make logs verbose (do not mute DEBUG level).
 lgi.log.DEBUG = 'verbose'

@@ -5,10 +5,10 @@
 -- Stream Example (http://live.gnome.org/Vala/GStreamerSample)
 --
 
-require 'lgi'
-local GLib = require 'lgi.GLib'
-local Gtk = require 'lgi.Gtk'
-local Gst = require 'lgi.Gst'
+local lgi = require 'lgi'
+local GLib = lgi.GLib
+local Gtk = lgi.Gtk
+local Gst = lgi.Gst
 
 Gtk.init()
 Gst.init()

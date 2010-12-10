@@ -4,11 +4,10 @@
 -- Lua console using Vte windget.
 --
 
-require 'lgi'
-local bit = require 'bit'
-local Gdk = require 'lgi.Gdk'
-local Gtk = require 'lgi.Gtk'
-local Vte = require 'lgi.Vte'
+local lgi = require 'lgi'
+local Gdk = lgi.Gdk
+local Gtk = lgi.Gtk
+local Vte = lgi.Vte
 
 -- Initialize GTK.
 Gtk.init()

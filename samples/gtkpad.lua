@@ -10,9 +10,9 @@
 
 --]]--------------------------------------------------------------------------
 
-require 'lgi'
-local Gtk = require 'lgi.Gtk'
-local Gio = require 'lgi.Gio'
+local lgi = require 'lgi'
+local Gtk = lgi.Gtk
+local Gio = lgi.Gio
 
 local function new_editor(app, file)
    local ok, contents

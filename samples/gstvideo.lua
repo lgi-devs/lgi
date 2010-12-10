@@ -5,11 +5,11 @@
 -- Example (http://live.gnome.org/Vala/GStreamerSample)
 --
 
-require 'lgi'
-local GLib = require 'lgi.GLib'
-local Gtk = require 'lgi.Gtk'
-local Gst = require 'lgi.Gst'
-local GstInterfaces = require 'lgi.GstInterfaces'
+local lgi = require 'lgi'
+local GLib = lgi.GLib
+local Gtk = lgi.Gtk
+local Gst = lgi.Gst
+local GstInterfaces = lgi.GstInterfaces
 
 Gtk.init()
 Gst.init()

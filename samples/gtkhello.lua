@@ -6,8 +6,8 @@
 -- Based on test from LuiGI code.  Thanks Adrian!
 --
 
-require 'lgi'
-local Gtk = require 'lgi.Gtk'
+local lgi = require 'lgi'
+local Gtk = lgi.Gtk
 
 -- Initialize GTK.
 Gtk.init()
