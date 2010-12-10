@@ -231,7 +231,11 @@ local function get_category(children, xform_value,
 end
 
 -- Loads element from specified compound typetable.
-local function get_element(typetable, symbol)
+local function get_element(typetable, instance, symbol)
+   -- Check whether symbol directly exists.
+   local val = rawget(typetable, symbol)
+   if val then return val end
+
    -- Decompose symbol name, in case that it contains category prefix
    -- (e.g. '_field_name' when requesting explicitely field called
    -- name).
@@ -239,14 +243,14 @@ local function get_element(typetable, symbol)
    if category and name then
       -- Check requested category.
       local cat = rawget(typetable, category)
-      local val = cat and cat[name]
+      val = cat and cat[name]
       if val then return val end
    elseif string.sub(symbol, 1, 1) ~= '_' then
       -- Check all available categories.
       local categories = typetable._categories or {}
       for i = 1, #categories do
 	 local cat = rawget(typetable, categories[i])
-	 local val = cat and cat[symbol]
+	 val = cat and cat[symbol]
 	 if val then return val end
       end
    end
@@ -288,10 +292,36 @@ local function resolve_elements(typetable, recursive)
    return typetable
 end
 
+-- Default implementation of _access_* family methods.
+local function default_access(typetable, instance, name, ...)
+   local element = typetable:_element(instance, name)
+   return typetable:_access_element(instance, name, element, ...)
+end
+
+local function default_access_element(typetable, instance, name, element, ...)
+   if element == nil then
+      error(("%s: no `%s'"):format(typetable._name, name))
+   elseif type(element) == 'function' then
+      return element(name, ...)
+   else
+      assert(select('#', ...) == 0,
+	     ("%s: `s' is not writable"):format(typetable._name, name))
+      return element
+   end
+end
+
 -- Metatables for assorted repo components.
 local function create_component_meta(categories)
-   return { _categories = categories, _resolve = resolve_elements,
-	    __index = get_element }
+   local meta = {
+      _categories = categories,
+      _resolve = resolve_elements,
+      _element = get_element,
+      _access = default_access,
+      _access_element = default_access_element }
+   function meta:__index(symbol)
+      return getmetatable(self)._element(self, nil, symbol)
+   end
+   return meta
 end
 
 local component_mt = {
@@ -380,27 +410,17 @@ local function access_signal(instance, info, ...)
    end
 end
 
--- _access method for records.
-function component_mt.record:_access(instance, name, ...)
-   local element = self[name]
-   if element == nil then error(("%s: no `%s'"):format(self._name, name)) end
-   if gi.isinfo(element) then
-      if element.is_field then
-	 return access_field(core.record.field, instance, element, ...)
-      end
-   elseif type(element) == 'function' then
-      return element(instance, ...)
+-- _access_element method for records.
+function component_mt.record:_access_element(instance, name, element, ...)
+   if gi.isinfo(element) and element.is_field then
+      return access_field(core.record.field, instance, element, ...)
    end
-   assert(select('#', ...) == 0, ("%s: `s' is not writable"):format(
-	     self._name, name))
-   return element
+   return default_access_element(self, instance, name, element, ...)
 end
 
--- _access method for raw objects (fundamentals).  Specific behavior
--- for GObject will be overriden in GObject.Object._access().
-function component_mt.class:_access(instance, name, ...)
-   local element = self[name]
-   if element == nil then error(("%s: no `%s'"):format(self._name, name)) end
+-- _access_element method for raw objects (fundamentals).  Specific
+-- behavior for GObject will be overriden in GObject.Object._access().
+function component_mt.class:_access_element(instance, name, element, ...)
    if gi.isinfo(element) then
       if element.is_field then
 	 return access_field(core.object.field, instance, element, ...)
@@ -411,20 +431,16 @@ function component_mt.class:_access(instance, name, ...)
 	    instance, element.container.gtype)
 	 return core.record.field(typestruct, typetable._type[element.name])
       end
-   elseif type(element) == 'function' then
-      return element(instance, ...)
    end
-   assert(select('#', ...) == 0, ("%s: `s' is not writable"):format(
-	     self._name, name))
-   return element
+   return default_access_element(self, instance, name, element, ...)
 end
 
 -- If member of interface cannot be found normally, try to look it up
 -- in parent namespace too; this allows to overcome IMHO gir-compiler
 -- flaw, causing that we can see e.g. Gio.file_new_for_path() instead
 -- of Gio.File.new_for_path().
-function component_mt.interface:__index(symbol)
-   local val = get_element(self, symbol)
+function component_mt.interface:_element(instance, symbol)
+   local val = get_element(self, instance, symbol)
    if not val then
       -- Convert name from CamelCase to underscore_delimited form.
       local ns_name, iface_name = self._name:match('^([%w_]+)%.([%w_]+)$')
@@ -635,7 +651,7 @@ end
 -- on-demand.
 function component_mt.namespace:__index(symbol)
    -- Check, whether symbol is already loaded.
-   local val = get_element(self, symbol)
+   local val = get_element(self, nil, symbol)
    if val then return val end
 
    -- Lookup baseinfo of requested symbol in the GIRepository.
@@ -705,7 +721,7 @@ setmetatable(repo, repo_mt)
 
 -- Add gtypes to important GLib and GObject structures, for which the
 -- typelibs do not contain them.
-for gtype_name, gi_name in pairs { 
+for gtype_name, gi_name in pairs {
       GDate = 'GLib.Date', GRegex = 'GLib.Regex', GDateTime = 'GLib.DateTime',
       GVariantType = 'GLib.VariantType', GParam = 'GObject.ParamSpec',
 } do
@@ -720,32 +736,29 @@ end
 do
    local object = repo.GObject.Object
 
-   -- No methods are needed (yet).
-   object._methods = nil
+   -- Custom _element implementation, checks dynamically inherited
+   -- interfaces and dynamic properties.
+   function object:_element(instance, name)
+      local element = component_mt.class._element(self, instance, name)
+      if element then return element end
 
-   -- _access handler for object handles properties, dynamic
-   -- interfaces etc.
-   function object:_access(instance, name, ...)
-      local element = self[name]
-      if not element then
-	 -- List all interfaces implemented by this object and try
-	 -- whether they can handle specified _element request.
-	 local interfaces = core.object.interfaces(instance)
-	 for i = 1, #interfaces do
-	    local iface = repo[interfaces[i].namespace][interfaces[i].name]
-	    element = iface and iface[name]
-	    if element then break end
-	 end
-	 if not element then
-	    -- Element not found in the repo (typelib), try whether
-	    -- dynamic property of the specified name exists.
-	    local pspec = core.object.properties(
-	       instance, name:gsub('_', '%-'))
-	    if pspec then return
-	       core.object.property(instance, pspec, ...)
-	    end
-	 end
+      -- List all interfaces implemented by this object and try
+      -- whether they can handle specified _element request.
+      local interfaces = core.object.interfaces(instance)
+      for i = 1, #interfaces do
+	 local iface = repo[interfaces[i].namespace][interfaces[i].name]
+	 element = iface and iface:_element(instance, name)
+	 if element then return element end
       end
+
+      -- Element not found in the repo (typelib), try whether
+      -- dynamic property of the specified name exists.
+      local pspec = core.object.properties(instance, name:gsub('_', '%-'))
+      if pspec then return pspec end
+   end
+
+   -- Custom access_element, reacts on dynamic properties
+   function object:_access_element(instance, name, element, ...)
       if element == nil then
 	 -- Check custom object's environment.
 	 local env = core.object.env(instance)
@@ -756,30 +769,15 @@ do
 	 else
 	    return env[name]
 	 end
-      elseif type(element) == 'function' then
-	 -- Custom accessor, invoke the function to get result.
-	 return element(instance, ...)
-      elseif gi.isinfo(element) then
-	 if element.is_property then
-	    return core.object.property(instance, element, ...)
-	 elseif element.is_signal then
-	    return access_signal(instance, element, ...)
-	 elseif element.is_field then
-	    return access_field(core.object.field, instance, element, ...)
-	 elseif element.is_vfunc then
-	    local typetable, _, typestruct = core.object.typeof(
-	       instance, element.container.gtype)
-	    return core.record.field(typestruct, typetable._type[element.name])
-	 else
-	    error(("`%s': unhandled field `%s' of gi info type `%s'"):format(
-		     self._name, name, element.type))
-	 end
+      elseif (core.record.typeof(element) == repo.GObject.ParamSpec
+	   or (gi.isinfo(element) and element.is_property)) then
+	 -- Get value of property.
+	 return core.object.property(instance, element, ...)
+      else
+	 -- Forward to 'inherited' generic object implementation.
+	 return component_mt.class._access_element(
+	    self, instance, name, element, ...)
       end
-
-      -- Other field type means class-static field, so return it.
-      assert(select('#', ...) == 0,
-	     ("%s: `s' is not writable"):format(self._name, name))
-      return element
    end
 
    -- Install 'on_notify' signal.  There are a few gotchas causing that the
