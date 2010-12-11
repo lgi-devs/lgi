@@ -9,9 +9,6 @@
 local lgi = require 'lgi'
 local Gtk = lgi.Gtk
 
--- Initialize GTK.
-Gtk.init()
-
 -- Create top level window with some properties and connect its 'destroy'
 -- signal to the event loop termination.
 local window = Gtk.Window {

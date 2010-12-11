@@ -10,9 +10,6 @@ local GLib = lgi.GLib
 local Gtk = lgi.Gtk
 local Gst = lgi.Gst
 
-Gtk.init()
-Gst.init()
-
 local function bus_callback(bus, message)
    if message.type == Gst.MessageType.ERROR then
       print('Error:', message:parse_error().message)
@@ -35,9 +32,10 @@ local function bus_callback(bus, message)
 end
 
 local play = Gst.ElementFactory.make('playbin', 'play')
-play.uri = 'http://streamer-dtc-aa02.somafm.com:80/stream/1018'
+--play.uri = 'http://streamer-dtc-aa02.somafm.com:80/stream/1018'
+play.uri = 'http://www.cybertechmedia.com/samples/raycharles.mov'
 local bus = play.bus
-bus:add_watch_full(GLib.PRIORITY_DEFAULT, bus_callback)
+bus:add_watch(bus_callback)
 play:set_state(Gst.State.PLAYING)
 
 -- Run the loop.

@@ -9,16 +9,11 @@ local lgi = require 'lgi'
 local GLib = lgi.GLib
 local Gtk = lgi.Gtk
 local Gst = lgi.Gst
-local GstInterfaces = lgi.GstInterfaces
-
-Gtk.init()
-Gst.init()
 
 local pipeline = Gst.Pipeline.new('mypipeline')
 local src = Gst.ElementFactory.make('videotestsrc', 'video')
 local sink = Gst.ElementFactory.make('xvimagesink', 'sink')
-pipeline:add(src)
-pipeline:add(sink)
+pipeline:add_many(src, sink)
 src:link(sink)
 
 local vbox = Gtk.Box.new(Gtk.Orientation.VERTICAL, 0)

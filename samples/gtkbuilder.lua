@@ -7,9 +7,6 @@
 local lgi = require 'lgi'
 local Gtk = lgi.Gtk
 
--- Initialize GTK
-Gtk.init()
-
 -- Instantiate Gtk.Builder and load resources from ui file.
 local builder = Gtk.Builder()
 assert(builder:add_from_file('demo.ui'))

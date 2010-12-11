@@ -41,7 +41,6 @@ if false then
 
    return app:run(...)
 else
-   Gtk.init()
    local args, running = { ... }, 0
    for i = 1, #args ~= 0 and #args or 1 do
       if args[i] then args[i] = Gio.File.new_for_path(args[i]) end
