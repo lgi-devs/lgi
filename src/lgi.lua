@@ -292,18 +292,28 @@ local function resolve_elements(typetable, recursive)
    return typetable
 end
 
--- Default implementation of _access_* family methods.
+-- Default _access method implementation.
 local function default_access(typetable, instance, name, ...)
+   -- Get element from typetable.
    local element = typetable:_element(instance, name)
+
+   -- Try custom override first.
+   if element == nil then
+      local func = typetable:_element(instance, '_custom_' .. name)
+      if func then return func(typetable, instance, name, ...) end
+   end
+
+   -- Forward to access_element implementation.
    return typetable:_access_element(instance, name, element, ...)
 end
 
+-- Default _access_element implementation.
 local function default_access_element(typetable, instance, name, element, ...)
    if element == nil then
+      -- Generic failure.
       error(("%s: no `%s'"):format(typetable._name, name))
-   elseif type(element) == 'function' then
-      return element(name, ...)
    else
+      -- Static member, is always read-only when accessing per-instance.
       assert(select('#', ...) == 0,
 	     ("%s: `s' is not writable"):format(typetable._name, name))
       return element
@@ -765,7 +775,7 @@ end
 -- Custom access_element, reacts on dynamic properties
 function object:_access_element(instance, name, element, ...)
    if element == nil then
-      -- Check custom object's environment.
+      -- Check object's environment.
       local env = core.object.env(instance)
       if not env then error(("%s: no `%s'"):format(self._name, name)) end
       if select('#', ...) > 0 then
@@ -789,7 +799,7 @@ end
 -- signal is handled separately from common signal handling above:
 -- 1) There is no declaration of this signal in the typelib.
 -- 2) Real notify works with glib-style property names as details.  We
---    use real type properties (e.g. Gtk.Window.has_focus) instead.
+--    use modified property names ('-' -> '_').
 -- 3) notify handler gets pspec, but we pass Lgi-mangled property name
 --    instead.
 
@@ -797,15 +807,17 @@ end
 -- Lgi-style property name.
 local function get_notifier(target)
    return function(obj, pspec)
-	     return target(obj, pspec.name:gsub('%-', '_'))
+	     return target(obj, (pspec.name:gsub('%-', '_')))
 	  end
 end
 
--- Install 'notify' signal.  Unfortunately typelib does not contain
--- its declaration, so we borrow it from callback
--- GObject.ObjectClass.notify.
+-- Install 'notify' signal.
 object._signals = {}
-function object._signals.on_notify(instance, ...)
+local _ = object._vfuncs.on_notify
+object._vfuncs.on_notify = nil
+object._custom = {}
+function object._custom.on_notify(typetable, instance, name, ...)
+   -- Borrow signal format from GObject.ObjectClass.notify.
    local info = gi.GObject.ObjectClass.fields.notify.typeinfo.interface
    if select('#', ...) > 0 then
       -- Assignment means 'connect signal for all properties'.
@@ -815,15 +827,16 @@ function object._signals.on_notify(instance, ...)
       local pad = {}
       function pad:connect(target, property)
 	 return core.object.connect(instance, info.name, info,
-				    get_notifier(target), property.name)
+				    get_notifier(target),
+				    property:gsub('_', '%-'))
       end
 
       -- Add metatable allowing connection on specified detail.
-      -- Detail is always specified as a property for this signal.
+      -- Detail is always specified as a property name for this signal.
       local padmeta = {}
       function padmeta:__newindex(property, target)
 	 core.object.connect(instance, info.name, info,
-			     get_notifier(target), property.name)
+			     get_notifier(target), property:gsub('_', '%-'))
       end
       return setmetatable(pad, padmeta)
    end
