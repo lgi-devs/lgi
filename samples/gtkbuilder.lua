@@ -7,20 +7,41 @@
 local lgi = require 'lgi'
 local Gtk = lgi.Gtk
 
--- Instantiate Gtk.Builder and load resources from ui file.
-local builder = Gtk.Builder()
-assert(builder:add_from_file('demo.ui'))
+-- There are two ways to access Gtk.Builder; using standard Gtk API's
+-- get_object() and get_objects(), or LGI override shortcuts.  Both
+-- can be used, as demonstrated below.
+local window
+if gtk_builder_use_standard_api then
+   -- Instantiate Gtk.Builder and load resources from ui file.
+   local builder = Gtk.Builder()
+   assert(builder:add_from_file('demo.ui'))
 
--- Get top-level window from the builder.
-local window = builder:get_object('window1')
+   -- Get top-level window from the builder.
+   window = builder:get_object('window1')
 
--- Connect 'quit' and 'about' signals.
-builder:get_object('Quit').on_activate = function(action) window:destroy() end
-builder:get_object('About').on_activate =
-function(action)
-   local about_dlg = builder:get_object('aboutdialog1')
-   about_dlg:run()
-   about_dlg:hide()
+   -- Connect 'Quit' and 'About' actions.
+   builder:get_object('Quit').on_activate = function(action)
+					       window:destroy()
+					    end
+   builder:get_object('About').on_activate =
+   function(action)
+      local about_dlg = builder:get_object('aboutdialog1')
+      about_dlg:run()
+      about_dlg:hide()
+   end
+else
+   -- Instantiate builder and load objects.
+   local objects = Gtk.Builder.from_files('demo.ui')
+
+   -- Get top-level window from the builder.
+   window = objects.window1
+
+   -- Connect 'Quit' and 'About' actions.
+   function objects.Quit:on_activate() window:destroy() end
+   function objects.About:on_activate()
+      objects.aboutdialog1:run()
+      objects.aboutdialog1:hide()
+   end
 end
 
 -- Connect 'destroy' signal of the main window, terminates the main loop.
