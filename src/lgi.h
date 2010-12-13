@@ -37,9 +37,6 @@ GType lgi_type_get_repotype (lua_State *L, GType gtype, GIBaseInfo *info);
    handler. Returns pointer to user_data stored inside guard. */
 gpointer *lgi_guard_create (lua_State *L, GDestroyNotify destroy);
 
-/* Returns data of specified guard. */
-void lgi_guard_get_data (lua_State *L, int pos, gpointer **data);
-
 /* lightuserdata of this address is a key in LUA_REGISTRYINDEX table
    to global repo table. */
 extern int lgi_addr_repo;

@@ -1105,14 +1105,14 @@ lgi_marshal_arg_2c_caller_alloc (lua_State *L, GITypeInfo *ti, GIArgument *val,
 		   contents. We have to do it in-place. */
 
 		/* Make sure that pos is absolute, so that stack
-		   shuffling below does not change the elemnt it
+		   shuffling below does not change the element it
 		   points to. */
 		if (pos < 0)
 		  pos += lua_gettop (L) + 1;
 
 		/* Get GArray from the guard and unmarshal it as a
 		   full GArray into Lua. */
-		lgi_guard_get_data (L, pos, &array_guard);
+		array_guard = lua_touserdata (L, pos);
 		marshal_2lua_array (L, ti, GI_ARRAY_TYPE_ARRAY,
 				    GI_TRANSFER_EVERYTHING, *array_guard, pos,
 				    NULL, NULL);

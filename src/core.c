@@ -178,13 +178,6 @@ lgi_guard_create (lua_State *L, GDestroyNotify destroy)
   return &guard->data;
 }
 
-void
-lgi_guard_get_data (lua_State *L, int pos, gpointer **data)
-{
-  Guard *guard = lua_touserdata (L, pos);
-  *data = &guard->data;
-}
-
 static int
 lgi_constant (lua_State* L)
 {
