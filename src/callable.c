@@ -73,6 +73,9 @@ typedef struct _Callback
      with __call metafunction or coroutine (which is resumed instead
      of called). */
   int target_ref;
+
+  /* Mutex which should be locked before calling Lua code. */
+  GMutex *mutex;
 } Callback;
 
 /* Structure containing closure data. */
@@ -94,6 +97,9 @@ typedef struct _FfiClosure
 
 /* lightuserdata key to callable cache table. */
 static int callable_cache;
+
+/* lightuserdata key to call mutex guard object. */
+static int call_mutex;
 
 /* Gets ffi_type for given tag, returns NULL if it cannot be handled. */
 static ffi_type *
@@ -369,6 +375,7 @@ callable_call (lua_State *L)
   GIArgument *args;
   void **ffi_args, **redirect_out;
   GError *err = NULL;
+  GMutex *mutex;
   Callable *callable = callable_get (L, 1);
 
   /* Make sure that all unspecified arguments are set as nil; during
@@ -468,8 +475,20 @@ callable_call (lua_State *L)
       ffi_args[nargs] = &redirect_out[nargs];
     }
 
+  /* Get and unlock the mutex. */
+  lua_pushlightuserdata (L, &call_mutex);
+  lua_rawget (L, LUA_REGISTRYINDEX);
+  mutex = *(GMutex **) lua_touserdata (L, -1);
+  lua_pop (L, 1);
+  if (mutex)
+    g_mutex_unlock (mutex);
+
   /* Call the function. */
   ffi_call (&callable->cif, callable->address, &retval, ffi_args);
+
+  /* Heading back to Lua, lock the mutex back again. */
+  if (mutex)
+    g_mutex_lock (mutex);
 
   /* Pop any temporary items from the stack which might be stored there by
      marshalling code. */
@@ -543,15 +562,24 @@ callback_create (lua_State *L, Callback *callback, int target_arg)
   callback->L = L;
   lua_pushthread (L);
   callback->thread_ref = luaL_ref (L, LUA_REGISTRYINDEX);
+
+  /* Retrieve and remember call mutex address. */
+  lua_pushlightuserdata (L, &call_mutex);
+  lua_rawget (L, LUA_REGISTRYINDEX);
+  callback->mutex = *(GMutex **) lua_touserdata (L, -1);
+  lua_pop (L, 1);
 }
 
 /* Prepares environment for the target to be called; sets up state
-   (and returns it), stores target to be invoked to the state. */
+   (and returns it), locks call mutex and stores target to be invoked
+   to the state. */
 static lua_State *
 callback_prepare_call (Callback *callback)
 {
   /* Get access to proper Lua context. */
   lua_State *L = callback->L;
+  if (callback->mutex)
+    g_mutex_lock (callback->mutex);
   lua_rawgeti (L, LUA_REGISTRYINDEX, callback->thread_ref);
   if (lua_isthread (L, -1))
     {
@@ -706,6 +734,10 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   /* This is NOT called by Lua, so we better leave the Lua stack we
      used pretty much tidied. */
   lua_settop (L, stacktop);
+
+  /* Going back to C code, release call mutex again. */
+  if (closure->callback.mutex)
+    g_mutex_unlock (closure->callback.mutex);
 }
 
 /* Destroys specified closure. */
@@ -776,7 +808,7 @@ lgi_gclosure_marshal (GClosure *closure, GValue *return_value,
 		      gpointer invocation_hint, gpointer marshal_data)
 {
   GlibClosure *c = (GlibClosure *) closure;
-  int vals = 0, res;
+  int vals = 0;
 
   /* Prepare context in which will everything happen. */
   lua_State *L = callback_prepare_call (&c->callback);
@@ -790,9 +822,14 @@ lgi_gclosure_marshal (GClosure *closure, GValue *return_value,
     }
 
   /* Invoke the function. */
-  res = lua_pcall (L, vals, 1, 0);
-  if (res == 0)
-    lgi_marshal_val_2c (L, NULL, GI_TRANSFER_NOTHING, return_value, -1);
+  lua_call (L, vals, 1);
+
+  /* Marshal result back. */
+  lgi_marshal_val_2c (L, NULL, GI_TRANSFER_NOTHING, return_value, -1);
+
+  /* Going back to C code, release back the mutex. */
+  if (c->callback.mutex)
+    g_mutex_unlock (c->callback.mutex);
 }
 
 GClosure *
@@ -835,9 +872,17 @@ callable_new (lua_State *L)
 			      luaL_checkudata (L, 1, LGI_GI_INFO), NULL);
 }
 
+static void
+mutex_free (gpointer mutex)
+{
+  g_mutex_free (mutex);
+}
+
 void
 lgi_callable_init (lua_State *L)
 {
+  GMutex *mutex;
+
   /* Register callable metatable. */
   lua_pushlightuserdata (L, &callable_mt);
   lua_newtable (L);
@@ -852,4 +897,14 @@ lgi_callable_init (lua_State *L)
   lua_pushcfunction (L, callable_new);
   lua_setfield (L, -2, "new");
   lua_setfield (L, -2, "callable");
+
+  /* Create call mutex guard, keep it locked initially (it is unlocked
+     only when we are calling out to C code.  */
+  mutex = g_mutex_new ();
+  g_mutex_lock (mutex);
+
+  /* Store it into the registry. */
+  lua_pushlightuserdata (L, &call_mutex);
+  *(GMutex **) lgi_guard_create (L, mutex_free) = mutex;
+  lua_rawset (L, LUA_REGISTRYINDEX);
 }
