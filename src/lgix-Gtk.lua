@@ -12,7 +12,25 @@ local select, type = select, type
 local lgi = require 'lgi'
 local Gtk = lgi.Gtk
 
--- Overrides for the builder.
+-------------------- Gtk.Container
+local container_access_element = Gtk.Container._access_element
+function Gtk.Container:_access_element(container, name, element, ...)
+   if name == 'children' then
+      if select('#', ...) == 0 then
+	 -- Reading yields the table of all children.
+	 return self.get_children(container)
+      else
+	 -- Writing adds new children.
+	 local arg = ...
+	 for i = 1, #arg do self.add(container, arg[i]) end
+	 return
+      end
+   end
+
+   return container_access_element(self, container, name, element, ...)
+end
+
+-------------------- Gtk.Builder
 local builder_objects_mt = {}
 function builder_objects_mt:__index(name)
    if type(name) == 'string' then

@@ -2,6 +2,12 @@
 
 ## Gtk
 
+### Container
+
+Properties:
+
+- `children`
+
 ### Builder
 
 Properties:
