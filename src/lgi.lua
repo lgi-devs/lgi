@@ -718,8 +718,14 @@ function lgi.require(name, version)
       end
 
       -- Try to load override, if it is present.
-      pcall(require, ('lgix-%s-%s'):format(
-	       ns._name, ns._version:gsub('%.', '_')))
+      local lgix_name = 'lgix-' .. ns._name
+      local ok, msg = pcall(require, lgix_name)
+      if not ok then 
+	 -- Try parsing message; if it is something different than
+	 -- "module xxx not found", then rethrow the exception.
+	 assert(msg:find("module '" .. lgix_name .. "' not found:", 1, true),
+		msg)
+      end
    else
       assert(not version or ns._version == version,
 	     ("loading '%s-%s', but version '%s' is already loaded"):format(
