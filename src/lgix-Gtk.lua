@@ -12,39 +12,42 @@ local select, type = select, type
 local lgi = require 'lgi'
 local Gtk = lgi.Gtk
 
--- Overrides for the builder.  Main tool is 'objects' pseudoproperty
--- which contains collection of all builder objects, and adds __index
--- method for retrieving object by name.
+-- Overrides for the builder.
 local builder_objects_mt = {}
 function builder_objects_mt:__index(name)
    if type(name) == 'string' then
-      return self._builder:get_object(name)
+      local object = self._builder:get_object(name)
+      self[name] = object
+      return object
    end
 end
 local builder_access_element = Gtk.Builder._access_element
-function Gtk.Builder:_access_element(instance, name, element, ...)
+function Gtk.Builder:_access_element(builder, name, element, ...)
    -- Detect 'objects' property request.
    if name == 'objects' then
       assert(select('#', ...) == 0, "Gtk.Builder: 'objects' is not writable")
 
-      -- Get all objects.
-      local objects = instance:get_objects()
-      objects._builder = instance
-
-      -- Add metatable for resolving by name.
+      -- Get all objects and add metatable for resolving by name.
+      local objects = builder:get_objects()
+      objects._builder = builder
       return setmetatable(objects, builder_objects_mt)
+   elseif name == 'file' or name == 'string' then
+      -- Load all specified files.
+      assert(select('#', ...) == 1, "Gtk.Builder: '" .. name ..
+	  "' is not readable")
+      local func = (name == 'file' and self.add_from_file
+		    or self.add_from_string)
+      local arg = ...
+      if type(arg) == table then
+	 for i = 1, #arg do func(builder, arg[i]) end
+      else
+	 func(builder, arg)
+      end
+      return
    end
 
    -- Forward to original method.
-   return builder_access_element(self, instance, name, element, ...)
-end
-
--- Create helper static method, which creates builder, adds specified
--- file(s) as resources and returns its 'objects' property.
-function Gtk.Builder.from_files(...)
-   local builder, files = Gtk.Builder(), {...}
-   for i = 1, #files do assert(builder:add_from_file(files[i])) end
-   return builder.objects
+   return builder_access_element(self, builder, name, element, ...)
 end
 
 -- Initialize GTK.
