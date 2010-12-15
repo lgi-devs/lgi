@@ -345,8 +345,9 @@ record_new (lua_State *L)
 	    if (G_TYPE_IS_VALUE (type))
 	      {
 		g_value_init (&val, type);
-		lgi_marshal_val_2c (L, NULL, GI_TRANSFER_NOTHING,
-				    &val, 3);
+		if (!lua_isnoneornil (L, 3))
+		  lgi_marshal_val_2c (L, NULL, GI_TRANSFER_NOTHING,
+				      &val, 3);
 	      }
 
 	    lgi_record_2lua (L, g_boxed_copy (G_TYPE_VALUE, &val),
