@@ -51,6 +51,11 @@ void lgi_record_init (lua_State *L);
 void lgi_object_init (lua_State *L);
 void lgi_callable_init (lua_State *L);
 void lgi_gi_init (lua_State *L);
+void lgi_buffer_init (lua_State *L);
+
+/* Returns address and possibly size of buffer object at given
+   argument. Returns NULL if it is not of type buffer. */
+gpointer lgi_buffer_check (lua_State *L, int narg, size_t *size);
 
 /* Metatable name of userdata - gi wrapped 'GIBaseInfo*' */
 #define LGI_GI_INFO "lgi.gi.info"

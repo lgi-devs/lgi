@@ -27,6 +27,12 @@ assert(gi.require ('GObject', '2.0'))
 -- Create lgi table, containing the module.
 local lgi = {}
 
+-- Map buffer creation from core to Lgi-style 'C++ constructor' convention.
+lgi.buffer = setmetatable({ new = core.buffer_new },
+			  { __call = function(_, arg)
+					return core.buffer_new(arg)
+				     end })
+
 -- Prepare logging support.  'log' is module-exported table, containing all
 -- functionality related to logging wrapped around GLib g_log facility.
 local logtable = { ERROR = 'assert', DEBUG = 'silent' }
@@ -720,7 +726,7 @@ function lgi.require(name, version)
       -- Try to load override, if it is present.
       local lgix_name = 'lgix-' .. ns._name
       local ok, msg = pcall(require, lgix_name)
-      if not ok then 
+      if not ok then
 	 -- Try parsing message; if it is something different than
 	 -- "module xxx not found", then rethrow the exception.
 	 assert(msg:find("module '" .. lgix_name .. "' not found:", 1, true),
