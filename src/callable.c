@@ -475,16 +475,6 @@ callable_call (lua_State *L)
      marshalling code. */
   lua_pop (L, nret);
 
-  /* Check, whether function threw. */
-  if (err != NULL)
-    {
-      lua_pushboolean (L, 0);
-      lua_pushstring (L, err->message);
-      lua_pushinteger (L, err->code);
-      g_error_free (err);
-      return 3;
-    }
-
   /* Handle return value. */
   nret = 0;
   if (g_type_info_get_tag (&callable->retval.ti) != GI_TYPE_TAG_VOID)
@@ -494,6 +484,21 @@ callable_call (lua_State *L)
 			    ffi_args + callable->has_self);
       nret++;
       lua_insert (L, -caller_allocated - 1);
+    }
+
+  /* Check, whether function threw. */
+  if (err != NULL)
+    {
+      if (nret == 0)
+	{
+	  lua_pushboolean (L, 0);
+	  nret = 1;
+	}
+
+      lua_pushstring (L, err->message);
+      lua_pushinteger (L, err->code);
+      g_error_free (err);
+      return nret + 2;
     }
 
   /* Process output parameters. */
@@ -519,6 +524,15 @@ callable_call (lua_State *L)
 
 	nret++;
       }
+
+  /* When function can throw and we are not returning anything, be
+     sure to return at least 'true', so that caller can check for
+     error in a usual way (i.e. by Lua's assert() call). */
+  if (nret == 0 && callable->throws)
+    {
+      lua_pushboolean (L, 1);
+      nret = 1;
+    }
 
   g_assert (caller_allocated == 0);
   return nret;
