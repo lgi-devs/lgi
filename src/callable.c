@@ -549,9 +549,15 @@ static const struct luaL_reg callable_reg[] = {
 static void
 callback_create (lua_State *L, Callback *callback, int target_arg)
 {
-  /* Store reference to target Lua function. */
-  lua_pushvalue (L, target_arg);
-  callback->target_ref = luaL_ref (L, LUA_REGISTRYINDEX);
+  /* Store reference to target Lua function (or NOREF if it is thread
+     instead). */
+  if (lua_isthread (L, target_arg))
+    callback->target_ref = LUA_NOREF;
+  else
+    {
+      lua_pushvalue (L, target_arg);
+      callback->target_ref = luaL_ref (L, LUA_REGISTRYINDEX);
+    }
 
   /* Store reference to target Lua thread. */
   callback->L = L;
@@ -560,16 +566,21 @@ callback_create (lua_State *L, Callback *callback, int target_arg)
 }
 
 /* Prepares environment for the target to be called; sets up state
-   (and returns it), stores target to be invoked to the state. */
+   (and returns it), stores target to be invoked to the state and sets
+   *call to TRUE.  If the target thread should not be called but
+   resumed instead, sets *call to FALSE and does not push anything to
+   the stack. */
 static lua_State *
-callback_prepare_call (Callback *callback)
+callback_prepare_call (Callback *callback, gboolean *call)
 {
   /* Get access to proper Lua context. */
   lua_State *L = callback->L;
   lua_rawgeti (L, LUA_REGISTRYINDEX, callback->thread_ref);
-  if (lua_isthread (L, -1))
+  L = lua_tothread (L, -1);
+  if ((*call = callback->target_ref != LUA_NOREF) != FALSE)
     {
-      L = lua_tothread (L, -1);
+      /* We will call target method, prepare context/thread to do
+	 it. */
       if (lua_status (L) != 0)
 	{
 	  /* Thread is not in usable state for us, it is suspended, we
@@ -581,10 +592,12 @@ callback_prepare_call (Callback *callback)
 	  luaL_unref (L, LUA_REGISTRYINDEX, callback->thread_ref);
 	  callback->thread_ref = luaL_ref (callback->L, LUA_REGISTRYINDEX);
 	}
+      lua_pop (callback->L, 1);
+      callback->L = L;
+      lua_rawgeti (L, LUA_REGISTRYINDEX, callback->target_ref);
     }
-  lua_pop (callback->L, 1);
-  lua_rawgeti (L, LUA_REGISTRYINDEX, callback->target_ref);
-  return callback->L = L;
+
+  return L;
 }
 
 /* Frees everything allocated in Callback. */
@@ -603,10 +616,11 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   Callable *callable;
   FfiClosure *closure = closure_arg;
   gint res = 0, npos, i, stacktop;
+  gboolean call;
   Param *param;
 
   /* Get access to proper Lua context. */
-  lua_State *L = callback_prepare_call (&closure->callback);
+  lua_State *L = callback_prepare_call (&closure->callback, &call);
 
   /* Get access to Callable structure. */
   lua_rawgeti (L, LUA_REGISTRYINDEX, closure->callable_ref);
@@ -614,9 +628,9 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   lua_pop (L, 1);
 
   /* Remember stacktop, this is the position on which we should expect
-     return values (note that callback_prepare_call already pushed
-     function to be executed to the stack). */
-  stacktop = lua_gettop (L) - 1;
+     return values (note that callback_prepare_call already might have
+     pushed function to be executed to the stack). */
+  stacktop = lua_gettop (L) - (call ? 1 : 0);
 
   /* Marshall 'self' argument, if it is present. */
   npos = 0;
@@ -650,10 +664,22 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
       }
 
   /* Call it. */
-  if (callable->throws)
-    res = lua_pcall (L, npos, LUA_MULTRET, 0);
+  if (call)
+    {
+      if (callable->throws)
+	res = lua_pcall (L, npos, LUA_MULTRET, 0);
+      else
+	lua_call (L, npos, LUA_MULTRET);
+    }
   else
-    lua_call (L, npos, LUA_MULTRET);
+    {
+      res = lua_resume (L, npos);
+
+      /* For our purposes is YIELD the same as if the coro really
+	 returned. */
+      if (res == LUA_YIELD)
+	res = 0;
+    }
   npos = stacktop + 1;
 
   /* Check, whether we can report an error here. */
@@ -790,10 +816,11 @@ lgi_gclosure_marshal (GClosure *closure, GValue *return_value,
 		      gpointer invocation_hint, gpointer marshal_data)
 {
   GlibClosure *c = (GlibClosure *) closure;
-  int vals = 0, res;
+  int vals = 0;
+  gboolean call;
 
   /* Prepare context in which will everything happen. */
-  lua_State *L = callback_prepare_call (&c->callback);
+  lua_State *L = callback_prepare_call (&c->callback, &call);
   luaL_checkstack (L, n_param_values + 1, "");
 
   /* Push parameters. */
@@ -804,9 +831,15 @@ lgi_gclosure_marshal (GClosure *closure, GValue *return_value,
     }
 
   /* Invoke the function. */
-  res = lua_pcall (L, vals, 1, 0);
-  if (res == 0)
-    lgi_marshal_val_2c (L, NULL, GI_TRANSFER_NOTHING, return_value, -1);
+  if (call)
+    lua_call (L, vals, 1);
+  else
+    {
+      int res = lua_resume (L, vals);
+      if (res != 0 && res != LUA_YIELD)
+	lua_error (L);
+    }
+  lgi_marshal_val_2c (L, NULL, GI_TRANSFER_NOTHING, return_value, -1);
 }
 
 GClosure *
