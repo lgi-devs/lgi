@@ -843,7 +843,7 @@ lgi_marshal_arg_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 	  case GI_INFO_TYPE_UNION:
 	    {
 	      lgi_type_get_repotype (L, G_TYPE_INVALID, info);
-	      nret = lgi_record_2c (L, narg, &val->v_pointer, optional);
+	      nret = lgi_record_2c (L, narg, &val->v_pointer, optional, FALSE);
 	      break;
 	    }
 
@@ -853,7 +853,7 @@ lgi_marshal_arg_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 	      val->v_pointer =
 		lgi_object_2c (L, narg,
 			       g_registered_type_info_get_g_type (info),
-			       optional);
+			       optional, FALSE);
 	      nret = 1;
 	      break;
 	    }
@@ -1021,7 +1021,7 @@ lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
       lgi_type_get_repotype (L, type, NULL);
       if (!lua_isnil (L, -1))
 	{
-	  vals = lgi_record_2c (L, narg, &obj, TRUE);
+	  vals = lgi_record_2c (L, narg, &obj, TRUE, FALSE);
 	  g_value_set_boxed (val, obj);
 	  lua_pop (L, vals);
 	  return;
@@ -1029,7 +1029,7 @@ lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
     }
   else if (fundamental_type == G_TYPE_OBJECT)
     {
-      g_value_set_object (val, lgi_object_2c (L, narg, type, TRUE));
+      g_value_set_object (val, lgi_object_2c (L, narg, type, TRUE, FALSE));
       return;
     }
   else
@@ -1045,7 +1045,7 @@ lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 	  g_base_info_unref (info);
 	  if (set_value != NULL)
 	    {
-	      set_value (val, lgi_object_2c (L, narg, type, TRUE));
+	      set_value (val, lgi_object_2c (L, narg, type, TRUE, FALSE));
 	      return;
 	    }
 	}

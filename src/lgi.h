@@ -146,7 +146,8 @@ void lgi_record_2lua (lua_State *L, gpointer addr, LgiRecordMode mode,
    repo typetable of expected argument pushed on the top of the stack,
    removes it.  Returns number of temporary objects created pushed on
    the stack. */
-int lgi_record_2c (lua_State *L, int narg, gpointer *addr, gboolean optional);
+int lgi_record_2c (lua_State *L, int narg, gpointer *addr, gboolean optional,
+		   gboolean nothrow);
 
 /* Creates Lua-side part (proxy) of given object. If the object is not
    owned (own == FALSE), an ownership is automatically acquired. */
@@ -157,4 +158,5 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own);
    gtype is not G_TYPE_INVALID, the real type is checked to conform to
    requested type. */
 gpointer
-lgi_object_2c (lua_State *L, int narg, GType gtype, gboolean optional);
+lgi_object_2c (lua_State *L, int narg, GType gtype, gboolean optional,
+	       gboolean nothrow);

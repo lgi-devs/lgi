@@ -142,7 +142,8 @@ object_tostring (lua_State *L)
 }
 
 gpointer
-lgi_object_2c (lua_State *L, int narg, GType gtype, gboolean optional)
+lgi_object_2c (lua_State *L, int narg, GType gtype, gboolean optional,
+	       gboolean nothrow)
 {
   gpointer obj;
 
@@ -154,7 +155,7 @@ lgi_object_2c (lua_State *L, int narg, GType gtype, gboolean optional)
 
   /* Get instance and perform type check. */
   obj = object_check (L, narg);
-  if (!obj || !g_type_is_a (G_TYPE_FROM_INSTANCE (obj), gtype))
+  if (!nothrow && (!obj || !g_type_is_a (G_TYPE_FROM_INSTANCE (obj), gtype)))
     object_type_error (L, narg, gtype);
 
   return obj;
@@ -434,7 +435,7 @@ object_property (lua_State *L)
   gboolean getmode = lua_isnone (L, 3);
 
   /* Get object instance. */
-  gpointer object = lgi_object_2c (L, 1, G_TYPE_OBJECT, FALSE);
+  gpointer object = lgi_object_2c (L, 1, G_TYPE_OBJECT, FALSE, FALSE);
   GIPropertyInfo *pi = lgi_gi_info_test (L, 2);
   if (pi)
     {
@@ -449,7 +450,7 @@ object_property (lua_State *L)
       /* If not gi.info, it must be record with pspec. */
       GParamSpec *pspec;
       lgi_type_get_repotype (L, G_TYPE_PARAM, NULL);
-      if (lgi_record_2c (L, 2, (gpointer *) &pspec, FALSE) > 0)
+      if (lgi_record_2c (L, 2, (gpointer *) &pspec, FALSE, FALSE) > 0)
 	g_assert_not_reached ();
       gtype = pspec->value_type;
       flags = pspec->flags;
@@ -494,7 +495,8 @@ object_properties (lua_State *L)
   GObjectClass *klass;
   gboolean list = lua_isnoneornil (L, 2);
 
-  klass = G_OBJECT_GET_CLASS (lgi_object_2c (L, 1, G_TYPE_OBJECT, FALSE));
+  klass = G_OBJECT_GET_CLASS (lgi_object_2c (L, 1, G_TYPE_OBJECT,
+					     FALSE, FALSE));
   lgi_type_get_repotype (L, G_TYPE_PARAM, NULL);
   g_assert (!lua_isnil (L, -1));
   if (list)
@@ -580,7 +582,7 @@ object_connect (lua_State *L)
   gulong handler_id;
 
   /* Get target objects. */
-  object = lgi_object_2c (L, 1, G_TYPE_OBJECT, FALSE);
+  object = lgi_object_2c (L, 1, G_TYPE_OBJECT, FALSE, FALSE);
   ci = *(GIBaseInfo **) luaL_checkudata (L, 3, LGI_GI_INFO);
 
   /* Create GClosure instance to be used.  This is fast'n'dirty method; it

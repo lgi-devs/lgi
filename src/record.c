@@ -196,7 +196,8 @@ record_get (lua_State *L, int narg)
 }
 
 int
-lgi_record_2c (lua_State *L, int narg, gpointer *addr, gboolean optional)
+lgi_record_2c (lua_State *L, int narg, gpointer *addr, gboolean optional,
+	       gboolean nothrow)
 {
   Record *record;
 
@@ -232,7 +233,7 @@ lgi_record_2c (lua_State *L, int narg, gpointer *addr, gboolean optional)
 		{
 		  lua_insert (L, -3);
 		  lua_pop (L, 1);
-		  return lgi_record_2c (L, -2, addr, optional) + 1;
+		  return lgi_record_2c (L, -2, addr, optional, nothrow) + 1;
 		}
 	    }
 	  lua_pop (L, 1);
@@ -241,7 +242,7 @@ lgi_record_2c (lua_State *L, int narg, gpointer *addr, gboolean optional)
       lua_pop (L, 1);
     }
 
-  if (!record)
+  if (!nothrow && !record)
     {
       const gchar *name = NULL;
       if (!lua_isnil (L, -1))
@@ -252,7 +253,7 @@ lgi_record_2c (lua_State *L, int narg, gpointer *addr, gboolean optional)
       record_error (L, narg, name);
     }
 
-  *addr = record->addr;
+  *addr = record ? record->addr : NULL;
   lua_pop (L, 1);
   return 0;
 }
