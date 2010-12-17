@@ -301,56 +301,77 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
     }
   else
     {
-      /* Check the type; we allow tables only. */
-      luaL_checktype (L, narg, LUA_TTABLE);
-
       /* Get element type info, create guard for it. */
       eti = g_type_info_get_param_type (ti, 0);
       lgi_gi_info_new (L, eti);
       eti_guard = lua_gettop (L);
       esize = array_get_elt_size (eti);
 
-      /* Find out how long array should we allocate. */
-      zero_terminated = g_type_info_is_zero_terminated (ti);
-      objlen = lua_objlen (L, narg);
-      len = g_type_info_get_array_fixed_size (ti);
-      if (atype != GI_ARRAY_TYPE_C || len < 0)
-	len = objlen;
-      else if (len < objlen)
-	objlen = len;
-
-      /* Allocate the array and wrap it into the userdata guard, if needed. */
-      if (len > 0 || zero_terminated)
+      /* Check the type. If this is C-array of byte-sized elements, we
+	 can try special-case and accept strings or buffers. */
+      *out_array = NULL;
+      if (lua_type (L, narg) != LUA_TTABLE && esize == 1
+	  && atype == GI_ARRAY_TYPE_C)
 	{
-	  array = g_array_sized_new (zero_terminated, TRUE, esize, len);
-	  g_array_set_size (array, len);
-	  *lgi_guard_create (L, (GDestroyNotify) g_array_unref) = array;
-	  vals = 1;
+	  size_t size;
+	  *out_array = lgi_buffer_check (L, narg, &size);
+	  if (!*out_array)
+	    *out_array = (gpointer *) lua_tolstring (L, narg, &size);
+	  if (transfer != GI_TRANSFER_NOTHING)
+	    *out_array = g_memdup (*out_array, size);
+	  len = size;
 	}
 
-      /* Iterate through Lua array and fill GArray accordingly. */
-      for (index = 0; index < objlen; index++)
+      if (!*out_array)
 	{
-	  lua_pushinteger (L, index + 1);
-	  lua_gettable (L, narg);
+	  /* Otherwise, we allow only tables. */
+	  luaL_checktype (L, narg, LUA_TTABLE);
 
-	  /* Marshal element retrieved from the table into target array. */
-	  to_pop = lgi_marshal_arg_2c (L, eti, NULL, exfer,
-				       (GIArgument *) (array->data +
-						       index * esize),
-				       -1, FALSE, NULL, NULL);
+	  /* Find out how long array should we allocate. */
+	  zero_terminated = g_type_info_is_zero_terminated (ti);
+	  objlen = lua_objlen (L, narg);
+	  len = g_type_info_get_array_fixed_size (ti);
+	  if (atype != GI_ARRAY_TYPE_C || len < 0)
+	    len = objlen;
+	  else if (len < objlen)
+	    objlen = len;
 
-	  /* Remove temporary element from the stack. */
-	  lua_remove (L, - to_pop - 1);
+	  /* Allocate the array and wrap it into the userdata guard,
+	     if needed. */
+	  if (len > 0 || zero_terminated)
+	    {
+	      array = g_array_sized_new (zero_terminated, TRUE, esize, len);
+	      g_array_set_size (array, len);
+	      *lgi_guard_create (L, (GDestroyNotify) g_array_unref) = array;
+	      vals = 1;
+	    }
 
-	  /* Remember that some more temp elements could be pushed. */
-	  vals += to_pop;
+	  /* Iterate through Lua array and fill GArray accordingly. */
+	  for (index = 0; index < objlen; index++)
+	    {
+	      lua_pushinteger (L, index + 1);
+	      lua_gettable (L, narg);
+
+	      /* Marshal element retrieved from the table into target
+		 array. */
+	      to_pop = lgi_marshal_arg_2c (L, eti, NULL, exfer,
+					   (GIArgument *) (array->data +
+							   index * esize),
+					   -1, FALSE, NULL, NULL);
+
+	      /* Remove temporary element from the stack. */
+	      lua_remove (L, - to_pop - 1);
+
+	      /* Remember that some more temp elements could be
+		 pushed. */
+	      vals += to_pop;
+	    }
+
+	  /* Return either GArray or direct pointer to the data,
+	     according to the array type. */
+	  *out_array = (atype == GI_ARRAY_TYPE_ARRAY || array == NULL)
+	    ? (void *) array : (void *) array->data;
 	}
-
-      /* Return either GArray or direct pointer to the data, according to the
-	 array type. */
-      *out_array = (atype == GI_ARRAY_TYPE_ARRAY || array == NULL)
-	  ? (void *) array : (void *) array->data;
 
       lua_remove (L, eti_guard);
     }
