@@ -8,6 +8,7 @@
  * Core C utility API.
  */
 
+#include <string.h>
 #include "lgi.h"
 
 #ifndef NDEBUG
@@ -63,6 +64,24 @@ lgi_cache_create (lua_State *L, gpointer key, const char *mode)
       lua_setmetatable (L, -2);
     }
   lua_rawset (L, LUA_REGISTRYINDEX);
+}
+
+static int core_addr_logger;
+
+static int
+lgi_set(lua_State *L)
+{
+  const char *name = luaL_checkstring (L, 1);
+  int *key;
+  if (strcmp (name, "logger") == 0)
+    key = &core_addr_logger;
+  else
+    luaL_argerror (L, 1, "invalid key");
+
+  lua_pushlightuserdata (L, key);
+  lua_pushvalue (L, 2);
+  lua_rawset (L, LUA_REGISTRYINDEX);
+  return 0;
 }
 
 int
@@ -193,17 +212,6 @@ lgi_constant (lua_State* L)
   return 1;
 }
 
-static int core_addr_logger;
-
-static int
-lgi_setlogger(lua_State *L)
-{
-  lua_pushlightuserdata (L, &core_addr_logger);
-  lua_pushvalue (L, 1);
-  lua_rawset (L, LUA_REGISTRYINDEX);
-  return 0;
-}
-
 static const char* log_levels[] = {
   "ERROR", "CRITICAL", "WARNING", "MESSAGE", "INFO", "DEBUG", "???", NULL
 };
@@ -276,7 +284,7 @@ log_handler (const gchar *log_domain, GLogLevelFlags log_level,
 static const struct luaL_reg lgi_reg[] = {
   { "constant", lgi_constant },
   { "log",  lgi_log },
-  { "setlogger", lgi_setlogger },
+  { "set", lgi_set },
   { NULL, NULL }
 };
 

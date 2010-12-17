@@ -37,20 +37,22 @@ lgi.buffer = setmetatable({ new = core.buffer_new },
 -- functionality related to logging wrapped around GLib g_log facility.
 local logtable = { ERROR = 'assert', DEBUG = 'silent' }
 lgi.log = logtable
-core.setlogger(
-   function(domain, level, message)
-      -- Create domain table in the log table if it does not exist yet.
-      if not logtable[domain] then logtable[domain] = {} end
+core.set('logger',
+	 function(domain, level, message)
+	    -- Create domain table in the log table if it does not
+	    -- exist yet.
+	    if not logtable[domain] then logtable[domain] = {} end
 
-      -- Check whether message should generate assert (i.e. Lua exception).
-      local setting = logtable[domain][level] or logtable[level]
-      if setting == 'assert' then error() end
-      if setting == 'silent' then return true end
+	    -- Check whether message should generate assert (i.e. Lua
+	    -- exception).
+	    local setting = logtable[domain][level] or logtable[level]
+	    if setting == 'assert' then error() end
+	    if setting == 'silent' then return true end
 
-      -- Get handler for the domain and invoke it.
-      local handler = logtable[domain].handler or logtable.handler
-      return handler and handler(domain, level, message)
-   end)
+	    -- Get handler for the domain and invoke it.
+	    local handler = logtable[domain].handler or logtable.handler
+	    return handler and handler(domain, level, message)
+	 end)
 
 -- Main logging facility.
 function logtable.log(domain, level, format, ...)
@@ -78,7 +80,7 @@ end
 -- For the rest of bootstrap, prepare logging to Lgi domain.
 local log = logtable.domain('Lgi')
 
-log.message('Lgi: Lua to GObject-Introspection binding v0.1')
+log.message('Lua to GObject-Introspection binding v0.1')
 
 -- Repository, table with all loaded namespaces.  Its metatable takes care of
 -- loading on-demand.  Created by C-side bootstrap.
