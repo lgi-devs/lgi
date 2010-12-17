@@ -897,6 +897,34 @@ lgi_marshal_arg_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 			      optional, transfer);
       break;
 
+    case GI_TYPE_TAG_VOID:
+      if (g_type_info_is_pointer (ti))
+	{
+	  /* Check and marshal according to real Lua type. */
+	  if (lua_type (L, narg) == LUA_TSTRING)
+	    /* Use string directly. */
+	    val->v_pointer = (gpointer) lua_tostring (L, narg);
+	  else
+	    {
+	      /* Check memory buffer. */
+	      val->v_pointer = lgi_buffer_check (L, narg, NULL);
+	      if (!val->v_pointer)
+		{
+		  /* Check object. */
+		  val->v_pointer = lgi_object_2c (L, narg, G_TYPE_INVALID,
+						  FALSE, TRUE);
+		  if (!val->v_pointer)
+		    {
+		      /* Check any kind of record. */
+		      lua_pushnil (L);
+		      nret = lgi_record_2c (L, narg, &val->v_pointer,
+					    FALSE, TRUE);
+		    }
+		}
+	    }
+	}
+      break;
+
     default:
       marshal_2c_int (L, tag, val, narg, optional, use_pointer);
     }

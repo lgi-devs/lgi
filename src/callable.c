@@ -97,20 +97,17 @@ static int callable_cache;
 
 /* Gets ffi_type for given tag, returns NULL if it cannot be handled. */
 static ffi_type *
-get_simple_ffi_type (GITypeTag tag, gboolean is_arg)
+get_simple_ffi_type (GITypeTag tag)
 {
   ffi_type *ffi;
   switch (tag)
     {
-    case GI_TYPE_TAG_VOID:
-      ffi = is_arg ? &ffi_type_pointer : &ffi_type_void;
-      break;
-
 #define HANDLE_TYPE(tag, ffitype)		\
       case GI_TYPE_TAG_ ## tag:			\
 	ffi = &ffi_type_ ## ffitype;		\
 	break
 
+      HANDLE_TYPE(VOID, void);
       HANDLE_TYPE(BOOLEAN, uint);
       HANDLE_TYPE(INT8, sint8);
       HANDLE_TYPE(UINT8, uint8);
@@ -138,11 +135,12 @@ get_simple_ffi_type (GITypeTag tag, gboolean is_arg)
 
 /* Gets ffi_type for given Param instance. */
 static ffi_type *
-get_ffi_type(Param *param, gboolean is_arg)
+get_ffi_type(Param *param)
 {
   /* In case of inout or out parameters, the type is always pointer. */
   GITypeTag tag = g_type_info_get_tag (&param->ti);
-  ffi_type* ffi = get_simple_ffi_type (tag, is_arg);
+  ffi_type* ffi = g_type_info_is_pointer(&param->ti)
+    ? &ffi_type_pointer : get_simple_ffi_type (tag);
   if (ffi == NULL)
     {
       /* Something more complex. */
@@ -153,8 +151,7 @@ get_ffi_type(Param *param, gboolean is_arg)
 	    {
 	    case GI_INFO_TYPE_ENUM:
 	    case GI_INFO_TYPE_FLAGS:
-	      ffi = get_simple_ffi_type (g_enum_info_get_storage_type (ii),
-					 is_arg);
+	      ffi = get_simple_ffi_type (g_enum_info_get_storage_type (ii));
 	      break;
 
 	    default:
@@ -259,7 +256,7 @@ lgi_callable_create (lua_State *L, GICallableInfo *info, gpointer addr)
   callable->retval.dir = GI_DIRECTION_OUT;
   callable->retval.transfer = g_callable_info_get_caller_owns (callable->info);
   callable->retval.internal = FALSE;
-  ffi_retval = get_ffi_type (&callable->retval, FALSE);
+  ffi_retval = get_ffi_type (&callable->retval);
   callable_mark_array_length (callable, &callable->retval.ti);
 
   /* Process 'self' argument, if present. */
@@ -276,7 +273,7 @@ lgi_callable_create (lua_State *L, GICallableInfo *info, gpointer addr)
       param->dir = g_arg_info_get_direction (&param->ai);
       param->transfer = g_arg_info_get_ownership_transfer (&param->ai);
       *ffi_arg = (param->dir == GI_DIRECTION_IN) ?
-	get_ffi_type(param, TRUE) : &ffi_type_pointer;
+	get_ffi_type(param) : &ffi_type_pointer;
 
       /* Mark closure-related user_data fields and possibly destroy_notify
 	 fields as internal. */
