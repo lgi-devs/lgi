@@ -321,7 +321,7 @@ local function default_access_element(typetable, instance, name, element, ...)
    else
       -- Static member, is always read-only when accessing per-instance.
       assert(select('#', ...) == 0,
-	     ("%s: `s' is not writable"):format(typetable._name, name))
+	     ("%s: `%s' is not writable"):format(typetable._name, name))
       return element
    end
 end
