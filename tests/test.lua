@@ -495,9 +495,9 @@ function gireg.array_gint8_in()
    local R = lgi.Regress
    check(R.test_array_gint8_in{1,2,3} == 6)
    check(R.test_array_gint8_in{1.1,2,3} == 6)
+   check(R.test_array_gint8_in('0123') == 48 + 49 + 50 + 51)
    check(R.test_array_gint8_in{} == 0)
    check(not pcall(R.test_array_gint8_in, nil))
-   check(not pcall(R.test_array_gint8_in, 'help'))
    check(not pcall(R.test_array_gint8_in, {'help'}))
 end
 
