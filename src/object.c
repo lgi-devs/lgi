@@ -393,7 +393,7 @@ object_typeof (lua_State *L)
 	    ? G_TYPE_INSTANCE_GET_CLASS (object, gtype, GTypeClass)
 	    : G_TYPE_INSTANCE_GET_INTERFACE (object, gtype, GTypeClass);
 	  lua_newtable (L);
-	  lgi_record_2lua (L, typestruct, LGI_RECORD_PEEK, 0);
+	  lgi_record_2lua (L, typestruct, FALSE, 0);
 	  return 3;
 	}
     }
@@ -510,7 +510,7 @@ object_properties (lua_State *L)
       for (i = 0; i < n_properties; ++i)
 	{
 	  lua_pushvalue (L, -2);
-	  lgi_record_2lua (L, pspecs[i], LGI_RECORD_PEEK, 0);
+	  lgi_record_2lua (L, pspecs[i], FALSE, 0);
 	  lua_setfield (L, -2, pspecs[i]->name);
 	}
 
@@ -523,7 +523,7 @@ object_properties (lua_State *L)
       GParamSpec *pspec =
 	g_object_class_find_property (klass, lua_tostring (L, 2));
       if (pspec != NULL)
-	lgi_record_2lua (L, pspec, LGI_RECORD_PEEK, 0);
+	lgi_record_2lua (L, pspec, FALSE, 0);
       else
 	lua_pushnil (L);
     }

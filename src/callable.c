@@ -642,7 +642,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
       else if (type == GI_INFO_TYPE_STRUCT || type == GI_INFO_TYPE_UNION)
 	{
 	  lgi_type_get_repotype (L, G_TYPE_INVALID, parent);
-	  lgi_record_2lua (L, addr, LGI_RECORD_PEEK, 0);
+	  lgi_record_2lua (L, addr, FALSE, 0);
 	}
       else
 	g_assert_not_reached ();

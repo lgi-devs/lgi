@@ -1268,19 +1268,14 @@ lgi_marshal_arg_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
 	  case GI_INFO_TYPE_STRUCT:
 	  case GI_INFO_TYPE_UNION:
 	    {
-	      LgiRecordMode mode;
 	      gpointer addr = val->v_pointer;
 	      if (parent != 0)
 		/* If struct or union allocated inside parent, the
 		   address is actually address of argument itself, not
 		   the pointer inside. */
 		addr = val;
-	      if (own)
-		mode = LGI_RECORD_OWN;
-	      else
-		mode = (parent != 0) ? LGI_RECORD_PARENT : LGI_RECORD_PEEK;
 	      lgi_type_get_repotype (L, G_TYPE_INVALID, info);
-	      lgi_record_2lua (L, addr, mode, parent);
+	      lgi_record_2lua (L, addr, own, parent);
 	      break;
 	    }
 
@@ -1441,7 +1436,7 @@ lgi_marshal_val_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
       lgi_type_get_repotype (L, type, NULL);
       if (!lua_isnil (L, -1))
 	{
-	  lgi_record_2lua (L, g_value_dup_boxed (val), LGI_RECORD_OWN, 0);
+	  lgi_record_2lua (L, g_value_dup_boxed (val), TRUE, 0);
 	  return;
 	}
       lua_pop (L, 1);

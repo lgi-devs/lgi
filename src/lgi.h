@@ -131,20 +131,11 @@ GClosure *lgi_gclosure_create (lua_State *L, int target);
 /* Allocates and creates new record instance. */
 gpointer lgi_record_new (lua_State *L, GIBaseInfo *ri);
 
-/* Record ownership modes. */
-typedef enum
-  {
-    LGI_RECORD_PEEK,
-    LGI_RECORD_PARENT,
-    LGI_RECORD_OWN,
-  } LgiRecordMode;
-
 /* Creates Lua-side part of given record. Assumes that repotype table
    is on the stack, replaces it with newly created proxy. If parent
    not zero, it is stack index of record parent (i.e. record of which
    the arg record is part of). */
-void lgi_record_2lua (lua_State *L, gpointer addr, LgiRecordMode mode,
-		      int parent);
+void lgi_record_2lua (lua_State *L, gpointer addr, gboolean own, int parent);
 
 /* Gets pointer to C-structure from given Lua-side object. Expects
    repo typetable of expected argument pushed on the top of the stack,

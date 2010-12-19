@@ -11,6 +11,24 @@
 #include <string.h>
 #include "lgi.h"
 
+/* Available record store modes. */
+typedef enum _RecordStore
+  {
+    /* Record is outside and not owned at all. */
+    RECORD_STORE_FOREIGN,
+
+    /* Record is stored in data section of Record proxy itself. */
+    RECORD_STORE_CONTAINS,
+
+    /* Record store mode os governed by some other record, data.parent
+       contain its luaL_ref. */
+    RECORD_STORE_PARENT,
+
+    /* Record is allocated by its GLib means and must be freed (by
+       g_boxed_free). */
+    RECORD_STORE_OWN,
+  } RecordStore;
+
 /* Userdata containing record reference. Table with record type is
    attached as userdata environment. */
 typedef struct _Record
@@ -18,8 +36,9 @@ typedef struct _Record
   /* Address of the record memory data. */
   gpointer addr;
 
-  /* Ownership mode of the record. */
-  unsigned mode : 2;
+  /* Store mode of the record. TODO: Might be possible to stuff it
+     into 2 lowest bits of addr, although it is a bit hacky. */
+  RecordStore store;
 
   union
   {
@@ -62,7 +81,7 @@ lgi_record_new (lua_State *L, GIBaseInfo *ri)
   lua_setmetatable (L, -2);
   record->addr = record->data.data;
   memset (record->addr, 0, size - G_STRUCT_OFFSET (Record, data));
-  record->mode = LGI_RECORD_PEEK;
+  record->store = RECORD_STORE_CONTAINS;
 
   /* Get ref_repo table, attach it as an environment. */
   lgi_type_get_repotype (L, G_TYPE_NONE, ri);
@@ -79,7 +98,7 @@ lgi_record_new (lua_State *L, GIBaseInfo *ri)
 }
 
 void
-lgi_record_2lua (lua_State *L, gpointer addr, LgiRecordMode mode, int parent)
+lgi_record_2lua (lua_State *L, gpointer addr, gboolean own, int parent)
 {
   Record *record;
 
@@ -102,7 +121,7 @@ lgi_record_2lua (lua_State *L, gpointer addr, LgiRecordMode mode, int parent)
   /* Check whether the record is already cached. */
   lua_pushlightuserdata (L, addr);
   lua_rawget (L, -2);
-  if (!lua_isnil (L, -1) && mode != LGI_RECORD_PARENT)
+  if (!lua_isnil (L, -1) && parent == 0)
     {
       /* Remove unneeded tables under our requested object. */
       lua_replace (L, -3);
@@ -112,8 +131,8 @@ lgi_record_2lua (lua_State *L, gpointer addr, LgiRecordMode mode, int parent)
 	 ownership is properly updated. */
       record = lua_touserdata (L, -1);
       g_assert (record->addr == addr);
-      if (mode == LGI_RECORD_OWN && record->mode == LGI_RECORD_PEEK)
-	record->mode = mode;
+      if (own && record->store == RECORD_STORE_FOREIGN)
+	record->store = RECORD_STORE_OWN;
 
       return;
     }
@@ -126,14 +145,16 @@ lgi_record_2lua (lua_State *L, gpointer addr, LgiRecordMode mode, int parent)
   lua_pushlightuserdata (L, &record_mt);
   lua_rawget (L, LUA_REGISTRYINDEX);
   lua_setmetatable (L, -2);
-  if (mode == LGI_RECORD_PARENT)
+  record->addr = addr;
+  if (parent != 0)
     {
       /* Store reference to the parent argument. */
       lua_pushvalue (L, parent);
       record->data.parent = luaL_ref (L, LUA_REGISTRYINDEX);
+      record->store = RECORD_STORE_PARENT;
     }
-  record->addr = addr;
-  record->mode = mode;
+  else
+    record->store = own ? RECORD_STORE_OWN : RECORD_STORE_FOREIGN;
 
   /* Assign refrepo table (on the stack when we are called) as
      environment for our proxy. */
@@ -141,7 +162,7 @@ lgi_record_2lua (lua_State *L, gpointer addr, LgiRecordMode mode, int parent)
   lua_setfenv (L, -2);
 
   /* Store newly created record into the cache. */
-  if (mode != LGI_RECORD_PARENT)
+  if (parent == 0)
     {
       lua_pushlightuserdata (L, addr);
       lua_pushvalue (L, -2);
@@ -262,7 +283,7 @@ static int
 record_gc (lua_State *L)
 {
   Record *record = record_get (L, 1);
-  if (record->mode == LGI_RECORD_OWN)
+  if (record->store == RECORD_STORE_OWN)
     {
       /* Free the owned record. */
       GType gtype;
@@ -272,7 +293,7 @@ record_gc (lua_State *L)
       g_assert (G_TYPE_IS_BOXED (gtype));
       g_boxed_free (gtype, record->addr);
     }
-  else if (record->mode == LGI_RECORD_PARENT)
+  else if (record->store == RECORD_STORE_PARENT)
     /* Free the reference to the parent. */
     luaL_unref (L, LUA_REGISTRYINDEX, record->data.parent);
 
@@ -332,7 +353,7 @@ record_new (lua_State *L)
 	  {
 	    /* Create closure instance wrapping 2nd argument and
 	       return it. */
-	    lgi_record_2lua (L, lgi_gclosure_create (L, 2), LGI_RECORD_OWN, 0);
+	    lgi_record_2lua (L, lgi_gclosure_create (L, 2), TRUE, 0);
 	    return 1;
 	  }
 
@@ -351,8 +372,7 @@ record_new (lua_State *L)
 				      &val, 3);
 	      }
 
-	    lgi_record_2lua (L, g_boxed_copy (G_TYPE_VALUE, &val),
-			     LGI_RECORD_OWN, 0);
+	    lgi_record_2lua (L, g_boxed_copy (G_TYPE_VALUE, &val), TRUE, 0);
 	    if (G_IS_VALUE (&val))
 	      g_value_unset (&val);
 	    return 1;
