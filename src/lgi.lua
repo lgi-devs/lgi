@@ -884,67 +884,65 @@ end
 
 -- Value is constructible from any kind of source Lua value, and the
 -- type of the value can be hinted by type name.
-local value = repo.GObject.Value
+local Value = repo.GObject.Value
 local value_info = gi.GObject.Value
 
--- Tries to deduce the gtype according to Lua value.
-local function gettype(source)
-   if source == nil then return 'void'
-   elseif type(source) == 'boolean' then return 'gboolean'
-   elseif type(source) == 'number' then
-      -- If the number fits in integer, use it, otherwise use double.
-      local _, fract = math.modf(source)
-      local maxint32 = 0x80000000
-      return ((fract == 0 and source >= -maxint32 and source < maxint32)
-	   and 'gint' or 'gdouble')
-   elseif type(source) == 'string' then return 'gchararray'
-   elseif type(source) == 'function' then return closure._gtype
-   elseif type(source) == 'userdata' then
-      -- Check whether is it record or object.
-      local typetable, gtype = core.record.typeof(source)
-      if typetable then return typetable._gtype end
-      typetable, gtype = core.object.typeof(source)
-      if typetable then return gtype end
+-- Value contents accessors - type-safe replacement for buch of
+-- set_xxx and get_xxx native C variants.
+Value._methods.get = core.value
+Value._methods.set = core.value
 
-      -- Check whether we can call this userdata.  If yes, generate
-      -- closure.
-      local meta = getmetatable(source)
-      if meta and meta.__call then return closure._gtype end
-   elseif type(source) == 'table' then
-      -- Check, whether we can call it.
-      local meta = getmetatable(source)
-      if meta and meta.__call then return closure._gtype end
-   end
+-- Do not allow direct access to fields.
+local value_field_gtype = Value._fields.g_type
+Value._fields = nil
 
-   -- No idea to what type should this be mapped.
-   error(("unclear type for GObject.Value from argument `%s'"):format(
-	    tostring(source)))
-end
-
--- Implement constructor, taking any source value and optionally type
--- of the source.
-local value_mt = {}
-function value_mt:__call(source, stype)
-   stype = stype or gettype(source)
-   if type(stype) == 'string' then
-      stype = repo.GObject.type_from_name(stype)
-   end
-   return core.record.new(value_info, stype, source)
-end
-setmetatable(value, value_mt)
-value._construct = value_mt.__call
-value._methods = nil
-value._fields = nil
-function value:_access(instance, name, ...)
-   assert(select('#', ...) == 0,
-	  ("GObject.Value: `%s' not writable"):format(name));
-   if name == 'type' then
-      return repo.GObject.type_name(
-	 core.record.field(instance, value_info.fields.g_type)) or ''
-   elseif name == 'value' then
-      return core.record.valueof(instance)
+-- Implements pseudo-properties 'g_type' and 'data', for safe
+-- read/write access to value's type and contents.
+Value._custom = {}
+function Value._custom.g_type(_, instance, _, ...)
+   local gtype = core.record.field(instance, value_field_gtype)
+   if select('#', ...) == 0 then
+      -- Reading existing type is simple access to value's gtype field.
+      return gtype
+   else
+      if gtype then
+	 if ... then
+	    -- Try converting old value to new one.
+	    local dest = core.record.new(value_info)
+	    Value.init(dest, ...)
+	    if not Value.transform(instance, dest) then
+	       error(("GObject.Value: cannot convert `%s' to `%s'"):format(
+			gtype, core.record.field(dest, value_field_gtype)))
+	    end
+	    Value.unset(instance)
+	    Value.init(instance, ...)
+	    Value.copy(dest, instance)
+	 else
+	    Value.unset(instance)
+	 end
+      elseif ... then
+	 Value.init(instance, ...)
+      end
    end
 end
+
+function Value._custom.data(_, instance, _, ...)
+   -- Forward to access value directly.
+   return core.value(instance, ...)
+end
+
+-- Implement custom 'constructor', taking optionally two values
+-- (g_type and data).  The reason why it is overriden is that the
+-- order of initialization is important, and standard record
+-- intializer cannot enforce the order.
+local value_mt = create_component_meta { '_methods' }
+function value_mt:__call(gtype, data)
+   local v = core.record.new(value_info)
+   if gtype then v.g_type = gtype end
+   if data then v.data = data end
+   return v
+end
+setmetatable(Value, value_mt)
 
 -- Access to module proxies the whole repo, for convenience.
 local lgi_mt = {}

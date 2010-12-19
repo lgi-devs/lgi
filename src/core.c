@@ -261,6 +261,33 @@ core_constant (lua_State *L)
   return 1;
 }
 
+/* Value contents 'access' function. Lua-side prototype:
+   res = core.value(val)
+   core.value(val, newval) */
+static int
+core_value (lua_State *L)
+{
+  GValue *val;
+  lgi_type_get_repotype (L, G_TYPE_VALUE, NULL);
+  if (lgi_record_2c (L, 1, (gpointer *) &val, FALSE, FALSE) > 0)
+    g_assert_not_reached ();
+  if (lua_isnone (L, 2))
+    {
+      /* Read the value from GValue. */
+      lgi_marshal_val_2lua (L, NULL, GI_TRANSFER_NOTHING, val);
+      return 1;
+    }
+  else
+    {
+      /* Write value to GValue, or reset it if source is 'nil'. */
+      if (lua_isnil (L, 2))
+	g_value_reset (val);
+      else
+	lgi_marshal_val_2c (L, NULL, GI_TRANSFER_NOTHING, val, 2);
+      return 0;
+    }
+}
+
 static const char* log_levels[] = {
   "ERROR", "CRITICAL", "WARNING", "MESSAGE", "INFO", "DEBUG", "???", NULL
 };
@@ -335,6 +362,7 @@ static const struct luaL_reg lgi_reg[] = {
   { "log",  core_log },
   { "gtype", core_gtype },
   { "constant", core_constant },
+  { "value", core_value },
   { NULL, NULL }
 };
 

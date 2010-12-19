@@ -356,27 +356,6 @@ record_new (lua_State *L)
 	    lgi_record_2lua (L, lgi_gclosure_create (L, 2), TRUE, 0);
 	    return 1;
 	  }
-
-	else if (g_type_is_a (type, G_TYPE_VALUE))
-	  {
-	    /* Get requested GType, construct and fill in GValue
-	       and return it wrapped in a GBoxed which is wrapped in
-	       a compound. */
-	    GValue val = {0};
-	    type = luaL_checknumber (L, 2);
-	    if (G_TYPE_IS_VALUE (type))
-	      {
-		g_value_init (&val, type);
-		if (!lua_isnoneornil (L, 3))
-		  lgi_marshal_val_2c (L, NULL, GI_TRANSFER_NOTHING,
-				      &val, 3);
-	      }
-
-	    lgi_record_2lua (L, g_boxed_copy (G_TYPE_VALUE, &val), TRUE, 0);
-	    if (G_IS_VALUE (&val))
-	      g_value_unset (&val);
-	    return 1;
-	  }
 	else
 	  {
 	    /* Create common struct. */
@@ -422,20 +401,10 @@ record_field (lua_State *L)
   return lgi_marshal_field (L, record->addr, getmode, 1, 2, 3);
 }
 
-/* Returns contents of the GObject.Value record. */
-static int
-record_valueof (lua_State *L)
-{
-  GValue *val = record_get (L, 1)->addr;
-  lgi_marshal_val_2lua (L, NULL, GI_TRANSFER_NOTHING, val);
-  return 1;
-}
-
 static const struct luaL_Reg record_api_reg[] = {
   { "new", record_new },
   { "typeof", record_typeof },
   { "field", record_field },
-  { "valueof", record_valueof },
   { NULL, NULL }
 };
 

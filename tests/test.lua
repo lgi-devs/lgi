@@ -1069,73 +1069,79 @@ function gireg.closure_arg()
 	  'number')
 end
 
-function gireg.gvalue_simple()
+function gireg.gvalue_assign()
    local V = GObject.Value
-   local function checkv(gval, tp, val)
-      check(type(gval.type) == 'string', "GValue.type is not `string'")
-      check(gval.type == tp, ("GValue type: expected `%s', got `%s'"):format(
-	       tp, gval.type), 2)
-      check(gval.value == val, ("GValue value: exp `%s', got `%s'"):format(
-	       tostring(val), tostring(gval.value)), 2)
-   end
-   checkv(V(), '', nil)
-   checkv(V(0), 'gint', 0)
-   checkv(V(1.1), 'gdouble', 1.1)
-   checkv(V('str'), 'gchararray', 'str')
-   local gcl = GObject.Closure(function() end)
-   checkv(V(gcl), 'GClosure', gcl)
-   local v = V(42)
-   checkv(V(v).value, 'gint', 42)
 
--- For non-refcounted boxeds, the returned Value.value is always new
--- copy of the instance, so the following test fails:
---
--- checkv(V(v), 'GValue', v)
+   local v = V()
+   check(v.g_type == nil)
+   check(v.data == nil)
+   v.g_type = 'gchararray'
+   check(v.g_type == 'gchararray')
+   check(v.data == nil)
+   v.data = 'label'
+   check(v.data == 'label')
+   v.data = nil
+   check(v.data == nil)
+   check(v.g_type == 'gchararray')
+   v.data = 'label'
+   v.g_type = nil
+   check(v.g_type == nil)
+   check(v.data == nil)
 
-   check(V(v).type == 'GValue')
+   v.g_type = 'gint'
+   v.data = 1
+   check(v.g_type == 'gint')
+   check(v.data == 1)
+   v.g_type = 'gdouble'
+   check(v.g_type == 'gdouble')
+   check(v.data == 1)
+   v.data = 3.14
+   v.g_type = 'gint'
+   check(v.g_type == 'gint')
+   check(v.data == 3)
 end
 
 function gireg.gvalue_arg()
    local R = lgi.Regress
-   checkv(R.test_int_value_arg(42), 42, 'number')
+   checkv(R.test_int_value_arg(GObject.Value('gint', 42)), 42, 'number')
 end
 
 function gireg.gvalue_return()
    local R = lgi.Regress
    local v = R.test_value_return(43)
-   checkv(v.value, 43, 'number')
-   check(v.type == 'gint', 'incorrect value type')
+   checkv(v.data, 43, 'number')
+   check(v.g_type == 'gint', 'incorrect value type')
 end
 
 function gireg.gvalue_date()
    local R = lgi.Regress
    local v = R.test_date_in_gvalue()
-   check(v.type == 'GDate')
-   check(v.value:get_day() == 5)
-   check(v.value:get_month() == 12)
-   check(v.value:get_year() == 1984)
+   check(v.g_type == 'GDate')
+   check(v.data:get_day() == 5)
+   check(v.data:get_month() == 12)
+   check(v.data:get_year() == 1984)
    local d = GLib.Date()
    d:set_dmy(25, 1, 1975)
-   v = GObject.Value(d)
-   check(v.type == 'GDate')
-   check(v.value:get_day() == 25)
-   check(v.value:get_month() == 1)
-   check(v.value:get_year() == 1975)
+   v = GObject.Value(GLib.Date, d)
+   check(v.g_type == 'GDate')
+   check(v.data:get_day() == 25)
+   check(v.data:get_month() == 1)
+   check(v.data:get_year() == 1975)
 end
 
 function gireg.gvalue_strv()
    local R = lgi.Regress
    local v = R.test_strv_in_gvalue()
-   check(v.type == 'GStrv')
-   check(#v.value == 3)
-   check(v.value[1] == 'one')
-   check(v.value[2] == 'two')
-   check(v.value[3] == 'three')
-   v = GObject.Value({ '1', '2', '3' }, 'GStrv')
-   check(#v.value == 3)
-   check(v.value[1] == '1')
-   check(v.value[2] == '2')
-   check(v.value[3] == '3')
+   check(v.g_type == 'GStrv')
+   check(#v.data == 3)
+   check(v.data[1] == 'one')
+   check(v.data[2] == 'two')
+   check(v.data[3] == 'three')
+   v = GObject.Value('GStrv', { '1', '2', '3' })
+   check(#v.data == 3)
+   check(v.data[1] == '1')
+   check(v.data[2] == '2')
+   check(v.data[3] == '3')
 end
 
 function gireg.obj_create()
@@ -1342,8 +1348,8 @@ function gireg.obj_fundamental()
    local f = R.TestFundamentalSubObject.new('foo-nda-mental')
    check(f)
    check(f.data == 'foo-nda-mental')
-   local v = lgi.GObject.Value(f)
-   check(v.value == f)
+   local v = lgi.GObject.Value(R.TestFundamentalSubObject, f)
+   check(v.data == f)
    f = nil
    collectgarbage()
 end

@@ -1111,7 +1111,7 @@ lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 	}
     }
 
-  luaL_error (L, "g_value_set: no handling of %s(%s)",
+  luaL_error (L, "g_value_2c: no handling of %s(%s)",
 	      g_type_name (type), g_type_name (G_TYPE_FUNDAMENTAL (type)));
 }
 
@@ -1468,7 +1468,7 @@ lgi_marshal_val_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 	}
     }
 
-  luaL_error (L, "g_value_get: no handling of %s(%s)",
+  luaL_error (L, "g_value_2lua: no handling of %s(%s)",
 	      g_type_name (type), g_type_name (G_TYPE_FUNDAMENTAL (type)));
 }
 
