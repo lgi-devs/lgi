@@ -70,7 +70,7 @@ static int core_addr_logger;
 static int core_addr_getgtype;
 
 static int
-lgi_set(lua_State *L)
+core_set(lua_State *L)
 {
   const char *name = luaL_checkstring (L, 1);
   int *key;
@@ -248,12 +248,11 @@ core_gtype (lua_State *L)
 
 /* Instantiate constant from given gi_info. */
 static int
-lgi_constant (lua_State* L)
+core_constant (lua_State *L)
 {
   /* Get typeinfo of the constant. */
   GIArgument val;
-  GIConstantInfo *ci = * (GIConstantInfo **) luaL_checkudata (L, 1,
-							      LGI_GI_INFO);
+  GIConstantInfo *ci = *(GIConstantInfo **) luaL_checkudata (L, 1, LGI_GI_INFO);
   GITypeInfo *ti = g_constant_info_get_type (ci);
   lgi_gi_info_new (L, ti);
   g_constant_info_get_value (ci, &val);
@@ -267,7 +266,7 @@ static const char* log_levels[] = {
 };
 
 static int
-lgi_log (lua_State *L)
+core_log (lua_State *L)
 {
   const char *domain = luaL_checkstring (L, 1);
   int level = 1 << (luaL_checkoption (L, 2, log_levels[5], log_levels) + 2);
