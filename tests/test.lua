@@ -370,14 +370,15 @@ end
 
 function gireg.type_gtype()
    local R = lgi.Regress
-   checkv(R.test_gtype(0), 0, 'number')
-   checkv(R.test_gtype(1), 1, 'number')
-   checkv(R.test_gtype(10000), 10000, 'number')
-   check(not pcall(R.test_gtype))
-   check(not pcall(R.test_gtype, nil))
-   check(not pcall(R.test_gtype, 'string'))
+   checkv(R.test_gtype(), nil, 'nil')
+   checkv(R.test_gtype(nil), nil, 'nil')
+   checkv(R.test_gtype(0), nil, 'nil')
+   checkv(R.test_gtype('void'), 'void', 'string')
+   checkv(R.test_gtype(4), 'void', 'string')
+   checkv(R.test_gtype('GObject'), 'GObject', 'string')
+   checkv(R.test_gtype(80), 'GObject', 'string')
+   checkv(R.test_gtype(R.TestObj), 'RegressTestObj', 'string')
    check(not pcall(R.test_gtype, true))
-   check(not pcall(R.test_gtype, {}))
    check(not pcall(R.test_gtype, function() end))
 end
 

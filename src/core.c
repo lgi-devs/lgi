@@ -67,6 +67,7 @@ lgi_cache_create (lua_State *L, gpointer key, const char *mode)
 }
 
 static int core_addr_logger;
+static int core_addr_getgtype;
 
 static int
 lgi_set(lua_State *L)
@@ -75,6 +76,8 @@ lgi_set(lua_State *L)
   int *key;
   if (strcmp (name, "logger") == 0)
     key = &core_addr_logger;
+  else if (strcmp (name, "getgtype") == 0)
+    key = &core_addr_getgtype;
   else
     luaL_argerror (L, 1, "invalid key");
 
@@ -169,6 +172,40 @@ lgi_type_get_repotype (lua_State *L, GType gtype, GIBaseInfo *info)
   return gtype;
 }
 
+GType
+lgi_type_get_gtype (lua_State *L, int narg)
+{
+  /* Handle simple cases natively, forward to Lua implementation for
+     the rest. */
+  switch (lua_type (L, narg))
+    {
+    case LUA_TNIL:
+    case LUA_TNONE:
+      return G_TYPE_INVALID;
+
+    case LUA_TNUMBER:
+      return lua_tonumber (L, narg);
+
+    case LUA_TSTRING:
+      return g_type_from_name (lua_tostring (L, narg));
+
+    default:
+      {
+	GType gtype = G_TYPE_INVALID;
+	lua_pushlightuserdata (L, &core_addr_getgtype);
+	lua_rawget (L, LUA_REGISTRYINDEX);
+	if (!lua_isnil (L, -1))
+	  {
+	    lua_pushvalue (L, narg);
+	    lua_call (L, 1, 1);
+	    gtype = lgi_type_get_gtype (L, -1);
+	  }
+	lua_pop (L, 1);
+	return gtype;
+      }
+    }
+}
+
 typedef struct _Guard
 {
   gpointer data;
@@ -197,6 +234,19 @@ lgi_guard_create (lua_State *L, GDestroyNotify destroy)
   return &guard->data;
 }
 
+/* Converts GType from/to string. */
+static int
+core_gtype (lua_State *L)
+{
+  GType gtype = lgi_type_get_gtype (L, 1);
+  if (lua_isnumber (L, 1))
+    lua_pushstring (L, g_type_name (gtype));
+  else
+    lua_pushnumber (L, gtype);
+  return 1;
+}
+
+/* Instantiate constant from given gi_info. */
 static int
 lgi_constant (lua_State* L)
 {
@@ -282,9 +332,10 @@ log_handler (const gchar *log_domain, GLogLevelFlags log_level,
 }
 
 static const struct luaL_reg lgi_reg[] = {
-  { "constant", lgi_constant },
-  { "log",  lgi_log },
-  { "set", lgi_set },
+  { "set", core_set },
+  { "log",  core_log },
+  { "gtype", core_gtype },
+  { "constant", core_constant },
   { NULL, NULL }
 };
 

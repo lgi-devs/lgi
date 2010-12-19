@@ -138,13 +138,19 @@ marshal_2c_int (lua_State *L, GITypeTag tag, GIArgument *val, int narg,
       HANDLE_INT_NOPTR(INT64, int64, ((lua_Number) -0x7f00000000000000LL) - 1,
 		       0x7fffffffffffffffLL);
       HANDLE_INT_NOPTR(UINT64, uint64, 0, 0xffffffffffffffffULL);
-#if GLIB_SIZEOF_SIZE_T == 4
-      HANDLE_INT_NOPTR(GTYPE, uint32, 0, 0xffffffffUL);
-#else
-      HANDLE_INT_NOPTR(GTYPE, uint64, 0, 0xffffffffffffffffULL);
-#endif
 #undef HANDLE_INT
 #undef HANDLE_INT_NOPTR
+
+    case GI_TYPE_TAG_GTYPE:
+      {
+#if GLIB_SIZEOF_SIZE_T == 4
+	val->v_uint32 =
+#else
+	  val->v_uint64 =
+#endif
+	  lgi_type_get_gtype (L, narg);
+      break;
+      }
 
     default:
       g_assert_not_reached ();
@@ -173,12 +179,17 @@ marshal_2lua_int (lua_State *L, GITypeTag tag, GIArgument *val,
       HANDLE_INT(UINT32, uint32, UINT);
       HANDLE_INT(INT64, int64, INT);
       HANDLE_INT(UINT64, uint64, UINT);
-#if GLIB_SIZEOF_SIZE_T == 4
-      HANDLE_INT(GTYPE, uint32, UINT);
-#else
-      HANDLE_INT(GTYPE, uint64, UINT);
-#endif
 #undef HANDLE_INT
+
+    case GI_TYPE_TAG_GTYPE:
+      lua_pushstring (L, g_type_name (
+#if GLIB_SIZEOF_SIZE_T == 4
+				      val->v_uint32
+#else
+				      val->v_uint64
+#endif
+				      ));
+      break;
 
     default:
       g_assert_not_reached ();

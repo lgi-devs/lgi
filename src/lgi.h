@@ -33,6 +33,10 @@ int lgi_type_get_name (lua_State *L, GIBaseInfo *info);
    found in the repo. */
 GType lgi_type_get_repotype (lua_State *L, GType gtype, GIBaseInfo *info);
 
+/* Gets GType from Lua index narg.  Accepts number and when it is
+   other type, invokes Lua helper to convert. */
+GType lgi_type_get_gtype (lua_State *L, int narg);
+
 /* Allocates guard, a pointer-size userdata with associated destroy
    handler. Returns pointer to user_data stored inside guard. */
 gpointer *lgi_guard_create (lua_State *L, GDestroyNotify destroy);

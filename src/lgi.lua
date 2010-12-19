@@ -529,6 +529,13 @@ local function create_component(info, mt)
    return setmetatable(component, mt)
 end
 
+-- Core callback, gets gtype from advanced types like structs and objects.
+core.set('getgtype',
+	 function(t)
+	    assert(type(t) == 'table', 'bad argument, not GType')
+	    return t._gtype
+	 end)
+
 -- Table containing loaders for various GI types, indexed by
 -- gi.InfoType constants.
 local typeloader = {}
@@ -755,7 +762,7 @@ for gtype_name, gi_name in pairs {
       GDate = 'GLib.Date', GRegex = 'GLib.Regex', GDateTime = 'GLib.DateTime',
       GVariantType = 'GLib.VariantType', GParam = 'GObject.ParamSpec',
 } do
-   local gtype = repo.GObject.type_from_name(gtype_name)
+   local gtype = core.gtype(gtype_name)
    local ns, name = gi_name:match('^([%w_]+)%.([%w_]+)$')
    local gi_type = repo[ns][name]
    gi_type._gtype = gtype
