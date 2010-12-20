@@ -1061,8 +1061,8 @@ function gireg.closure()
    local closure = GObject.Closure(function() return 42 end)
    checkv(R.test_closure(closure, 42), 42, 'number')
    local res = GObject.Value('gint')
---   closure:invoke(res, {}, nil)
---   check(res.g_type == 'gint' and res.data == 42)
+   closure:invoke(res, {}, nil)
+   check(res.g_type == 'gint' and res.data == 42)
 end
 
 function gireg.closure_arg()
@@ -1070,8 +1070,8 @@ function gireg.closure_arg()
    local closure = GObject.Closure(function(int) return int end)
    checkv(R.test_closure_one_arg(closure, 43), 43, 'number')
    local res = GObject.Value('gint')
---   closure:invoke(res, { GObject.Value('gint', 43) }, nil)
---   check(res.g_type == 'gint' and res.data == 43)
+   closure:invoke(res, { GObject.Value('gint', 43) }, nil)
+   check(res.g_type == 'gint' and res.data == 43)
 end
 
 function gireg.gvalue_assign()
