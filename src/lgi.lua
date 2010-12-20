@@ -582,11 +582,11 @@ local function load_signal_name_reverse(name)
 end
 
 local function load_vfunc_name(name)
-   return name:match('^on_(.+)$')
+   return name:match('^do_(.+)$')
 end
 
 local function load_vfunc_name_reverse(name)
-   return 'on_' .. name
+   return 'do_' .. name
 end
 
 local function load_method(mi)

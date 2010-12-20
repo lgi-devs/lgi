@@ -1162,6 +1162,10 @@ end
 
 function gireg.obj_methods()
    local R = lgi.Regress
+   if R.TestObj._methods.do_matrix then
+      R.TestObj._methods.invoke_matrix = R.TestObj._methods.do_matrix
+      R.TestObj._methods.do_matrix = nil
+   end
    local o = R.TestObj()
    check(o:instance_method() == -1)
    check(o.static_method(42) == 42)
@@ -1178,7 +1182,7 @@ function gireg.obj_methods()
    check(res == false)
    check(type(msg) == 'string')
    check(type(code) == 'number')
-   check(o:do_matrix('unused') == 42)
+   check(o:invoke_matrix('unused') == 42)
 end
 
 function gireg.obj_null_args()
@@ -1191,8 +1195,12 @@ end
 
 function gireg.obj_virtual_methods()
    local R = lgi.Regress
+   if R.TestObj._methods.do_matrix then
+      R.TestObj._methods.invoke_matrix = R.TestObj._methods.do_matrix
+      R.TestObj._methods.do_matrix = nil
+   end
    local o = R.TestObj()
-   check(o:on_matrix('unused') == 42)
+   check(o:do_matrix('unused') == 42)
 end
 
 function gireg.obj_prop_int()
