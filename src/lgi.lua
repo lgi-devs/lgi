@@ -597,22 +597,22 @@ local function load_method(mi)
 end
 
 -- Loads structure information into table representing the structure
-local function load_record(namespace, info)
-   -- Avoid exposing internal structs created for object implementations.
-   if not info.is_gtype_struct then
-      local record = create_component(info, component_mt.record)
-      record._methods = get_category(info.methods, core.callable.new)
-      record._fields = get_category(info.fields)
-      return record
-   end
+local function load_record(info)
+   local record = create_component(info, component_mt.record)
+   record._methods = get_category(info.methods, core.callable.new)
+   record._fields = get_category(info.fields)
+   return record
 end
 
 function typeloader.struct(namespace, info)
-   return load_record(namespace, info), '_structs'
+   -- Avoid exposing internal structs created for object implementations.
+   if not info.is_gtype_struct then
+      return load_record(info), '_structs'
+   end
 end
 
 function typeloader.union(namespace, info)
-   return load_record(namespace, info), '_unions'
+   return load_record(info), '_unions'
 end
 
 local function load_properties(info)
@@ -634,7 +634,7 @@ function typeloader.interface(namespace, info)
    if type_struct then
       interface._vfuncs = get_category(info.vfuncs, nil, load_vfunc_name,
 				       load_vfunc_name_reverse)
-      interface._type = get_category(type_struct.fields)
+      interface._type = load_record(type_struct)
    end
    return interface, '_interfaces'
 end
@@ -651,7 +651,7 @@ function typeloader.object(namespace, info)
    if type_struct then
       class._vfuncs = get_category(info.vfuncs, nil, load_vfunc_name,
 				   load_vfunc_name_reverse)
-      class._type = type_struct and get_category(type_struct.fields)
+      class._type = load_record(type_struct)
    end
 
    -- Populate inheritation information (_implements and _parent fields).
