@@ -879,6 +879,24 @@ callable_new (lua_State *L)
 			      luaL_checkudata (L, 1, LGI_GI_INFO), NULL);
 }
 
+/* Creates new closure instance with given Lua target.  Lua prototype:
+   closure = callable.closure(target) */
+static int
+callable_closure (lua_State *L)
+{
+  /* Create closure instance wrapping argument and return it. */
+  if (lgi_type_get_repotype (L, G_TYPE_CLOSURE, NULL) != G_TYPE_INVALID)
+    lgi_record_2lua (L, lgi_gclosure_create (L, 1), TRUE, 0);
+  return 1;
+}
+
+/* Callable module public API table. */
+static const luaL_Reg callable_api_reg[] = {
+  { "new", callable_new },
+  { "closure", callable_closure },
+  { NULL, NULL }
+};
+
 void
 lgi_callable_init (lua_State *L)
 {
@@ -893,7 +911,6 @@ lgi_callable_init (lua_State *L)
 
   /* Create public api for callable module. */
   lua_newtable (L);
-  lua_pushcfunction (L, callable_new);
-  lua_setfield (L, -2, "new");
+  luaL_register (L, NULL, callable_api_reg);
   lua_setfield (L, -2, "callable");
 }

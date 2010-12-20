@@ -1058,15 +1058,20 @@ end
 
 function gireg.closure()
    local R = lgi.Regress
-   checkv(R.test_closure(GObject.Closure(function() return 42 end)),
-	  42, 'number')
-   checkv(R.test_closure(function() return 42 end), 42, 'number')
+   local closure = GObject.Closure(function() return 42 end)
+   checkv(R.test_closure(closure, 42), 42, 'number')
+   local res = GObject.Value('gint')
+--   closure:invoke(res, {}, nil)
+--   check(res.g_type == 'gint' and res.data == 42)
 end
 
 function gireg.closure_arg()
    local R = lgi.Regress
-   checkv(R.test_closure_one_arg(function(int) return int end, 43), 43,
-	  'number')
+   local closure = GObject.Closure(function(int) return int end)
+   checkv(R.test_closure_one_arg(closure, 43), 43, 'number')
+   local res = GObject.Value('gint')
+--   closure:invoke(res, { GObject.Value('gint', 43) }, nil)
+--   check(res.g_type == 'gint' and res.data == 43)
 end
 
 function gireg.gvalue_assign()

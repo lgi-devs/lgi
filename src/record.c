@@ -343,32 +343,11 @@ static int
 record_new (lua_State *L)
 {
   GIBaseInfo **info = luaL_checkudata (L, 1, LGI_GI_INFO);
-  switch (g_base_info_get_type (*info))
-    {
-    case GI_INFO_TYPE_STRUCT:
-    case GI_INFO_TYPE_UNION:
-      {
-	GType type = lgi_type_get_repotype (L, G_TYPE_INVALID, *info);
-	if (g_type_is_a (type, G_TYPE_CLOSURE))
-	  {
-	    /* Create closure instance wrapping 2nd argument and
-	       return it. */
-	    lgi_record_2lua (L, lgi_gclosure_create (L, 2), TRUE, 0);
-	    return 1;
-	  }
-	else
-	  {
-	    /* Create common struct. */
-	    lgi_record_new (L, *info);
-	    lua_replace (L, -2);
-	    return 1;
-	  }
-	break;
-      }
-
-    default:
-      g_assert_not_reached ();
-    }
+  GIInfoType type = g_base_info_get_type (*info);
+  luaL_argcheck (L, type == GI_INFO_TYPE_STRUCT || type == GI_INFO_TYPE_UNION,
+		 1, "record expected");
+  lgi_record_new (L, *info);
+  return 1;
 }
 
 /* Checks whether given value is record. */

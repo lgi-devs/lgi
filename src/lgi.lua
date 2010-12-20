@@ -862,25 +862,22 @@ function object._custom.on_notify(typetable, instance, name, ...)
    end
 end
 
--- Closure modifications.  Closure does not need any methods nor
--- fields, but it must have constructor creating it from any kind of
--- Lua callable.
-local closure = repo.GObject.Closure
-local closure_info = gi.GObject.Closure
-closure._methods = nil
-closure._fields = nil
-local closure_mt = { __index = getmetatable(closure).__index,
-		     _access = getmetatable(closure)._access }
-function closure_mt:__call(arg)
-   return core.record.new(closure_info, arg)
+-- Closure modifications.  All fields and most methods of closure are
+-- removed, added possibility to construct closure from Lua
+-- function/callable userdata.
+local Closure = repo.GObject.Closure
+Closure._fields = nil
+local closure_methods = Closure._methods
+Closure._methods = {
+   invoke = closure_methods.invoke,
+   invalidate = closure_methods.invalidate
+}
+closure_methods = nil
+local closure_mt = create_component_meta { '_methods' }
+function closure_mt:__call(target)
+   return core.callable.closure(target)
 end
-setmetatable(closure, closure_mt)
-
--- Implicit conversion constructor, allows using Lua function directly
--- at the places where GClosure is expected.
-function closure:_construct(arg)
-   return core.record.new(closure_info, arg)
-end
+setmetatable(Closure, closure_mt)
 
 -- Value is constructible from any kind of source Lua value, and the
 -- type of the value can be hinted by type name.
