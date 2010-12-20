@@ -438,7 +438,7 @@ callable_call (lua_State *L)
 	  /* Convert parameter from Lua stack to C. */
 	  nret += lgi_marshal_arg_2c (L, &param->ti, &param->ai,
 				      GI_TRANSFER_NOTHING,
-				      &args[argi], lua_argi++, FALSE,
+				      &args[argi], lua_argi++, FALSE, FALSE,
 				      callable->info,
 				      ffi_args + callable->has_self);
 	/* Special handling for out/caller-alloc structures; we have to
@@ -688,7 +688,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	{
 	  to_pop = lgi_marshal_arg_2c (L, &callable->retval.ti, NULL,
 				       callable->retval.transfer, ret, npos,
-				       FALSE, callable->info,
+				       FALSE, FALSE, callable->info,
 				       args + callable->has_self);
 	  if (to_pop != 0)
 	    {
@@ -709,7 +709,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	    to_pop =
 	      lgi_marshal_arg_2c (L, &param->ti, &param->ai, param->transfer,
 				  (GIArgument *)args[i + callable->has_self],
-				  npos, FALSE, callable->info,
+				  npos, FALSE, FALSE, callable->info,
 				  args + callable->has_self);
 	    if (to_pop != 0)
 	      {

@@ -8,6 +8,7 @@
  * Implements marshalling, i.e. transferring values between Lua and GLib/C.
  */
 
+#include <string.h>
 #include "lgi.h"
 
 GType
@@ -368,7 +369,7 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 	      to_pop = lgi_marshal_arg_2c (L, eti, NULL, exfer,
 					   (GIArgument *) (array->data +
 							   index * esize),
-					   -1, FALSE, NULL, NULL);
+					   -1, TRUE, FALSE, NULL, NULL);
 
 	      /* Remove temporary element from the stack. */
 	      lua_remove (L, - to_pop - 1);
@@ -515,8 +516,8 @@ marshal_2c_list (lua_State *L, GITypeInfo *ti, GITypeTag list_tag,
       GIArgument eval;
       lua_pushinteger (L, index--);
       lua_gettable (L, narg);
-      to_pop = lgi_marshal_arg_2c (L, eti, NULL, exfer, &eval, -1, TRUE,
-				   NULL, NULL);
+      to_pop = lgi_marshal_arg_2c (L, eti, NULL, exfer, &eval, -1,
+				   FALSE, TRUE, NULL, NULL);
 
       /* Prepend new list element and reassign the guard. */
       if (list_tag == GI_TYPE_TAG_GSLIST)
@@ -648,7 +649,7 @@ marshal_2c_hash (lua_State *L, GITypeInfo *ti, GHashTable **table, int narg,
 	  /* Marshal key and value from the table. */
 	  for (i = 0; i < 2; i++)
 	    vals += lgi_marshal_arg_2c (L, eti[i], NULL, exfer, &eval[i],
-					key_pos + i, TRUE, NULL, NULL);
+					key_pos + i, FALSE, TRUE, NULL, NULL);
 
 	  /* Insert newly marshalled pointers into the table. */
 	  g_hash_table_insert (*table, eval[0].v_pointer, eval[1].v_pointer);
@@ -791,7 +792,8 @@ marshal_2c_callable (lua_State *L, GICallableInfo *ci, GIArgInfo *ai,
 int
 lgi_marshal_arg_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 		    GITransfer transfer, GIArgument *val, int narg,
-		    gboolean use_pointer, GICallableInfo *ci, void **args)
+		    gboolean in_parent, gboolean use_pointer,
+		    GICallableInfo *ci, void **args)
 {
   int nret = 0;
   gboolean optional = (ai != NULL && (g_arg_info_is_optional (ai) ||
@@ -874,8 +876,17 @@ lgi_marshal_arg_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 	  case GI_INFO_TYPE_STRUCT:
 	  case GI_INFO_TYPE_UNION:
 	    {
+	      gpointer addr;
 	      lgi_type_get_repotype (L, G_TYPE_INVALID, info);
-	      nret = lgi_record_2c (L, narg, &val->v_pointer, optional, FALSE);
+	      nret = lgi_record_2c (L, narg, &addr, optional, FALSE);
+	      if (in_parent)
+		/* 'val' is actually the place where to put the whole
+		   structure, so copy it there. */
+		memcpy (val, addr, (type == GI_INFO_TYPE_STRUCT
+				    ? g_struct_info_get_size (info)
+				    : g_union_info_get_size (info)));
+	      else
+		val->v_pointer = addr;
 	      break;
 	    }
 
@@ -1511,7 +1522,7 @@ lgi_marshal_field (lua_State *L, gpointer object, gboolean getmode,
   else
     {
       lgi_marshal_arg_2c (L, ti, NULL, GI_TRANSFER_NOTHING, val, val_arg,
-			  FALSE, NULL, NULL);
+			  FALSE, FALSE, NULL, NULL);
       return 0;
     }
 }

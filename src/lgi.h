@@ -79,7 +79,8 @@ GType lgi_get_gtype (lua_State *L, GITypeInfo *ti);
    returns. */
 int lgi_marshal_arg_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 			GITransfer xfer,  GIArgument *val, int narg,
-			gboolean use_pointer, GICallableInfo *ci, void **args);
+			gboolean in_parent, gboolean use_pointer,
+			GICallableInfo *ci, void **args);
 
 /* Marshalls single value from Lua to GValue. ti is optional. */
 void lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
