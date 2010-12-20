@@ -140,10 +140,9 @@ void lgi_record_2lua (lua_State *L, gpointer addr, gboolean own, int parent);
 
 /* Gets pointer to C-structure from given Lua-side object. Expects
    repo typetable of expected argument pushed on the top of the stack,
-   removes it.  Returns number of temporary objects created pushed on
-   the stack. */
-int lgi_record_2c (lua_State *L, int narg, gpointer *addr, gboolean optional,
-		   gboolean nothrow);
+   removes it. */
+gpointer lgi_record_2c (lua_State *L, int narg, gboolean optional,
+			gboolean nothrow);
 
 /* Creates Lua-side part (proxy) of given object. If the object is not
    owned (own == FALSE), an ownership is automatically acquired. */

@@ -216,18 +216,14 @@ record_get (lua_State *L, int narg)
   return record;
 }
 
-int
-lgi_record_2c (lua_State *L, int narg, gpointer *addr, gboolean optional,
-	       gboolean nothrow)
+gpointer
+lgi_record_2c (lua_State *L, int narg, gboolean optional, gboolean nothrow)
 {
   Record *record;
 
   /* Check for nil. */
   if (optional && lua_isnoneornil (L, narg))
-    {
-      *addr = NULL;
-      return 0;
-    }
+    return NULL;
 
   /* Get record and check its type. */
   lgi_makeabs (L, narg);
@@ -239,26 +235,6 @@ lgi_record_2c (lua_State *L, int narg, gpointer *addr, gboolean optional,
       lua_getfenv (L, narg);
       if (record && !lua_equal (L, -1, -2))
 	record = NULL;
-
-      /* If there was some type problem, try whether type implements
-	 custom conversion: 'res = type:_construct(arg)' */
-      if (!record)
-	{
-	  lua_getfield (L, -2, "_construct");
-	  if (!lua_isnil (L, -1))
-	    {
-	      lua_pushvalue (L, -3);
-	      lua_pushvalue (L, narg);
-	      lua_call (L, 2, 1);
-	      if (!lua_isnil (L, -1))
-		{
-		  lua_insert (L, -3);
-		  lua_pop (L, 1);
-		  return lgi_record_2c (L, -2, addr, optional, nothrow) + 1;
-		}
-	    }
-	  lua_pop (L, 1);
-	}
 
       lua_pop (L, 1);
     }
@@ -274,9 +250,8 @@ lgi_record_2c (lua_State *L, int narg, gpointer *addr, gboolean optional,
       record_error (L, narg, name);
     }
 
-  *addr = record ? record->addr : NULL;
   lua_pop (L, 1);
-  return 0;
+  return record ? record->addr : NULL;
 }
 
 static int

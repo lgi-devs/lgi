@@ -269,8 +269,7 @@ core_value (lua_State *L)
 {
   GValue *val;
   lgi_type_get_repotype (L, G_TYPE_VALUE, NULL);
-  if (lgi_record_2c (L, 1, (gpointer *) &val, FALSE, FALSE) > 0)
-    g_assert_not_reached ();
+  val = lgi_record_2c (L, 1, FALSE, FALSE);
   if (lua_isnone (L, 2))
     {
       /* Read the value from GValue. */

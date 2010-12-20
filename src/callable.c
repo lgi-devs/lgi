@@ -400,7 +400,8 @@ callable_call (lua_State *L)
       else
 	{
 	  lgi_type_get_repotype (L, G_TYPE_INVALID, parent);
-	  nret += lgi_record_2c (L, 2, &args[0].v_pointer, FALSE, FALSE);
+	  args[0].v_pointer = lgi_record_2c (L, 2, FALSE, FALSE);
+	  nret++;
 	}
 
       ffi_args[0] = &args[0];

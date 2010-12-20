@@ -448,8 +448,7 @@ object_property (lua_State *L)
       /* If not gi.info, it must be record with pspec. */
       GParamSpec *pspec;
       lgi_type_get_repotype (L, G_TYPE_PARAM, NULL);
-      if (lgi_record_2c (L, 2, (gpointer *) &pspec, FALSE, FALSE) > 0)
-	g_assert_not_reached ();
+      pspec = lgi_record_2c (L, 2, FALSE, FALSE);
       gtype = pspec->value_type;
       flags = pspec->flags;
       name = pspec->name;

@@ -878,7 +878,7 @@ lgi_marshal_arg_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 	    {
 	      gpointer addr;
 	      lgi_type_get_repotype (L, G_TYPE_INVALID, info);
-	      nret = lgi_record_2c (L, narg, &addr, optional, FALSE);
+	      addr = lgi_record_2c (L, narg, optional, FALSE);
 	      if (in_parent)
 		/* 'val' is actually the place where to put the whole
 		   structure, so copy it there. */
@@ -963,8 +963,7 @@ lgi_marshal_arg_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 		    {
 		      /* Check any kind of record. */
 		      lua_pushnil (L);
-		      nret = lgi_record_2c (L, narg, &val->v_pointer,
-					    FALSE, TRUE);
+		      val->v_pointer = lgi_record_2c (L, narg, FALSE, TRUE);
 		    }
 		}
 	    }
@@ -985,8 +984,6 @@ lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
   /* Initial decision is up to GValue type; if the type reported by
      GValue identifies type uniquelly, we ignore 'ti' arg
      completely. */
-  int vals;
-  gpointer obj;
   lgi_makeabs (L, narg);
   GType type = G_VALUE_TYPE (val), fundamental_type;
   if (!G_TYPE_IS_VALUE (type))
@@ -1092,14 +1089,12 @@ lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
     }
   else if (fundamental_type == G_TYPE_BOXED)
     {
-      lgi_type_get_repotype (L, type, NULL);
-      if (!lua_isnil (L, -1))
+      if (!lgi_type_get_repotype (L, type, NULL) == G_TYPE_INVALID)
 	{
-	  vals = lgi_record_2c (L, narg, &obj, TRUE, FALSE);
-	  g_value_set_boxed (val, obj);
-	  lua_pop (L, vals);
+	  g_value_set_boxed (val, lgi_record_2c (L, narg, TRUE, FALSE));
 	  return;
 	}
+      lua_pop (L, 1);
     }
   else if (fundamental_type == G_TYPE_OBJECT)
     {
