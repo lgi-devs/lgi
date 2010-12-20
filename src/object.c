@@ -147,8 +147,6 @@ lgi_object_2c (lua_State *L, int narg, GType gtype, gboolean optional,
 {
   gpointer obj;
 
-  g_return_val_if_fail (gtype != G_TYPE_INVALID, NULL);
-
   /* Check for nil. */
   if (optional && lua_isnoneornil (L, narg))
     return NULL;
