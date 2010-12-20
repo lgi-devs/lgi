@@ -933,6 +933,9 @@ lgi_marshal_arg_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
       if (g_type_info_is_pointer (ti))
 	{
 	  /* Check and marshal according to real Lua type. */
+	  if (lua_isnoneornil (L, narg))
+	    /* nil -> NULL. */
+	    val->v_pointer = NULL;
 	  if (lua_type (L, narg) == LUA_TSTRING)
 	    /* Use string directly. */
 	    val->v_pointer = (gpointer) lua_tostring (L, narg);
