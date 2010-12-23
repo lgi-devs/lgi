@@ -771,11 +771,11 @@ for gtype_name, gi_name in pairs {
 end
 
 -- GObject overrides.
-local object = repo.GObject.Object
+local Object = repo.GObject.Object
 
 -- Custom _element implementation, checks dynamically inherited
 -- interfaces and dynamic properties.
-function object:_element(instance, name)
+function Object:_element(instance, name)
    local element = component_mt.class._element(self, instance, name)
    if element then return element end
 
@@ -790,12 +790,13 @@ function object:_element(instance, name)
 
    -- Element not found in the repo (typelib), try whether dynamic
    -- property of the specified name exists.
-   local pspec = core.object.properties(instance, name:gsub('_', '%-'))
-   if pspec then return pspec end
+   local _, _, class_struct = core.object.typeof(instance)
+   return core.record.cast(class_struct, Object._type):find_property(
+      name:gsub('_', '%-'))
 end
 
 -- Custom access_element, reacts on dynamic properties
-function object:_access_element(instance, name, element, ...)
+function Object:_access_element(instance, name, element, ...)
    if element == nil then
       -- Check object's environment.
       local env = core.object.env(instance)
@@ -806,10 +807,21 @@ function object:_access_element(instance, name, element, ...)
       else
 	 return env[name]
       end
-   elseif (core.record.typeof(element) == repo.GObject.ParamSpec
-	or (gi.isinfo(element) and element.is_property)) then
-      -- Get value of property.
+   elseif gi.isinfo(element) and element.is_property then
+      -- Process property using GI.
       return core.object.property(instance, element, ...)
+   elseif core.record.typeof(element) == repo.GObject.ParamSpec then
+      -- Process property using GLib.
+
+      local val = repo.GObject.Value(element.value_type)
+      if select('#', ...) > 0 then
+	 val.data = ...
+	 Object.set_property(instance, element.name, val)
+	 return
+      else
+	 Object.get_property(instance, element.name, val)
+	 return val.data
+      end
    else
       -- Forward to 'inherited' generic object implementation.
       return component_mt.class._access_element(
@@ -834,11 +846,11 @@ local function get_notifier(target)
 end
 
 -- Install 'notify' signal.
-object._signals = {}
-local _ = object._vfuncs.on_notify
-object._vfuncs.on_notify = nil
-object._custom = {}
-function object._custom.on_notify(typetable, instance, name, ...)
+Object._signals = {}
+local _ = Object._vfuncs.on_notify
+Object._vfuncs.on_notify = nil
+Object._custom = {}
+function Object._custom.on_notify(typetable, instance, name, ...)
    -- Borrow signal format from GObject.ObjectClass.notify.
    local info = gi.GObject.ObjectClass.fields.notify.typeinfo.interface
    if select('#', ...) > 0 then

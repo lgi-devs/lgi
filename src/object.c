@@ -415,18 +415,14 @@ object_field (lua_State *L)
 }
 
 /* Object property accessor.  Lua-side prototypes:
-   res = object.property(objectinstance, propref)
-   object.property(objectinstance, propref, newvalue)
-   where 'propref' is either gi.info of the property or record with
-   ParamSpec returned by object.properties() call. */
+   res = object.property(objectinstance, propinfo)
+   object.property(objectinstance, propinfo, newvalue) */
 static int
 object_property (lua_State *L)
 {
   int vals = 0;
   GValue val = {0};
   GType gtype;
-  GITypeInfo *ti = NULL;
-  GParamFlags flags;
   const gchar *name;
 
   /* Check, whether we are doing set or get operation. */
@@ -434,28 +430,15 @@ object_property (lua_State *L)
 
   /* Get object instance. */
   gpointer object = lgi_object_2c (L, 1, G_TYPE_OBJECT, FALSE, FALSE);
-  GIPropertyInfo *pi = lgi_gi_info_test (L, 2);
-  if (pi)
-    {
-      ti = g_property_info_get_type (pi);
-      lgi_gi_info_new (L, ti);
-      gtype = lgi_get_gtype (L, ti);
-      flags = g_property_info_get_flags (pi);
-      name = g_base_info_get_name (pi);
-    }
-  else
-    {
-      /* If not gi.info, it must be record with pspec. */
-      GParamSpec *pspec;
-      lgi_type_get_repotype (L, G_TYPE_PARAM, NULL);
-      pspec = lgi_record_2c (L, 2, FALSE, FALSE);
-      gtype = pspec->value_type;
-      flags = pspec->flags;
-      name = pspec->name;
-    }
+  GIPropertyInfo *pi = *(GIPropertyInfo **) luaL_checkudata (L, 2, LGI_GI_INFO);
+  GITypeInfo *ti = g_property_info_get_type (pi);
+  lgi_gi_info_new (L, ti);
+  gtype = lgi_get_gtype (L, ti);
+  name = g_base_info_get_name (pi);
 
   /* Check access control. */
-  if ((flags & (getmode ? G_PARAM_READABLE : G_PARAM_WRITABLE)) == 0)
+  if ((g_property_info_get_flags (pi)
+       & (getmode ? G_PARAM_READABLE : G_PARAM_WRITABLE)) == 0)
     {
       /* Prepare proper error message. */
       object_type (L, G_OBJECT_TYPE (object));
@@ -481,51 +464,6 @@ object_property (lua_State *L)
 
   g_value_unset (&val);
   return vals;
-}
-
-/* Lists all dynamic properties of given object. Lua-side prototype:
-   {name->record(ParamSpec)} = object.properties(objectinstance)
-   record(ParamSpec) = object.properties(objectinstance, name) */
-static int
-object_properties (lua_State *L)
-{
-  GObjectClass *klass;
-  gboolean list = lua_isnoneornil (L, 2);
-
-  klass = G_OBJECT_GET_CLASS (lgi_object_2c (L, 1, G_TYPE_OBJECT,
-					     FALSE, FALSE));
-  lgi_type_get_repotype (L, G_TYPE_PARAM, NULL);
-  g_assert (!lua_isnil (L, -1));
-  if (list)
-    {
-      /* List all properties of the object, store them into the table. */
-      guint n_properties, i;
-      GParamSpec **pspecs;
-
-      lua_newtable (L);
-      pspecs = g_object_class_list_properties (klass, &n_properties);
-      for (i = 0; i < n_properties; ++i)
-	{
-	  lua_pushvalue (L, -2);
-	  lgi_record_2lua (L, pspecs[i], FALSE, 0);
-	  lua_setfield (L, -2, pspecs[i]->name);
-	}
-
-      /* Returned array has to be freed. */
-      g_free (pspecs);
-    }
-  else
-    {
-      /* Find specified property. */
-      GParamSpec *pspec =
-	g_object_class_find_property (klass, lua_tostring (L, 2));
-      if (pspec != NULL)
-	lgi_record_2lua (L, pspec, FALSE, 0);
-      else
-	lua_pushnil (L);
-    }
-
-  return 1;
 }
 
 /* Returns table of interfaces implemented by given compound, exports
@@ -616,7 +554,6 @@ static const luaL_Reg object_api_reg[] = {
   { "typeof", object_typeof },
   { "field", object_field },
   { "property", object_property },
-  { "properties", object_properties },
   { "interfaces", object_interfaces },
   { "env", object_env },
   { "connect", object_connect },
