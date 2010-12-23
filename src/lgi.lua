@@ -781,9 +781,11 @@ function Object:_element(instance, name)
 
    -- List all interfaces implemented by this object and try whether
    -- they can handle specified _element request.
-   local interfaces = core.object.interfaces(instance)
+   local _, gtype = core.object.typeof(instance)
+   local interfaces = repo.GObject.type_interfaces(gtype)
    for i = 1, #interfaces do
-      local iface = repo[interfaces[i].namespace][interfaces[i].name]
+      local info = gi[core.gtype(interfaces[i])]
+      local iface = repo[info.namespace][info.name]
       element = iface and iface:_element(instance, name)
       if element then return element end
    end
