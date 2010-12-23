@@ -689,9 +689,11 @@ function component_mt.namespace:__index(symbol)
       val, category = loader(self, info)
 
       -- Cache the symbol in specified category in the namespace.
-      local cat = rawget(self, category) or {}
-      self[category] = cat
-      cat[symbol] = val
+      if val then
+	 local cat = rawget(self, category) or {}
+	 self[category] = cat
+	 cat[symbol] = val
+      end
    end
    return val
 end
