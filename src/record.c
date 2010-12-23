@@ -355,10 +355,22 @@ record_field (lua_State *L)
   return lgi_marshal_field (L, record->addr, getmode, 1, 2, 3);
 }
 
+/* Casts given record to another record type.  Lua prototype:
+   res = core.record.cast(recordinstance, targettypetable) */
+static int
+record_cast (lua_State *L)
+{
+  Record *record = record_get (L, 1);
+  luaL_checktype (L, 2, LUA_TTABLE);
+  lgi_record_2lua (L, record->addr, FALSE, 1);
+  return 1;
+}
+
 static const struct luaL_Reg record_api_reg[] = {
   { "new", record_new },
   { "typeof", record_typeof },
   { "field", record_field },
+  { "cast", record_cast },
   { NULL, NULL }
 };
 
