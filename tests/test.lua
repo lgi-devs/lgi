@@ -1322,6 +1322,28 @@ function gireg.obj_prop_list()
    check(not pcall(function() o.list = R.TestBoxed() end))
 end
 
+function gireg.obj_prop_dynamic()
+   local R = lgi.Regress
+   local o = R.TestObj()
+
+   -- Remove static property information, force lgi to use dynamic
+   -- GLib property system.
+   local old_prop = R.TestObj.int
+   R.TestObj._properties.int = nil
+   check(R.TestObj.int == nil)
+
+   check(o.int == 0)
+   o.int = 3
+   check(o.int == 3)
+   check(not pcall(function() o.int = 'string' end))
+   check(not pcall(function() o.int = {} end))
+   check(not pcall(function() o.int = true end))
+   check(not pcall(function() o.int = function() end end))
+
+   -- Restore TestObj to work normally.
+   R.TestObj._properties.int = old_prop
+end
+
 function gireg.obj_subobj()
    local R = lgi.Regress
    local o = R.TestSubObj()
