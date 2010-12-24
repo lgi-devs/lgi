@@ -102,10 +102,10 @@ object_get (lua_State *L, int narg)
   return obj;
 }
 
-static int
-object_gc (lua_State *L)
+/* Removes one reference from the object. */
+static void
+object_unref (gpointer obj)
 {
-  gpointer obj = object_get (L, 1);
   GType gtype = G_TYPE_FROM_INSTANCE (obj);
   if (G_TYPE_IS_OBJECT (gtype))
     g_object_unref (obj);
@@ -123,7 +123,12 @@ object_gc (lua_State *L)
 	  g_base_info_unref (info);
 	}
     }
+}
 
+static int
+object_gc (lua_State *L)
+{
+  object_unref (object_get (L, 1));
   return 0;
 }
 
@@ -212,6 +217,12 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
     {
       /* Use the object from the cache. */
       lua_replace (L, -2);
+
+      /* If the object was already owned, remove one reference,
+	 because our proxy always keeps only one reference, which we
+	 already have. */
+      if (own)
+	object_unref (obj);
       return;
     }
 
