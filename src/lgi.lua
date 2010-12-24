@@ -444,9 +444,9 @@ function component_mt.class:_access_element(instance, name, element, ...)
       elseif element.is_signal then
 	 return access_signal(instance, element, ...)
       elseif element.is_vfunc then
-	 local typetable, _, typestruct = core.object.typeof(
-	    instance, element.container.gtype)
-	 return core.record.field(typestruct, typetable._type[element.name])
+	 local typestruct = core.object.query(instance, 'class',
+					      element.container.gtype)
+	 return core.record.field(typestruct, self._type[element.name])
       end
    end
    return default_access_element(self, instance, name, element, ...)
@@ -781,8 +781,8 @@ function Object:_element(instance, name)
 
    -- List all interfaces implemented by this object and try whether
    -- they can handle specified _element request.
-   local _, gtype = core.object.typeof(instance)
-   local interfaces = repo.GObject.type_interfaces(gtype)
+   local interfaces = repo.GObject.type_interfaces(
+      core.object.query(instance, 'gtype'))
    for i = 1, #interfaces do
       local info = gi[core.gtype(interfaces[i])]
       local iface = repo[info.namespace][info.name]
@@ -792,9 +792,8 @@ function Object:_element(instance, name)
 
    -- Element not found in the repo (typelib), try whether dynamic
    -- property of the specified name exists.
-   local _, _, class_struct = core.object.typeof(instance)
-   return core.record.cast(class_struct, Object._type):find_property(
-      name:gsub('_', '%-'))
+   return core.record.cast(core.object.query(instance, 'class'),
+			   Object._type):find_property(name:gsub('_', '%-'))
 end
 
 -- Custom access_element, reacts on dynamic properties
@@ -812,9 +811,8 @@ function Object:_access_element(instance, name, element, ...)
    elseif gi.isinfo(element) and element.is_property then
       -- Process property using GI.
       return core.object.property(instance, element, ...)
-   elseif core.record.typeof(element) == repo.GObject.ParamSpec then
+   elseif core.record.query(element, 'repo') == repo.GObject.ParamSpec then
       -- Process property using GLib.
-
       local val = repo.GObject.Value(element.value_type)
       if select('#', ...) > 0 then
 	 val.data = ...

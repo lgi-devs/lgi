@@ -325,14 +325,29 @@ record_new (lua_State *L)
   return 1;
 }
 
-/* Checks whether given value is record. */
+static const char* const query_modes[] = { "gtype", "repo", NULL };
+
+/* Returns specific information mode about given record.  Lua prototype:
+   res = record.query(instance, mode)
+   Supported 'mode' strings are:
+
+   'gtype': retrns real gtype of this instance, G_TYPE_INVALID when it
+            is not boxed.
+   'repo': returns repotable of this instance. */
 static int
-record_typeof (lua_State *L)
+record_query (lua_State *L)
 {
   Record *record = record_check (L, 1);
   if (!record)
     return 0;
   lua_getfenv (L, 1);
+  if (luaL_checkoption (L, 2, query_modes[0], query_modes) == 0)
+    {
+      if (lua_isnil (L, -1))
+	return 0;
+
+      lua_getfield (L, -1, "_gtype");
+    }
   return 1;
 }
 
@@ -368,7 +383,7 @@ record_cast (lua_State *L)
 
 static const struct luaL_Reg record_api_reg[] = {
   { "new", record_new },
-  { "typeof", record_typeof },
+  { "query", record_query },
   { "field", record_field },
   { "cast", record_cast },
   { NULL, NULL }

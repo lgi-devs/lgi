@@ -372,27 +372,42 @@ object_new (lua_State *L)
   return 1;
 }
 
-/* Checks whether given value is object and returns its real gtype,
-   associated type table and type struct record.  Lua-side prototype:
-   typetable, gtype, typestruct =
-   object.typeof(objectinstance[, iface-gtype]) */
+static const char *const query_mode[] = { "gtype", "repo", "class", NULL };
+
+/* Queries for assorted instance properties. Lua-side prototype:
+   res = object.query(objectinstance, mode [, iface-gtype])
+   Supported mode strings are:
+   'gtype': returns real gtype of this instance.
+   'repo': returns repotable for this instance.
+   'class': returns class struct record of this instance. */
 static int
-object_typeof (lua_State *L)
+object_query (lua_State *L)
 {
   gpointer object = object_check (L, 1);
   if (object)
     {
-      GType gtype = luaL_optnumber (L, 2, G_TYPE_FROM_INSTANCE (object));
-      if (object_type (L, gtype) != G_TYPE_INVALID)
+      int mode = luaL_checkoption (L, 2, query_mode[0], query_mode);
+      GType gtype = luaL_optnumber (L, 3, G_TYPE_FROM_INSTANCE (object));
+      if (mode == 0)
 	{
-	  gpointer typestruct;
 	  lua_pushnumber (L, gtype);
-	  typestruct = !G_TYPE_IS_INTERFACE (gtype)
-	    ? G_TYPE_INSTANCE_GET_CLASS (object, gtype, GTypeClass)
-	    : G_TYPE_INSTANCE_GET_INTERFACE (object, gtype, GTypeClass);
-	  lua_getfield (L, -2, "_type");
-	  lgi_record_2lua (L, typestruct, FALSE, 0);
-	  return 3;
+	  return 1;
+	}
+      else
+	{
+	  /* Get repotype structure. */
+	  if (object_type (L, gtype) != G_TYPE_INVALID)
+	    {
+	      if (mode == 2)
+		{
+		  gpointer typestruct = !G_TYPE_IS_INTERFACE (gtype)
+		    ? G_TYPE_INSTANCE_GET_CLASS (object, gtype, GTypeClass)
+		    : G_TYPE_INSTANCE_GET_INTERFACE (object, gtype, GTypeClass);
+		  lua_getfield (L, -1, "_type");
+		  lgi_record_2lua (L, typestruct, FALSE, 0);
+		}
+	      return 1;
+	    }
 	}
     }
   return 0;
@@ -533,7 +548,7 @@ object_connect (lua_State *L)
 /* Object API table. */
 static const luaL_Reg object_api_reg[] = {
   { "new", object_new },
-  { "typeof", object_typeof },
+  { "query", object_query },
   { "field", object_field },
   { "property", object_property },
   { "env", object_env },
