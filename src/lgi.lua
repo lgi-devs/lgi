@@ -770,6 +770,15 @@ for gtype_name, gi_name in pairs {
    repo[gtype] = gi_type
 end
 
+-- Add symbolic names for GTypes.
+repo.GObject.Type = {}
+for num, name in ipairs { 'NONE', 'INTERFACE', 'CHAR', 'UCHAR', 'BOOLEAN',
+			  'INT', 'UINT', 'LONG', 'ULONG', 'INT64', 'UINT64',
+			  'ENUM', 'FLAGS', 'FLOAT', 'DOUBLE', 'STRING',
+			  'POINTER', 'BOXED', 'PARAM', 'OBJECT', 'VARIANT' } do
+   repo.GObject.Type[name] = core.gtype(num * 4)
+end
+
 -- GObject overrides.
 local Object = repo.GObject.Object
 
