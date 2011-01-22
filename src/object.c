@@ -398,7 +398,9 @@ object_query (lua_State *L)
   if (object)
     {
       int mode = luaL_checkoption (L, 2, query_mode[0], query_mode);
-      GType gtype = luaL_optnumber (L, 3, G_TYPE_FROM_INSTANCE (object));
+      GType gtype = lgi_type_get_gtype (L, 3);
+      if (gtype == G_TYPE_INVALID)
+	gtype = G_TYPE_FROM_INSTANCE (object);
       if (mode == 0)
 	{
 	  lua_pushnumber (L, gtype);
