@@ -841,14 +841,27 @@ lgi_marshal_arg_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 	break;
       }
 
-      /* We have no distinction between filename and utf8, Lua does
-	 not enforce any encoding on the strings. */
     case GI_TYPE_TAG_UTF8:
     case GI_TYPE_TAG_FILENAME:
       {
 	const gchar *str = (optional && lua_isnoneornil (L, narg)
 			    ? NULL : luaL_checkstring (L, narg));
-	if (transfer == GI_TRANSFER_EVERYTHING)
+	if (tag == GI_TYPE_TAG_FILENAME)
+	  {
+	    /* Convert from UTF-8 to filename encoding. */
+	    if (str)
+	      {
+		str = g_filename_from_utf8 (str, -1, NULL, NULL, NULL);
+		if (transfer != GI_TRANSFER_EVERYTHING)
+		  {
+		    /* Create temporary object on the stack which will
+		       destroy the allocated temporary filename. */
+		    *lgi_guard_create (L, g_free) = (gpointer) str;
+		    nret = 1;
+		  }
+	      }
+	  }
+	else if (transfer == GI_TRANSFER_EVERYTHING)
 	  str = g_strdup (str);
 	if (use_pointer)
 	  val->v_pointer = (gchar *)str;
@@ -1252,7 +1265,14 @@ lgi_marshal_arg_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
     case GI_TYPE_TAG_FILENAME:
       {
 	gchar *str = use_pointer ? val->v_pointer : val->v_string;
-	lua_pushstring (L, str);
+	if (tag == GI_TYPE_TAG_FILENAME && str != NULL)
+	  {
+	    gchar *utf8 = g_filename_to_utf8 (str, -1, NULL, NULL, NULL);
+	    lua_pushstring (L, utf8);
+	    g_free (utf8);
+	  }
+	else
+	  lua_pushstring (L, str);
 	if (transfer == GI_TRANSFER_EVERYTHING)
 	  g_free (str);
 	break;
