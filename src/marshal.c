@@ -1109,7 +1109,8 @@ lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 	}
       lua_pop (L, 1);
     }
-  else if (fundamental_type == G_TYPE_OBJECT)
+  else if (fundamental_type == G_TYPE_OBJECT
+	   || fundamental_type == G_TYPE_INTERFACE)
     {
       g_value_set_object (val, lgi_object_2c (L, narg, type, TRUE, FALSE));
       return;
@@ -1470,7 +1471,8 @@ lgi_marshal_val_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 	}
       lua_pop (L, 1);
     }
-  else if (fundamental_type == G_TYPE_OBJECT)
+  else if (fundamental_type == G_TYPE_OBJECT
+	   || fundamental_type == G_TYPE_INTERFACE)
     {
       lgi_object_2lua (L, g_value_dup_object (val), TRUE);
       return;
