@@ -14,13 +14,18 @@ def options(opt):
 def configure(conf):
     import Options
     conf.check_tool('compiler_cc')
-    conf.check_cfg(package='lua5.1', uselib_store='LUA',
-                   mandatory=True,
-                   args='--cflags --libs')
-    conf.check_cfg(package='lua5.1', uselib_store='LUA',
-                   msg='Checking for Lua package directories',
-                   okmsg='ok',
-                   variables=['INSTALL_LMOD', 'INSTALL_CMOD'])
+    lua_found = False
+    for lua_pkg in ['lua5.1', 'lua']:
+        if conf.check_cfg(package=lua_pkg, uselib_store='LUA',
+                          args='--cflags --libs', mandatory=False) is not None:
+            conf.check_cfg(package=lua_pkg, uselib_store='LUA',
+                           msg='Checking for Lua package directories',
+                           okmsg='ok', mandatory=True,
+                           variables=['INSTALL_LMOD', 'INSTALL_CMOD'])
+            lua_found = True
+            break
+    if not lua_found:
+        conf.fatal("Lua pkgconfig package not found.")
     conf.check_cfg(package='gobject-introspection-1.0', uselib_store='GI',
                    mandatory=True,
                    args='gobject-introspection-1.0 >= 0.9.7 --cflags --libs',
