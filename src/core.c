@@ -9,6 +9,7 @@
  */
 
 #include <string.h>
+#include <locale.h>
 #include "lgi.h"
 
 #ifndef NDEBUG
@@ -373,6 +374,7 @@ luaopen_lgi__core (lua_State* L)
   /* Early GLib initializations. Make sure that following G_TYPEs are
      already initialized, because GIRepo does not initialize them (it
      does not know that they are boxed). */
+  setlocale (LC_ALL, "");
   g_type_init ();
   volatile GType unused;
   unused = G_TYPE_DATE;
