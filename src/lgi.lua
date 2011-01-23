@@ -307,7 +307,20 @@ local function default_access(typetable, instance, name, ...)
    -- Try custom override first.
    if element == nil then
       local func = typetable:_element(instance, '_custom_' .. name)
-      if func then return func(typetable, instance, name, ...) end
+      if func then
+	 -- If custom element is a table, assume that this table
+	 -- contains 'read' and 'write' methods.  Dispatch to them,
+	 -- and error ou if they are missing.
+	 if type(func) == 'table' then
+	    local mode = select('#', ...) == 0 and 'read' or 'write'
+	    if not func[mode] then
+	       error(("%s: cannot %s `%s'"):format(typetable._name, mode,
+						   name), 3)
+	    end
+	    func = func[mode]
+	 end
+	 return func(instance, ...)
+      end
    end
 
    -- Forward to access_element implementation.
@@ -858,31 +871,31 @@ end
 Object._signals = {}
 local _ = Object._vfuncs.on_notify
 Object._vfuncs.on_notify = nil
-Object._custom = {}
-function Object._custom.on_notify(typetable, instance, name, ...)
-   -- Borrow signal format from GObject.ObjectClass.notify.
-   local info = gi.GObject.ObjectClass.fields.notify.typeinfo.interface
-   if select('#', ...) > 0 then
-      -- Assignment means 'connect signal for all properties'.
-      core.object.connect(instance, info.name, info, get_notifier(...))
-   else
-      -- Reading yields table with signal operations.
-      local pad = {}
-      function pad:connect(target, property)
-	 return core.object.connect(instance, info.name, info,
-				    get_notifier(target),
-				    property:gsub('_', '%-'))
-      end
-
-      -- Add metatable allowing connection on specified detail.
-      -- Detail is always specified as a property name for this signal.
-      local padmeta = {}
-      function padmeta:__newindex(property, target)
-	 core.object.connect(instance, info.name, info,
-			     get_notifier(target), property:gsub('_', '%-'))
-      end
-      return setmetatable(pad, padmeta)
+Object._custom = { on_notify= {} }
+-- Borrow signal format from GObject.ObjectClass.notify.
+local on_notify_info = gi.GObject.ObjectClass.fields.notify.typeinfo.interface
+function Object._custom.on_notify.write(instance, handler)
+   -- Assignment means 'connect signal for all properties'.
+   core.object.connect(instance, on_notify_info.name, on_notify_info,
+		       get_notifier(handler))
+end
+function Object._custom.on_notify.read(instance)
+   -- Reading yields table with signal operations.
+   local pad = {}
+   function pad:connect(target, property)
+      return core.object.connect(instance, on_notify_info.name, on_notify_info,
+				 get_notifier(target),
+				 property:gsub('_', '%-'))
    end
+
+   -- Add metatable allowing connection on specified detail.  Detail
+   -- is always specified as a property name for this signal.
+   local padmeta = {}
+   function padmeta:__newindex(property, target)
+      core.object.connect(instance, on_notify_info.name, on_notify_info,
+			  get_notifier(target), property:gsub('_', '%-'))
+   end
+   return setmetatable(pad, padmeta)
 end
 
 -- Closure modifications.  All fields and most methods of closure are
@@ -918,38 +931,36 @@ Value._fields = nil
 
 -- Implements pseudo-properties 'g_type' and 'data', for safe
 -- read/write access to value's type and contents.
-Value._custom = {}
-function Value._custom.g_type(_, instance, _, ...)
+Value._custom = { g_type = {} }
+function Value._custom.g_type.read(instance)
+   -- Reading existing type is simple access to value's gtype field.
+   return core.record.field(instance, value_field_gtype)
+end
+function Value._custom.g_type.write(instance, newtype)
    local gtype = core.record.field(instance, value_field_gtype)
-   if select('#', ...) == 0 then
-      -- Reading existing type is simple access to value's gtype field.
-      return gtype
-   else
-      if gtype then
-	 if ... then
-	    -- Try converting old value to new one.
-	    local dest = core.record.new(value_info)
-	    Value.init(dest, ...)
-	    if not Value.transform(instance, dest) then
-	       error(("GObject.Value: cannot convert `%s' to `%s'"):format(
-			gtype, core.record.field(dest, value_field_gtype)))
-	    end
-	    Value.unset(instance)
-	    Value.init(instance, ...)
-	    Value.copy(dest, instance)
-	 else
-	    Value.unset(instance)
+   if gtype then
+      if newtype then
+	 -- Try converting old value to new one.
+	 local dest = core.record.new(value_info)
+	 Value.init(dest, newtype)
+	 if not Value.transform(instance, dest) then
+	    error(("GObject.Value: cannot convert `%s' to `%s'"):format(
+		     core.record.field(dest, value_field_gtype), gtype))
 	 end
-      elseif ... then
-	 Value.init(instance, ...)
+	 Value.unset(instance)
+	 Value.init(instance, newtype)
+	 Value.copy(dest, instance)
+      else
+	 Value.unset(instance)
       end
+   elseif newtype then
+      -- No value was set and some is requested, so set it.
+      Value.init(instance, newtype)
    end
 end
 
-function Value._custom.data(_, instance, _, ...)
-   -- Forward to access value directly.
-   return core.value(instance, ...)
-end
+-- Forward to access value directly.
+Value._custom.data = core.value
 
 -- Implement custom 'constructor', taking optionally two values
 -- (g_type and data).  The reason why it is overriden is that the
