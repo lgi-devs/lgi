@@ -183,6 +183,63 @@ function Gtk.TreeView._custom.columns.write(treeview, columns)
    for i = 1, #columns do Gtk.TreeView.append_column(treeview, columns[i]) end
 end
 
+-------------------- Gtk.Dialog
+
+Gtk.Dialog._custom = { buttons = {} }
+function Gtk.Dialog._custom.buttons.write(dialog, buttons)
+   for label, response in pairs(buttons) do
+      Gtk.Dialog.add_button(dialog, label, response)
+   end
+end
+
+-------------------- Gtk.FileChooser
+
+Gtk.FileChooser._custom = { file = {}, filename = {} }
+function Gtk.FileChooser._custom.file.read(filechooser)
+   return Gtk.FileChooser.get_file(filechooser)
+end
+
+function Gtk.FileChooser._custom.file.write(filechooser, file)
+   return Gtk.FileChooser.set_file(filechooser, file)
+end
+
+function Gtk.FileChooser._custom.filename.read(filechooser)
+   return Gtk.FileChooser.get_filename(filechooser)
+end
+
+function Gtk.FileChooser._custom.filename.write(filechooser, filename)
+   return Gtk.FileChooser.set_filename(filechooser, filename)
+end
+
+-------------------- Gtk.FileFilter
+
+Gtk.FileFilter._custom = { name = {} , pattern = {}, mime_type = {} }
+function Gtk.FileFilter._custom.name.read(filefilter)
+   return Gtk.FileFilter.get_name(filefilter)
+end
+
+function Gtk.FileFilter._custom.name.write(filefilter, name)
+   return Gtk.FileFilter.set_name(filefilter, name)
+end
+
+local function filefilter_add(filefilter, item, func)
+   if type(item) == 'table' then
+      for i = 1, #item do
+	 func(filefilter, item[i])
+      end
+   else
+      func(filefilter, item)
+   end
+end
+
+function Gtk.FileFilter._custom.pattern.write(filefilter, pattern)
+   filefilter_add(filefilter, pattern, Gtk.FileFilter.add_pattern)
+end
+
+function Gtk.FileFilter._custom.mime_type.write(filefilter, mime_type)
+   filefilter_add(filefilter, mime_type, Gtk.FileFilter.add_mime_type)
+end
+
 -------------------- Gtk.Builder
 
 local builder_objects_mt = {}
@@ -194,7 +251,7 @@ function builder_objects_mt:__index(name)
    end
 end
 
-Gtk.Builder._custom = { objects = {}, file = {}, string = {} }
+Gtk.Builder._custom = { objects = {}, file = {}, string = {}, connect = {} }
 function Gtk.Builder._custom.objects.read(builder)
    -- Get all objects and add metatable for resolving by name.
    local objects = builder:get_objects()
@@ -216,6 +273,16 @@ end
 
 function Gtk.Builder._custom.string.write(builder, vals)
    builder_add(builder, vals, Gtk.Builder.add_from_string)
+end
+
+function Gtk.Builder._custom.connect.write(builder, target)
+   Gtk.Builder.connect_signals_full(
+      builder, function(_, object, signal, handler)
+		  object['on_' .. signal:gsub('%-', '_')] =
+		  function(_, ...)
+		     return target[handler](target, ...)
+		  end
+	    end)
 end
 
 -- Initialize GTK.
