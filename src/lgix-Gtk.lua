@@ -21,7 +21,7 @@ function Gtk.Container:child_set(child, properties)
    for name, value in pairs(properties) do
       -- Ignore non-string names.
       if type(name) == 'string' then
-	 Gtk.Container.child_set_property(self, child, 
+	 Gtk.Container.child_set_property(self, child,
 					  name:gsub('_', '%-'), value);
       end
    end
@@ -80,49 +80,107 @@ local function container_add_child(container, child_specs)
    end
 end
 
-local container_access_element = Gtk.Container._access_element
-function Gtk.Container:_access_element(container, name, element, ...)
-   if name == 'children' then
-      if select('#', ...) == 0 then
-	 -- Reading yields the table of all children.
-	 return self.get_children(container)
-      else
-	 -- Writing adds new children, optionally with specified child
-	 -- properties.
-	 local arg = ...
-	 for i = 1, #arg do container_add_child(container, arg[i]) end
-	 return
-      end
-   elseif name == 'child' then
-      if select('#', ...) == 0 then
-	 -- Reading generates table used for getting/setting child
-	 -- properties on specified child.
-	 return setmetatable({ _container = container },
-			     container_prop_children_mt)
-      else
-	 -- Writing adds new child.
-	 container_add_child(container, ...)
-      end
-   end
+Gtk.Container._custom = { children = {}, child = {} }
+-- Reading yields the table of all children.
+Gtk.Container._custom.children.read = Gtk.Container.get_children
 
-   return container_access_element(self, container, name, element, ...)
+-- Writing adds new children, optionally with specified child
+-- properties.
+function Gtk.Container._custom.children.write(container, children)
+   for i = 1, #children do container_add_child(container, children[i]) end
 end
 
--------------------- Gtk.CellLayout
+-- Reading generates table used for getting/setting child properties
+-- on specified child.
+function Gtk.Container._custom.child.read(container)
+   return setmetatable({ _container = container }, container_prop_children_mt)
+end
 
-local celllayout_access_element = Gtk.CellLayout._access_element
-function Gtk.CellLayout:_access_element(layout, name, element, ...)
-   if name == 'attributes' then
-      assert(select('#', ...) == 1, "Gtk.CellLayout: '" .. name .. 
-	  "' is not readable")
-      self.clear(column)
-      for attr, column_number in pairs(...) do
-	 if type(attr) == 'userdata' then attr = attr.name end
-	 self.add_attribute(column, core.object.env(column).cell, attr,
-			    column_number)
-      end
+-- Writing adds new child.
+Gtk.Container._custom.child.write = container_add_child
+
+-------------------- Gtk.TreeModel
+
+local treemodel_row_mt = {}
+function treemodel_row_mt:__index(column)
+   return Gtk.TreeModel.get_value(self._model, self._iter, column).data
+end
+
+local treemodel_values_mt = {}
+function treemodel_values_mt:__index(iter)
+   if core.record.query(iter, 'repo') == Gtk.TreePath then
+      local ok, real_iter = Gtk.TreeModel.get_iter(self._model, iter)
+      if not ok then return nil end
+      iter = real_iter
+   elseif type(iter) == 'string' then
+      local ok, real_iter = Gtk.TreeModel.get_iter_from_string(
+	 self._model, iter)
+      if not ok then return nil end
+      iter = real_iter
    end
-   return celllaout_access_element(layout, name, element, ...)
+   return setmetatable({ _model = self._model, _iter = iter }, self._row_mt)
+end
+
+Gtk.TreeModel._custom = { columns = {}, values = {} }
+function Gtk.TreeModel._custom.columns.read(model)
+   return model:get_n_columns()
+end
+
+function Gtk.TreeModel._custom.values.read(model)
+   return setmetatable({ _model = model, _row_mt = treemodel_row_mt },
+		       treemodel_values_mt)
+end
+
+-------------------- Gtk.ListStore
+
+local liststore_row_mt = { __index = treemodel_row_mt.__index }
+function liststore_row_mt:__newindex(column, val)
+   local gtype = Gtk.TreeModel.get_column_type(self._model, column)
+   Gtk.ListStore.set_value(self._model, self._iter, column,
+			   GObject.Value(gtype, val))
+end
+
+local liststore_values_mt = { __index = treemodel_values_mt.__index }
+function liststore_values_mt:__newindex(iter, vals)
+   local columns, values = {}, {}
+   for i = 1, #vals do
+      local gtype = Gtk.TreeModel.get_column_type(self._model, i - 1)
+      values[i] = GObject.Value(gtype, vals[i])
+      columns[i] = i - 1
+   end
+   Gtk.ListStore.set(self._model, iter, columns, values)
+end
+
+Gtk.ListStore._custom = { values = {} }
+function Gtk.ListStore._custom.values.read(model)
+   return setmetatable({ _model = model, _row_mt = liststore_row_mt },
+		       liststore_values_mt)
+end
+
+-------------------- Gtk.TreeViewColumn
+
+function Gtk.TreeViewColumn:set_attributes(cell, attrs)
+   for colnum, attr in pairs(attrs) do
+      if type(attr) ~= 'string' then attr = attr.name end
+      Gtk.TreeViewColumn.add_attribute(self, cell, attr, colnum)
+   end
+end
+
+Gtk.TreeViewColumn._custom = { cell = {} }
+function Gtk.TreeViewColumn._custom.cell.write(column, cell)
+   local pack = cell.pack == 'end' and Gtk.TreeViewColumn.pack_start
+      or Gtk.TreeViewColumn.pack_end
+   pack(column, cell[1], cell.expand == nil and true or cell.expand)
+   if cell[2] then
+      Gtk.TreeViewColumn.set_attributes(column, cell[1], cell[2])
+   end
+end
+
+-------------------- Gtk.TreeView
+
+Gtk.TreeView._custom = { columns = {} }
+function Gtk.TreeView._custom.columns.write(treeview, columns)
+   for i = 1, #columns do Gtk.TreeView.append_column(treeview, columns[i]) end
 end
 
 -------------------- Gtk.Builder
@@ -135,33 +193,29 @@ function builder_objects_mt:__index(name)
       return object
    end
 end
-local builder_access_element = Gtk.Builder._access_element
-function Gtk.Builder:_access_element(builder, name, element, ...)
-   -- Detect 'objects' property request.
-   if name == 'objects' then
-      assert(select('#', ...) == 0, "Gtk.Builder: 'objects' is not writable")
 
-      -- Get all objects and add metatable for resolving by name.
-      local objects = builder:get_objects()
-      objects._builder = builder
-      return setmetatable(objects, builder_objects_mt)
-   elseif name == 'file' or name == 'string' then
-      -- Load all specified files.
-      assert(select('#', ...) == 1, "Gtk.Builder: '" .. name ..
-	  "' is not readable")
-      local func = (name == 'file' and self.add_from_file
-		    or self.add_from_string)
-      local arg = ...
-      if type(arg) == table then
-	 for i = 1, #arg do func(builder, arg[i]) end
-      else
-	 func(builder, arg)
-      end
-      return
+Gtk.Builder._custom = { objects = {}, file = {}, string = {} }
+function Gtk.Builder._custom.objects.read(builder)
+   -- Get all objects and add metatable for resolving by name.
+   local objects = builder:get_objects()
+   objects._builder = builder
+   return setmetatable(objects, builder_objects_mt)
+end
+
+local function builder_add(builder, vals, func)
+   if type(vals) == 'table' then
+      for i = 1, #vals do assert(func(builder, vals[i])) end
+   else
+      assert(func(builder, vals))
    end
+end
 
-   -- Forward to original method.
-   return builder_access_element(self, builder, name, element, ...)
+function Gtk.Builder._custom.file.write(builder, vals)
+   builder_add(builder, vals, Gtk.Builder.add_from_file)
+end
+
+function Gtk.Builder._custom.string.write(builder, vals)
+   builder_add(builder, vals, Gtk.Builder.add_from_string)
 end
 
 -- Initialize GTK.
