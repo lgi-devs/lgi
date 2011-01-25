@@ -465,26 +465,6 @@ function component_mt.class:_access_element(instance, name, element, ...)
    return default_access_element(self, instance, name, element, ...)
 end
 
--- If member of interface cannot be found normally, try to look it up
--- in parent namespace too; this allows to overcome IMHO gir-compiler
--- flaw, causing that we can see e.g. Gio.file_new_for_path() instead
--- of Gio.File.new_for_path().
-function component_mt.interface:_element(instance, symbol)
-   local val = get_element(self, instance, symbol)
-   if not val then
-      -- Convert name from CamelCase to underscore_delimited form.
-      local ns_name, iface_name = self._name:match('^([%w_]+)%.([%w_]+)$')
-      local method_name = {}
-      for part in iface_name:gmatch('[%u%d][%l%d]*') do
-	 method_name[#method_name + 1] = part:lower()
-      end
-      method_name[#method_name + 1] = symbol
-      val = repo[ns_name][table.concat(method_name, '_')]
-      self[symbol] = val
-   end
-   return val
-end
-
 -- Create structure instance and initialize it with given fields.
 function component_mt.record:__call(fields)
    -- Create the structure instance.
