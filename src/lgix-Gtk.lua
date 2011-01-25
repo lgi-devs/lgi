@@ -17,12 +17,15 @@ local GObject = lgi.GObject
 -------------------- Gtk.Container
 function Gtk.Container:child_set(child, properties)
    -- Assign a bunch (table) of child properties at once.
+   local class = core.object.query(self, 'class', Gtk.Container)
    Gtk.Widget.freeze_child_notify(child)
    for name, value in pairs(properties) do
       -- Ignore non-string names.
       if type(name) == 'string' then
-	 Gtk.Container.child_set_property(self, child,
-					  name:gsub('_', '%-'), value);
+	 local pspec = class:find_child_property(name:gsub('_', '%-'))
+	 Gtk.Container.child_set_property(
+	    self, child, name:gsub('_', '%-'),
+	    GObject.Value(pspec.value_type, value));
       end
    end
    Gtk.Widget.thaw_child_notify(child)
