@@ -27,6 +27,12 @@ assert(gi.require ('GObject', '2.0'))
 -- Create lgi table, containing the module.
 local lgi = {}
 
+-- Add simple flag-checking function, avoid compatibility hassle with
+-- importing bitlib just because of this simple operation.
+function lgi.has_bit(value, flag)
+   return value % (2 * flag) >= flag
+end
+
 -- Map buffer creation from core to Lgi-style 'C++ constructor' convention.
 local buffer_mt = {}
 function buffer_mt:__call(arg) return core.buffer_new(arg) end
@@ -376,7 +382,7 @@ function component_mt.bitflags:__index(value)
    if type(value) ~= 'number' then return end
    local t = {}
    for name, flag in pairs(self) do
-      if type(flag) == 'number' and value % (2 * flag) >= flag then
+      if type(flag) == 'number' and lgi.has_bit(value, flag) then
 	 t[name] = flag
       end
    end
