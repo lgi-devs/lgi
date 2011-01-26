@@ -16,7 +16,6 @@ local GObject = lgi.GObject
 
 -------------------- Gtk.Container
 function Gtk.Container:child_set(child, properties)
-   -- Assign a bunch (table) of child properties at once.
    local class = core.object.query(self, 'class', Gtk.Container)
    Gtk.Widget.freeze_child_notify(child)
    for name, value in pairs(properties) do
@@ -85,22 +84,22 @@ end
 
 Gtk.Container._custom = { children = {}, child = {} }
 -- Reading yields the table of all children.
-Gtk.Container._custom.children.read = Gtk.Container.get_children
+Gtk.Container._custom.children.get = Gtk.Container.get_children
 
 -- Writing adds new children, optionally with specified child
 -- properties.
-function Gtk.Container._custom.children.write(container, children)
+function Gtk.Container._custom.children.set(container, children)
    for i = 1, #children do container_add_child(container, children[i]) end
 end
 
 -- Reading generates table used for getting/setting child properties
 -- on specified child.
-function Gtk.Container._custom.child.read(container)
+function Gtk.Container._custom.child.get(container)
    return setmetatable({ _container = container }, container_prop_children_mt)
 end
 
 -- Writing adds new child.
-Gtk.Container._custom.child.write = container_add_child
+Gtk.Container._custom.child.set = container_add_child
 
 -------------------- Gtk.TreeModel
 
@@ -124,12 +123,8 @@ function treemodel_values_mt:__index(iter)
    return setmetatable({ _model = self._model, _iter = iter }, self._row_mt)
 end
 
-Gtk.TreeModel._custom = { columns = {}, values = {} }
-function Gtk.TreeModel._custom.columns.read(model)
-   return model:get_n_columns()
-end
-
-function Gtk.TreeModel._custom.values.read(model)
+Gtk.TreeModel._custom = { values = {} }
+function Gtk.TreeModel._custom.values.get(model)
    return setmetatable({ _model = model, _row_mt = treemodel_row_mt },
 		       treemodel_values_mt)
 end
@@ -155,7 +150,7 @@ function liststore_values_mt:__newindex(iter, vals)
 end
 
 Gtk.ListStore._custom = { values = {} }
-function Gtk.ListStore._custom.values.read(model)
+function Gtk.ListStore._custom.values.get(model)
    return setmetatable({ _model = model, _row_mt = liststore_row_mt },
 		       liststore_values_mt)
 end
@@ -170,7 +165,7 @@ function Gtk.TreeViewColumn:set_attributes(cell, attrs)
 end
 
 Gtk.TreeViewColumn._custom = { cell = {} }
-function Gtk.TreeViewColumn._custom.cell.write(column, cell)
+function Gtk.TreeViewColumn._custom.cell.set(column, cell)
    local pack = cell.pack == 'end' and Gtk.TreeViewColumn.pack_start
       or Gtk.TreeViewColumn.pack_end
    pack(column, cell[1], cell.expand == nil and true or cell.expand)
@@ -182,14 +177,14 @@ end
 -------------------- Gtk.TreeView
 
 Gtk.TreeView._custom = { columns = {} }
-function Gtk.TreeView._custom.columns.write(treeview, columns)
+function Gtk.TreeView._custom.columns.set(treeview, columns)
    for i = 1, #columns do Gtk.TreeView.append_column(treeview, columns[i]) end
 end
 
 -------------------- Gtk.Dialog
 
-Gtk.Dialog._custom = { buttons = {} }
-function Gtk.Dialog._custom.buttons.write(dialog, buttons)
+Gtk.Dialog._custom = { buttons = {}, flags = {} }
+function Gtk.Dialog._custom.buttons.set(dialog, buttons)
    for label, response in pairs(buttons) do
       Gtk.Dialog.add_button(dialog, label, response)
    end
@@ -198,30 +193,30 @@ end
 -------------------- Gtk.FileChooser
 
 Gtk.FileChooser._custom = { file = {}, filename = {} }
-function Gtk.FileChooser._custom.file.read(filechooser)
+function Gtk.FileChooser._custom.file.get(filechooser)
    return Gtk.FileChooser.get_file(filechooser)
 end
 
-function Gtk.FileChooser._custom.file.write(filechooser, file)
+function Gtk.FileChooser._custom.file.set(filechooser, file)
    return Gtk.FileChooser.set_file(filechooser, file)
 end
 
-function Gtk.FileChooser._custom.filename.read(filechooser)
+function Gtk.FileChooser._custom.filename.get(filechooser)
    return Gtk.FileChooser.get_filename(filechooser)
 end
 
-function Gtk.FileChooser._custom.filename.write(filechooser, filename)
+function Gtk.FileChooser._custom.filename.set(filechooser, filename)
    return Gtk.FileChooser.set_filename(filechooser, filename)
 end
 
 -------------------- Gtk.FileFilter
 
 Gtk.FileFilter._custom = { name = {} , pattern = {}, mime_type = {} }
-function Gtk.FileFilter._custom.name.read(filefilter)
+function Gtk.FileFilter._custom.name.get(filefilter)
    return Gtk.FileFilter.get_name(filefilter)
 end
 
-function Gtk.FileFilter._custom.name.write(filefilter, name)
+function Gtk.FileFilter._custom.name.set(filefilter, name)
    return Gtk.FileFilter.set_name(filefilter, name)
 end
 
@@ -235,11 +230,11 @@ local function filefilter_add(filefilter, item, func)
    end
 end
 
-function Gtk.FileFilter._custom.pattern.write(filefilter, pattern)
+function Gtk.FileFilter._custom.pattern.set(filefilter, pattern)
    filefilter_add(filefilter, pattern, Gtk.FileFilter.add_pattern)
 end
 
-function Gtk.FileFilter._custom.mime_type.write(filefilter, mime_type)
+function Gtk.FileFilter._custom.mime_type.set(filefilter, mime_type)
    filefilter_add(filefilter, mime_type, Gtk.FileFilter.add_mime_type)
 end
 
@@ -255,7 +250,7 @@ function builder_objects_mt:__index(name)
 end
 
 Gtk.Builder._custom = { objects = {}, file = {}, string = {}, connect = {} }
-function Gtk.Builder._custom.objects.read(builder)
+function Gtk.Builder._custom.objects.get(builder)
    -- Get all objects and add metatable for resolving by name.
    local objects = builder:get_objects()
    objects._builder = builder
@@ -270,15 +265,15 @@ local function builder_add(builder, vals, func)
    end
 end
 
-function Gtk.Builder._custom.file.write(builder, vals)
+function Gtk.Builder._custom.file.set(builder, vals)
    builder_add(builder, vals, Gtk.Builder.add_from_file)
 end
 
-function Gtk.Builder._custom.string.write(builder, vals)
+function Gtk.Builder._custom.string.set(builder, vals)
    builder_add(builder, vals, Gtk.Builder.add_from_string)
 end
 
-function Gtk.Builder._custom.connect.write(builder, target)
+function Gtk.Builder._custom.connect.set(builder, target)
    Gtk.Builder.connect_signals_full(
       builder, function(_, object, signal, handler)
 		  object['on_' .. signal:gsub('%-', '_')] =

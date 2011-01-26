@@ -40,7 +40,7 @@ end
 -- Add accessor properties for filename's get_foo methods.
 for _, name in pairs { 'basename', 'path', 'uri', 'parse_name' }  do
    Gio.File._custom[name] = {
-      read = function(file)
+      get = function(file)
 		return Gio.File['get_' .. name](file)
 	     end }
 end

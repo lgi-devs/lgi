@@ -315,13 +315,14 @@ local function default_access(typetable, instance, name, ...)
       local func = typetable:_element(instance, '_custom_' .. name)
       if func then
 	 -- If custom element is a table, assume that this table
-	 -- contains 'read' and 'write' methods.  Dispatch to them,
-	 -- and error ou if they are missing.
+	 -- contains 'get' and 'set' methods.  Dispatch to them, and
+	 -- error ou if they are missing.
 	 if type(func) == 'table' then
-	    local mode = select('#', ...) == 0 and 'read' or 'write'
+	    local mode = select('#', ...) == 0 and 'get' or 'set'
 	    if not func[mode] then
-	       error(("%s: cannot %s `%s'"):format(typetable._name, mode,
-						   name), 3)
+	       error(("%s: cannot %s `%s'"):format(
+			typetable._name, mode == 'get' and 'read' or 'write',
+			name), 3)
 	    end
 	    func = func[mode]
 	 end
@@ -860,12 +861,12 @@ Object._vfuncs.on_notify = nil
 Object._custom = { on_notify= {} }
 -- Borrow signal format from GObject.ObjectClass.notify.
 local on_notify_info = gi.GObject.ObjectClass.fields.notify.typeinfo.interface
-function Object._custom.on_notify.write(instance, handler)
+function Object._custom.on_notify.set(instance, handler)
    -- Assignment means 'connect signal for all properties'.
    core.object.connect(instance, on_notify_info.name, on_notify_info,
 		       get_notifier(handler))
 end
-function Object._custom.on_notify.read(instance)
+function Object._custom.on_notify.get(instance)
    -- Reading yields table with signal operations.
    local pad = {}
    function pad:connect(target, property)
@@ -918,11 +919,11 @@ Value._fields = nil
 -- Implements pseudo-properties 'g_type' and 'data', for safe
 -- read/write access to value's type and contents.
 Value._custom = { g_type = {} }
-function Value._custom.g_type.read(instance)
+function Value._custom.g_type.get(instance)
    -- Reading existing type is simple access to value's gtype field.
    return core.record.field(instance, value_field_gtype)
 end
-function Value._custom.g_type.write(instance, newtype)
+function Value._custom.g_type.set(instance, newtype)
    local gtype = core.record.field(instance, value_field_gtype)
    if gtype then
       if newtype then
