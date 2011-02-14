@@ -36,7 +36,7 @@ end
 -- Map buffer creation from core to Lgi-style 'C++ constructor' convention.
 local buffer_mt = {}
 function buffer_mt:__call(arg) return core.buffer_new(arg) end
-lgi.buffer = setmetatable({ new = core.buffer_new }, buffer_mt)
+lgi.Buffer = setmetatable({ new = core.buffer_new }, buffer_mt)
 
 -- Prepare logging support.  'log' is module-exported table, containing all
 -- functionality related to logging wrapped around GLib g_log facility.

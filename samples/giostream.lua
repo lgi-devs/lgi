@@ -14,7 +14,7 @@ local app = Gio.Application.new('org.lgi.samples.giostream', 0)
 
 local function read_sync(file)
    local info = assert(file:query_info('standard::size', 0))
-   local buffer = lgi.buffer(info:get_size())
+   local buffer = lgi.Buffer(info:get_size())
    local stream = assert(file:read(nil))
    local ok, read = assert(stream:read_all(buffer, #buffer))
    return tostring(buffer):sub(1,read)
@@ -25,7 +25,7 @@ local function read_async(file)
    file:query_info_async('standard::size', 0, GLib.PRIORITY_DEFAULT, nil,
 			 coroutine.running())
    local info = assert(file.query_info_finish(coroutine.yield()))
-   local buffer = lgi.buffer(info:get_size())
+   local buffer = lgi.Buffer(info:get_size())
    file:read_async(GLib.PRIORITY_DEFAULT, nil, coroutine.running())
    local stream = assert(file.read_finish(coroutine.yield()))
    local read_buffers = {}
