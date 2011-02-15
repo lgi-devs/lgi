@@ -673,10 +673,15 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
     {
       res = lua_resume (L, npos);
 
-      /* For our purposes is YIELD the same as if the coro really
-	 returned. */
       if (res == LUA_YIELD)
+	/* For our purposes is YIELD the same as if the coro really
+	   returned. */
 	res = 0;
+      else if (res == LUA_ERRRUN && !callable->throws)
+	/* If closure is not allowed to return errors and coroutine
+	   finished with error, rethrow the error in the context of
+	   the original thread. */
+	lua_error (L);
     }
   npos = stacktop + 1;
 
