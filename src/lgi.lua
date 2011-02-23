@@ -734,7 +734,7 @@ function lgi.require(name, version)
       end
 
       -- Try to load override, if it is present.
-      local lgix_name = 'lgix-' .. ns._name
+      local lgix_name = 'lgix.' .. ns._name
       local ok, msg = pcall(require, lgix_name)
       if not ok then
 	 -- Try parsing message; if it is something different than

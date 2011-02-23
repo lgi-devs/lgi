@@ -27,3 +27,5 @@ def build(bld):
         install_path = '${LUA_INSTALL_CMOD}',
         )
     bld.install_files('${LUA_INSTALL_LMOD}/', 'lgi.lua')
+    bld.install_files('${LUA_INSTALL_LMOD}/lgix/',
+                      bld.path.ant_glob('lgix/*.lua'))
