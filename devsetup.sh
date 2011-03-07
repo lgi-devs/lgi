@@ -16,7 +16,7 @@ test -x $build_dir/src/lgi${ext} &&			\
 # Create links from files to root 'build' dir.
 (cd $build_dir && ln -sf src/lgi${ext} &&	\
     ln -sf ../src/*.lua . &&			\
-    mkdir lgix && ln -sf ../src/lgix/* . &&	\
+    mkdir -p lgix && ln -sf ../src/lgix/* . &&	\
     ln -sf tests/${pfx}regress${ext} &&		\
     ln -sf tests/Regress-1.0.typelib)
 
