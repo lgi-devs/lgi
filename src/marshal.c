@@ -910,7 +910,6 @@ lgi_marshal_arg_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 		lgi_object_2c (L, narg,
 			       g_registered_type_info_get_g_type (info),
 			       optional, FALSE);
-	      nret = 1;
 	      break;
 	    }
 
