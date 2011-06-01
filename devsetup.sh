@@ -14,10 +14,10 @@ test -x $build_dir/src/lgi${ext} &&			\
     echo 'LGI must be built first.'; return; }
 
 # Create links from files to root 'build' dir.
-(cd $build_dir && ln -sf src/lgi${ext} &&	\
-    ln -sf ../src/*.lua . &&			\
-    mkdir -p lgix && ln -sf ../src/lgix/* . &&	\
-    ln -sf tests/${pfx}regress${ext} &&		\
+(cd $build_dir && ln -sf src/lgi${ext} &&			\
+    ln -sf ../src/*.lua . &&					\
+    mkdir -p lgix && (cd lgix && ln -sf ../../src/lgix/* .) &&	\
+    ln -sf tests/${pfx}regress${ext} &&				\
     ln -sf tests/Regress-1.0.typelib)
 
 # Modify assorted path variables.
