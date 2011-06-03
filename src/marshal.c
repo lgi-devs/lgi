@@ -481,7 +481,6 @@ marshal_2c_list (lua_State *L, GITypeInfo *ti, GITypeTag list_tag,
 		 gpointer *list, int narg, GITransfer transfer)
 {
   GITypeInfo *eti;
-  GITypeTag etag;
   GITransfer exfer = (transfer == GI_TRANSFER_EVERYTHING
 		      ? GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING);
   gint index, vals = 0, to_pop, eti_guard;
@@ -502,7 +501,6 @@ marshal_2c_list (lua_State *L, GITypeInfo *ti, GITypeTag list_tag,
   eti = g_type_info_get_param_type (ti, 0);
   lgi_gi_info_new (L, eti);
   eti_guard = lua_gettop (L);
-  etag = g_type_info_get_tag (eti);
 
   /* Go from back and prepend to the list, which is cheaper than
      appending. */
@@ -586,7 +584,7 @@ marshal_2c_hash (lua_State *L, GITypeInfo *ti, GHashTable **table, int narg,
   GITypeInfo *eti[2];
   GITransfer exfer = (transfer == GI_TRANSFER_EVERYTHING
 		      ? GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING);
-  gint i, vals = 0, guard, table_guard;
+  gint i, vals = 0, guard;
   GHashTable **guarded_table;
   GHashFunc hash_func;
   GEqualFunc equal_func;
@@ -611,7 +609,6 @@ marshal_2c_hash (lua_State *L, GITypeInfo *ti, GHashTable **table, int narg,
 	 case something goes wrong during marshalling. */
       guarded_table = (GHashTable **)
 	lgi_guard_create (L, (GDestroyNotify) g_hash_table_destroy);
-      table_guard = lua_gettop (L);
       vals++;
 
       /* Find out which hash_func and equal_func should be used,
