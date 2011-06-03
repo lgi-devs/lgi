@@ -29,9 +29,6 @@ local function new_editor(app, file)
 	 }
       }
    }
-   function window:on_destroy()
-      self.application = nil
-   end
    window:show_all()
    return window
 end
