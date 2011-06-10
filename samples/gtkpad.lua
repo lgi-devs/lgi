@@ -25,7 +25,7 @@ local function new_editor(app, file)
       title = file and file:get_parse_name() or '<Untitled>',
       child = Gtk.ScrolledWindow {
 	 child = Gtk.TextView {
-	    buffer = Gtk.TextBuffer { text = ok and contents or '' }
+	    buffer = Gtk.TextBuffer { text = ok and tostring(contents) or '' }
 	 }
       }
    }

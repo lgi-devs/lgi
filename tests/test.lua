@@ -12,6 +12,7 @@ local lgi = require 'lgi'
 local GLib = lgi.GLib
 local Gio = lgi.Gio
 local GObject = lgi.GObject
+local bytes = require 'bytes'
 
 -- Make logs verbose (do not mute DEBUG level).
 lgi.log.DEBUG = 'verbose'
@@ -496,6 +497,7 @@ function gireg.array_gint8_in()
    check(R.test_array_gint8_in{1,2,3} == 6)
    check(R.test_array_gint8_in{1.1,2,3} == 6)
    check(R.test_array_gint8_in('0123') == 48 + 49 + 50 + 51)
+   check(R.test_array_gint8_in(bytes.new('0123')) == 48 + 49 + 50 + 51)
    check(R.test_array_gint8_in{} == 0)
    check(not pcall(R.test_array_gint8_in, nil))
    check(not pcall(R.test_array_gint8_in, {'help'}))

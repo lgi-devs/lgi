@@ -325,9 +325,11 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
       if (lua_type (L, narg) != LUA_TTABLE && esize == 1
 	  && atype == GI_ARRAY_TYPE_C)
 	{
-	  size_t size;
-	  *out_array = lgi_buffer_check (L, narg, &size);
-	  if (!*out_array)
+	  size_t size = 0;
+	  *out_array = lgi_udata_test (L, narg, LGI_BYTES_BUFFER);
+	  if (*out_array)
+	    size = lua_objlen (L, narg);
+	  else
 	    *out_array = (gpointer *) lua_tolstring (L, narg, &size);
 	  if (transfer != GI_TRANSFER_NOTHING)
 	    *out_array = g_memdup (*out_array, size);
@@ -441,28 +443,38 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
   eti_guard = lua_gettop (L);
   esize = array_get_elt_size (eti);
 
-  /* Create Lua table which will hold the array. */
-  lua_createtable (L, len > 0 ? len : 0, 0);
-
-  /* Iterate through array elements. */
-  for (index = 0; len < 0 || index < len; index++)
+  if (esize == 1 && g_type_info_get_tag (eti) == GI_TYPE_TAG_UINT8)
     {
-      /* Get value from specified index. */
-      GIArgument *eval = (GIArgument *) (data + index * esize);
+      /* UINT8 arrays are marshalled as 'bytes' instances. */
+      memcpy (lua_newuserdata (L, len), data, len);
+      luaL_getmetatable (L, LGI_BYTES_BUFFER);
+      lua_setmetatable (L, -2);
+    }
+  else
+    {
+      /* Create Lua table which will hold the array. */
+      lua_createtable (L, len > 0 ? len : 0, 0);
 
-      /* If the array is zero-terminated, terminate now and don't
-	 include NULL entry. */
-      if (len < 0 && eval->v_pointer == NULL)
-	break;
+      /* Iterate through array elements. */
+      for (index = 0; len < 0 || index < len; index++)
+	{
+	  /* Get value from specified index. */
+	  GIArgument *eval = (GIArgument *) (data + index * esize);
 
-      /* Store value into the table. */
-      lgi_marshal_arg_2lua (L, eti, (transfer == GI_TRANSFER_EVERYTHING) ?
-			    GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING,
-			    eval, parent, FALSE, NULL, NULL);
-      lua_rawseti (L, -2, index + 1);
+	  /* If the array is zero-terminated, terminate now and don't
+	     include NULL entry. */
+	  if (len < 0 && eval->v_pointer == NULL)
+	    break;
+
+	  /* Store value into the table. */
+	  lgi_marshal_arg_2lua (L, eti, (transfer == GI_TRANSFER_EVERYTHING) ?
+				GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING,
+				eval, parent, FALSE, NULL, NULL);
+	  lua_rawseti (L, -2, index + 1);
+	}
     }
 
-  /* If needed, free the array itself. */
+  /* If needed, free the original array. */
   if (transfer != GI_TRANSFER_NOTHING)
     {
       if (atype == GI_ARRAY_TYPE_ARRAY)
@@ -962,7 +974,7 @@ lgi_marshal_arg_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 	  else
 	    {
 	      /* Check memory buffer. */
-	      val->v_pointer = lgi_buffer_check (L, narg, NULL);
+	      val->v_pointer = lgi_udata_test (L, narg, LGI_BYTES_BUFFER);
 	      if (!val->v_pointer)
 		{
 		  /* Check object. */

@@ -65,9 +65,6 @@ lgi_udata_test (lua_State *L, int narg, const char *name);
 /* Metatable name of userdata for 'bytes' extension; see
    http://permalink.gmane.org/gmane.comp.lang.lua.general/79288 */
 #define LGI_BYTES_BUFFER "bytes.bytearray"
-/* Returns address and possibly size of buffer object at given
-   argument. Returns NULL if it is not of type buffer. */
-gpointer lgi_buffer_check (lua_State *L, int narg, size_t *size);
 
 /* Metatable name of userdata - gi wrapped 'GIBaseInfo*' */
 #define LGI_GI_INFO "lgi.gi.info"
