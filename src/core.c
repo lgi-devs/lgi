@@ -397,6 +397,7 @@ luaopen_lgi__core (lua_State* L)
   unused = G_TYPE_REGEX;
   unused = G_TYPE_DATE_TIME;
   unused = G_TYPE_VARIANT_TYPE;
+  unused = unused;
 
   /* Register 'guard' metatable. */
   luaL_newmetatable (L, UD_GUARD);
