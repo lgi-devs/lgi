@@ -52,6 +52,22 @@ const char *lgi_sd (lua_State *L)
 }
 #endif
 
+void *
+lgi_udata_test (lua_State *L, int narg, const char *name)
+{
+  void *udata = NULL;
+  luaL_checkstack (L, 2, "");
+  lgi_makeabs (L, narg);
+  if (lua_getmetatable (L, narg))
+    {
+      luaL_getmetatable (L, name);
+      if (lua_equal (L, -1, -2))
+	udata = lua_touserdata (L, narg);
+      lua_pop (L, 2);
+    }
+  return udata;
+}
+
 void
 lgi_cache_create (lua_State *L, gpointer key, const char *mode)
 {

@@ -57,6 +57,14 @@ void lgi_callable_init (lua_State *L);
 void lgi_gi_init (lua_State *L);
 void lgi_buffer_init (lua_State *L);
 
+/* Checks whether given argument is of specified udata - similar to
+   luaL_testudata, which is missing in Lua 5.1 */
+void *
+lgi_udata_test (lua_State *L, int narg, const char *name);
+
+/* Metatable name of userdata for 'bytes' extension; see
+   http://permalink.gmane.org/gmane.comp.lang.lua.general/79288 */
+#define LGI_BYTES_BUFFER "bytes.bytearray"
 /* Returns address and possibly size of buffer object at given
    argument. Returns NULL if it is not of type buffer. */
 gpointer lgi_buffer_check (lua_State *L, int narg, size_t *size);
