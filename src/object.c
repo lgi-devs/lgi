@@ -255,12 +255,12 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
   else if (object_type (L, gtype))
     {
       lua_getfield (L, -1, "_sink");
-      GIBaseInfo *info = lgi_gi_info_test (L, -1);
-      if (info && GI_IS_FUNCTION_INFO (info))
+      GIBaseInfo **info = lgi_udata_test (L, -1, LGI_GI_INFO);
+      if (info && GI_IS_FUNCTION_INFO (*info))
 	{
 	  void (*ref_sink)(gpointer);
-	  if (g_typelib_symbol (g_base_info_get_typelib (info),
-				g_function_info_get_symbol (info),
+	  if (g_typelib_symbol (g_base_info_get_typelib (*info),
+				g_function_info_get_symbol (*info),
 				(gpointer *) &ref_sink))
 	    ref_sink (obj);
 	}

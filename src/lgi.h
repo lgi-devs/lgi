@@ -75,10 +75,6 @@ gpointer lgi_buffer_check (lua_State *L, int narg, size_t *size);
 /* Creates new instance of info from given GIBaseInfo pointer. */
 int lgi_gi_info_new (lua_State *L, GIBaseInfo *info);
 
-/* Checks if narg is gi.info and if yes, returns it, otherwise returns
-   NULL. */
-GIBaseInfo *lgi_gi_info_test (lua_State *L, int narg);
-
 /* Gets gtype of the type represented by typeinfo. */
 GType lgi_get_gtype (lua_State *L, GITypeInfo *ti);
 

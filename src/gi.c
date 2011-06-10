@@ -40,22 +40,6 @@ lgi_gi_info_new (lua_State *L, GIBaseInfo *info)
   return 1;
 }
 
-GIBaseInfo *
-lgi_gi_info_test (lua_State *L, int narg)
-{
-  GIBaseInfo *info = NULL;
-  luaL_checkstack (L, 2, "");
-  lgi_makeabs (L, narg);
-  if (lua_getmetatable (L, narg))
-    {
-      luaL_getmetatable (L, LGI_GI_INFO);
-      if (lua_equal (L, -1, -2))
-	info = *(GIBaseInfo **) lua_touserdata (L, narg);
-      lua_pop (L, 2);
-    }
-  return info;
-}
-
 /* Userdata representing single group of infos (e.g. methods on
    object, fields of struct etc.).  Emulates Lua table for access. */
 typedef struct _Infos
