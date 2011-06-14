@@ -20,8 +20,10 @@ typedef enum _RecordStore
     /* Record is stored in data section of Record proxy itself. */
     RECORD_STORE_CONTAINS,
 
-    /* Record store mode os governed by some other record, data.parent
-       contain its luaL_ref. */
+    /* Record store mode is governed by some other (parent) record.
+       In order to keep parent record alive, parent record is stored
+       in registry table, keyed by lightuserdata of address of this
+       object. */
     RECORD_STORE_PARENT,
 
     /* Record is allocated by its GLib means and must be freed (by
@@ -40,16 +42,8 @@ typedef struct _Record
      into 2 lowest bits of addr, although it is a bit hacky. */
   RecordStore store;
 
-  union
-  {
-    /* If the record is allocated 'on the stack', its data is here. */
-    gchar data[1];
-
-    /* If the record is allocated inside parent record, a
-       luaL_ref-type reference into LUA_REGISTRYINDEX of parent object
-       is stored here. */
-    int parent;
-  } data;
+  /* If the record is allocated 'on the stack', its data is here. */
+  gchar data[1];
 } Record;
 
 /* lightuserdata key to LUA_REGISTRYINDEX containing metatable for
@@ -79,7 +73,7 @@ lgi_record_new (lua_State *L, GIBaseInfo *ri)
   lua_pushlightuserdata (L, &record_mt);
   lua_rawget (L, LUA_REGISTRYINDEX);
   lua_setmetatable (L, -2);
-  record->addr = record->data.data;
+  record->addr = record->data;
   memset (record->addr, 0, size - G_STRUCT_OFFSET (Record, data));
   record->store = RECORD_STORE_CONTAINS;
 
@@ -149,8 +143,9 @@ lgi_record_2lua (lua_State *L, gpointer addr, gboolean own, int parent)
   if (parent != 0)
     {
       /* Store reference to the parent argument. */
+      lua_pushlightuserdata (L, record);
       lua_pushvalue (L, parent);
-      record->data.parent = luaL_ref (L, LUA_REGISTRYINDEX);
+      lua_rawset (L, LUA_REGISTRYINDEX);
       record->store = RECORD_STORE_PARENT;
     }
   else
@@ -269,8 +264,12 @@ record_gc (lua_State *L)
       g_boxed_free (gtype, record->addr);
     }
   else if (record->store == RECORD_STORE_PARENT)
-    /* Free the reference to the parent. */
-    luaL_unref (L, LUA_REGISTRYINDEX, record->data.parent);
+    {
+      /* Free the reference to the parent. */
+      lua_pushlightuserdata (L, record);
+      lua_pushnil (L);
+      lua_rawset (L, LUA_REGISTRYINDEX);
+    }
 
   return 0;
 }
@@ -332,7 +331,7 @@ static const char* const query_modes[] = { "gtype", "repo", NULL };
    Supported 'mode' strings are:
 
    'gtype': retrns real gtype of this instance, G_TYPE_INVALID when it
-            is not boxed.
+	    is not boxed.
    'repo': returns repotable of this instance. */
 static int
 record_query (lua_State *L)
