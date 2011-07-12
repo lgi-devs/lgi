@@ -14,21 +14,21 @@
 /* Available record store modes. */
 typedef enum _RecordStore
   {
-    /* Record is outside and not owned at all. */
-    RECORD_STORE_FOREIGN,
+    /* We do not have ownership of the record. */
+    RECORD_STORE_EXTERNAL,
 
     /* Record is stored in data section of Record proxy itself. */
-    RECORD_STORE_CONTAINS,
+    RECORD_STORE_EMBEDDED,
 
-    /* Record store mode is governed by some other (parent) record.
-       In order to keep parent record alive, parent record is stored
-       in registry table, keyed by lightuserdata of address of this
-       object. */
-    RECORD_STORE_PARENT,
+    /* Record is placed inside some other (parent) record.  In order
+       to keep parent record alive, parent record is stored in
+       LUA_REGISTRYINDEX table, keyed by lightuserdata of address of
+       this Record object. */
+    RECORD_STORE_NESTED,
 
     /* Record is allocated by its GLib means and must be freed (by
        g_boxed_free). */
-    RECORD_STORE_OWN,
+    RECORD_STORE_ALLOCATED,
   } RecordStore;
 
 /* Userdata containing record reference. Table with record type is
@@ -75,7 +75,7 @@ lgi_record_new (lua_State *L, GIBaseInfo *ri)
   lua_setmetatable (L, -2);
   record->addr = record->data;
   memset (record->addr, 0, size - G_STRUCT_OFFSET (Record, data));
-  record->store = RECORD_STORE_CONTAINS;
+  record->store = RECORD_STORE_EMBEDDED;
 
   /* Get ref_repo table, attach it as an environment. */
   lgi_type_get_repotype (L, G_TYPE_NONE, ri);
@@ -125,8 +125,8 @@ lgi_record_2lua (lua_State *L, gpointer addr, gboolean own, int parent)
 	 ownership is properly updated. */
       record = lua_touserdata (L, -1);
       g_assert (record->addr == addr);
-      if (own && record->store == RECORD_STORE_FOREIGN)
-	record->store = RECORD_STORE_OWN;
+      if (own && record->store == RECORD_STORE_EXTERNAL)
+	record->store = RECORD_STORE_ALLOCATED;
 
       return;
     }
@@ -146,10 +146,10 @@ lgi_record_2lua (lua_State *L, gpointer addr, gboolean own, int parent)
       lua_pushlightuserdata (L, record);
       lua_pushvalue (L, parent);
       lua_rawset (L, LUA_REGISTRYINDEX);
-      record->store = RECORD_STORE_PARENT;
+      record->store = RECORD_STORE_NESTED;
     }
   else
-    record->store = own ? RECORD_STORE_OWN : RECORD_STORE_FOREIGN;
+    record->store = own ? RECORD_STORE_ALLOCATED : RECORD_STORE_EXTERNAL;
 
   /* Assign refrepo table (on the stack when we are called) as
      environment for our proxy. */
@@ -253,7 +253,7 @@ static int
 record_gc (lua_State *L)
 {
   Record *record = record_get (L, 1);
-  if (record->store == RECORD_STORE_OWN)
+  if (record->store == RECORD_STORE_ALLOCATED)
     {
       /* Free the owned record. */
       GType gtype;
@@ -263,7 +263,7 @@ record_gc (lua_State *L)
       g_assert (G_TYPE_IS_BOXED (gtype));
       g_boxed_free (gtype, record->addr);
     }
-  else if (record->store == RECORD_STORE_PARENT)
+  else if (record->store == RECORD_STORE_NESTED)
     {
       /* Free the reference to the parent. */
       lua_pushlightuserdata (L, record);
