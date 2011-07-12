@@ -133,9 +133,7 @@ lgi_record_2lua (lua_State *L, gpointer addr, gboolean own, int parent)
 
   /* Allocate new userdata for record object, attach proper
      metatable. */
-  record = lua_newuserdata (L, (parent == 0)
-			    ? G_STRUCT_OFFSET (Record, data)
-			    : sizeof (Record));
+  record = lua_newuserdata (L, G_STRUCT_OFFSET (Record, data));
   lua_pushlightuserdata (L, &record_mt);
   lua_rawget (L, LUA_REGISTRYINDEX);
   lua_setmetatable (L, -2);
