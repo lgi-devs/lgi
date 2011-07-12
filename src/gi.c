@@ -40,6 +40,20 @@ lgi_gi_info_new (lua_State *L, GIBaseInfo *info)
   return 1;
 }
 
+gpointer
+lgi_gi_load_function(lua_State *L, int typetable, const char *name)
+{
+  GIBaseInfo **info;
+  gpointer symbol = NULL;
+  lua_getfield (L, typetable, name);
+  info = lgi_udata_test (L, -1, LGI_GI_INFO);
+  if (info && GI_IS_FUNCTION_INFO (*info))
+    g_typelib_symbol (g_base_info_get_typelib (*info),
+		      g_function_info_get_symbol (*info), &symbol);
+  lua_pop (L, 1);
+  return symbol;
+}
+
 /* Userdata representing single group of infos (e.g. methods on
    object, fields of struct etc.).  Emulates Lua table for access. */
 typedef struct _Infos

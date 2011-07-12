@@ -72,6 +72,11 @@ lgi_udata_test (lua_State *L, int narg, const char *name);
 /* Creates new instance of info from given GIBaseInfo pointer. */
 int lgi_gi_info_new (lua_State *L, GIBaseInfo *info);
 
+/* Assumes that 'typetable' can hold field 'name' which contains
+   wrapped LGI_GI_INFO of function.  Returns address of this function,
+   NULL if table does not contain such field. */
+gpointer lgi_gi_load_function(lua_State *L, int typetable, const char *name);
+
 /* Gets gtype of the type represented by typeinfo. */
 GType lgi_get_gtype (lua_State *L, GITypeInfo *ti);
 
