@@ -238,6 +238,14 @@ local function get_category(children, xform_value,
    return setmetatable({}, mt)
 end
 
+-- Keyword translation dictionary.  Used for translating LUa keywords
+-- which might appear as symbols in typelibs into Lua-neutral identifiers.
+local keyword_dictionary = {
+   _end = 'end', _do = 'do', _then = 'then', _elseif = 'elseif', _in = 'in',
+   _local = 'local', _function = 'function', _nil = 'nil', _false = 'false',
+   _true = 'true', _and = 'and', _or = 'or', _not = 'not',
+}
+
 -- Loads element from specified compound typetable.
 local function get_element(typetable, instance, symbol)
    -- Check whether symbol directly exists.
@@ -275,9 +283,16 @@ local function get_element(typetable, instance, symbol)
       end
    end
 
-   -- As a last resort, metatable might contain fallback implementation.
+   -- metatable might contain fallback implementation.
    local meta = getmetatable(typetable)
-   return meta and meta[symbol]
+   val = meta and meta[symbol]
+   if val then return val end
+
+   -- Finally, check translation table.  If the symbol can be found
+   -- there, try to lookup translated symbol.
+   local xlated = keyword_dictionary[symbol]
+   if xlated then val = get_element(typetable, instance, xlated) end
+   return val
 end
 
 -- Fully resolves the whole typetable, i.e. load all symbols normally
