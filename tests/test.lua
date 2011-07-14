@@ -1452,8 +1452,8 @@ local groups = { 'gireg', gireg = gireg }
 
 -- Cmdline runner.
 local failed = false
-args = args or {}
-if #args == 0 then
+arg = arg or {}
+if #arg == 0 then
    -- Check for debug mode.
    if tests_debug then
       for _, name in ipairs(groups) do
@@ -1470,9 +1470,9 @@ if #args == 0 then
    end
 else
    -- Run just those which pass the mask.
-   for _, mask in ipairs(args) do
-      local groupname, groupmask = mask:match('^(.-):(.+)$')
-      if not groupname or not groups[group] then
+   for _, mask in ipairs(arg) do
+      local group, groupmask = mask:match('^(.-):(.+)$')
+      if not group or not groups[group] then
 	 io.write(("No test group for mask `%s' found."):format(mask))
 	 return 2
       end
