@@ -957,6 +957,18 @@ function value_mt:__call(gtype, data)
 end
 setmetatable(Value, value_mt)
 
+-- Variant support.
+local Variant = repo.GLib.Variant
+local variant_info = gi.GLib.Variant
+
+-- Add custom refsink and free methods for variant handling.
+Variant._refsink = variant_info.methods.ref_sink
+Variant._free = variant_info.methods.unref
+
+-- VariantBuilder is boxed only in glib 2.29, older libs need custom
+-- recipe how to free it.
+repo.GLib.VariantBuilder._free = gi.GLib.VariantBuilder.methods.unref
+
 -- Access to module proxies the whole repo, for convenience.
 local lgi_mt = {}
 function lgi_mt:__index(name)
