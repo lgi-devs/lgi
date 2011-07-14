@@ -147,7 +147,22 @@ lgi_record_2lua (lua_State *L, gpointer addr, gboolean own, int parent)
       record->store = RECORD_STORE_NESTED;
     }
   else
-    record->store = own ? RECORD_STORE_ALLOCATED : RECORD_STORE_EXTERNAL;
+    {
+      if (!own)
+	{
+	  /* Check, whether refrepo table specifies custom _refsink
+	     function. */
+	  void (*refsink_func)(gpointer) =
+	    lgi_gi_load_function (L, -4, "_refsink");
+	  if (refsink_func)
+	    {
+	      refsink_func(addr);
+	      own = TRUE;
+	    }
+	}
+
+      record->store = own ? RECORD_STORE_ALLOCATED : RECORD_STORE_EXTERNAL;
+    }
 
   /* Assign refrepo table (on the stack when we are called) as
      environment for our proxy. */
@@ -258,8 +273,15 @@ record_gc (lua_State *L)
       lua_getfenv (L, 1);
       lua_getfield (L, -1, "_gtype");
       gtype = lua_tonumber (L, -1);
-      g_assert (G_TYPE_IS_BOXED (gtype));
-      g_boxed_free (gtype, record->addr);
+      if (G_TYPE_IS_BOXED (gtype))
+	g_boxed_free (gtype, record->addr);
+      else
+	{
+	  /* Use custom _free function. */
+	  void (*free_func)(gpointer) = lgi_gi_load_function (L, -2, "_free");
+	  g_assert (free_func);
+	  free_func (record->addr);
+	}
     }
   else if (record->store == RECORD_STORE_NESTED)
     {
