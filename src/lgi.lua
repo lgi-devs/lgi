@@ -466,7 +466,7 @@ function component_mt.record:_access_element(instance, name, element, ...)
 end
 
 -- _access_element method for raw objects (fundamentals).  Specific
--- behavior for GObject will be overriden in GObject.Object._access().
+-- behavior for GObject will be overriden in GObject.Object._access_element().
 function component_mt.class:_access_element(instance, name, element, ...)
    if gi.isinfo(element) then
       if element.is_field then
@@ -483,7 +483,12 @@ function component_mt.class:_access_element(instance, name, element, ...)
 end
 
 -- Create structure instance and initialize it with given fields.
-function component_mt.record:__call(fields)
+function component_mt.record:__call(...)
+   -- Check, whether we have '_constructor' field in the typetable.  If yes,
+   -- always use this method.
+   local ctor = self._constructor
+   if ctor then return ctor(...) end
+
    -- Create the structure instance.
    local info
    if self._gtype then
@@ -498,7 +503,7 @@ function component_mt.record:__call(fields)
    local struct = core.record.new(info)
 
    -- Set values of fields.
-   for name, value in pairs(fields or {}) do
+   for name, value in pairs(... or {}) do
       struct[name] = value
    end
    return struct
@@ -982,7 +987,14 @@ Variant._free = variant_info.methods.unref
 
 -- VariantBuilder is boxed only in glib 2.29, older libs need custom
 -- recipe how to free it.
-repo.GLib.VariantBuilder._free = gi.GLib.VariantBuilder.methods.unref
+local VariantBuilder = repo.GLib.VariantBuilder
+VariantBuilder._free = gi.GLib.VariantBuilder.methods.unref
+VariantBuilder._constructor = core.callable.new(
+   gi.GLib.VariantBuilder.methods.new)
+
+-- Map VariantType.new to implicit constructor
+local VariantType = repo.GLib.VariantType
+VariantType._constructor = core.callable.new(gi.GLib.VariantType.methods.new)
 
 -- Access to module proxies the whole repo, for convenience.
 local lgi_mt = {}
