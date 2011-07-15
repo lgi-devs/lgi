@@ -835,7 +835,8 @@ function Object:_access_element(instance, name, element, ...)
    elseif gi.isinfo(element) and element.is_property then
       -- Process property using GI.
       return core.object.property(instance, element, ...)
-   elseif core.record.query(element, 'repo') == repo.GObject.ParamSpec then
+   elseif core.record.query(element, 'repo') == repo.GObject.ParamSpec or
+   core.object.query(element, 'repo') == repo.GObject.ParamSpec then
       -- Process property using GLib.
       local val = repo.GObject.Value(element.value_type)
       if select('#', ...) > 0 then
