@@ -114,11 +114,13 @@ object_unref (gpointer obj)
       /* Some other fundamental type, check, whether it has
 	 registered custom unref method. */
       GIObjectInfo *info = g_irepository_find_by_gtype (NULL, gtype);
+      if (info == NULL)
+	info = g_irepository_find_by_gtype (NULL, G_TYPE_FUNDAMENTAL (gtype));
       if (info != NULL)
 	{
-	  GIObjectInfoUnrefFunction unref;
-	  if (g_object_info_get_fundamental (info)
-	      && (unref = g_object_info_get_unref_function_pointer (info)))
+	  GIObjectInfoUnrefFunction unref =
+	    g_object_info_get_unref_function_pointer (info);
+	  if (unref != NULL)
 	    unref (obj);
 	  g_base_info_unref (info);
 	}
@@ -280,11 +282,13 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
     {
       /* Unowned fundamental non-GObject, try to get its ownership. */
       GIObjectInfo *info = g_irepository_find_by_gtype (NULL, gtype);
+      if (info == NULL)
+	info = g_irepository_find_by_gtype (NULL, G_TYPE_FUNDAMENTAL (gtype));
       if (info != NULL)
 	{
-	  GIObjectInfoRefFunction ref;
-	  if (g_object_info_get_fundamental (info)
-	      && (ref = g_object_info_get_ref_function_pointer (info)))
+	  GIObjectInfoRefFunction ref =
+	    g_object_info_get_ref_function_pointer (info);
+	  if (ref != NULL)
 	    ref (obj);
 	  g_base_info_unref (info);
 	}

@@ -1127,11 +1127,12 @@ lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
     {
       /* Try fundamentals; they have custom gtype. */
       GIBaseInfo *info = g_irepository_find_by_gtype (NULL, type);
+      if (info == NULL)
+	info = g_irepository_find_by_gtype (NULL, G_TYPE_FUNDAMENTAL (type));
       if (info != NULL)
 	{
 	  GIObjectInfoSetValueFunction set_value = NULL;
-	  if (g_base_info_get_type (info) == GI_INFO_TYPE_OBJECT &&
-	      g_object_info_get_fundamental (info))
+	  if (g_base_info_get_type (info) == GI_INFO_TYPE_OBJECT)
 	    set_value = g_object_info_get_set_value_function_pointer (info);
 	  g_base_info_unref (info);
 	  if (set_value != NULL)
@@ -1489,19 +1490,17 @@ lgi_marshal_val_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
     {
       /* Fundamentals handling. */
       GIBaseInfo *info = g_irepository_find_by_gtype (NULL, type);
+      if (info == NULL)
+	info = g_irepository_find_by_gtype (NULL, G_TYPE_FUNDAMENTAL (type));
       if (info != NULL)
 	{
-	  if (g_base_info_get_type (info) == GI_INFO_TYPE_OBJECT
-	      && g_object_info_get_fundamental (info))
+	  GIObjectInfoGetValueFunction get_value =
+	    g_object_info_get_get_value_function_pointer (info);
+	  if (get_value != NULL)
 	    {
-	      GIObjectInfoGetValueFunction get_value =
-		g_object_info_get_get_value_function_pointer (info);
-	      if (get_value != NULL)
-		{
-		  lgi_object_2lua (L, get_value (val), FALSE);
-		  g_base_info_unref (info);
-		  return;
-		}
+	      lgi_object_2lua (L, get_value (val), FALSE);
+	      g_base_info_unref (info);
+	      return;
 	    }
 	  g_base_info_unref (info);
 	}
