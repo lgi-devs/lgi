@@ -23,8 +23,7 @@ local function bus_callback(bus, message)
    elseif message.type == Gst.MessageType.TAG then
       message:parse_tag():foreach(
 	 function(list, tag)
-	    local ok, value = list:get_string(tag)
-	    if ok then print(('tag: %s = %s'):format(tag, value)) end
+	    print(('tag: %s = %s'):format(tag, tostring(list:get(tag))))
 	 end)
    end
 
@@ -32,8 +31,8 @@ local function bus_callback(bus, message)
 end
 
 local play = Gst.ElementFactory.make('playbin', 'play')
---play.uri = 'http://streamer-dtc-aa02.somafm.com:80/stream/1018'
-play.uri = 'http://www.cybertechmedia.com/samples/raycharles.mov'
+play.uri = 'http://streamer-dtc-aa02.somafm.com:80/stream/1018'
+--play.uri = 'http://www.cybertechmedia.com/samples/raycharles.mov'
 local bus = play.bus
 bus:add_watch(bus_callback)
 play:set_state(Gst.State.PLAYING)
