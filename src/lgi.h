@@ -77,6 +77,12 @@ int lgi_gi_info_new (lua_State *L, GIBaseInfo *info);
    NULL if table does not contain such field. */
 gpointer lgi_gi_load_function(lua_State *L, int typetable, const char *name);
 
+/* lightuserdata key to call mutex guard object. This mutex is locked
+   when inside Lua state and unlocked when calling out.  Protects
+   lua_State from being accessed from multiple threads when external
+   code uses multithreading.*/
+extern int lgi_call_mutex;
+
 /* Gets gtype of the type represented by typeinfo. */
 GType lgi_get_gtype (lua_State *L, GITypeInfo *ti);
 

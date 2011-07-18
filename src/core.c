@@ -304,6 +304,32 @@ core_value (lua_State *L)
     }
 }
 
+/* Helper structure, contents of lgi_call_mutex ud registry index.
+   Contains pointer to mutex as the 1st member, and then auxiliary
+   information so that logger can find the context. */
+typedef struct _CallMutex
+{
+  GStaticRecMutex mutex;
+  lua_State *L;
+} CallMutex;
+
+/* GC method for CallMutex structure, which lives inside lua_State. */
+static int
+call_mutex_gc (lua_State* L)
+{
+  CallMutex *mutex = lua_touserdata (L, 1);
+  g_static_rec_mutex_unlock (&mutex->mutex);
+  g_static_rec_mutex_free (&mutex->mutex);
+  return 0;
+}
+
+/* MT for CallMutex. */
+static int call_mutex_mt;
+
+/* lightuserdata of address of this member is key to LUA_REGISTRYINDEX
+   where CallMutex instance for this state resides. */
+int lgi_call_mutex;
+
 static const char* log_levels[] = {
   "ERROR", "CRITICAL", "WARNING", "MESSAGE", "INFO", "DEBUG", "???", NULL
 };
@@ -322,7 +348,8 @@ static void
 log_handler (const gchar *log_domain, GLogLevelFlags log_level,
 	     const gchar *message, gpointer user_data)
 {
-  lua_State *L = user_data;
+  CallMutex *mutex = (CallMutex *)user_data;
+  lua_State *L;
   const gchar **level;
   gboolean handled = FALSE, throw = FALSE;
   gint level_bit;
@@ -333,6 +360,10 @@ log_handler (const gchar *log_domain, GLogLevelFlags log_level,
        level_bit <<= 1, level++)
     if (log_level & level_bit)
       break;
+
+  /* Enter Lua state, protected by the CallMutex. */
+  g_static_rec_mutex_lock (&mutex->mutex);
+  L = mutex->L;
 
   /* Check, whether there is handler registered in Lua. */
   luaL_checkstack (L, 4, "");
@@ -368,6 +399,9 @@ log_handler (const gchar *log_domain, GLogLevelFlags log_level,
   if (throw || log_level & (G_LOG_FLAG_FATAL | G_LOG_LEVEL_ERROR))
     luaL_error (L, "%s-%s **: %s", log_domain, *level, message);
 
+  /* Leaving the handler, so leave also call mutex. */
+  g_static_rec_mutex_unlock (&mutex->mutex);
+
   /* If not handled by our handler, use default system logger. */
   if (!handled)
     g_log_default_handler (log_domain, log_level, message, NULL);
@@ -387,6 +421,8 @@ int lgi_addr_repo;
 int
 luaopen_lgi__core (lua_State* L)
 {
+  CallMutex *mutex;
+
   /* Early GLib initializations. Make sure that following G_TYPEs are
      already initialized, because GIRepo does not initialize them (it
      does not know that they are boxed). */
@@ -405,6 +441,23 @@ luaopen_lgi__core (lua_State* L)
   lua_setfield (L, -2, "__gc");
   lua_pop (L, 1);
 
+  /* Register 'call-mutex' metatable. */
+  lua_pushlightuserdata (L, &call_mutex_mt);
+  lua_newtable (L);
+  lua_pushcfunction (L, call_mutex_gc);
+  lua_setfield (L, -2, "__gc");
+  lua_rawset (L, LUA_REGISTRYINDEX);
+
+  /* Create call mutex guard, keep it locked initially (it is unlocked
+     only when we are calling out to C code) and store it into the
+     registry. */
+  lua_pushlightuserdata (L, &lgi_call_mutex);
+  mutex = lua_newuserdata (L, sizeof (*mutex));
+  g_static_rec_mutex_init (&mutex->mutex);
+  g_static_rec_mutex_lock (&mutex->mutex);
+  mutex->L = L;
+  lua_rawset (L, LUA_REGISTRYINDEX);
+
   /* Register _core interface. */
   luaL_register (L, "lgi._core", lgi_reg);
 
@@ -416,7 +469,7 @@ luaopen_lgi__core (lua_State* L)
   lua_setfield (L, -2, "repo");
 
   /* Install custom log handler. */
-  g_log_set_default_handler (log_handler, L);
+  g_log_set_default_handler (log_handler, mutex);
 
   /* Initialize modules. */
   lgi_buffer_init (L);
