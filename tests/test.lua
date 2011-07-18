@@ -12,6 +12,7 @@ local lgi = require 'lgi'
 local GLib = lgi.GLib
 local Gio = lgi.Gio
 local GObject = lgi.GObject
+local bytes = require 'bytes'
 
 -- Make logs verbose (do not mute DEBUG level).
 lgi.log.DEBUG = 'verbose'
@@ -370,14 +371,15 @@ end
 
 function gireg.type_gtype()
    local R = lgi.Regress
-   checkv(R.test_gtype(0), 0, 'number')
-   checkv(R.test_gtype(1), 1, 'number')
-   checkv(R.test_gtype(10000), 10000, 'number')
-   check(not pcall(R.test_gtype))
-   check(not pcall(R.test_gtype, nil))
-   check(not pcall(R.test_gtype, 'string'))
+   checkv(R.test_gtype(), nil, 'nil')
+   checkv(R.test_gtype(nil), nil, 'nil')
+   checkv(R.test_gtype(0), nil, 'nil')
+   checkv(R.test_gtype('void'), 'void', 'string')
+   checkv(R.test_gtype(4), 'void', 'string')
+   checkv(R.test_gtype('GObject'), 'GObject', 'string')
+   checkv(R.test_gtype(80), 'GObject', 'string')
+   checkv(R.test_gtype(R.TestObj), 'RegressTestObj', 'string')
    check(not pcall(R.test_gtype, true))
-   check(not pcall(R.test_gtype, {}))
    check(not pcall(R.test_gtype, function() end))
 end
 
@@ -494,9 +496,10 @@ function gireg.array_gint8_in()
    local R = lgi.Regress
    check(R.test_array_gint8_in{1,2,3} == 6)
    check(R.test_array_gint8_in{1.1,2,3} == 6)
+   check(R.test_array_gint8_in('0123') == 48 + 49 + 50 + 51)
+   check(R.test_array_gint8_in(bytes.new('0123')) == 48 + 49 + 50 + 51)
    check(R.test_array_gint8_in{} == 0)
    check(not pcall(R.test_array_gint8_in, nil))
-   check(not pcall(R.test_array_gint8_in, 'help'))
    check(not pcall(R.test_array_gint8_in, {'help'}))
 end
 
@@ -1057,84 +1060,95 @@ end
 
 function gireg.closure()
    local R = lgi.Regress
-   checkv(R.test_closure(GObject.Closure(function() return 42 end)),
-	  42, 'number')
-   checkv(R.test_closure(function() return 42 end), 42, 'number')
+   local closure = GObject.Closure(function() return 42 end)
+   checkv(R.test_closure(closure, 42), 42, 'number')
+   local res = GObject.Value('gint')
+   closure:invoke(res, {}, nil)
+   check(res.g_type == 'gint' and res.data == 42)
 end
 
 function gireg.closure_arg()
    local R = lgi.Regress
-   checkv(R.test_closure_one_arg(function(int) return int end, 43), 43,
-	  'number')
+   local closure = GObject.Closure(function(int) return int end)
+   checkv(R.test_closure_one_arg(closure, 43), 43, 'number')
+   local res = GObject.Value('gint')
+   closure:invoke(res, { GObject.Value('gint', 43) }, nil)
+   check(res.g_type == 'gint' and res.data == 43)
 end
 
-function gireg.gvalue_simple()
+function gireg.gvalue_assign()
    local V = GObject.Value
-   local function checkv(gval, tp, val)
-      check(type(gval.type) == 'string', "GValue.type is not `string'")
-      check(gval.type == tp, ("GValue type: expected `%s', got `%s'"):format(
-	       tp, gval.type), 2)
-      check(gval.value == val, ("GValue value: exp `%s', got `%s'"):format(
-	       tostring(val), tostring(gval.value)), 2)
-   end
-   checkv(V(), '', nil)
-   checkv(V(0), 'gint', 0)
-   checkv(V(1.1), 'gdouble', 1.1)
-   checkv(V('str'), 'gchararray', 'str')
-   local gcl = GObject.Closure(function() end)
-   checkv(V(gcl), 'GClosure', gcl)
-   local v = V(42)
-   checkv(V(v).value, 'gint', 42)
 
--- For non-refcounted boxeds, the returned Value.value is always new
--- copy of the instance, so the following test fails:
---
--- checkv(V(v), 'GValue', v)
+   local v = V()
+   check(v.g_type == nil)
+   check(v.data == nil)
+   v.g_type = 'gchararray'
+   check(v.g_type == 'gchararray')
+   check(v.data == nil)
+   v.data = 'label'
+   check(v.data == 'label')
+   v.data = nil
+   check(v.data == nil)
+   check(v.g_type == 'gchararray')
+   v.data = 'label'
+   v.g_type = nil
+   check(v.g_type == nil)
+   check(v.data == nil)
 
-   check(V(v).type == 'GValue')
+   v.g_type = 'gint'
+   v.data = 1
+   check(v.g_type == 'gint')
+   check(v.data == 1)
+   v.g_type = 'gdouble'
+   check(v.g_type == 'gdouble')
+   check(v.data == 1)
+   v.data = 3.14
+   v.g_type = 'gint'
+   check(v.g_type == 'gint')
+   check(v.data == 3)
 end
 
 function gireg.gvalue_arg()
    local R = lgi.Regress
-   checkv(R.test_int_value_arg(42), 42, 'number')
+   checkv(R.test_int_value_arg(GObject.Value('gint', 42)), 42, 'number')
 end
 
 function gireg.gvalue_return()
    local R = lgi.Regress
    local v = R.test_value_return(43)
-   checkv(v.value, 43, 'number')
-   check(v.type == 'gint', 'incorrect value type')
+   checkv(v.data, 43, 'number')
+   check(v.g_type == 'gint', 'incorrect value type')
 end
 
 function gireg.gvalue_date()
    local R = lgi.Regress
    local v = R.test_date_in_gvalue()
-   check(v.type == 'GDate')
-   check(v.value:get_day() == 5)
-   check(v.value:get_month() == 12)
-   check(v.value:get_year() == 1984)
+   check(v.g_type == 'GDate')
+   check(v.data:get_day() == 5)
+   check(v.data:get_month() == 12)
+   check(v.data:get_year() == 1984)
    local d = GLib.Date()
    d:set_dmy(25, 1, 1975)
-   v = GObject.Value(d)
-   check(v.type == 'GDate')
-   check(v.value:get_day() == 25)
-   check(v.value:get_month() == 1)
-   check(v.value:get_year() == 1975)
+   v = GObject.Value(GLib.Date, d)
+   check(v.g_type == 'GDate')
+   check(v.data:get_day() == 25)
+   check(v.data:get_month() == 1)
+   check(v.data:get_year() == 1975)
 end
 
 function gireg.gvalue_strv()
    local R = lgi.Regress
    local v = R.test_strv_in_gvalue()
-   check(v.type == 'GStrv')
-   check(#v.value == 3)
-   check(v.value[1] == 'one')
-   check(v.value[2] == 'two')
-   check(v.value[3] == 'three')
-   v = GObject.Value({ '1', '2', '3' }, 'GStrv')
-   check(#v.value == 3)
-   check(v.value[1] == '1')
-   check(v.value[2] == '2')
-   check(v.value[3] == '3')
+   check(v.g_type == 'GStrv')
+   check(#v.data == 3)
+   check(v.data[1] == 'one')
+   check(v.data[2] == 'two')
+   check(v.data[3] == 'three')
+   v = GObject.Value('GStrv', { '1', '2', '3' })
+   check(#v.data == 3)
+   check(v.data[1] == '1')
+   check(v.data[2] == '2')
+   check(v.data[3] == '3')
 end
 
 function gireg.obj_create()
@@ -1150,6 +1164,10 @@ end
 
 function gireg.obj_methods()
    local R = lgi.Regress
+   if R.TestObj._methods.do_matrix then
+      R.TestObj._methods.invoke_matrix = R.TestObj._methods.do_matrix
+      R.TestObj._methods.do_matrix = nil
+   end
    local o = R.TestObj()
    check(o:instance_method() == -1)
    check(o.static_method(42) == 42)
@@ -1166,7 +1184,7 @@ function gireg.obj_methods()
    check(res == false)
    check(type(msg) == 'string')
    check(type(code) == 'number')
-   check(o:do_matrix('unused') == 42)
+   check(o:invoke_matrix('unused') == 42)
 end
 
 function gireg.obj_null_args()
@@ -1179,8 +1197,12 @@ end
 
 function gireg.obj_virtual_methods()
    local R = lgi.Regress
+   if R.TestObj._methods.do_matrix then
+      R.TestObj._methods.invoke_matrix = R.TestObj._methods.do_matrix
+      R.TestObj._methods.do_matrix = nil
+   end
    local o = R.TestObj()
-   check(o:on_matrix('unused') == 42)
+   check(o:do_matrix('unused') == 42)
 end
 
 function gireg.obj_prop_int()
@@ -1302,6 +1324,28 @@ function gireg.obj_prop_list()
    check(not pcall(function() o.list = R.TestBoxed() end))
 end
 
+function gireg.obj_prop_dynamic()
+   local R = lgi.Regress
+   local o = R.TestObj()
+
+   -- Remove static property information, force lgi to use dynamic
+   -- GLib property system.
+   local old_prop = R.TestObj.int
+   R.TestObj._properties.int = nil
+   check(R.TestObj.int == nil)
+
+   check(o.int == 0)
+   o.int = 3
+   check(o.int == 3)
+   check(not pcall(function() o.int = 'string' end))
+   check(not pcall(function() o.int = {} end))
+   check(not pcall(function() o.int = true end))
+   check(not pcall(function() o.int = function() end end))
+
+   -- Restore TestObj to work normally.
+   R.TestObj._properties.int = old_prop
+end
+
 function gireg.obj_subobj()
    local R = lgi.Regress
    local o = R.TestSubObj()
@@ -1341,8 +1385,8 @@ function gireg.obj_fundamental()
    local f = R.TestFundamentalSubObject.new('foo-nda-mental')
    check(f)
    check(f.data == 'foo-nda-mental')
-   local v = lgi.GObject.Value(f)
-   check(v.value == f)
+   local v = lgi.GObject.Value(R.TestFundamentalSubObject, f)
+   check(v.data == f)
    f = nil
    collectgarbage()
 end
@@ -1408,8 +1452,8 @@ local groups = { 'gireg', gireg = gireg }
 
 -- Cmdline runner.
 local failed = false
-args = args or {}
-if #args == 0 then
+arg = arg or {}
+if #arg == 0 then
    -- Check for debug mode.
    if tests_debug then
       for _, name in ipairs(groups) do
@@ -1426,9 +1470,9 @@ if #args == 0 then
    end
 else
    -- Run just those which pass the mask.
-   for _, mask in ipairs(args) do
-      local groupname, groupmask = mask:match('^(.-):(.+)$')
-      if not groupname or not groups[group] then
+   for _, mask in ipairs(arg) do
+      local group, groupmask = mask:match('^(.-):(.+)$')
+      if not group or not groups[group] then
 	 io.write(("No test group for mask `%s' found."):format(mask))
 	 return 2
       end

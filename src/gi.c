@@ -40,20 +40,18 @@ lgi_gi_info_new (lua_State *L, GIBaseInfo *info)
   return 1;
 }
 
-GIBaseInfo *
-lgi_gi_info_test (lua_State *L, int narg)
+gpointer
+lgi_gi_load_function(lua_State *L, int typetable, const char *name)
 {
-  GIBaseInfo *info = NULL;
-  luaL_checkstack (L, 2, "");
-  lgi_makeabs (L, narg);
-  if (lua_getmetatable (L, narg))
-    {
-      luaL_getmetatable (L, LGI_GI_INFO);
-      if (lua_equal (L, -1, -2))
-	info = *(GIBaseInfo **) lua_touserdata (L, narg);
-      lua_pop (L, 2);
-    }
-  return info;
+  GIBaseInfo **info;
+  gpointer symbol = NULL;
+  lua_getfield (L, typetable, name);
+  info = lgi_udata_test (L, -1, LGI_GI_INFO);
+  if (info && GI_IS_FUNCTION_INFO (*info))
+    g_typelib_symbol (g_base_info_get_typelib (*info),
+		      g_function_info_get_symbol (*info), &symbol);
+  lua_pop (L, 1);
+  return symbol;
 }
 
 /* Userdata representing single group of infos (e.g. methods on

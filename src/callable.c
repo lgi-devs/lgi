@@ -103,20 +103,17 @@ static int call_mutex;
 
 /* Gets ffi_type for given tag, returns NULL if it cannot be handled. */
 static ffi_type *
-get_simple_ffi_type (GITypeTag tag, gboolean is_arg)
+get_simple_ffi_type (GITypeTag tag)
 {
   ffi_type *ffi;
   switch (tag)
     {
-    case GI_TYPE_TAG_VOID:
-      ffi = is_arg ? &ffi_type_pointer : &ffi_type_void;
-      break;
-
 #define HANDLE_TYPE(tag, ffitype)		\
       case GI_TYPE_TAG_ ## tag:			\
 	ffi = &ffi_type_ ## ffitype;		\
 	break
 
+      HANDLE_TYPE(VOID, void);
       HANDLE_TYPE(BOOLEAN, uint);
       HANDLE_TYPE(INT8, sint8);
       HANDLE_TYPE(UINT8, uint8);
@@ -144,11 +141,12 @@ get_simple_ffi_type (GITypeTag tag, gboolean is_arg)
 
 /* Gets ffi_type for given Param instance. */
 static ffi_type *
-get_ffi_type(Param *param, gboolean is_arg)
+get_ffi_type(Param *param)
 {
   /* In case of inout or out parameters, the type is always pointer. */
   GITypeTag tag = g_type_info_get_tag (&param->ti);
-  ffi_type* ffi = get_simple_ffi_type (tag, is_arg);
+  ffi_type* ffi = g_type_info_is_pointer(&param->ti)
+    ? &ffi_type_pointer : get_simple_ffi_type (tag);
   if (ffi == NULL)
     {
       /* Something more complex. */
@@ -159,8 +157,7 @@ get_ffi_type(Param *param, gboolean is_arg)
 	    {
 	    case GI_INFO_TYPE_ENUM:
 	    case GI_INFO_TYPE_FLAGS:
-	      ffi = get_simple_ffi_type (g_enum_info_get_storage_type (ii),
-					 is_arg);
+	      ffi = get_simple_ffi_type (g_enum_info_get_storage_type (ii));
 	      break;
 
 	    default:
@@ -265,7 +262,7 @@ lgi_callable_create (lua_State *L, GICallableInfo *info, gpointer addr)
   callable->retval.dir = GI_DIRECTION_OUT;
   callable->retval.transfer = g_callable_info_get_caller_owns (callable->info);
   callable->retval.internal = FALSE;
-  ffi_retval = get_ffi_type (&callable->retval, FALSE);
+  ffi_retval = get_ffi_type (&callable->retval);
   callable_mark_array_length (callable, &callable->retval.ti);
 
   /* Process 'self' argument, if present. */
@@ -282,7 +279,7 @@ lgi_callable_create (lua_State *L, GICallableInfo *info, gpointer addr)
       param->dir = g_arg_info_get_direction (&param->ai);
       param->transfer = g_arg_info_get_ownership_transfer (&param->ai);
       *ffi_arg = (param->dir == GI_DIRECTION_IN) ?
-	get_ffi_type(param, TRUE) : &ffi_type_pointer;
+	get_ffi_type(param) : &ffi_type_pointer;
 
       /* Mark closure-related user_data fields and possibly destroy_notify
 	 fields as internal. */
@@ -404,13 +401,14 @@ callable_call (lua_State *L)
 	{
 	  args[0].v_pointer =
 	    lgi_object_2c (L, 2, g_registered_type_info_get_g_type (parent),
-			   FALSE);
+			   FALSE, FALSE);
 	  nret++;
 	}
       else
 	{
 	  lgi_type_get_repotype (L, G_TYPE_INVALID, parent);
-	  nret += lgi_record_2c (L, 2, &args[0].v_pointer, FALSE);
+	  args[0].v_pointer = lgi_record_2c (L, 2, FALSE, FALSE);
+	  nret++;
 	}
 
       ffi_args[0] = &args[0];
@@ -448,7 +446,7 @@ callable_call (lua_State *L)
 	  /* Convert parameter from Lua stack to C. */
 	  nret += lgi_marshal_arg_2c (L, &param->ti, &param->ai,
 				      GI_TRANSFER_NOTHING,
-				      &args[argi], lua_argi++, FALSE,
+				      &args[argi], lua_argi++, FALSE, FALSE,
 				      callable->info,
 				      ffi_args + callable->has_self);
 	/* Special handling for out/caller-alloc structures; we have to
@@ -494,16 +492,6 @@ callable_call (lua_State *L)
      marshalling code. */
   lua_pop (L, nret);
 
-  /* Check, whether function threw. */
-  if (err != NULL)
-    {
-      lua_pushboolean (L, 0);
-      lua_pushstring (L, err->message);
-      lua_pushinteger (L, err->code);
-      g_error_free (err);
-      return 3;
-    }
-
   /* Handle return value. */
   nret = 0;
   if (g_type_info_get_tag (&callable->retval.ti) != GI_TYPE_TAG_VOID)
@@ -513,6 +501,21 @@ callable_call (lua_State *L)
 			    ffi_args + callable->has_self);
       nret++;
       lua_insert (L, -caller_allocated - 1);
+    }
+
+  /* Check, whether function threw. */
+  if (err != NULL)
+    {
+      if (nret == 0)
+	{
+	  lua_pushboolean (L, 0);
+	  nret = 1;
+	}
+
+      lua_pushstring (L, err->message);
+      lua_pushinteger (L, err->code);
+      g_error_free (err);
+      return nret + 2;
     }
 
   /* Process output parameters. */
@@ -539,6 +542,15 @@ callable_call (lua_State *L)
 	nret++;
       }
 
+  /* When function can throw and we are not returning anything, be
+     sure to return at least 'true', so that caller can check for
+     error in a usual way (i.e. by Lua's assert() call). */
+  if (nret == 0 && callable->throws)
+    {
+      lua_pushboolean (L, 1);
+      nret = 1;
+    }
+
   g_assert (caller_allocated == 0);
   return nret;
 }
@@ -554,9 +566,15 @@ static const struct luaL_reg callable_reg[] = {
 static void
 callback_create (lua_State *L, Callback *callback, int target_arg)
 {
-  /* Store reference to target Lua function. */
-  lua_pushvalue (L, target_arg);
-  callback->target_ref = luaL_ref (L, LUA_REGISTRYINDEX);
+  /* Store reference to target Lua function (or NOREF if it is thread
+     instead). */
+  if (lua_isthread (L, target_arg))
+    callback->target_ref = LUA_NOREF;
+  else
+    {
+      lua_pushvalue (L, target_arg);
+      callback->target_ref = luaL_ref (L, LUA_REGISTRYINDEX);
+    }
 
   /* Store reference to target Lua thread. */
   callback->L = L;
@@ -572,18 +590,22 @@ callback_create (lua_State *L, Callback *callback, int target_arg)
 
 /* Prepares environment for the target to be called; sets up state
    (and returns it), locks call mutex and stores target to be invoked
-   to the state. */
+   to the state and sets *call to TRUE.  If the target thread should
+   not be called but resumed instead, sets *call to FALSE and does not
+   push anything to the stack. */
 static lua_State *
-callback_prepare_call (Callback *callback)
+callback_prepare_call (Callback *callback, gboolean *call)
 {
   /* Get access to proper Lua context. */
   lua_State *L = callback->L;
   if (callback->mutex)
     g_mutex_lock (callback->mutex);
   lua_rawgeti (L, LUA_REGISTRYINDEX, callback->thread_ref);
-  if (lua_isthread (L, -1))
+  L = lua_tothread (L, -1);
+  if ((*call = callback->target_ref != LUA_NOREF) != FALSE)
     {
-      L = lua_tothread (L, -1);
+      /* We will call target method, prepare context/thread to do
+	 it. */
       if (lua_status (L) != 0)
 	{
 	  /* Thread is not in usable state for us, it is suspended, we
@@ -595,10 +617,12 @@ callback_prepare_call (Callback *callback)
 	  luaL_unref (L, LUA_REGISTRYINDEX, callback->thread_ref);
 	  callback->thread_ref = luaL_ref (callback->L, LUA_REGISTRYINDEX);
 	}
+      lua_pop (callback->L, 1);
+      callback->L = L;
+      lua_rawgeti (L, LUA_REGISTRYINDEX, callback->target_ref);
     }
-  lua_pop (callback->L, 1);
-  lua_rawgeti (L, LUA_REGISTRYINDEX, callback->target_ref);
-  return callback->L = L;
+
+  return L;
 }
 
 /* Frees everything allocated in Callback. */
@@ -617,10 +641,11 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   Callable *callable;
   FfiClosure *closure = closure_arg;
   gint res = 0, npos, i, stacktop;
+  gboolean call;
   Param *param;
 
   /* Get access to proper Lua context. */
-  lua_State *L = callback_prepare_call (&closure->callback);
+  lua_State *L = callback_prepare_call (&closure->callback, &call);
 
   /* Get access to Callable structure. */
   lua_rawgeti (L, LUA_REGISTRYINDEX, closure->callable_ref);
@@ -628,9 +653,9 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   lua_pop (L, 1);
 
   /* Remember stacktop, this is the position on which we should expect
-     return values (note that callback_prepare_call already pushed
-     function to be executed to the stack). */
-  stacktop = lua_gettop (L) - 1;
+     return values (note that callback_prepare_call already might have
+     pushed function to be executed to the stack). */
+  stacktop = lua_gettop (L) - (call ? 1 : 0);
 
   /* Marshall 'self' argument, if it is present. */
   npos = 0;
@@ -645,7 +670,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
       else if (type == GI_INFO_TYPE_STRUCT || type == GI_INFO_TYPE_UNION)
 	{
 	  lgi_type_get_repotype (L, G_TYPE_INVALID, parent);
-	  lgi_record_2lua (L, addr, LGI_RECORD_PEEK, 0);
+	  lgi_record_2lua (L, addr, FALSE, 0);
 	}
       else
 	g_assert_not_reached ();
@@ -664,10 +689,27 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
       }
 
   /* Call it. */
-  if (callable->throws)
-    res = lua_pcall (L, npos, LUA_MULTRET, 0);
+  if (call)
+    {
+      if (callable->throws)
+	res = lua_pcall (L, npos, LUA_MULTRET, 0);
+      else
+	lua_call (L, npos, LUA_MULTRET);
+    }
   else
-    lua_call (L, npos, LUA_MULTRET);
+    {
+      res = lua_resume (L, npos);
+
+      if (res == LUA_YIELD)
+	/* For our purposes is YIELD the same as if the coro really
+	   returned. */
+	res = 0;
+      else if (res == LUA_ERRRUN && !callable->throws)
+	/* If closure is not allowed to return errors and coroutine
+	   finished with error, rethrow the error in the context of
+	   the original thread. */
+	lua_error (L);
+    }
   npos = stacktop + 1;
 
   /* Check, whether we can report an error here. */
@@ -679,7 +721,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	{
 	  to_pop = lgi_marshal_arg_2c (L, &callable->retval.ti, NULL,
 				       callable->retval.transfer, ret, npos,
-				       FALSE, callable->info,
+				       FALSE, FALSE, callable->info,
 				       args + callable->has_self);
 	  if (to_pop != 0)
 	    {
@@ -700,7 +742,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	    to_pop =
 	      lgi_marshal_arg_2c (L, &param->ti, &param->ai, param->transfer,
 				  (GIArgument *)args[i + callable->has_self],
-				  npos, FALSE, callable->info,
+				  npos, FALSE, FALSE, callable->info,
 				  args + callable->has_self);
 	    if (to_pop != 0)
 	      {
@@ -809,9 +851,10 @@ lgi_gclosure_marshal (GClosure *closure, GValue *return_value,
 {
   GlibClosure *c = (GlibClosure *) closure;
   int vals = 0;
+  gboolean call;
 
   /* Prepare context in which will everything happen. */
-  lua_State *L = callback_prepare_call (&c->callback);
+  lua_State *L = callback_prepare_call (&c->callback, &call);
   luaL_checkstack (L, n_param_values + 1, "");
 
   /* Push parameters. */
@@ -822,9 +865,14 @@ lgi_gclosure_marshal (GClosure *closure, GValue *return_value,
     }
 
   /* Invoke the function. */
-  lua_call (L, vals, 1);
-
-  /* Marshal result back. */
+  if (call)
+    lua_call (L, vals, 1);
+  else
+    {
+      int res = lua_resume (L, vals);
+      if (res != 0 && res != LUA_YIELD)
+	lua_error (L);
+    }
   lgi_marshal_val_2c (L, NULL, GI_TRANSFER_NOTHING, return_value, -1);
 
   /* Going back to C code, release back the mutex. */
@@ -872,9 +920,28 @@ callable_new (lua_State *L)
 			      luaL_checkudata (L, 1, LGI_GI_INFO), NULL);
 }
 
+/* Creates new closure instance with given Lua target.  Lua prototype:
+   closure = callable.closure(target) */
+static int
+callable_closure (lua_State *L)
+{
+  /* Create closure instance wrapping argument and return it. */
+  if (lgi_type_get_repotype (L, G_TYPE_CLOSURE, NULL) != G_TYPE_INVALID)
+    lgi_record_2lua (L, lgi_gclosure_create (L, 1), TRUE, 0);
+  return 1;
+}
+
+/* Callable module public API table. */
+static const luaL_Reg callable_api_reg[] = {
+  { "new", callable_new },
+  { "closure", callable_closure },
+  { NULL, NULL }
+};
+
 static void
 mutex_free (gpointer mutex)
 {
+  g_mutex_unlock (mutex);
   g_mutex_free (mutex);
 }
 
@@ -894,8 +961,7 @@ lgi_callable_init (lua_State *L)
 
   /* Create public api for callable module. */
   lua_newtable (L);
-  lua_pushcfunction (L, callable_new);
-  lua_setfield (L, -2, "new");
+  luaL_register (L, NULL, callable_api_reg);
   lua_setfield (L, -2, "callable");
 
   /* Create call mutex guard, keep it locked initially (it is unlocked

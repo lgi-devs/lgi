@@ -14,10 +14,18 @@ def build(bld):
     bld(
         features = 'c cshlib luaext',
 
-        source = 'core.c gi.c callable.c marshal.c record.c object.c',
+        source = ['core.c',
+                  'gi.c',
+                  'buffer.c',
+                  'callable.c',
+                  'marshal.c',
+                  'record.c',
+                  'object.c'],
         target = 'lgi',
         uselib = ['LUA', 'GI'],
         cflags = bld.env.CCFLAGS,
         install_path = '${LUA_INSTALL_CMOD}',
         )
     bld.install_files('${LUA_INSTALL_LMOD}/', 'lgi.lua')
+    bld.install_files('${LUA_INSTALL_LMOD}/lgix/',
+                      bld.path.ant_glob('lgix/*.lua'))

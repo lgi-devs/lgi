@@ -33,6 +33,10 @@ int lgi_type_get_name (lua_State *L, GIBaseInfo *info);
    found in the repo. */
 GType lgi_type_get_repotype (lua_State *L, GType gtype, GIBaseInfo *info);
 
+/* Gets GType from Lua index narg.  Accepts number and when it is
+   other type, invokes Lua helper to convert. */
+GType lgi_type_get_gtype (lua_State *L, int narg);
+
 /* Allocates guard, a pointer-size userdata with associated destroy
    handler. Returns pointer to user_data stored inside guard. */
 gpointer *lgi_guard_create (lua_State *L, GDestroyNotify destroy);
@@ -51,6 +55,16 @@ void lgi_record_init (lua_State *L);
 void lgi_object_init (lua_State *L);
 void lgi_callable_init (lua_State *L);
 void lgi_gi_init (lua_State *L);
+void lgi_buffer_init (lua_State *L);
+
+/* Checks whether given argument is of specified udata - similar to
+   luaL_testudata, which is missing in Lua 5.1 */
+void *
+lgi_udata_test (lua_State *L, int narg, const char *name);
+
+/* Metatable name of userdata for 'bytes' extension; see
+   http://permalink.gmane.org/gmane.comp.lang.lua.general/79288 */
+#define LGI_BYTES_BUFFER "bytes.bytearray"
 
 /* Metatable name of userdata - gi wrapped 'GIBaseInfo*' */
 #define LGI_GI_INFO "lgi.gi.info"
@@ -58,9 +72,10 @@ void lgi_gi_init (lua_State *L);
 /* Creates new instance of info from given GIBaseInfo pointer. */
 int lgi_gi_info_new (lua_State *L, GIBaseInfo *info);
 
-/* Checks if narg is gi.info and if yes, returns it, otherwise returns
-   NULL. */
-GIBaseInfo *lgi_gi_info_test (lua_State *L, int narg);
+/* Assumes that 'typetable' can hold field 'name' which contains
+   wrapped LGI_GI_INFO of function.  Returns address of this function,
+   NULL if table does not contain such field. */
+gpointer lgi_gi_load_function(lua_State *L, int typetable, const char *name);
 
 /* Gets gtype of the type represented by typeinfo. */
 GType lgi_get_gtype (lua_State *L, GITypeInfo *ti);
@@ -70,7 +85,8 @@ GType lgi_get_gtype (lua_State *L, GITypeInfo *ti);
    returns. */
 int lgi_marshal_arg_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 			GITransfer xfer,  GIArgument *val, int narg,
-			gboolean use_pointer, GICallableInfo *ci, void **args);
+			gboolean in_parent, gboolean use_pointer,
+			GICallableInfo *ci, void **args);
 
 /* Marshalls single value from Lua to GValue. ti is optional. */
 void lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
@@ -122,26 +138,17 @@ GClosure *lgi_gclosure_create (lua_State *L, int target);
 /* Allocates and creates new record instance. */
 gpointer lgi_record_new (lua_State *L, GIBaseInfo *ri);
 
-/* Record ownership modes. */
-typedef enum
-  {
-    LGI_RECORD_PEEK,
-    LGI_RECORD_PARENT,
-    LGI_RECORD_OWN,
-  } LgiRecordMode;
-
 /* Creates Lua-side part of given record. Assumes that repotype table
    is on the stack, replaces it with newly created proxy. If parent
    not zero, it is stack index of record parent (i.e. record of which
    the arg record is part of). */
-void lgi_record_2lua (lua_State *L, gpointer addr, LgiRecordMode mode,
-		      int parent);
+void lgi_record_2lua (lua_State *L, gpointer addr, gboolean own, int parent);
 
 /* Gets pointer to C-structure from given Lua-side object. Expects
    repo typetable of expected argument pushed on the top of the stack,
-   removes it.  Returns number of temporary objects created pushed on
-   the stack. */
-int lgi_record_2c (lua_State *L, int narg, gpointer *addr, gboolean optional);
+   removes it. */
+gpointer lgi_record_2c (lua_State *L, int narg, gboolean optional,
+			gboolean nothrow);
 
 /* Creates Lua-side part (proxy) of given object. If the object is not
    owned (own == FALSE), an ownership is automatically acquired. */
@@ -152,4 +159,5 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own);
    gtype is not G_TYPE_INVALID, the real type is checked to conform to
    requested type. */
 gpointer
-lgi_object_2c (lua_State *L, int narg, GType gtype, gboolean optional);
+lgi_object_2c (lua_State *L, int narg, GType gtype, gboolean optional,
+	       gboolean nothrow);

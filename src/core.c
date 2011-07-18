@@ -8,6 +8,8 @@
  * Core C utility API.
  */
 
+#include <string.h>
+#include <locale.h>
 #include "lgi.h"
 
 #ifndef NDEBUG
@@ -50,6 +52,22 @@ const char *lgi_sd (lua_State *L)
 }
 #endif
 
+void *
+lgi_udata_test (lua_State *L, int narg, const char *name)
+{
+  void *udata = NULL;
+  luaL_checkstack (L, 2, "");
+  lgi_makeabs (L, narg);
+  if (lua_getmetatable (L, narg))
+    {
+      luaL_getmetatable (L, name);
+      if (lua_equal (L, -1, -2))
+	udata = lua_touserdata (L, narg);
+      lua_pop (L, 2);
+    }
+  return udata;
+}
+
 void
 lgi_cache_create (lua_State *L, gpointer key, const char *mode)
 {
@@ -63,6 +81,27 @@ lgi_cache_create (lua_State *L, gpointer key, const char *mode)
       lua_setmetatable (L, -2);
     }
   lua_rawset (L, LUA_REGISTRYINDEX);
+}
+
+static int core_addr_logger;
+static int core_addr_getgtype;
+
+static int
+core_set(lua_State *L)
+{
+  const char *name = luaL_checkstring (L, 1);
+  int *key;
+  if (strcmp (name, "logger") == 0)
+    key = &core_addr_logger;
+  else if (strcmp (name, "getgtype") == 0)
+    key = &core_addr_getgtype;
+  else
+    luaL_argerror (L, 1, "invalid key");
+
+  lua_pushlightuserdata (L, key);
+  lua_pushvalue (L, 2);
+  lua_rawset (L, LUA_REGISTRYINDEX);
+  return 0;
 }
 
 int
@@ -136,7 +175,7 @@ lgi_type_get_repotype (lua_State *L, GType gtype, GIBaseInfo *info)
 	  lua_getfield (L, -1, g_base_info_get_name (info));
 	  lua_replace (L, -4);
 	  lua_pop (L, 2);
-	  if (gtype == G_TYPE_INVALID)
+	  if (gtype == G_TYPE_INVALID && !lua_isnil (L, -1))
 	    {
 	      lua_getfield (L, -1, "_gtype");
 	      gtype = luaL_optnumber (L, -1, G_TYPE_INVALID);
@@ -148,6 +187,40 @@ lgi_type_get_repotype (lua_State *L, GType gtype, GIBaseInfo *info)
     }
   lua_replace (L, -2);
   return gtype;
+}
+
+GType
+lgi_type_get_gtype (lua_State *L, int narg)
+{
+  /* Handle simple cases natively, forward to Lua implementation for
+     the rest. */
+  switch (lua_type (L, narg))
+    {
+    case LUA_TNIL:
+    case LUA_TNONE:
+      return G_TYPE_INVALID;
+
+    case LUA_TNUMBER:
+      return lua_tonumber (L, narg);
+
+    case LUA_TSTRING:
+      return g_type_from_name (lua_tostring (L, narg));
+
+    default:
+      {
+	GType gtype = G_TYPE_INVALID;
+	lua_pushlightuserdata (L, &core_addr_getgtype);
+	lua_rawget (L, LUA_REGISTRYINDEX);
+	if (!lua_isnil (L, -1))
+	  {
+	    lua_pushvalue (L, narg);
+	    lua_call (L, 1, 1);
+	    gtype = lgi_type_get_gtype (L, -1);
+	  }
+	lua_pop (L, 1);
+	return gtype;
+      }
+    }
 }
 
 typedef struct _Guard
@@ -178,13 +251,25 @@ lgi_guard_create (lua_State *L, GDestroyNotify destroy)
   return &guard->data;
 }
 
+/* Converts GType from/to string. */
 static int
-lgi_constant (lua_State* L)
+core_gtype (lua_State *L)
+{
+  GType gtype = lgi_type_get_gtype (L, 1);
+  if (lua_isnumber (L, 1))
+    lua_pushstring (L, g_type_name (gtype));
+  else
+    lua_pushnumber (L, gtype);
+  return 1;
+}
+
+/* Instantiate constant from given gi_info. */
+static int
+core_constant (lua_State *L)
 {
   /* Get typeinfo of the constant. */
   GIArgument val;
-  GIConstantInfo *ci = * (GIConstantInfo **) luaL_checkudata (L, 1,
-							      LGI_GI_INFO);
+  GIConstantInfo *ci = *(GIConstantInfo **) luaL_checkudata (L, 1, LGI_GI_INFO);
   GITypeInfo *ti = g_constant_info_get_type (ci);
   lgi_gi_info_new (L, ti);
   g_constant_info_get_value (ci, &val);
@@ -193,15 +278,30 @@ lgi_constant (lua_State* L)
   return 1;
 }
 
-static int core_addr_logger;
-
+/* Value contents 'access' function. Lua-side prototype:
+   res = core.value(val)
+   core.value(val, newval) */
 static int
-lgi_setlogger(lua_State *L)
+core_value (lua_State *L)
 {
-  lua_pushlightuserdata (L, &core_addr_logger);
-  lua_pushvalue (L, 1);
-  lua_rawset (L, LUA_REGISTRYINDEX);
-  return 0;
+  GValue *val;
+  lgi_type_get_repotype (L, G_TYPE_VALUE, NULL);
+  val = lgi_record_2c (L, 1, FALSE, FALSE);
+  if (lua_isnone (L, 2))
+    {
+      /* Read the value from GValue. */
+      lgi_marshal_val_2lua (L, NULL, GI_TRANSFER_NOTHING, val);
+      return 1;
+    }
+  else
+    {
+      /* Write value to GValue, or reset it if source is 'nil'. */
+      if (lua_isnil (L, 2))
+	g_value_reset (val);
+      else
+	lgi_marshal_val_2c (L, NULL, GI_TRANSFER_NOTHING, val, 2);
+      return 0;
+    }
 }
 
 static const char* log_levels[] = {
@@ -209,7 +309,7 @@ static const char* log_levels[] = {
 };
 
 static int
-lgi_log (lua_State *L)
+core_log (lua_State *L)
 {
   const char *domain = luaL_checkstring (L, 1);
   int level = 1 << (luaL_checkoption (L, 2, log_levels[5], log_levels) + 2);
@@ -274,9 +374,11 @@ log_handler (const gchar *log_domain, GLogLevelFlags log_level,
 }
 
 static const struct luaL_reg lgi_reg[] = {
-  { "constant", lgi_constant },
-  { "log",  lgi_log },
-  { "setlogger", lgi_setlogger },
+  { "set", core_set },
+  { "log",  core_log },
+  { "gtype", core_gtype },
+  { "constant", core_constant },
+  { "value", core_value },
   { NULL, NULL }
 };
 
@@ -288,12 +390,14 @@ luaopen_lgi__core (lua_State* L)
   /* Early GLib initializations. Make sure that following G_TYPEs are
      already initialized, because GIRepo does not initialize them (it
      does not know that they are boxed). */
+  setlocale (LC_ALL, "");
   g_type_init ();
   volatile GType unused;
   unused = G_TYPE_DATE;
   unused = G_TYPE_REGEX;
   unused = G_TYPE_DATE_TIME;
   unused = G_TYPE_VARIANT_TYPE;
+  unused = unused;
 
   /* Register 'guard' metatable. */
   luaL_newmetatable (L, UD_GUARD);
@@ -315,6 +419,7 @@ luaopen_lgi__core (lua_State* L)
   g_log_set_default_handler (log_handler, L);
 
   /* Initialize modules. */
+  lgi_buffer_init (L);
   lgi_gi_init (L);
   lgi_record_init (L);
   lgi_object_init (L);

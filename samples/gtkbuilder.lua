@@ -31,16 +31,16 @@ if gtk_builder_use_standard_api then
    end
 else
    -- Instantiate builder and load objects.
-   local objects = Gtk.Builder.from_files('demo.ui')
+   local ui = Gtk.Builder({file = 'demo.ui'}).objects
 
    -- Get top-level window from the builder.
-   window = objects.window1
+   window = ui.window1
 
    -- Connect 'Quit' and 'About' actions.
-   function objects.Quit:on_activate() window:destroy() end
-   function objects.About:on_activate()
-      objects.aboutdialog1:run()
-      objects.aboutdialog1:hide()
+   function ui.Quit:on_activate() window:destroy() end
+   function ui.About:on_activate()
+      ui.aboutdialog1:run()
+      ui.aboutdialog1:hide()
    end
 end
 

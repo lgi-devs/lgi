@@ -27,24 +27,32 @@ assert(gi.require ('GObject', '2.0'))
 -- Create lgi table, containing the module.
 local lgi = {}
 
+-- Add simple flag-checking function, avoid compatibility hassle with
+-- importing bitlib just because of this simple operation.
+function lgi.has_bit(value, flag)
+   return value % (2 * flag) >= flag
+end
+
 -- Prepare logging support.  'log' is module-exported table, containing all
 -- functionality related to logging wrapped around GLib g_log facility.
 local logtable = { ERROR = 'assert', DEBUG = 'silent' }
 lgi.log = logtable
-core.setlogger(
-   function(domain, level, message)
-      -- Create domain table in the log table if it does not exist yet.
-      if not logtable[domain] then logtable[domain] = {} end
+core.set('logger',
+	 function(domain, level, message)
+	    -- Create domain table in the log table if it does not
+	    -- exist yet.
+	    if not logtable[domain] then logtable[domain] = {} end
 
-      -- Check whether message should generate assert (i.e. Lua exception).
-      local setting = logtable[domain][level] or logtable[level]
-      if setting == 'assert' then error() end
-      if setting == 'silent' then return true end
+	    -- Check whether message should generate assert (i.e. Lua
+	    -- exception).
+	    local setting = logtable[domain][level] or logtable[level]
+	    if setting == 'assert' then error() end
+	    if setting == 'silent' then return true end
 
-      -- Get handler for the domain and invoke it.
-      local handler = logtable[domain].handler or logtable.handler
-      return handler and handler(domain, level, message)
-   end)
+	    -- Get handler for the domain and invoke it.
+	    local handler = logtable[domain].handler or logtable.handler
+	    return handler and handler(domain, level, message)
+	 end)
 
 -- Main logging facility.
 function logtable.log(domain, level, format, ...)
@@ -72,7 +80,7 @@ end
 -- For the rest of bootstrap, prepare logging to Lgi domain.
 local log = logtable.domain('Lgi')
 
-log.message('Lgi: Lua to GObject-Introspection binding v0.1')
+log.message('Lua to GObject-Introspection binding v0.1')
 
 -- Repository, table with all loaded namespaces.  Its metatable takes care of
 -- loading on-demand.  Created by C-side bootstrap.
@@ -230,6 +238,14 @@ local function get_category(children, xform_value,
    return setmetatable({}, mt)
 end
 
+-- Keyword translation dictionary.  Used for translating LUa keywords
+-- which might appear as symbols in typelibs into Lua-neutral identifiers.
+local keyword_dictionary = {
+   _end = 'end', _do = 'do', _then = 'then', _elseif = 'elseif', _in = 'in',
+   _local = 'local', _function = 'function', _nil = 'nil', _false = 'false',
+   _true = 'true', _and = 'and', _or = 'or', _not = 'not',
+}
+
 -- Loads element from specified compound typetable.
 local function get_element(typetable, instance, symbol)
    -- Check whether symbol directly exists.
@@ -267,9 +283,16 @@ local function get_element(typetable, instance, symbol)
       end
    end
 
-   -- As a last resort, metatable might contain fallback implementation.
+   -- metatable might contain fallback implementation.
    local meta = getmetatable(typetable)
-   return meta and meta[symbol]
+   val = meta and meta[symbol]
+   if val then return val end
+
+   -- Finally, check translation table.  If the symbol can be found
+   -- there, try to lookup translated symbol.
+   local xlated = keyword_dictionary[symbol]
+   if xlated then val = get_element(typetable, instance, xlated) end
+   return val
 end
 
 -- Fully resolves the whole typetable, i.e. load all symbols normally
@@ -300,7 +323,21 @@ local function default_access(typetable, instance, name, ...)
    -- Try custom override first.
    if element == nil then
       local func = typetable:_element(instance, '_custom_' .. name)
-      if func then return func(typetable, instance, name, ...) end
+      if func then
+	 -- If custom element is a table, assume that this table
+	 -- contains 'get' and 'set' methods.  Dispatch to them, and
+	 -- error ou if they are missing.
+	 if type(func) == 'table' then
+	    local mode = select('#', ...) == 0 and 'get' or 'set'
+	    if not func[mode] then
+	       error(("%s: cannot %s `%s'"):format(
+			typetable._name, mode == 'get' and 'read' or 'write',
+			name), 3)
+	    end
+	    func = func[mode]
+	 end
+	 return func(instance, ...)
+      end
    end
 
    -- Forward to access_element implementation.
@@ -315,7 +352,7 @@ local function default_access_element(typetable, instance, name, element, ...)
    else
       -- Static member, is always read-only when accessing per-instance.
       assert(select('#', ...) == 0,
-	     ("%s: `s' is not writable"):format(typetable._name, name))
+	     ("%s: `%s' is not writable"):format(typetable._name, name))
       return element
    end
 end
@@ -356,7 +393,7 @@ function component_mt.bitflags:__index(value)
    if type(value) ~= 'number' then return end
    local t = {}
    for name, flag in pairs(self) do
-      if type(flag) == 'number' and value % (2 * flag) >= flag then
+      if type(flag) == 'number' and lgi.has_bit(value, flag) then
 	 t[name] = flag
       end
    end
@@ -429,7 +466,7 @@ function component_mt.record:_access_element(instance, name, element, ...)
 end
 
 -- _access_element method for raw objects (fundamentals).  Specific
--- behavior for GObject will be overriden in GObject.Object._access().
+-- behavior for GObject will be overriden in GObject.Object._access_element().
 function component_mt.class:_access_element(instance, name, element, ...)
    if gi.isinfo(element) then
       if element.is_field then
@@ -437,36 +474,21 @@ function component_mt.class:_access_element(instance, name, element, ...)
       elseif element.is_signal then
 	 return access_signal(instance, element, ...)
       elseif element.is_vfunc then
-	 local typetable, _, typestruct = core.object.typeof(
-	    instance, element.container.gtype)
-	 return core.record.field(typestruct, typetable._type[element.name])
+	 local typestruct = core.object.query(instance, 'class',
+					      element.container.gtype)
+	 return core.record.field(typestruct, self._type[element.name])
       end
    end
    return default_access_element(self, instance, name, element, ...)
 end
 
--- If member of interface cannot be found normally, try to look it up
--- in parent namespace too; this allows to overcome IMHO gir-compiler
--- flaw, causing that we can see e.g. Gio.file_new_for_path() instead
--- of Gio.File.new_for_path().
-function component_mt.interface:_element(instance, symbol)
-   local val = get_element(self, instance, symbol)
-   if not val then
-      -- Convert name from CamelCase to underscore_delimited form.
-      local ns_name, iface_name = self._name:match('^([%w_]+)%.([%w_]+)$')
-      local method_name = {}
-      for part in iface_name:gmatch('[%u%d][%l%d]*') do
-	 method_name[#method_name + 1] = part:lower()
-      end
-      method_name[#method_name + 1] = symbol
-      val = repo[ns_name][table.concat(method_name, '_')]
-      self[symbol] = val
-   end
-   return val
-end
-
 -- Create structure instance and initialize it with given fields.
-function component_mt.record:__call(fields)
+function component_mt.record:__call(...)
+   -- Check, whether we have '_constructor' field in the typetable.  If yes,
+   -- always use this method.
+   local ctor = self._constructor
+   if ctor then return ctor(...) end
+
    -- Create the structure instance.
    local info
    if self._gtype then
@@ -481,7 +503,7 @@ function component_mt.record:__call(fields)
    local struct = core.record.new(info)
 
    -- Set values of fields.
-   for name, value in pairs(fields or {}) do
+   for name, value in pairs(... or {}) do
       struct[name] = value
    end
    return struct
@@ -520,6 +542,13 @@ local function create_component(info, mt)
    end
    return setmetatable(component, mt)
 end
+
+-- Core callback, gets gtype from advanced types like structs and objects.
+core.set('getgtype',
+	 function(t)
+	    assert(type(t) == 'table', 'bad argument, not GType')
+	    return t._gtype
+	 end)
 
 -- Table containing loaders for various GI types, indexed by
 -- gi.InfoType constants.
@@ -568,11 +597,11 @@ local function load_signal_name_reverse(name)
 end
 
 local function load_vfunc_name(name)
-   return name:match('^on_(.+)$')
+   return name:match('^do_(.+)$')
 end
 
 local function load_vfunc_name_reverse(name)
-   return 'on_' .. name
+   return 'do_' .. name
 end
 
 local function load_method(mi)
@@ -583,22 +612,22 @@ local function load_method(mi)
 end
 
 -- Loads structure information into table representing the structure
-local function load_record(namespace, info)
-   -- Avoid exposing internal structs created for object implementations.
-   if not info.is_gtype_struct then
-      local record = create_component(info, component_mt.record)
-      record._methods = get_category(info.methods, core.callable.new)
-      record._fields = get_category(info.fields)
-      return record
-   end
+local function load_record(info)
+   local record = create_component(info, component_mt.record)
+   record._methods = get_category(info.methods, core.callable.new)
+   record._fields = get_category(info.fields)
+   return record
 end
 
 function typeloader.struct(namespace, info)
-   return load_record(namespace, info), '_structs'
+   -- Avoid exposing internal structs created for object implementations.
+   if not info.is_gtype_struct then
+      return load_record(info), '_structs'
+   end
 end
 
 function typeloader.union(namespace, info)
-   return load_record(namespace, info), '_unions'
+   return load_record(info), '_unions'
 end
 
 local function load_properties(info)
@@ -620,7 +649,7 @@ function typeloader.interface(namespace, info)
    if type_struct then
       interface._vfuncs = get_category(info.vfuncs, nil, load_vfunc_name,
 				       load_vfunc_name_reverse)
-      interface._type = get_category(type_struct.fields)
+      interface._type = load_record(type_struct)
    end
    return interface, '_interfaces'
 end
@@ -637,7 +666,7 @@ function typeloader.object(namespace, info)
    if type_struct then
       class._vfuncs = get_category(info.vfuncs, nil, load_vfunc_name,
 				   load_vfunc_name_reverse)
-      class._type = type_struct and get_category(type_struct.fields)
+      class._type = load_record(type_struct)
    end
 
    -- Populate inheritation information (_implements and _parent fields).
@@ -675,9 +704,11 @@ function component_mt.namespace:__index(symbol)
       val, category = loader(self, info)
 
       -- Cache the symbol in specified category in the namespace.
-      local cat = rawget(self, category) or {}
-      self[category] = cat
-      cat[symbol] = val
+      if val then
+	 local cat = rawget(self, category) or {}
+	 self[category] = cat
+	 cat[symbol] = val
+      end
    end
    return val
 end
@@ -718,8 +749,14 @@ function lgi.require(name, version)
       end
 
       -- Try to load override, if it is present.
-      pcall(require, ('lgix-%s-%s'):format(
-	       ns._name, ns._version:gsub('%.', '_')))
+      local lgix_name = 'lgix.' .. ns._name
+      local ok, msg = pcall(require, lgix_name)
+      if not ok then
+	 -- Try parsing message; if it is something different than
+	 -- "module xxx not found", then rethrow the exception.
+	 assert(msg:find("module '" .. lgix_name .. "' not found:", 1, true),
+		msg)
+      end
    else
       assert(not version or ns._version == version,
 	     ("loading '%s-%s', but version '%s' is already loaded"):format(
@@ -741,39 +778,50 @@ for gtype_name, gi_name in pairs {
       GDate = 'GLib.Date', GRegex = 'GLib.Regex', GDateTime = 'GLib.DateTime',
       GVariantType = 'GLib.VariantType', GParam = 'GObject.ParamSpec',
 } do
-   local gtype = repo.GObject.type_from_name(gtype_name)
+   local gtype = core.gtype(gtype_name)
    local ns, name = gi_name:match('^([%w_]+)%.([%w_]+)$')
    local gi_type = repo[ns][name]
    gi_type._gtype = gtype
    repo[gtype] = gi_type
 end
 
+-- Add symbolic names for GTypes.
+repo.GObject.Type = {}
+for num, name in ipairs { 'NONE', 'INTERFACE', 'CHAR', 'UCHAR', 'BOOLEAN',
+			  'INT', 'UINT', 'LONG', 'ULONG', 'INT64', 'UINT64',
+			  'ENUM', 'FLAGS', 'FLOAT', 'DOUBLE', 'STRING',
+			  'POINTER', 'BOXED', 'PARAM', 'OBJECT', 'VARIANT' } do
+   repo.GObject.Type[name] = core.gtype(num * 4)
+end
+
 -- GObject overrides.
-local object = repo.GObject.Object
+local Object = repo.GObject.Object
 
 -- Custom _element implementation, checks dynamically inherited
 -- interfaces and dynamic properties.
-function object:_element(instance, name)
+function Object:_element(instance, name)
    local element = component_mt.class._element(self, instance, name)
    if element then return element end
 
    -- List all interfaces implemented by this object and try whether
    -- they can handle specified _element request.
-   local interfaces = core.object.interfaces(instance)
+   local interfaces = repo.GObject.type_interfaces(
+      core.object.query(instance, 'gtype'))
    for i = 1, #interfaces do
-      local iface = repo[interfaces[i].namespace][interfaces[i].name]
+      local info = gi[core.gtype(interfaces[i])]
+      local iface = repo[info.namespace][info.name]
       element = iface and iface:_element(instance, name)
       if element then return element end
    end
 
    -- Element not found in the repo (typelib), try whether dynamic
    -- property of the specified name exists.
-   local pspec = core.object.properties(instance, name:gsub('_', '%-'))
-   if pspec then return pspec end
+   return core.record.cast(core.object.query(instance, 'class'),
+			   Object._type):find_property(name:gsub('_', '%-'))
 end
 
 -- Custom access_element, reacts on dynamic properties
-function object:_access_element(instance, name, element, ...)
+function Object:_access_element(instance, name, element, ...)
    if element == nil then
       -- Check object's environment.
       local env = core.object.env(instance)
@@ -784,10 +832,21 @@ function object:_access_element(instance, name, element, ...)
       else
 	 return env[name]
       end
-   elseif (core.record.typeof(element) == repo.GObject.ParamSpec
-	or (gi.isinfo(element) and element.is_property)) then
-      -- Get value of property.
+   elseif gi.isinfo(element) and element.is_property then
+      -- Process property using GI.
       return core.object.property(instance, element, ...)
+   elseif core.record.query(element, 'repo') == repo.GObject.ParamSpec or
+   core.object.query(element, 'repo') == repo.GObject.ParamSpec then
+      -- Process property using GLib.
+      local val = repo.GObject.Value(element.value_type)
+      if select('#', ...) > 0 then
+	 val.data = ...
+	 Object.set_property(instance, element.name, val)
+	 return
+      else
+	 Object.get_property(instance, element.name, val)
+	 return val.data
+      end
    else
       -- Forward to 'inherited' generic object implementation.
       return component_mt.class._access_element(
@@ -812,119 +871,131 @@ local function get_notifier(target)
 end
 
 -- Install 'notify' signal.
-object._signals = {}
-local _ = object._vfuncs.on_notify
-object._vfuncs.on_notify = nil
-object._custom = {}
-function object._custom.on_notify(typetable, instance, name, ...)
-   -- Borrow signal format from GObject.ObjectClass.notify.
-   local info = gi.GObject.ObjectClass.fields.notify.typeinfo.interface
-   if select('#', ...) > 0 then
-      -- Assignment means 'connect signal for all properties'.
-      core.object.connect(instance, info.name, info, get_notifier(...))
-   else
-      -- Reading yields table with signal operations.
-      local pad = {}
-      function pad:connect(target, property)
-	 return core.object.connect(instance, info.name, info,
-				    get_notifier(target),
-				    property:gsub('_', '%-'))
-      end
-
-      -- Add metatable allowing connection on specified detail.
-      -- Detail is always specified as a property name for this signal.
-      local padmeta = {}
-      function padmeta:__newindex(property, target)
-	 core.object.connect(instance, info.name, info,
-			     get_notifier(target), property:gsub('_', '%-'))
-      end
-      return setmetatable(pad, padmeta)
+Object._signals = {}
+local _ = Object._vfuncs.on_notify
+Object._vfuncs.on_notify = nil
+Object._custom = { on_notify= {} }
+-- Borrow signal format from GObject.ObjectClass.notify.
+local on_notify_info = gi.GObject.ObjectClass.fields.notify.typeinfo.interface
+function Object._custom.on_notify.set(instance, handler)
+   -- Assignment means 'connect signal for all properties'.
+   core.object.connect(instance, on_notify_info.name, on_notify_info,
+		       get_notifier(handler))
+end
+function Object._custom.on_notify.get(instance)
+   -- Reading yields table with signal operations.
+   local pad = {}
+   function pad:connect(target, property)
+      return core.object.connect(instance, on_notify_info.name, on_notify_info,
+				 get_notifier(target),
+				 property:gsub('_', '%-'))
    end
+
+   -- Add metatable allowing connection on specified detail.  Detail
+   -- is always specified as a property name for this signal.
+   local padmeta = {}
+   function padmeta:__newindex(property, target)
+      core.object.connect(instance, on_notify_info.name, on_notify_info,
+			  get_notifier(target), property:gsub('_', '%-'))
+   end
+   return setmetatable(pad, padmeta)
 end
 
--- Closure modifications.  Closure does not need any methods nor
--- fields, but it must have constructor creating it from any kind of
--- Lua callable.
-local closure = repo.GObject.Closure
-local closure_info = gi.GObject.Closure
-closure._methods = nil
-closure._fields = nil
-local closure_mt = { __index = getmetatable(closure).__index,
-		     _access = getmetatable(closure)._access }
-function closure_mt:__call(arg)
-   return core.record.new(closure_info, arg)
+-- Closure modifications.  All fields and most methods of closure are
+-- removed, added possibility to construct closure from Lua
+-- function/callable userdata.
+local Closure = repo.GObject.Closure
+Closure._fields = nil
+local closure_methods = Closure._methods
+Closure._methods = {
+   invoke = closure_methods.invoke,
+   invalidate = closure_methods.invalidate
+}
+closure_methods = nil
+local closure_mt = create_component_meta { '_methods' }
+function closure_mt:__call(target)
+   return core.callable.closure(target)
 end
-setmetatable(closure, closure_mt)
-
--- Implicit conversion constructor, allows using Lua function directly
--- at the places where GClosure is expected.
-function closure:_construct(arg)
-   return core.record.new(closure_info, arg)
-end
+setmetatable(Closure, closure_mt)
 
 -- Value is constructible from any kind of source Lua value, and the
 -- type of the value can be hinted by type name.
-local value = repo.GObject.Value
+local Value = repo.GObject.Value
 local value_info = gi.GObject.Value
 
--- Tries to deduce the gtype according to Lua value.
-local function gettype(source)
-   if source == nil then return 'void'
-   elseif type(source) == 'boolean' then return 'gboolean'
-   elseif type(source) == 'number' then
-      -- If the number fits in integer, use it, otherwise use double.
-      local _, fract = math.modf(source)
-      local maxint32 = 0x80000000
-      return ((fract == 0 and source >= -maxint32 and source < maxint32)
-	   and 'gint' or 'gdouble')
-   elseif type(source) == 'string' then return 'gchararray'
-   elseif type(source) == 'function' then return closure._gtype
-   elseif type(source) == 'userdata' then
-      -- Check whether is it record or object.
-      local typetable, gtype = core.record.typeof(source)
-      if typetable then return typetable._gtype end
-      typetable, gtype = core.object.typeof(source)
-      if typetable then return gtype end
+-- Value contents accessors - type-safe replacement for buch of
+-- set_xxx and get_xxx native C variants.
+Value._methods.get = core.value
+Value._methods.set = core.value
 
-      -- Check whether we can call this userdata.  If yes, generate
-      -- closure.
-      local meta = getmetatable(source)
-      if meta and meta.__call then return closure._gtype end
-   elseif type(source) == 'table' then
-      -- Check, whether we can call it.
-      local meta = getmetatable(source)
-      if meta and meta.__call then return closure._gtype end
-   end
+-- Do not allow direct access to fields.
+local value_field_gtype = Value._fields.g_type
+Value._fields = nil
 
-   -- No idea to what type should this be mapped.
-   error(("unclear type for GObject.Value from argument `%s'"):format(
-	    tostring(source)))
+-- Implements pseudo-properties 'g_type' and 'data', for safe
+-- read/write access to value's type and contents.
+Value._custom = { g_type = {} }
+function Value._custom.g_type.get(instance)
+   -- Reading existing type is simple access to value's gtype field.
+   return core.record.field(instance, value_field_gtype)
 end
-
--- Implement constructor, taking any source value and optionally type
--- of the source.
-local value_mt = {}
-function value_mt:__call(source, stype)
-   stype = stype or gettype(source)
-   if type(stype) == 'string' then
-      stype = repo.GObject.type_from_name(stype)
-   end
-   return core.record.new(value_info, stype, source)
-end
-setmetatable(value, value_mt)
-value._construct = value_mt.__call
-value._methods = nil
-value._fields = nil
-function value:_access(instance, name, ...)
-   assert(select('#', ...) == 0,
-	  ("GObject.Value: `%s' not writable"):format(name));
-   if name == 'type' then
-      return repo.GObject.type_name(
-	 core.record.field(instance, value_info.fields.g_type)) or ''
-   elseif name == 'value' then
-      return core.record.valueof(instance)
+function Value._custom.g_type.set(instance, newtype)
+   local gtype = core.record.field(instance, value_field_gtype)
+   if gtype then
+      if newtype then
+	 -- Try converting old value to new one.
+	 local dest = core.record.new(value_info)
+	 Value.init(dest, newtype)
+	 if not Value.transform(instance, dest) then
+	    error(("GObject.Value: cannot convert `%s' to `%s'"):format(
+		     core.record.field(dest, value_field_gtype), gtype))
+	 end
+	 Value.unset(instance)
+	 Value.init(instance, newtype)
+	 Value.copy(dest, instance)
+      else
+	 Value.unset(instance)
+      end
+   elseif newtype then
+      -- No value was set and some is requested, so set it.
+      Value.init(instance, newtype)
    end
 end
+
+-- Forward to access value directly.
+Value._custom.data = core.value
+
+-- Implement custom 'constructor', taking optionally two values
+-- (g_type and data).  The reason why it is overriden is that the
+-- order of initialization is important, and standard record
+-- intializer cannot enforce the order.
+local value_mt = create_component_meta { '_methods' }
+function value_mt:__call(gtype, data)
+   local v = core.record.new(value_info)
+   if gtype then v.g_type = gtype end
+   if data then v.data = data end
+   return v
+end
+setmetatable(Value, value_mt)
+
+-- Variant support.
+local Variant = repo.GLib.Variant
+local variant_info = gi.GLib.Variant
+
+-- Add custom refsink and free methods for variant handling.
+Variant._refsink = variant_info.methods.ref_sink
+Variant._free = variant_info.methods.unref
+
+-- VariantBuilder is boxed only in glib 2.29, older libs need custom
+-- recipe how to free it.
+local VariantBuilder = repo.GLib.VariantBuilder
+VariantBuilder._free = gi.GLib.VariantBuilder.methods.unref
+VariantBuilder._constructor = core.callable.new(
+   gi.GLib.VariantBuilder.methods.new)
+
+-- Map VariantType.new to implicit constructor
+local VariantType = repo.GLib.VariantType
+VariantType._constructor = core.callable.new(gi.GLib.VariantType.methods.new)
 
 -- Access to module proxies the whole repo, for convenience.
 local lgi_mt = {}

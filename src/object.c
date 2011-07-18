@@ -102,10 +102,10 @@ object_get (lua_State *L, int narg)
   return obj;
 }
 
-static int
-object_gc (lua_State *L)
+/* Removes one reference from the object. */
+static void
+object_unref (gpointer obj)
 {
-  gpointer obj = object_get (L, 1);
   GType gtype = G_TYPE_FROM_INSTANCE (obj);
   if (G_TYPE_IS_OBJECT (gtype))
     g_object_unref (obj);
@@ -114,16 +114,23 @@ object_gc (lua_State *L)
       /* Some other fundamental type, check, whether it has
 	 registered custom unref method. */
       GIObjectInfo *info = g_irepository_find_by_gtype (NULL, gtype);
+      if (info == NULL)
+	info = g_irepository_find_by_gtype (NULL, G_TYPE_FUNDAMENTAL (gtype));
       if (info != NULL)
 	{
-	  GIObjectInfoUnrefFunction unref;
-	  if (g_object_info_get_fundamental (info)
-	      && (unref = g_object_info_get_unref_function_pointer (info)))
+	  GIObjectInfoUnrefFunction unref =
+	    g_object_info_get_unref_function_pointer (info);
+	  if (unref != NULL)
 	    unref (obj);
 	  g_base_info_unref (info);
 	}
     }
+}
 
+static int
+object_gc (lua_State *L)
+{
+  object_unref (object_get (L, 1));
   return 0;
 }
 
@@ -142,11 +149,10 @@ object_tostring (lua_State *L)
 }
 
 gpointer
-lgi_object_2c (lua_State *L, int narg, GType gtype, gboolean optional)
+lgi_object_2c (lua_State *L, int narg, GType gtype, gboolean optional,
+	       gboolean nothrow)
 {
   gpointer obj;
-
-  g_return_val_if_fail (gtype != G_TYPE_INVALID, NULL);
 
   /* Check for nil. */
   if (optional && lua_isnoneornil (L, narg))
@@ -154,7 +160,7 @@ lgi_object_2c (lua_State *L, int narg, GType gtype, gboolean optional)
 
   /* Get instance and perform type check. */
   obj = object_check (L, narg);
-  if (!obj || !g_type_is_a (G_TYPE_FROM_INSTANCE (obj), gtype))
+  if (!nothrow && (!obj || !g_type_is_a (G_TYPE_FROM_INSTANCE (obj), gtype)))
     object_type_error (L, narg, gtype);
 
   return obj;
@@ -213,6 +219,12 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
     {
       /* Use the object from the cache. */
       lua_replace (L, -2);
+
+      /* If the object was already owned, remove one reference,
+	 because our proxy always keeps only one reference, which we
+	 already have. */
+      if (own)
+	object_unref (obj);
       return;
     }
 
@@ -244,17 +256,12 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
     g_object_ref_sink (obj);
   else if (object_type (L, gtype))
     {
-      lua_getfield (L, -1, "_sink");
-      GIBaseInfo *info = lgi_gi_info_test (L, -1);
-      if (info && GI_IS_FUNCTION_INFO (info))
-	{
-	  void (*ref_sink)(gpointer);
-	  if (g_typelib_symbol (g_base_info_get_typelib (info),
-				g_function_info_get_symbol (info),
-				(gpointer *) &ref_sink))
-	    ref_sink (obj);
-	}
-      lua_pop (L, 2);
+      void (*sink_func)(gpointer) = lgi_gi_load_function (L, -1, "_sink");
+      if (sink_func)
+	sink_func (obj);
+
+      /* Pop table stored by object_type() call in the condition above. */
+      lua_pop (L, 1);
     }
 
   if (G_TYPE_IS_OBJECT (gtype))
@@ -275,11 +282,13 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
     {
       /* Unowned fundamental non-GObject, try to get its ownership. */
       GIObjectInfo *info = g_irepository_find_by_gtype (NULL, gtype);
+      if (info == NULL)
+	info = g_irepository_find_by_gtype (NULL, G_TYPE_FUNDAMENTAL (gtype));
       if (info != NULL)
 	{
-	  GIObjectInfoRefFunction ref;
-	  if (g_object_info_get_fundamental (info)
-	      && (ref = g_object_info_get_ref_function_pointer (info)))
+	  GIObjectInfoRefFunction ref =
+	    g_object_info_get_ref_function_pointer (info);
+	  if (ref != NULL)
 	    ref (obj);
 	  g_base_info_unref (info);
 	}
@@ -373,27 +382,44 @@ object_new (lua_State *L)
   return 1;
 }
 
-/* Checks whether given value is object and returns its real gtype,
-   associated type table and type struct record.  Lua-side prototype:
-   typetable, gtype, typestruct =
-   object.typeof(objectinstance[, iface-gtype]) */
+static const char *const query_mode[] = { "gtype", "repo", "class", NULL };
+
+/* Queries for assorted instance properties. Lua-side prototype:
+   res = object.query(objectinstance, mode [, iface-gtype])
+   Supported mode strings are:
+   'gtype': returns real gtype of this instance.
+   'repo': returns repotable for this instance.
+   'class': returns class struct record of this instance. */
 static int
-object_typeof (lua_State *L)
+object_query (lua_State *L)
 {
   gpointer object = object_check (L, 1);
   if (object)
     {
-      GType gtype = luaL_optnumber (L, 2, G_TYPE_FROM_INSTANCE (object));
-      if (object_type (L, gtype) != G_TYPE_INVALID)
+      int mode = luaL_checkoption (L, 2, query_mode[0], query_mode);
+      GType gtype = lgi_type_get_gtype (L, 3);
+      if (gtype == G_TYPE_INVALID)
+	gtype = G_TYPE_FROM_INSTANCE (object);
+      if (mode == 0)
 	{
-	  gpointer typestruct;
 	  lua_pushnumber (L, gtype);
-	  typestruct = !G_TYPE_IS_INTERFACE (gtype)
-	    ? G_TYPE_INSTANCE_GET_CLASS (object, gtype, GTypeClass)
-	    : G_TYPE_INSTANCE_GET_INTERFACE (object, gtype, GTypeClass);
-	  lua_newtable (L);
-	  lgi_record_2lua (L, typestruct, LGI_RECORD_PEEK, 0);
-	  return 3;
+	  return 1;
+	}
+      else
+	{
+	  /* Get repotype structure. */
+	  if (object_type (L, gtype) != G_TYPE_INVALID)
+	    {
+	      if (mode == 2)
+		{
+		  gpointer typestruct = !G_TYPE_IS_INTERFACE (gtype)
+		    ? G_TYPE_INSTANCE_GET_CLASS (object, gtype, GTypeClass)
+		    : G_TYPE_INSTANCE_GET_INTERFACE (object, gtype, GTypeClass);
+		  lua_getfield (L, -1, "_type");
+		  lgi_record_2lua (L, typestruct, FALSE, 0);
+		}
+	      return 1;
+	    }
 	}
     }
   return 0;
@@ -416,48 +442,30 @@ object_field (lua_State *L)
 }
 
 /* Object property accessor.  Lua-side prototypes:
-   res = object.property(objectinstance, propref)
-   object.property(objectinstance, propref, newvalue)
-   where 'propref' is either gi.info of the property or record with
-   ParamSpec returned by object.properties() call. */
+   res = object.property(objectinstance, propinfo)
+   object.property(objectinstance, propinfo, newvalue) */
 static int
 object_property (lua_State *L)
 {
   int vals = 0;
   GValue val = {0};
   GType gtype;
-  GITypeInfo *ti = NULL;
-  GParamFlags flags;
   const gchar *name;
 
   /* Check, whether we are doing set or get operation. */
   gboolean getmode = lua_isnone (L, 3);
 
   /* Get object instance. */
-  gpointer object = lgi_object_2c (L, 1, G_TYPE_OBJECT, FALSE);
-  GIPropertyInfo *pi = lgi_gi_info_test (L, 2);
-  if (pi)
-    {
-      ti = g_property_info_get_type (pi);
-      lgi_gi_info_new (L, ti);
-      gtype = lgi_get_gtype (L, ti);
-      flags = g_property_info_get_flags (pi);
-      name = g_base_info_get_name (pi);
-    }
-  else
-    {
-      /* If not gi.info, it must be record with pspec. */
-      GParamSpec *pspec;
-      lgi_type_get_repotype (L, G_TYPE_PARAM, NULL);
-      if (lgi_record_2c (L, 2, (gpointer *) &pspec, FALSE) > 0)
-	g_assert_not_reached ();
-      gtype = pspec->value_type;
-      flags = pspec->flags;
-      name = pspec->name;
-    }
+  gpointer object = lgi_object_2c (L, 1, G_TYPE_OBJECT, FALSE, FALSE);
+  GIPropertyInfo *pi = *(GIPropertyInfo **) luaL_checkudata (L, 2, LGI_GI_INFO);
+  GITypeInfo *ti = g_property_info_get_type (pi);
+  lgi_gi_info_new (L, ti);
+  gtype = lgi_get_gtype (L, ti);
+  name = g_base_info_get_name (pi);
 
   /* Check access control. */
-  if ((flags & (getmode ? G_PARAM_READABLE : G_PARAM_WRITABLE)) == 0)
+  if ((g_property_info_get_flags (pi)
+       & (getmode ? G_PARAM_READABLE : G_PARAM_WRITABLE)) == 0)
     {
       /* Prepare proper error message. */
       object_type (L, G_OBJECT_TYPE (object));
@@ -483,68 +491,6 @@ object_property (lua_State *L)
 
   g_value_unset (&val);
   return vals;
-}
-
-/* Lists all dynamic properties of given object. Lua-side prototype:
-   {name->record(ParamSpec)} = object.properties(objectinstance)
-   record(ParamSpec) = object.properties(objectinstance, name) */
-static int
-object_properties (lua_State *L)
-{
-  GObjectClass *klass;
-  gboolean list = lua_isnoneornil (L, 2);
-
-  klass = G_OBJECT_GET_CLASS (lgi_object_2c (L, 1, G_TYPE_OBJECT, FALSE));
-  lgi_type_get_repotype (L, G_TYPE_PARAM, NULL);
-  g_assert (!lua_isnil (L, -1));
-  if (list)
-    {
-      /* List all properties of the object, store them into the table. */
-      guint n_properties, i;
-      GParamSpec **pspecs;
-
-      lua_newtable (L);
-      pspecs = g_object_class_list_properties (klass, &n_properties);
-      for (i = 0; i < n_properties; ++i)
-	{
-	  lua_pushvalue (L, -2);
-	  lgi_record_2lua (L, pspecs[i], LGI_RECORD_PEEK, 0);
-	  lua_setfield (L, -2, pspecs[i]->name);
-	}
-
-      /* Returned array has to be freed. */
-      g_free (pspecs);
-    }
-  else
-    {
-      /* Find specified property. */
-      GParamSpec *pspec =
-	g_object_class_find_property (klass, lua_tostring (L, 2));
-      if (pspec != NULL)
-	lgi_record_2lua (L, pspec, LGI_RECORD_PEEK, 0);
-      else
-	lua_pushnil (L);
-    }
-
-  return 1;
-}
-
-/* Returns table of interfaces implemented by given compound, exports
-   them as gi.info(GIInterfaceInfo) instances. */
-static int
-object_interfaces(lua_State *L)
-{
-  guint n_interfaces, i, pos;
-  GType *interfaces, gtype = G_OBJECT_TYPE (object_get (L, 1));
-
-  /* Create table with resulting interfaces. */
-  lua_newtable (L);
-  interfaces = g_type_interfaces (gtype, &n_interfaces);
-  for (i = 0, pos = 1; i < n_interfaces; i++)
-    if (lgi_gi_info_new (L, g_irepository_find_by_gtype (NULL, interfaces[i])))
-      lua_rawseti (L, -2, pos++);
-
-  return 1;
 }
 
 /* Returns internal custom object's table, free to store/load anything
@@ -580,7 +526,7 @@ object_connect (lua_State *L)
   gulong handler_id;
 
   /* Get target objects. */
-  object = lgi_object_2c (L, 1, G_TYPE_OBJECT, FALSE);
+  object = lgi_object_2c (L, 1, G_TYPE_OBJECT, FALSE, FALSE);
   ci = *(GIBaseInfo **) luaL_checkudata (L, 3, LGI_GI_INFO);
 
   /* Create GClosure instance to be used.  This is fast'n'dirty method; it
@@ -614,11 +560,9 @@ object_connect (lua_State *L)
 /* Object API table. */
 static const luaL_Reg object_api_reg[] = {
   { "new", object_new },
-  { "typeof", object_typeof },
+  { "query", object_query },
   { "field", object_field },
   { "property", object_property },
-  { "properties", object_properties },
-  { "interfaces", object_interfaces },
   { "env", object_env },
   { "connect", object_connect },
   { NULL, NULL }
