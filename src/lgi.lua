@@ -838,14 +838,15 @@ function Object:_access_element(instance, name, element, ...)
    elseif core.record.query(element, 'repo') == repo.GObject.ParamSpec or
    core.object.query(element, 'repo') == repo.GObject.ParamSpec then
       -- Process property using GLib.
-      local val = repo.GObject.Value(element.value_type)
+      local val = repo.GObject.Value()
+      repo.GObject.Value.init(val, element.value_type)
       if select('#', ...) > 0 then
-	 val.data = ...
+	 core.value(val, ...)
 	 Object.set_property(instance, element.name, val)
 	 return
       else
 	 Object.get_property(instance, element.name, val)
-	 return val.data
+	 return core.value(val)
       end
    else
       -- Forward to 'inherited' generic object implementation.
