@@ -978,24 +978,23 @@ function value_mt:__call(gtype, data)
 end
 setmetatable(Value, value_mt)
 
--- Variant support.
-local Variant = repo.GLib.Variant
-local variant_info = gi.GLib.Variant
+-- Implementation of lazy-loading.  Component is installed only as a
+-- stub and when accessed, full implementation is loaded from lgix.
+local lazy_mt = {}
+function lazy_mt:__index(name)
+   -- Load override, which (hopefully) replaces this stub with real
+   -- component implementation.
+   require('lgix.' .. (self._lazy_lgix or self._lazy_name))
 
--- Add custom refsink and free methods for variant handling.
-Variant._refsink = variant_info.methods.ref_sink
-Variant._free = variant_info.methods.unref
+   -- Forward index call to real replaced component.
+   return repo.GLib[self._lazy_name][name]
+end
 
--- VariantBuilder is boxed only in glib 2.29, older libs need custom
--- recipe how to free it.
-local VariantBuilder = repo.GLib.VariantBuilder
-VariantBuilder._free = gi.GLib.VariantBuilder.methods.unref
-VariantBuilder._constructor = core.callable.new(
-   gi.GLib.VariantBuilder.methods.new)
-
--- Map VariantType.new to implicit constructor
-local VariantType = repo.GLib.VariantType
-VariantType._constructor = core.callable.new(gi.GLib.VariantType.methods.new)
+-- Create lazy-loading components for variant stuff.
+for _, name in pairs { 'Variant', 'VariantType', 'VariantBuilder' } do
+   repo.GLib[name] = setmetatable(
+      { _lazy_name = name, _lazy_lgix = 'GLib-Variant' }, lazy_mt)
+end
 
 -- Access to module proxies the whole repo, for convenience.
 local lgi_mt = {}
