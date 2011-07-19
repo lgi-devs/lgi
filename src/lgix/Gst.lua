@@ -2,7 +2,7 @@
 --
 --  LGI Gst override module.
 --
---  Copyright (c) 2010 Pavel Holejsovsky
+--  Copyright (c) 2010, 2011 Pavel Holejsovsky
 --  Licensed under the MIT license:
 --  http://www.opensource.org/licenses/mit-license.php
 --
