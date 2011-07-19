@@ -1,0 +1,5 @@
+LGI is GObject-Introspection-based Lua binding to GObject based libraries.
+
+Licensed under MIT-style license
+http://www.opensource.org/licenses/mit-license.php, see LICENSE file
+for full text.
