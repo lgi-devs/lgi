@@ -17,7 +17,7 @@ local function read_sync(file)
    local info = assert(file:query_info('standard::size', 0))
    local buffer = bytes.new(info:get_size())
    local stream = assert(file:read(nil))
-   local ok, read = assert(stream:read_all(buffer, #buffer))
+   local read = assert(stream:read_all(buffer, #buffer))
    return tostring(buffer):sub(1,read)
 end
 
@@ -66,6 +66,7 @@ function app:on_activate()
 
    local function perform(read_op, write_op, target_file)
       app:hold()
+      print('Starting:', target_file:get_basename())
       local contents = read_op(source_file)
       target_file:delete()
       write_op(target_file, contents)

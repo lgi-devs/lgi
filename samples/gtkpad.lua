@@ -15,8 +15,7 @@ local Gtk = lgi.Gtk
 local Gio = lgi.Gio
 
 local function new_editor(app, file)
-   local ok, contents
-   if file then ok, contents = file:load_contents() end
+   local contents = file and file:load_contents()
    local window = Gtk.Window {
       type = Gtk.WindowType.TOPLEVEL,
       default_width = 400,
@@ -25,7 +24,9 @@ local function new_editor(app, file)
       title = file and file:get_parse_name() or '<Untitled>',
       child = Gtk.ScrolledWindow {
 	 child = Gtk.TextView {
-	    buffer = Gtk.TextBuffer { text = ok and tostring(contents) or '' }
+	    buffer = Gtk.TextBuffer {
+	       text = contents and tostring(contents) or ''
+	    }
 	 }
       }
    }
