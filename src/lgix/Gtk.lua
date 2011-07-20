@@ -242,11 +242,9 @@ end
 
 local builder_objects_mt = {}
 function builder_objects_mt:__index(name)
-   if type(name) == 'string' then
-      local object = self._builder:get_object(name)
-      self[name] = object
-      return object
-   end
+   local object = self._builder:get_object(name)
+   self[name] = object
+   return object
 end
 
 Gtk.Builder._custom = { objects = {}, file = {}, string = {}, connect = {} }

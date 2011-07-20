@@ -32,8 +32,8 @@ if not Gst.TagList.copy_value then
    Gst.TagList._methods.copy_value = Gst.tag_list_copy_value
 end
 function Gst.TagList:get(tag)
-   local ok, value = self:copy_value(tag)
-   return ok and value.data
+   local value = self:copy_value(tag)
+   return value and value.data
 end
 
 -- Load additional Gst modules.
