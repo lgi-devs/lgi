@@ -407,12 +407,31 @@ log_handler (const gchar *log_domain, GLogLevelFlags log_level,
     g_log_default_handler (log_domain, log_level, message, NULL);
 }
 
+static int
+core_yield (lua_State *L)
+{
+  /* Get CallMutex from the state. */
+  CallMutex *mutex;
+  lua_pushlightuserdata (L, &lgi_call_mutex);
+  lua_rawget (L, LUA_REGISTRYINDEX);
+  mutex = lua_touserdata (L, -1);
+
+  /* Perform yield with unlocked mutex; this might force another
+     threads waiting on the mutex to perform what they need to do
+     (i.e. enter Lua with callbacks). */
+  g_static_rec_mutex_unlock (&mutex->mutex);
+  g_thread_yield ();
+  g_static_rec_mutex_lock (&mutex->mutex);
+  return 0;
+}
+
 static const struct luaL_reg lgi_reg[] = {
   { "set", core_set },
   { "log",  core_log },
   { "gtype", core_gtype },
   { "constant", core_constant },
   { "value", core_value },
+  { "yield", core_yield },
   { NULL, NULL }
 };
 

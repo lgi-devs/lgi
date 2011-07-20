@@ -33,6 +33,9 @@ function lgi.has_bit(value, flag)
    return value % (2 * flag) >= flag
 end
 
+-- Forward 'yield' functionality into external interface.
+lgi.yield = core.yield
+
 -- Prepare logging support.  'log' is module-exported table, containing all
 -- functionality related to logging wrapped around GLib g_log facility.
 local logtable = { ERROR = 'assert', DEBUG = 'silent' }
