@@ -8,7 +8,7 @@
 --
 ------------------------------------------------------------------------------
 
-local select, type, pairs = select, type, pairs
+local select, type, pairs, unpack = select, type, pairs, unpack
 local lgi = require 'lgi'
 local core = require 'lgi._core'
 local Gtk = lgi.Gtk
@@ -240,13 +240,24 @@ end
 
 -------------------- Gtk.Builder
 
+-- Override braindead return value type of gtk_builder_add_from_xxx.
+function Gtk.Builder.add_from_file(...)
+   local res = {Gtk.Builder._methods.add_from_file(...)}
+   res[1] = res[1] and res[1] ~= 0
+   return unpack(res)
+end
+
+function Gtk.Builder.add_from_string(...)
+   local res = {Gtk.Builder._methods.add_from_string(...)}
+   res[1] = res[1] and res[1] ~= 0
+   return unpack(res)
+end
+
 local builder_objects_mt = {}
 function builder_objects_mt:__index(name)
-   if type(name) == 'string' then
-      local object = self._builder:get_object(name)
-      self[name] = object
-      return object
-   end
+   local object = self._builder:get_object(name)
+   self[name] = object
+   return object
 end
 
 Gtk.Builder._custom = { objects = {}, file = {}, string = {}, connect = {} }

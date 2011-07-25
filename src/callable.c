@@ -46,6 +46,7 @@ typedef struct _Callable
   guint has_self : 1;
   guint throws : 1;
   guint nargs : 6;
+  guint ignore_retval : 1;
 
   /* Initialized FFI CIF structure. */
   ffi_cif cif;
@@ -224,6 +225,7 @@ lgi_callable_create (lua_State *L, GICallableInfo *info, gpointer addr)
   callable->nargs = nargs;
   callable->has_self = 0;
   callable->throws = 0;
+  callable->ignore_retval = 0;
   callable->address = addr;
   if (GI_IS_FUNCTION_INFO (info))
     {
@@ -289,6 +291,14 @@ lgi_callable_create (lua_State *L, GICallableInfo *info, gpointer addr)
 
       /* Similarly for array length field. */
       callable_mark_array_length (callable, &param->ti);
+
+      /* In case that we have an out or inout argument and callable
+	 returns boolean, mark it as ignore_retval (because we will
+	 signalize failure by returning nil instead of extra
+	 value). */
+      if (param->dir != GI_DIRECTION_IN
+	  && g_type_info_get_tag (&callable->retval.ti) == GI_TYPE_TAG_BOOLEAN)
+	callable->ignore_retval = 1;
     }
 
   /* Add ffi info for 'err' argument. */
@@ -489,7 +499,8 @@ callable_call (lua_State *L)
 
   /* Handle return value. */
   nret = 0;
-  if (g_type_info_get_tag (&callable->retval.ti) != GI_TYPE_TAG_VOID)
+  if (g_type_info_get_tag (&callable->retval.ti) != GI_TYPE_TAG_VOID
+      && !callable->ignore_retval)
     {
       lgi_marshal_arg_2lua (L, &callable->retval.ti, callable->retval.transfer,
 			    &retval, 0, FALSE, callable->info,
@@ -532,6 +543,15 @@ callable_call (lua_State *L)
 				  callable->info,
 				  ffi_args + callable->has_self);
 	    lua_insert (L, -caller_allocated - 1);
+	  }
+
+	/* In case that this callable is in ignore-retval mode and
+	   function actually returned FALSE, replace the already
+	   marshalled return value with NULL. */
+	if (callable->ignore_retval && !retval.v_boolean)
+	  {
+	    lua_pushnil (L);
+	    lua_replace (L, -caller_allocated - 2);
 	  }
 
 	nret++;
@@ -713,19 +733,27 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
       int to_pop;
       if (g_type_info_get_tag (&callable->retval.ti) != GI_TYPE_TAG_VOID)
 	{
-	  to_pop = lgi_marshal_arg_2c (L, &callable->retval.ti, NULL,
-				       callable->retval.transfer, ret, npos,
-				       FALSE, FALSE, callable->info,
-				       args + callable->has_self);
-	  if (to_pop != 0)
+	  if (callable->ignore_retval)
+	    /* Return value should be ignored on Lua side, so we have
+	       to synthesize the return value for C side.  We should
+	       return FALSE if next output argument is nil. */
+	    *(gboolean *) ret = lua_isnoneornil (L, npos) ? FALSE : TRUE;
+	  else
 	    {
-	      g_warning ("cbk `%s.%s': return (transfer none) %d, unsafe!",
-			 g_base_info_get_namespace (callable->info),
-			 g_base_info_get_name (callable->info), to_pop);
-	      lua_pop (L, to_pop);
-	    }
+	      to_pop = lgi_marshal_arg_2c (L, &callable->retval.ti, NULL,
+					   callable->retval.transfer, ret, npos,
+					   FALSE, FALSE, callable->info,
+					   args + callable->has_self);
+	      if (to_pop != 0)
+		{
+		  g_warning ("cbk `%s.%s': return (transfer none) %d, unsafe!",
+			     g_base_info_get_namespace (callable->info),
+			     g_base_info_get_name (callable->info), to_pop);
+		  lua_pop (L, to_pop);
+		}
 
-	  npos++;
+	      npos++;
+	    }
 	}
 
       /* Marshal output arguments from Lua. */
@@ -758,6 +786,10 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 					  callable->nargs])->v_pointer;
       g_set_error_literal (err, q, 1, lua_tostring(L, -1));
       lua_pop (L, 1);
+
+      /* Such function should usually return FALSE, so do it. */
+      if (g_type_info_get_tag (&callable->retval.ti) == GI_TYPE_TAG_BOOLEAN)
+	*(gboolean *) ret = FALSE;
     }
 
   /* If the closure is marked as autodestroy, destroy it now.  Note that it is
