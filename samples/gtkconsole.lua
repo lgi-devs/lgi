@@ -18,23 +18,25 @@ local terminal = Vte.Terminal {
 }
 
 -- Perform initial terminal setup (enable linewrap and scrolling).
-terminal:feed('\27[7h',4)
-terminal:feed('\27[r', 3)
+terminal:feed('\27[7h', -1)
+terminal:feed('\27[r', -1)
 
 -- Invoked when something is typed into the terminal.
 function terminal:on_commit(text, length)
    if text == '\r' then
       -- Jump to the next line.
-      self:feed('\27[E', 3)
+      self:feed('\r\n', -1)
 
       -- Try to execute input line.
-      local chunk, msg = loadstring((self.input:gsub('^%s?(=)%s?', 'return ')))
+      local chunk, msg = loadstring(
+	 (self.input:gsub('^%s?(=)%s?', 'return ')),
+	 '=stdin')
       if not chunk then
 	 answer = msg
       else
 	 (function(ok, ...)
 	    if not ok then
-	       return tostring(...)
+	       answer = tostring(...)
 	    else
 	       answer = {}
 	       for i = 1, select('#', ...) do
@@ -45,12 +47,12 @@ function terminal:on_commit(text, length)
       end)(pcall(chunk))
       end
       if answer then
-	 self:feed(answer, #answer)
-	 self:feed('\27[E', 3)
+	 self:feed((answer .. '\n'):gsub('([^\r])\n', '%1\r\n'), -1)
       end
 
-      -- Prepare empty input line for the next statement.
+      -- Prepare empty input line for the next statement and print prompt.
       self.input = ''
+      self:feed(_PROMPT or '> ', -1)
    else
       -- Simply echo to the terminal and add to the inputline.
       self.input = self.input .. text
@@ -67,11 +69,26 @@ function app:on_activate()
       orientation = Gtk.Orientation.VERTICAL,
       adjustment = terminal.adjustment,
    }
+   terminal:feed(([[
+This is terminal emulation of standard Lua console.  Enter Lua commands
+as in interactive Lua console.  Unfortunately, no advanced input editing
+(i.e. readline emulation) is implemented (yet).
+The advantage over standard console is that in this context, Gtk mainloop
+is running, so this console is ideal for interactive toying with Gtk
+(and other mainloop-based) components.  Try following:
+
+Gtk = require('lgi').Gtk <Enter>
+window = Gtk.Window { title = 'Test' } <Enter>
+window:show_all() <Enter>
+window.title = 'Different' <Enter>
+
+]]):gsub('\n', '\r\n'), -1)
+   terminal:feed(_PROMPT or '> ', -1)
    local window = Gtk.Window {
       application = self,
       title = 'Lua Terminal',
-      default_width = 800,
-      default_height = 600,
+      default_width = 640,
+      default_height = 480,
       has_resize_grip = true,
       child = grid,
    }
