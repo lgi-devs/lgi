@@ -256,9 +256,19 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
     g_object_ref_sink (obj);
   else if (object_type (L, gtype))
     {
+      /* Check custom _refsink method in typetable. */
       void (*refsink_func)(gpointer) = lgi_gi_load_function (L, -1, "_refsink");
       if (refsink_func)
-	refsink_func (obj);
+	{
+	  refsink_func (obj);
+	  if (own)
+	    /* If the object was already owned, it is now owned twice,
+	       so get rid of one extra reference. */
+	    object_unref (obj);
+	  else
+	    /* refsink caused that we already own the object now. */
+	    own = TRUE;
+	}
 
       /* Pop table stored by object_type() call in the condition above. */
       lua_pop (L, 1);
@@ -290,6 +300,14 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
 	    g_object_info_get_ref_function_pointer (info);
 	  if (ref != NULL)
 	    ref (obj);
+	  else
+	    {
+	      /* Use custom _refsink method in typetable. */
+	      void (*refsink_func)(gpointer) =
+		lgi_gi_load_function (L, -1, "_refsink");
+	      g_assert (refsink_func != NULL);
+	      refsink_func (obj);
+	    }
 	  g_base_info_unref (info);
 	}
     }
