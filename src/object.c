@@ -256,9 +256,9 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
     g_object_ref_sink (obj);
   else if (object_type (L, gtype))
     {
-      void (*sink_func)(gpointer) = lgi_gi_load_function (L, -1, "_sink");
-      if (sink_func)
-	sink_func (obj);
+      void (*refsink_func)(gpointer) = lgi_gi_load_function (L, -1, "_refsink");
+      if (refsink_func)
+	refsink_func (obj);
 
       /* Pop table stored by object_type() call in the condition above. */
       lua_pop (L, 1);

@@ -15,7 +15,7 @@ local Gst = lgi.Gst
 
 -- GstObject has special ref_sink mechanism, make sure that lgi core
 -- is aware of it, otherwise refcounting is screwed.
-Gst.Object._sink = gi.Gst.Object.methods.ref_sink
+Gst.Object._refsink = gi.Gst.Object.methods.ref_sink
 
 -- Gst.Bin adjustments
 function Gst.Bus:add_watch(callback)
