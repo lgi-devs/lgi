@@ -40,16 +40,34 @@ lgi_gi_info_new (lua_State *L, GIBaseInfo *info)
   return 1;
 }
 
+static int
+pgetfield (lua_State *L)
+{
+  lua_gettable (L, 1);
+  return 1;
+}
+
 gpointer
-lgi_gi_load_function(lua_State *L, int typetable, const char *name)
+lgi_gi_load_function (lua_State *L, int typetable, const char *name)
 {
   GIBaseInfo **info;
   gpointer symbol = NULL;
-  lua_getfield (L, typetable, name);
-  info = lgi_udata_test (L, -1, LGI_GI_INFO);
-  if (info && GI_IS_FUNCTION_INFO (*info))
-    g_typelib_symbol (g_base_info_get_typelib (*info),
-		      g_function_info_get_symbol (*info), &symbol);
+
+  /* This is just complicated way to perform pcall in C code. Sans
+     failure handling, lua_getfield (L, typetable, name) would be
+     enough here. */
+  luaL_checkstack (L, 3, "");
+  lgi_makeabs (L, typetable);
+  lua_pushcfunction (L, pgetfield);
+  lua_pushvalue (L, typetable);
+  lua_pushstring (L, name);
+  if (lua_pcall (L, 2, 1, 0) == 0)
+    {
+      info = lgi_udata_test (L, -1, LGI_GI_INFO);
+      if (info && GI_IS_FUNCTION_INFO (*info))
+	g_typelib_symbol (g_base_info_get_typelib (*info),
+			  g_function_info_get_symbol (*info), &symbol);
+    }
   lua_pop (L, 1);
   return symbol;
 }

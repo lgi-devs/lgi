@@ -305,8 +305,8 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
 	      /* Use custom _refsink method in typetable. */
 	      void (*refsink_func)(gpointer) =
 		lgi_gi_load_function (L, -1, "_refsink");
-	      g_assert (refsink_func != NULL);
-	      refsink_func (obj);
+	      if (refsink_func != NULL)
+		refsink_func (obj);
 	    }
 	  g_base_info_unref (info);
 	}
