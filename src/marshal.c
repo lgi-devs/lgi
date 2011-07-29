@@ -1110,7 +1110,7 @@ lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
     }
   else if (fundamental_type == G_TYPE_BOXED)
     {
-      if (!lgi_type_get_repotype (L, type, NULL) == G_TYPE_INVALID)
+      if (lgi_type_get_repotype (L, type, NULL) != G_TYPE_INVALID)
 	{
 	  g_value_set_boxed (val, lgi_record_2c (L, narg, TRUE, FALSE));
 	  return;
