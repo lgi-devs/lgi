@@ -1448,19 +1448,18 @@ end
 
 -- Available groups
 local groups = { 'gireg', gireg = gireg }
+-- Check for debug mode.
+if tests_debug then
+   for _, name in ipairs(groups) do
+      groups[name].debug = true
+      _G[name] = groups[name]
+   end
+end
 
 -- Cmdline runner.
 local failed = false
 arg = arg or {}
 if #arg == 0 then
-   -- Check for debug mode.
-   if tests_debug then
-      for _, name in ipairs(groups) do
-	 groups[name].debug = true
-	 _G[name] = groups[name]
-      end
-      return
-   end
 
    -- Run everything.
    for _, group in ipairs(groups) do
@@ -1472,7 +1471,7 @@ else
    for _, mask in ipairs(arg) do
       local group, groupmask = mask:match('^(.-):(.+)$')
       if not group or not groups[group] then
-	 io.write(("No test group for mask `%s' found."):format(mask))
+	 io.write(("No test group for mask `%s' found.\n"):format(mask))
 	 return 2
       end
       groups[group]:run(groupmask)
