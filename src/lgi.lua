@@ -699,6 +699,20 @@ end
 -- Gets symbol of the specified namespace, if not present yet, tries to load it
 -- on-demand.
 function component_mt.namespace:__index(symbol)
+   -- Check, whether there is some precondition in the lazy-loading table.
+   local preconditions = rawget(self, '_precondition')
+   local precondition = preconditions and preconditions[symbol]
+   if precondition then
+      local package = preconditions[symbol]
+      if not preconditions[package] then
+	 preconditions[package] = true
+	 require('lgix.' .. package)
+	 preconditions[package] = nil
+      end
+      preconditions[symbol] = nil
+      if not next(preconditions) then self._precondition = nil end
+   end
+
    -- Check, whether symbol is already loaded.
    local val = get_element(self, nil, symbol)
    if val then return val end
@@ -989,22 +1003,10 @@ function value_mt:__call(gtype, data)
 end
 setmetatable(Value, value_mt)
 
--- Implementation of lazy-loading.  Component is installed only as a
--- stub and when accessed, full implementation is loaded from lgix.
-local lazy_mt = {}
-function lazy_mt:__index(name)
-   -- Load override, which (hopefully) replaces this stub with real
-   -- component implementation.
-   require('lgix.' .. (self._lazy_lgix or self._lazy_name))
-
-   -- Forward index call to real replaced component.
-   return repo.GLib[self._lazy_name][name]
-end
-
 -- Create lazy-loading components for variant stuff.
+repo.GLib._precondition = {}
 for _, name in pairs { 'Variant', 'VariantType', 'VariantBuilder' } do
-   repo.GLib[name] = setmetatable(
-      { _lazy_name = name, _lazy_lgix = 'GLib-Variant' }, lazy_mt)
+   repo.GLib._precondition[name] = 'GLib-Variant'
 end
 
 -- Access to module proxies the whole repo, for convenience.
