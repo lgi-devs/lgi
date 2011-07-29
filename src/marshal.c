@@ -1126,10 +1126,11 @@ lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
   else
     {
       /* Try fundamentals; they have custom gtype. */
+      gboolean is_object = FALSE;
       GIBaseInfo *info = g_irepository_find_by_gtype (NULL, type);
       if (info == NULL)
 	info = g_irepository_find_by_gtype (NULL, G_TYPE_FUNDAMENTAL (type));
-      if (info != NULL)
+      if (info != NULL && GI_IS_OBJECT_INFO (info))
 	{
 	  GIObjectInfoSetValueFunction set_value = NULL;
 	  if (g_base_info_get_type (info) == GI_INFO_TYPE_OBJECT)
@@ -1140,6 +1141,32 @@ lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 	      set_value (val, lgi_object_2c (L, narg, type, TRUE, FALSE));
 	      return;
 	    }
+	  is_object = TRUE;
+	}
+
+      /* Finally, check typetable, it might contain custom setvalue
+	 method to use. */
+      if (lgi_type_get_repotype (L, type, NULL) != G_TYPE_INVALID)
+	{
+	  gpointer obj;
+	  void (*setvalue_func)(GValue *, gpointer) = 
+	    lgi_gi_load_function (L, -1, "_setvalue");
+	  if (setvalue_func != NULL)
+	    {
+	      if (is_object)
+		obj = lgi_object_2c (L, narg, type, TRUE, TRUE);
+	      else
+		{
+		  obj = lgi_record_2c (L, narg, TRUE, TRUE);
+		  /* lgi_record_2c pops, so push keep stack balanced.. */
+		  lua_pushnil (L);
+		}
+
+	      setvalue_func (val, obj);
+	      lua_pop (L, 1);
+	      return;
+	    }
+	  lua_pop (L, 1);
 	}
     }
 
@@ -1489,10 +1516,11 @@ lgi_marshal_val_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
   else
     {
       /* Fundamentals handling. */
+      gboolean is_object = FALSE;
       GIBaseInfo *info = g_irepository_find_by_gtype (NULL, type);
       if (info == NULL)
 	info = g_irepository_find_by_gtype (NULL, G_TYPE_FUNDAMENTAL (type));
-      if (info != NULL)
+      if (info != NULL && GI_IS_OBJECT_INFO (info))
 	{
 	  GIObjectInfoGetValueFunction get_value =
 	    g_object_info_get_get_value_function_pointer (info);
@@ -1503,6 +1531,28 @@ lgi_marshal_val_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 	      return;
 	    }
 	  g_base_info_unref (info);
+	  is_object = TRUE;
+	}
+
+      /* Finally, check typetable, it might contain custom setvalue
+	 method to use. */
+      if (lgi_type_get_repotype (L, type, NULL) != G_TYPE_INVALID)
+	{
+	  gpointer (*getvalue_func)(const GValue *) = 
+	    lgi_gi_load_function (L, -1, "_getvalue");
+	  if (getvalue_func != NULL)
+	    {
+	      gpointer obj = getvalue_func (val);
+	      if (is_object)
+		{
+		  lgi_object_2lua (L, obj, FALSE);
+		  lua_replace (L, -2);
+		}
+	      else
+		lgi_record_2lua (L, obj, FALSE, 0);
+	      return;
+	    }
+	  lua_pop (L, 1);
 	}
     }
 
