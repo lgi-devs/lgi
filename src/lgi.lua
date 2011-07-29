@@ -952,7 +952,7 @@ function Value._custom.g_type.set(instance, newtype)
 	 Value.init(dest, newtype)
 	 if not Value.transform(instance, dest) then
 	    error(("GObject.Value: cannot convert `%s' to `%s'"):format(
-		     core.record.field(dest, value_field_gtype), gtype))
+		     gtype, core.record.field(dest, value_field_gtype)))
 	 end
 	 Value.unset(instance)
 	 Value.init(instance, newtype)
