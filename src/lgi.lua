@@ -36,6 +36,13 @@ end
 -- Forward 'yield' functionality into external interface.
 lgi.yield = core.yield
 
+-- If global package 'bytes' does not exist (i.e. not provided
+-- externally), use our internal (although incomplete) implementation.
+local ok, bytes = pcall(require, 'bytes')
+if not ok or not bytes then
+   package.loaded.bytes = core.bytes
+end
+
 -- Prepare logging support.  'log' is module-exported table, containing all
 -- functionality related to logging wrapped around GLib g_log facility.
 local logtable = { ERROR = 'assert', DEBUG = 'silent' }

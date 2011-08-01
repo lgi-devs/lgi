@@ -96,6 +96,8 @@ lgi_buffer_init (lua_State *L)
   luaL_register (L, NULL, buffer_mt_reg);
 
   /* Register global API. */
-  luaL_register (L, "bytes", buffer_reg);
-  lua_pop (L, 2);
+  lua_newtable (L);
+  luaL_register (L, NULL, buffer_reg);
+  lua_setfield (L, -3, "bytes");
+  lua_pop (L, 1);
 }

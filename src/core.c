@@ -478,7 +478,8 @@ luaopen_lgi__core (lua_State* L)
   lua_rawset (L, LUA_REGISTRYINDEX);
 
   /* Register _core interface. */
-  luaL_register (L, "lgi._core", lgi_reg);
+  lua_newtable (L);
+  luaL_register (L, NULL, lgi_reg);
 
   /* Create repo table. */
   lua_newtable (L);
