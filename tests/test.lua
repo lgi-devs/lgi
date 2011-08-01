@@ -60,7 +60,7 @@ function testgroup:run(id)
       runfunc(id)
    else
       for i = 1, #self do
-	 if self[i]:match(id) then runfunc(i) end
+	 if self[i] ~= 'debug' and self[i]:match(id) then runfunc(i) end
       end
       if (self.results.failed == 0) then
 	 io.write(('%s: all %d tests passed.\n'):format(
@@ -1448,6 +1448,7 @@ end
 
 -- Available groups
 local groups = { 'gireg', gireg = gireg }
+
 -- Check for debug mode.
 if tests_debug then
    for _, name in ipairs(groups) do
