@@ -323,11 +323,31 @@ record_access (lua_State *L)
   return lgi_marshal_access (L, getmode, 1, 2, 3);
 }
 
+/* Worker method for __len implementation. */
+static int
+record_len (lua_State *L)
+{
+  /* Check record, get its typetable and try to invoke _len method. */
+  record_get (L, 1);
+  lua_getfenv (L, 1);
+  lua_getfield (L, -1, "_len");
+  if (lua_isnil (L, -1))
+    {
+      lua_getfield (L, -2, "_name");
+      return luaL_error (L, "`%s': attempt to get length", 
+			 lua_tostring (L, -1));
+    }
+  lua_pushvalue (L, 1);
+  lua_call (L, 1, 1);
+  return 1;
+}
+
 static const struct luaL_Reg record_meta_reg[] = {
   { "__gc", record_gc },
   { "__tostring", record_tostring },
   { "__index", record_access },
   { "__newindex", record_access },
+  { "__len", record_len },
   { NULL, NULL }
 };
 
