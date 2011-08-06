@@ -499,7 +499,8 @@ callable_call (lua_State *L)
 
   /* Handle return value. */
   nret = 0;
-  if (g_type_info_get_tag (&callable->retval.ti) != GI_TYPE_TAG_VOID
+  if ((g_type_info_get_tag (&callable->retval.ti) != GI_TYPE_TAG_VOID
+       || g_type_info_is_pointer (&callable->retval.ti))
       && !callable->ignore_retval)
     {
       lgi_marshal_arg_2lua (L, &callable->retval.ti, callable->retval.transfer,

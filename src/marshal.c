@@ -330,7 +330,16 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 	  if (*out_array)
 	    size = lua_objlen (L, narg);
 	  else
-	    *out_array = (gpointer *) lua_tolstring (L, narg, &size);
+	    {
+	      LgiRef *ref = lgi_udata_test (L, narg, LGI_BYTES_REF);
+	      if (ref != NULL)
+		{
+		  *out_array = ref->data;
+		  size = ref->length;
+		}
+	      else
+		*out_array = (gpointer *) lua_tolstring (L, narg, &size);
+	    }
 	  if (transfer != GI_TRANSFER_NOTHING)
 	    *out_array = g_memdup (*out_array, size);
 	  len = size;
@@ -446,6 +455,8 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
   if (esize == 1 && g_type_info_get_tag (eti) == GI_TYPE_TAG_UINT8)
     {
       /* UINT8 arrays are marshalled as 'bytes' instances. */
+      if (len < 0)
+	len = strlen(data);
       memcpy (lua_newuserdata (L, len), data, len);
       luaL_getmetatable (L, LGI_BYTES_BUFFER);
       lua_setmetatable (L, -2);
@@ -1273,7 +1284,19 @@ lgi_marshal_arg_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
   switch (tag)
     {
     case GI_TYPE_TAG_VOID:
-      lua_pushnil (L);
+      if (g_type_info_is_pointer (ti))
+	{
+	  /* Create bytes.ref wrapping returned address having 0
+	     size. It is up to Lua code (preferrable an override one)
+	     to assign proper size to the created ref. */
+	  LgiRef *ref = lua_newuserdata (L, sizeof (*ref));
+	  luaL_getmetatable (L, LGI_BYTES_REF);
+	  lua_setmetatable (L, -2);
+	  ref->data = val->v_pointer;
+	  ref->length = 0;
+	}
+      else
+	lua_pushnil (L);
       break;
 
     case GI_TYPE_TAG_BOOLEAN:
