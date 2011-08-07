@@ -1,5 +1,3 @@
-# Overrides
-
 ## Gtk
 
 ### Container

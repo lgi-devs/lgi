@@ -1,8 +1,0 @@
-- Lua-C calls of callbacks and virtuals
-- signals using native lgi GClosure implementation instead of detour
-  through libffi.
-- override framework
-  - Gio: modifiable buffer as input for _read methods.
-  - Gtk: Container.child handling
-  - Gst: object sinking
-- unichar support.
