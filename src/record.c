@@ -351,8 +351,15 @@ static const struct luaL_Reg record_meta_reg[] = {
   { NULL, NULL }
 };
 
-/* Implements generic record creation. Lua prototype:
-   recordinstance = core.record.new(structinfo|unioninfo) */
+/* Implements generic record creation. Creates new record instance,
+   unless 'addr' argument (lightuserdata or integer) is specified, in
+   which case wraps specified address as record.  Lua prototype:
+
+   recordinstance = core.record.new(structinfo|unioninfo[, addr[, own]])
+
+   own (default false) means whether Lua takes record ownership
+   (i.e. if it tries to deallocate the record when created Lua proxy
+   dies). */
 static int
 record_new (lua_State *L)
 {
@@ -360,7 +367,20 @@ record_new (lua_State *L)
   GIInfoType type = g_base_info_get_type (*info);
   luaL_argcheck (L, type == GI_INFO_TYPE_STRUCT || type == GI_INFO_TYPE_UNION,
 		 1, "record expected");
-  lgi_record_new (L, *info);
+  if (lua_isnoneornil (L, 2))
+    /* Create new record instance. */
+    lgi_record_new (L, *info);
+  else
+    {
+      /* Wrap record at existing address. */
+      gpointer addr = (lua_type (L, 2) == LUA_TLIGHTUSERDATA)
+	? addr = lua_touserdata (L, 2)
+	: (gpointer) luaL_checkinteger (L, 2);
+      gboolean owned = lua_toboolean (L, 3);
+      lgi_type_get_repotype (L, G_TYPE_NONE, *info);
+      g_assert (!lua_isnil (L, -1));
+      lgi_record_2lua (L, addr, owned, 0);
+    }
   return 1;
 }
 
