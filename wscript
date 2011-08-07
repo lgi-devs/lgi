@@ -17,7 +17,7 @@ def configure(conf):
     lua_found = False
     for lua_pkg in ['lua5.1', 'lua']:
         if conf.check_cfg(package=lua_pkg, uselib_store='LUA',
-                          args='--cflags --libs', mandatory=False) is not None:
+                          args='--cflags', mandatory=False) is not None:
             conf.check_cfg(package=lua_pkg, uselib_store='LUA',
                            msg='Checking for Lua package directories',
                            okmsg='ok', mandatory=True,
