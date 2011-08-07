@@ -563,7 +563,8 @@ object_connect (lua_State *L)
      1) emitter prepares params as an array of GValues.
      2) LGI custom marshaller marshalls then to Lua stack and calls Lua
 	function. */
-  lgi_closure = lgi_closure_create (L, ci, 4, FALSE, &call_addr);
+  lgi_closure = lgi_closure_allocate (L, 1);
+  call_addr = lgi_closure_create (L, lgi_closure, ci, 4, FALSE);
   gclosure = g_cclosure_new (call_addr, lgi_closure, gclosure_destroy);
 
   /* Connect closure to the signal. */

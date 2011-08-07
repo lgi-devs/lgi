@@ -129,11 +129,16 @@ int lgi_marshal_access (lua_State *L, gboolean getmode,
    cache is reused if possible. */
 int lgi_callable_create (lua_State *L, GICallableInfo *ci, gpointer addr);
 
-/* Creates closure for specified Lua function (or callable table or
-   userdata). Returns user_data field for the closure and fills call_addr with
-   executable address for the closure. */
-gpointer lgi_closure_create (lua_State* L, GICallableInfo* ci, int target,
-			     gboolean autodestroy, gpointer* call_addr);
+/* Creates container block for allocated closures.  Returns address of
+   the block, suitable as user_data parameter. */
+gpointer lgi_closure_allocate (lua_State *L, int count);
+
+/* Allocates n-th closure in the closure block for specified Lua
+   function (or callable table or userdata). Returns executable
+   address for the closure. */
+gpointer lgi_closure_create (lua_State* L, gpointer user_data,
+			     GICallableInfo* ci, int target,
+			     gboolean autodestroy);
 
 /* GDestroyNotify-compatible callback for destroying closure. */
 void lgi_closure_destroy (gpointer user_data);

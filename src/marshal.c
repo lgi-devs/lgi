@@ -763,6 +763,7 @@ marshal_2c_callable (lua_State *L, GICallableInfo *ci, GIArgInfo *ai,
 {
   int nret = 0;
   GIScopeType scope = g_arg_info_get_scope (ai);
+  gpointer user_data = NULL;
 
   /* Check 'nil' in optional case.  In this case, return NULL as
      callback. */
@@ -772,32 +773,39 @@ marshal_2c_callable (lua_State *L, GICallableInfo *ci, GIArgInfo *ai,
       return 0;
     }
 
-  /* Create the closure. */
-  gpointer closure = lgi_closure_create (L, ci, narg,
-					 scope == GI_SCOPE_TYPE_ASYNC,
-					 callback);
-
-  /* Store user_data and/or destroy_notify arguments. */
-  if (argci != NULL && args != NULL)
+  if (argci != NULL)
     {
-      gint arg;
       gint nargs = g_callable_info_get_n_args (argci);
-      arg = g_arg_info_get_closure (ai);
-      if (arg >= 0 && arg < nargs)
-	((GIArgument *) args[arg])->v_pointer = closure;
-      arg = g_arg_info_get_destroy (ai);
-      if (arg >= 0 && arg < nargs)
-	((GIArgument *) args[arg])->v_pointer = lgi_closure_destroy;
-    }
+      gint arg = g_arg_info_get_closure (ai);
 
-  /* In case of scope == SCOPE_TYPE_CALL, we have to create and store on the
-     stack helper Lua userdata which destroy the closure in its gc. */
-  if (scope == GI_SCOPE_TYPE_CALL)
+      /* user_data block is already preallocated from function call. */
+      g_assert (args != NULL);
+      if (arg >= 0 && arg < nargs)
+	{
+	  user_data = ((GIArgument *) args[arg])->v_pointer;
+	  arg = g_arg_info_get_destroy (ai);
+	  if (arg >= 0 && arg < nargs)
+	    ((GIArgument *) args[arg])->v_pointer = lgi_closure_destroy;
+	}
+    }
+  
+  if (user_data == NULL)
     {
-      *lgi_guard_create (L, lgi_closure_destroy) = closure;
-      nret = 1;
+      /* Closure without user_data block.  Create new data block,
+	 setup destruction according to scope. */
+      user_data = lgi_closure_allocate (L, 1);
+      if (scope == GI_SCOPE_TYPE_CALL)
+	{
+	  *lgi_guard_create (L, lgi_closure_destroy) = user_data;
+	  nret++;
+	}
+      else
+	g_assert (scope == GI_SCOPE_TYPE_ASYNC);
     }
 
+  /* Create the closure. */
+  *callback = lgi_closure_create (L, user_data, ci, narg, 
+				  scope == GI_SCOPE_TYPE_ASYNC);
   return nret;
 }
 

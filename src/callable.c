@@ -30,6 +30,14 @@ typedef struct _Param
      returned value.  Not represented are e.g. callback's user_data, array
      sizes etc. */
   guint internal : 1;
+
+  /* Set to nonzero if this argument is user_data for closure which is
+     marked as (scope call). */
+  guint call_scoped_user_data : 1;
+
+  /* Number of closures bound to this argument.  0 if this is not
+     user_data for closure. */
+  guint n_closures : 4;
 } Param;
 
 /* Structure representing userdata allocated for any callable, i.e. function,
@@ -70,31 +78,68 @@ typedef struct _Callback
   lua_State *L;
   int thread_ref;
 
-  /* Callable's target to be invoked (either function, userdata/table
-     with __call metafunction or coroutine (which is resumed instead
-     of called). */
-  int target_ref;
-
   /* Mutex which should be locked before calling Lua code. */
   GStaticRecMutex *mutex;
 } Callback;
 
-/* Structure containing closure data. */
+typedef struct _FfiClosureBlock FfiClosureBlock;
+
+/* Single element in FFI callbacks block. */
 typedef struct _FfiClosure
 {
   /* Libffi closure object. */
   ffi_closure ffi_closure;
 
-  /* Lua reference to associated callable. */
-  int callable_ref;
+  /* Pointer to the block to which this closure belongs. */
+  FfiClosureBlock *block;
+
+  union
+  {
+    struct
+    {
+      /* Lua reference to associated Callable. */
+      int callable_ref;
+
+      /* Callable's target to be invoked (either function,
+	 userdata/table with __call metafunction or coroutine (which
+	 is resumed instead of called). */
+      int target_ref;
+    };
+
+    /* Closure's entry point, stored only temporarily until closure is
+       created. */
+    gpointer call_addr;
+  };
+
+  /* Flag indicating whether closure should auto-destroy itself after it is
+     called. */
+  guint autodestroy : 1;
+
+  /* Flag indicating whether the closure was already created. */
+  guint created : 1;
+} FfiClosure;
+
+/* Structure containing closure block. This is user_data block for
+   C-side closure arguments. */
+struct _FfiClosureBlock
+{
+  /* 1st closure. */
+  FfiClosure ffi_closure;
 
   /* Target to be invoked. */
   Callback callback;
 
-  /* Flag indicating whether closure should auto-destroy itself after it is
-     called. */
-  gboolean autodestroy;
-} FfiClosure;
+  /* Number of other closures in the block, excluding the forst one
+     contained already in this header. */
+  int closures_count;
+
+  /* Variable-length array of pointers to other closures.
+     Unfortunately libffi does not allow to allocate contiguous block
+     containing more closures, otherwise this array would simply
+     contain FfiClosure instances instead of pointers to dynamically
+     allocated ones. */
+  FfiClosure *ffi_closures[1];
+};
 
 /* lightuserdata key to callable cache table. */
 static int callable_cache;
@@ -254,7 +299,11 @@ lgi_callable_create (lua_State *L, GICallableInfo *info, gpointer addr)
   /* Clear all 'internal' flags inside callable parameters, parameters are then
      marked as internal during processing of their parents. */
   for (argi = 0; argi < nargs; argi++)
-    callable->params[argi].internal = FALSE;
+    {
+      callable->params[argi].internal = FALSE;
+      callable->params[argi].n_closures = 0;
+      callable->params[argi].call_scoped_user_data = FALSE;
+    }
 
   /* Process return value. */
   g_callable_info_load_return_type (callable->info, &callable->retval.ti);
@@ -284,7 +333,12 @@ lgi_callable_create (lua_State *L, GICallableInfo *info, gpointer addr)
 	 fields as internal. */
       arg = g_arg_info_get_closure (&param->ai);
       if (arg > 0 && arg < nargs)
-	callable->params[arg].internal = TRUE;
+	{
+	  callable->params[arg].internal = TRUE;
+	  callable->params[arg].n_closures++;
+	  if (g_arg_info_get_scope (&param->ai) == GI_SCOPE_TYPE_CALL)
+	    callable->params[arg].call_scoped_user_data = TRUE;
+	}
       arg = g_arg_info_get_destroy (&param->ai);
       if (arg > 0 && arg < nargs)
 	callable->params[arg].internal = TRUE;
@@ -375,8 +429,7 @@ callable_call (lua_State *L)
 {
   Param *param;
   int i, lua_argi, nret, caller_allocated = 0, nargs;
-  GIArgument retval;
-  GIArgument *args;
+  GIArgument retval, *args;
   void **ffi_args, **redirect_out;
   GError *err = NULL;
   GStaticRecMutex *mutex;
@@ -440,10 +493,18 @@ callable_call (lua_State *L)
 	  ffi_args[argi] = &redirect_out[argi];
 	  redirect_out[argi] = &args[argi];
 	}
+
+      if (param->n_closures > 0)
+	{
+	  args[argi].v_pointer = lgi_closure_allocate (L, param->n_closures);
+	  if (param->call_scoped_user_data)
+	    /* Add guard which releases closure block after the
+	       call. */
+	    *lgi_guard_create (L, lgi_closure_destroy) = args[argi].v_pointer;
+	}
     }
 
   /* Process input parameters. */
-  nret = 0;
   param = &callable->params[0];
   for (i = 0; i < callable->nargs; i++, param++)
     if (!param->internal)
@@ -578,20 +639,22 @@ static const struct luaL_reg callable_reg[] = {
   { NULL, NULL }
 };
 
-/* Initializes target substructure. */
-static void
-callback_create (lua_State *L, Callback *callback, int target_arg)
+static int
+callback_create_target (lua_State *L, int target_arg)
 {
   /* Store reference to target Lua function (or NOREF if it is thread
      instead). */
   if (lua_isthread (L, target_arg))
-    callback->target_ref = LUA_NOREF;
-  else
-    {
-      lua_pushvalue (L, target_arg);
-      callback->target_ref = luaL_ref (L, LUA_REGISTRYINDEX);
-    }
+    return LUA_NOREF;
 
+  lua_pushvalue (L, target_arg);
+  return luaL_ref (L, LUA_REGISTRYINDEX);
+}
+
+/* Initializes target substructure. */
+static void
+callback_create (lua_State *L, Callback *callback)
+{
   /* Store reference to target Lua thread. */
   callback->L = L;
   lua_pushthread (L);
@@ -610,14 +673,15 @@ callback_create (lua_State *L, Callback *callback, int target_arg)
    not be called but resumed instead, sets *call to FALSE and does not
    push anything to the stack. */
 static lua_State *
-callback_prepare_call (Callback *callback, gboolean *call)
+callback_prepare_call (Callback *callback, int target_ref, gboolean *call)
 {
   /* Get access to proper Lua context. */
   lua_State *L = callback->L;
   g_static_rec_mutex_lock (callback->mutex);
   lua_rawgeti (L, LUA_REGISTRYINDEX, callback->thread_ref);
   L = lua_tothread (L, -1);
-  if ((*call = callback->target_ref != LUA_NOREF) != FALSE)
+  *call = (target_ref != LUA_NOREF);
+  if (*call)
     {
       /* We will call target method, prepare context/thread to do
 	 it. */
@@ -634,17 +698,16 @@ callback_prepare_call (Callback *callback, gboolean *call)
 	}
       lua_pop (callback->L, 1);
       callback->L = L;
-      lua_rawgeti (L, LUA_REGISTRYINDEX, callback->target_ref);
+      lua_rawgeti (L, LUA_REGISTRYINDEX, target_ref);
     }
 
   return L;
 }
 
 /* Frees everything allocated in Callback. */
-static void
+static inline void
 callback_destroy (Callback *callback)
 {
-  luaL_unref (callback->L, LUA_REGISTRYINDEX, callback->target_ref);
   luaL_unref (callback->L, LUA_REGISTRYINDEX, callback->thread_ref);
 }
 
@@ -655,12 +718,14 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 {
   Callable *callable;
   FfiClosure *closure = closure_arg;
+  FfiClosureBlock *block = closure->block;
   gint res = 0, npos, i, stacktop;
   gboolean call;
   Param *param;
 
   /* Get access to proper Lua context. */
-  lua_State *L = callback_prepare_call (&closure->callback, &call);
+  lua_State *L = callback_prepare_call (&block->callback, closure->target_ref,
+					&call);
 
   /* Get access to Callable structure. */
   lua_rawgeti (L, LUA_REGISTRYINDEX, closure->callable_ref);
@@ -798,61 +863,108 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
      delete the code under our feet and crash and burn :-(. Instead, we create
      marshal guard and leave it to GC to destroy the closure later. */
   if (closure->autodestroy)
-    *lgi_guard_create (L, lgi_closure_destroy) = closure;
+    *lgi_guard_create (L, lgi_closure_destroy) = block;
 
   /* This is NOT called by Lua, so we better leave the Lua stack we
      used pretty much tidied. */
   lua_settop (L, stacktop);
 
   /* Going back to C code, release call mutex again. */
-  g_static_rec_mutex_unlock (closure->callback.mutex);
+  g_static_rec_mutex_unlock (block->callback.mutex);
 }
 
 /* Destroys specified closure. */
 void
 lgi_closure_destroy (gpointer user_data)
 {
-  FfiClosure* closure = user_data;
+  FfiClosureBlock* block = user_data;
+  lua_State *L = block->callback.L;
+  FfiClosure *closure;
+  int i;
 
-  luaL_unref (closure->callback.L, LUA_REGISTRYINDEX, closure->callable_ref);
-  callback_destroy (&closure->callback);
-  ffi_closure_free (closure);
+  for (i = block->closures_count - 1; i >= -1; --i)
+    {
+      closure = (i < 0) ? &block->ffi_closure : block->ffi_closures[i];
+      if (closure->created)
+	{
+	  luaL_unref (L, LUA_REGISTRYINDEX, closure->callable_ref);
+	  luaL_unref (L, LUA_REGISTRYINDEX, closure->target_ref);
+	}
+      if (i < 0)
+	callback_destroy (&block->callback);
+      ffi_closure_free (closure);
+    }
+}
+
+/* Creates container block for allocated closures.  Returns address of
+   the block, suitable as user_data parameter. */
+gpointer
+lgi_closure_allocate (lua_State *L, int count)
+{
+  gpointer call_addr;
+  int i;
+
+  /* Allocate header block. */
+  FfiClosureBlock *block =
+    ffi_closure_alloc (offsetof (FfiClosureBlock, ffi_closures)
+		       + (--count * sizeof (FfiClosure*)), &call_addr);
+  block->ffi_closure.created = 0;
+  block->ffi_closure.call_addr = call_addr;
+  block->ffi_closure.block = block;
+  block->closures_count = count;
+
+  /* Allocate all additional closures. */
+  for (i = 0; i < count; ++i)
+    {
+      block->ffi_closures[i] = ffi_closure_alloc (sizeof (FfiClosure),
+						  &call_addr);
+      block->ffi_closures[i]->created = 0;
+      block->ffi_closures[i]->call_addr = call_addr;
+      block->ffi_closures[i]->block = block;
+    }
+
+  /* Initialize callback member. */
+  callback_create (L, &block->callback);
+  return block;
 }
 
 /* Creates closure from Lua function to be passed to C. */
 gpointer
-lgi_closure_create (lua_State *L, GICallableInfo *ci, int target,
-		    gboolean autodestroy, gpointer *call_addr)
+lgi_closure_create (lua_State *L, gpointer user_data,
+		    GICallableInfo *ci, int target, gboolean autodestroy)
 {
+  FfiClosureBlock* block = user_data;
   FfiClosure *closure;
   Callable *callable;
+  gpointer call_addr;
+  int i;
+
+  /* Find pointer to target FfiClosure. */
+  for (closure = &block->ffi_closure, i = 0; closure->created; ++i)
+    {
+      g_assert (i < block->closures_count);
+      closure = block->ffi_closures[i];
+    }
 
   /* Prepare callable and store reference to it. */
   lgi_callable_create (L, ci, NULL);
   callable = lua_touserdata (L, -1);
-
-  /* Allocate closure space. */
-  closure = ffi_closure_alloc (sizeof (FfiClosure), call_addr);
-  closure->callable_ref = luaL_ref (L, LUA_REGISTRYINDEX);
-
-  /* Initialize closure callback target. */
-  callback_create (L, &closure->callback, target);
-
-  /* Remember whether closure should destroy itself automatically after being
-     invoked. */
+  call_addr = closure->call_addr;
+  closure->created = 1;
   closure->autodestroy = autodestroy;
+  closure->callable_ref = luaL_ref (L, LUA_REGISTRYINDEX);
+  closure->target_ref = callback_create_target (L, target);
 
   /* Create closure. */
   if (ffi_prep_closure_loc (&closure->ffi_closure, &callable->cif,
-			    closure_callback, closure, *call_addr) != FFI_OK)
+			    closure_callback, closure, call_addr) != FFI_OK)
     {
-      lgi_closure_destroy (closure);
       lua_concat (L, lgi_type_get_name (L, ci));
       luaL_error (L, "failed to prepare closure for `%'", lua_tostring (L, -1));
       return NULL;
     }
 
-  return closure;
+  return call_addr;
 }
 
 typedef struct _GlibClosure
@@ -861,12 +973,14 @@ typedef struct _GlibClosure
 
   /* Target callback of the closure. */
   Callback callback;
+  int target_ref;
 } GlibClosure;
 
 static void
 lgi_gclosure_finalize (gpointer notify_data, GClosure *closure)
 {
   GlibClosure *c = (GlibClosure *) closure;
+  luaL_unref (c->callback.L, LUA_REGISTRYINDEX, c->target_ref);
   callback_destroy (&c->callback);
 }
 
@@ -880,7 +994,7 @@ lgi_gclosure_marshal (GClosure *closure, GValue *return_value,
   gboolean call;
 
   /* Prepare context in which will everything happen. */
-  lua_State *L = callback_prepare_call (&c->callback, &call);
+  lua_State *L = callback_prepare_call (&c->callback, c->target_ref, &call);
   luaL_checkstack (L, n_param_values + 1, "");
 
   /* Push parameters. */
@@ -922,7 +1036,8 @@ lgi_gclosure_create (lua_State *L, int target)
   c = (GlibClosure *) g_closure_new_simple (sizeof (GlibClosure), NULL);
 
   /* Initialize callback target. */
-  callback_create (L, &c->callback, target);
+  callback_create (L, &c->callback);
+  c->target_ref = callback_create_target (L, target);
 
   /* Set marshaller for the closure. */
   g_closure_set_marshal (&c->closure, lgi_gclosure_marshal);
