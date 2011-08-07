@@ -251,6 +251,16 @@ lgi_guard_create (lua_State *L, GDestroyNotify destroy)
   return &guard->data;
 }
 
+/* Creates Lua string from lightuserdata (containing pointer to
+   buffer) and length. */
+static int
+core_refptr (lua_State *L)
+{
+  luaL_checktype (L, 1, LUA_TLIGHTUSERDATA);
+  lua_pushlstring (L, lua_touserdata (L, 1), luaL_checkint (L, 2));
+  return 1;
+}
+
 /* Converts GType from/to string. */
 static int
 core_gtype (lua_State *L)
@@ -428,6 +438,7 @@ core_yield (lua_State *L)
 static const struct luaL_reg lgi_reg[] = {
   { "set", core_set },
   { "log",  core_log },
+  { "refptr", core_refptr },
   { "gtype", core_gtype },
   { "constant", core_constant },
   { "value", core_value },

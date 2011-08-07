@@ -83,56 +83,8 @@ buffer_new (lua_State *L)
   return 1;
 }
 
-static int
-ref_len (lua_State *L)
-{
-  LgiRef *ref = luaL_checkudata (L, 1, LGI_BYTES_REF);
-  lua_pushnumber (L, ref->length);
-  return 1;
-}
-
-static int
-ref_tostring (lua_State *L)
-{
-  LgiRef *ref = luaL_checkudata (L, 1, LGI_BYTES_REF);
-  lua_pushlstring (L, (const char *) ref->data, ref->length);
-  return 1;
-}
-
-static int
-ref_index (lua_State *L)
-{
-  int index;
-  LgiRef *ref = luaL_checkudata (L, 1, LGI_BYTES_REF);
-  index = lua_tonumber (L, 2);
-  if (index > 0 && index <= ref->length)
-    lua_pushnumber (L, ref->data[index - 1]);
-  else
-    {
-      luaL_argcheck (L, !lua_isnoneornil (L, 2), 2, "nil index");
-      lua_pushnil (L);
-    }
-  return 1;
-}
-
-static const luaL_Reg ref_mt_reg[] = {
-  { "__len", ref_len },
-  { "__tostring", ref_tostring },
-  { "__index", ref_index },
-  { NULL, NULL }
-};
-
-static int
-ref_resize (lua_State *L)
-{
-  LgiRef *ref = luaL_checkudata (L, 1, LGI_BYTES_REF);
-  ref->length = luaL_checkint (L, 2);
-  return 0;
-}
-
 static const luaL_Reg buffer_reg[] = {
   { "new", buffer_new },
-  { "resize", ref_resize },
   { NULL, NULL }
 };
 
@@ -142,9 +94,7 @@ lgi_buffer_init (lua_State *L)
   /* Register metatables. */
   luaL_newmetatable (L, LGI_BYTES_BUFFER);
   luaL_register (L, NULL, buffer_mt_reg);
-  luaL_newmetatable (L, LGI_BYTES_REF);
-  luaL_register (L, NULL, ref_mt_reg);
-  lua_pop (L, 2);
+  lua_pop (L, 1);
 
   /* Register global API. */
   lua_newtable (L);

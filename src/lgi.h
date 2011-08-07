@@ -66,16 +66,6 @@ lgi_udata_test (lua_State *L, int narg, const char *name);
    http://permalink.gmane.org/gmane.comp.lang.lua.general/79288 */
 #define LGI_BYTES_BUFFER "bytes.bytearray"
 
-/* Ref is indirect read-only bytebuffer.  Its length can be adjusted
-   dynamically and its purpose is to wrap APIs which return pointer to
-   bytebuffer data and length is retrieved by different means
-   (i.e. separate get_length() type API). */
-#define LGI_BYTES_REF "bytes.ref"
-typedef struct _LgiRef {
-  unsigned char *data;
-  int length;
-} LgiRef;
-
 /* Metatable name of userdata - gi wrapped 'GIBaseInfo*' */
 #define LGI_GI_INFO "lgi.gi.info"
 

@@ -330,18 +330,11 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 	  if (*out_array)
 	    size = lua_objlen (L, narg);
 	  else
-	    {
-	      LgiRef *ref = lgi_udata_test (L, narg, LGI_BYTES_REF);
-	      if (ref != NULL)
-		{
-		  *out_array = ref->data;
-		  size = ref->length;
-		}
-	      else
-		*out_array = (gpointer *) lua_tolstring (L, narg, &size);
-	    }
+	    *out_array = (gpointer *) lua_tolstring (L, narg, &size);
+
 	  if (transfer != GI_TRANSFER_NOTHING)
 	    *out_array = g_memdup (*out_array, size);
+
 	  len = size;
 	}
 
@@ -984,18 +977,28 @@ lgi_marshal_arg_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 	    val->v_pointer = (gpointer) lua_tostring (L, narg);
 	  else
 	    {
-	      /* Check memory buffer. */
-	      val->v_pointer = lgi_udata_test (L, narg, LGI_BYTES_BUFFER);
-	      if (!val->v_pointer)
+	      int type = lua_type (L, narg);
+	      if (type == LUA_TLIGHTUSERDATA)
+		/* Generic pointer. */
+		val->v_pointer = lua_touserdata (L, narg);
+	      else if (type == LUA_TNUMBER)
+		/* Integer cast to pointer (e.g. GDK_SELECTION_CLIPBOARD). */
+		val->v_pointer = (gpointer) lua_tointeger (L, narg);
+	      else
 		{
-		  /* Check object. */
-		  val->v_pointer = lgi_object_2c (L, narg, G_TYPE_INVALID,
-						  FALSE, TRUE);
-		  if (!val->v_pointer)
+		  /* Check memory buffer. */
+		  val->v_pointer = lgi_udata_test (L, narg, LGI_BYTES_BUFFER);
+		  if (!val->v_pointer) 
 		    {
-		      /* Check any kind of record. */
-		      lua_pushnil (L);
-		      val->v_pointer = lgi_record_2c (L, narg, FALSE, TRUE);
+		      /* Check object. */
+		      val->v_pointer = lgi_object_2c (L, narg, G_TYPE_INVALID,
+						      FALSE, TRUE);
+		      if (!val->v_pointer)
+			{
+			  /* Check any kind of record. */
+			  lua_pushnil (L);
+			  val->v_pointer = lgi_record_2c (L, narg, FALSE, TRUE);
+			}
 		    }
 		}
 	    }
@@ -1285,16 +1288,8 @@ lgi_marshal_arg_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
     {
     case GI_TYPE_TAG_VOID:
       if (g_type_info_is_pointer (ti))
-	{
-	  /* Create bytes.ref wrapping returned address having 0
-	     size. It is up to Lua code (preferrable an override one)
-	     to assign proper size to the created ref. */
-	  LgiRef *ref = lua_newuserdata (L, sizeof (*ref));
-	  luaL_getmetatable (L, LGI_BYTES_REF);
-	  lua_setmetatable (L, -2);
-	  ref->data = val->v_pointer;
-	  ref->length = 0;
-	}
+	/* Marshal pointer to simple lightuserdata. */
+	lua_pushlightuserdata (L, val->v_pointer);
       else
 	lua_pushnil (L);
       break;
