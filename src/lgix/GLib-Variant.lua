@@ -177,6 +177,11 @@ function Variant.new(vt, val)
 end
 Variant._constructor = Variant.new
 
+-- Implement VariantBuilder:add() using the same facade.
+function VariantBuilder:add(type, val)
+   VariantBuilder.add_value(Variant.new(type, val))
+end
+
 -- Converts variant to nearest possible Lua value, but leaves arrays
 -- intact (use indexing and/or iterators for handling arrays).
 local simple_unpack_map = {
