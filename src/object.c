@@ -17,10 +17,6 @@
    notifications. */
 static int cache_weak, cache_strong;
 
-/* lightuserdata key to registry containing thread to be used for
-   toggle reference callback. */
-static int callback_thread;
-
 /* lightuserdata key to registry for metatable of objects. */
 static int object_mt;
 
@@ -102,35 +98,139 @@ object_get (lua_State *L, int narg)
   return obj;
 }
 
-/* Removes one reference from the object. */
+/* GObject toggle-ref notification callback.  Inserts or removes given
+   object from/to strong reference cache. */
 static void
-object_unref (gpointer obj)
+object_toggle_notify (gpointer data, GObject *object, gboolean is_last_ref)
+{
+  lua_State *L = lgi_callback_enter (data);
+  luaL_checkstack (L, 3, "");
+  lua_pushlightuserdata (L, &cache_strong);
+  lua_rawget (L, LUA_REGISTRYINDEX);
+  lua_pushlightuserdata (L, object);
+  if (is_last_ref)
+    {
+      /* Remove from strong cache (i.e. assign nil to that slot). */
+      lua_pushnil (L);
+    }
+  else
+    {
+      /* Find proxy object in the weak table and assign it to the
+	 strong table. */
+      lua_pushlightuserdata (L, &cache_weak);
+      lua_rawget (L, LUA_REGISTRYINDEX);
+      lua_pushvalue (L, -2);
+      lua_rawget (L, -2);
+      lua_replace (L, -2);
+    }
+
+  /* Store new value to the strong cache. */
+  lua_rawset (L, -3);
+  lua_pop (L, 1);
+  lgi_callback_leave (data);
+}
+
+/* Retrieves requested typetable function for the object. */
+static gpointer
+object_load_function (lua_State *L, GType gtype, const gchar *name)
+{
+  gpointer func = NULL;
+  if (object_type (L, gtype) != G_TYPE_INVALID)
+    {
+      func = lgi_gi_load_function (L, -1, name);
+      lua_pop (L, 1);
+    }
+  return func;
+}
+
+/* Adds one reference to the object, returns TRUE if succeded. */
+static gboolean
+object_refsink (lua_State *L, gpointer obj)
 {
   GType gtype = G_TYPE_FROM_INSTANCE (obj);
   if (G_TYPE_IS_OBJECT (gtype))
-    g_object_unref (obj);
-  else
     {
-      /* Some other fundamental type, check, whether it has
-	 registered custom unref method. */
-      GIObjectInfo *info = g_irepository_find_by_gtype (NULL, gtype);
-      if (info == NULL)
-	info = g_irepository_find_by_gtype (NULL, G_TYPE_FUNDAMENTAL (gtype));
-      if (info != NULL)
+      g_object_ref_sink (obj);
+      return TRUE;
+    }
+
+  /* Check whether object has registered fundamental 'ref'
+     function. */
+  GIObjectInfo *info = g_irepository_find_by_gtype (NULL, gtype);
+  if (info == NULL)
+    info = g_irepository_find_by_gtype (NULL, G_TYPE_FUNDAMENTAL (gtype));
+  if (info != NULL)
+    {
+      GIObjectInfoRefFunction ref =
+	g_object_info_get_ref_function_pointer (info);
+      g_base_info_unref (info);
+      if (ref != NULL)
 	{
-	  GIObjectInfoUnrefFunction unref =
-	    g_object_info_get_unref_function_pointer (info);
-	  if (unref != NULL)
-	    unref (obj);
-	  g_base_info_unref (info);
+	  ref (obj);
+	  return TRUE;
 	}
     }
+
+  /* Finally check custom _refsink method in typetable. */
+  gpointer (*refsink_func)(gpointer) =
+    object_load_function (L, gtype, "_refsink");
+  if (refsink_func)
+    {
+      refsink_func (obj);
+      return TRUE;
+    }
+
+  /* There is no known wasy how to ref this kind of object. */
+  g_warning ("no way to ref type `%s'", g_type_name (gtype));
+  return FALSE;
+}
+
+/* Removes one reference from the object. */
+static void
+object_unref (lua_State *L, gpointer obj, gboolean remove_proxy)
+{
+  GType gtype = G_TYPE_FROM_INSTANCE (obj);
+  if (G_TYPE_IS_OBJECT (gtype))
+    {
+      if (remove_proxy)
+	g_object_remove_toggle_ref (obj, object_toggle_notify,
+				    lgi_callback_context (L));
+      else
+	g_object_unref (obj);
+      return;
+    }
+
+  /* Some other fundamental type, check, whether it has registered
+     custom unref method. */
+  GIObjectInfo *info = g_irepository_find_by_gtype (NULL, gtype);
+  if (info == NULL)
+    info = g_irepository_find_by_gtype (NULL, G_TYPE_FUNDAMENTAL (gtype));
+  if (info != NULL)
+    {
+      GIObjectInfoUnrefFunction unref =
+	g_object_info_get_unref_function_pointer (info);
+      g_base_info_unref (info);
+      if (unref != NULL)
+	{
+	  unref (obj);
+	  return;
+	}
+    }
+
+  void (*unref_func)(gpointer) = object_load_function (L, gtype, "_unref");
+  if (unref_func)
+    {
+      unref_func (obj);
+      return;
+    }
+
+  g_warning ("no way to unref type `%s'", g_type_name (gtype));
 }
 
 static int
 object_gc (lua_State *L)
 {
-  object_unref (object_get (L, 1));
+  object_unref (L, object_get (L, 1), TRUE);
   return 0;
 }
 
@@ -166,37 +266,6 @@ lgi_object_2c (lua_State *L, int narg, GType gtype, gboolean optional,
   return obj;
 }
 
-/* GObject toggle-ref notification callback.  Inserts or removes given
-   object from/to strong reference cache. */
-static void
-object_toggle_notify (gpointer data, GObject *object, gboolean is_last_ref)
-{
-  lua_State *L = data;
-  luaL_checkstack (L, 3, "");
-  lua_pushlightuserdata (L, &cache_strong);
-  lua_rawget (L, LUA_REGISTRYINDEX);
-  lua_pushlightuserdata (L, object);
-  if (is_last_ref)
-    {
-      /* Remove from strong cache (i.e. assign nil to that slot). */
-      lua_pushnil (L);
-    }
-  else
-    {
-      /* Find proxy object in the weak table and assign it to the
-	 strong table. */
-      lua_pushlightuserdata (L, &cache_weak);
-      lua_rawget (L, LUA_REGISTRYINDEX);
-      lua_pushvalue (L, -2);
-      lua_rawget (L, -2);
-      lua_replace (L, -2);
-    }
-
-  /* Store new value to the strong cache. */
-  lua_rawset (L, -3);
-  lua_pop (L, 1);
-}
-
 void
 lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
 {
@@ -224,7 +293,7 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
 	 because our proxy always keeps only one reference, which we
 	 already have. */
       if (own)
-	object_unref (obj);
+	object_unref (L, obj, FALSE);
       return;
     }
 
@@ -245,71 +314,23 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
   lua_replace (L, -3);
   lua_pop (L, 1);
 
-
-  /* Make sure that floating and/or initially-unowned objects are
-     converted to regular reference; we are not interested in floating
-     refs, they just complicate stuff for us. The way how is sinking
-     performed is stored in the typetable. */
+  /* If we don't own the object, take its ownership (and also remove
+     floating reference if there is any). */
   gtype = G_TYPE_FROM_INSTANCE (obj);
-  if (g_type_is_a (gtype, G_TYPE_INITIALLY_UNOWNED)
-      || (G_TYPE_IS_OBJECT (gtype) && g_object_is_floating (obj)))
-    g_object_ref_sink (obj);
-  else if (object_type (L, gtype))
-    {
-      /* Check custom _refsink method in typetable. */
-      void (*refsink_func)(gpointer) = lgi_gi_load_function (L, -1, "_refsink");
-      if (refsink_func)
-	{
-	  refsink_func (obj);
-	  if (own)
-	    /* If the object was already owned, it is now owned twice,
-	       so get rid of one extra reference. */
-	    object_unref (obj);
-	  else
-	    /* refsink caused that we already own the object now. */
-	    own = TRUE;
-	}
-
-      /* Pop table stored by object_type() call in the condition above. */
-      lua_pop (L, 1);
-    }
+  if (!own && object_refsink (L, obj))
+    own = TRUE;
 
   if (G_TYPE_IS_OBJECT (gtype))
     {
       /* Create toggle reference and add object to the strong cache. */
-      lua_pushlightuserdata (L, &callback_thread);
-      lua_rawget (L, LUA_REGISTRYINDEX);
-      g_object_add_toggle_ref (obj, object_toggle_notify, lua_tothread (L, -1));
-      object_toggle_notify (L, obj, FALSE);
-      lua_pop (L, 1);
+      gpointer user_data = lgi_callback_context (L);
+      g_object_add_toggle_ref (obj, object_toggle_notify, user_data);
+      object_toggle_notify (user_data, obj, FALSE);
 
       /* If the object was already pre-owned, remove one reference
-	 (because we have one owning toggle reference). */
+	 (because we have added one owning toggle reference). */
       if (own)
 	g_object_unref (obj);
-    }
-  else if (!own)
-    {
-      /* Unowned fundamental non-GObject, try to get its ownership. */
-      GIObjectInfo *info = g_irepository_find_by_gtype (NULL, gtype);
-      if (info == NULL)
-	info = g_irepository_find_by_gtype (NULL, G_TYPE_FUNDAMENTAL (gtype));
-      if (info != NULL)
-	{
-	  GIObjectInfoRefFunction ref =
-	    g_object_info_get_ref_function_pointer (info);
-	  if (ref != NULL)
-	    ref (obj);
-	  else
-	    {
-	      /* Use custom _refsink method in typetable. */
-	      void (*refsink_func)(gpointer) =
-		lgi_gi_load_function (L, -1, "_refsink");
-	      if (refsink_func != NULL)
-		refsink_func (obj);
-	    }
-	  g_base_info_unref (info);
-	}
     }
 }
 
@@ -395,8 +416,10 @@ object_new (lua_State *L)
   for (param = params; n_params > 0; param++, n_params--)
     g_value_unset (&param->value);
 
-  /* Wrap Lua proxy around created object. */
-  lgi_object_2lua (L, obj, TRUE);
+  /* Wrap Lua proxy around created object.  Note that if created
+     object is of G_INITIALLY_UNOWNED type, we do not have the
+     ownership. */
+  lgi_object_2lua (L, obj, !G_IS_INITIALLY_UNOWNED (obj));
   return 1;
 }
 
@@ -599,12 +622,6 @@ lgi_object_init (lua_State *L)
   /* Initialize caches. */
   lgi_cache_create (L, &cache_weak, "v");
   lgi_cache_create (L, &cache_strong, NULL);
-
-  /* Create new service helper thread which is used solely for
-     invoking toggle reference notification. */
-  lua_pushlightuserdata (L, &callback_thread);
-  lua_newthread (L);
-  lua_rawset (L, LUA_REGISTRYINDEX);
 
   /* Create object API table and set it to the parent. */
   lua_newtable (L);
