@@ -340,6 +340,34 @@ static int call_mutex_mt;
    where CallMutex instance for this state resides. */
 int lgi_call_mutex;
 
+gpointer
+lgi_callback_context (lua_State *L)
+{
+  /* Get context from the callback thread. */
+  gpointer user_data;
+  lua_pushlightuserdata (L, &lgi_call_mutex);
+  lua_rawget (L, LUA_REGISTRYINDEX);
+  user_data = lua_touserdata (L, -1);
+  lua_pop (L, 1);
+  return user_data;
+}
+
+lua_State *
+lgi_callback_enter (gpointer user_data)
+{
+  /* user_data is actually a pointer to CallMutex structure. */
+  CallMutex *mutex = user_data;
+  g_static_rec_mutex_lock (&mutex->mutex);
+  return mutex->L;
+}
+
+void lgi_callback_leave (gpointer user_data)
+{
+  CallMutex *mutex = user_data;
+  g_assert (lua_gettop (mutex->L) == 0);
+  g_static_rec_mutex_unlock (&mutex->mutex);
+}
+
 static const char* log_levels[] = {
   "ERROR", "CRITICAL", "WARNING", "MESSAGE", "INFO", "DEBUG", "???", NULL
 };
@@ -358,7 +386,6 @@ static void
 log_handler (const gchar *log_domain, GLogLevelFlags log_level,
 	     const gchar *message, gpointer user_data)
 {
-  CallMutex *mutex = (CallMutex *)user_data;
   lua_State *L;
   const gchar **level;
   gboolean handled = FALSE, throw = FALSE;
@@ -372,8 +399,7 @@ log_handler (const gchar *log_domain, GLogLevelFlags log_level,
       break;
 
   /* Enter Lua state, protected by the CallMutex. */
-  g_static_rec_mutex_lock (&mutex->mutex);
-  L = mutex->L;
+  L = lgi_callback_enter (user_data);
 
   /* Check, whether there is handler registered in Lua. */
   luaL_checkstack (L, 4, "");
@@ -410,7 +436,7 @@ log_handler (const gchar *log_domain, GLogLevelFlags log_level,
     luaL_error (L, "%s-%s **: %s", log_domain, *level, message);
 
   /* Leaving the handler, so leave also call mutex. */
-  g_static_rec_mutex_unlock (&mutex->mutex);
+  lgi_callback_leave (user_data);
 
   /* If not handled by our handler, use default system logger. */
   if (!handled)
@@ -480,12 +506,14 @@ luaopen_lgi__core (lua_State* L)
 
   /* Create call mutex guard, keep it locked initially (it is unlocked
      only when we are calling out to C code) and store it into the
-     registry. */
+     registry. Also create an auxiliary Lua thread which will be
+     exclusively used only for callbacks. */
   lua_pushlightuserdata (L, &lgi_call_mutex);
   mutex = lua_newuserdata (L, sizeof (*mutex));
   g_static_rec_mutex_init (&mutex->mutex);
   g_static_rec_mutex_lock (&mutex->mutex);
-  mutex->L = L;
+  mutex->L = lua_newthread (L);
+  luaL_ref (L, LUA_REGISTRYINDEX); /* Keep thread fixed in registry forever. */
   lua_rawset (L, LUA_REGISTRYINDEX);
 
   /* Register _core interface. */

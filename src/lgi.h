@@ -83,6 +83,14 @@ gpointer lgi_gi_load_function(lua_State *L, int typetable, const char *name);
    code uses multithreading.*/
 extern int lgi_call_mutex;
 
+/* Tools for invoking Lua services from C core.  This is used mainly
+   for log handlers and toggle_notifications, which are called by GLib
+   and expected to be handled using Lua state.  But access to Lua
+   state have to be synchronized, so following API exists. */
+gpointer lgi_callback_context (lua_State *L);
+lua_State *lgi_callback_enter (gpointer user_data);
+void lgi_callback_leave (gpointer user_data);
+
 /* Gets gtype of the type represented by typeinfo. */
 GType lgi_get_gtype (lua_State *L, GITypeInfo *ti);
 
