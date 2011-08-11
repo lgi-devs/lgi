@@ -51,8 +51,12 @@ typedef struct _Record
 static int record_mt;
 
 /* lightuserdata key to cache table containing
-   lightuserdata(record->addr)->weak(record) */
+   lightuserdata(record->addr) -> weak(record) */
 static int record_cache;
+
+/* lightuserdata key to cache table containing
+   recordproxy(weak) -> parent */
+static int parent_cache;
 
 gpointer
 lgi_record_new (lua_State *L, GIBaseInfo *ri)
@@ -140,10 +144,14 @@ lgi_record_2lua (lua_State *L, gpointer addr, gboolean own, int parent)
   record->addr = addr;
   if (parent != 0)
     {
-      /* Store reference to the parent argument. */
-      lua_pushlightuserdata (L, record);
+      /* Store reference to the parent argument into parent reference
+	 cache. */
+      lua_pushlightuserdata (L, &parent_cache);
+      lua_rawget (L, LUA_REGISTRYINDEX);
+      lua_pushvalue (L, -2);
       lua_pushvalue (L, parent);
-      lua_rawset (L, LUA_REGISTRYINDEX);
+      lua_rawset (L, -3);
+      lua_pop (L, 1);
       record->store = RECORD_STORE_NESTED;
     }
   else
@@ -457,8 +465,9 @@ lgi_record_init (lua_State *L)
   luaL_register (L, NULL, record_meta_reg);
   lua_rawset (L, LUA_REGISTRYINDEX);
 
-  /* Create ref_cache. */
+  /* Create caches. */
   lgi_cache_create (L, &record_cache, "v");
+  lgi_cache_create (L, &parent_cache, "k");
 
   /* Create 'record' API table in main core API table. */
   lua_newtable (L);

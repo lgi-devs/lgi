@@ -45,8 +45,8 @@ gpointer *lgi_guard_create (lua_State *L, GDestroyNotify destroy);
    to global repo table. */
 extern int lgi_addr_repo;
 
-/* Creates cache table (optionally with given table __mode), stores it into
-   registry and returns ref to it. */
+/* Creates cache table (optionally with given table __mode), stores it
+   into registry to specified userdata address. */
 void
 lgi_cache_create (lua_State *L, gpointer key, const char *mode);
 
