@@ -990,12 +990,13 @@ lgi_gclosure_marshal (GClosure *closure, GValue *return_value,
 		      gpointer invocation_hint, gpointer marshal_data)
 {
   GlibClosure *c = (GlibClosure *) closure;
-  int vals = 0;
+  int vals = 0, top;
   gboolean call;
 
   /* Prepare context in which will everything happen. */
   lua_State *L = callback_prepare_call (&c->callback, c->target_ref, &call);
   luaL_checkstack (L, n_param_values + 1, "");
+  top = lua_gettop (L);
 
   /* Push parameters. */
   while (n_param_values--)
@@ -1013,9 +1014,12 @@ lgi_gclosure_marshal (GClosure *closure, GValue *return_value,
       if (res != 0 && res != LUA_YIELD)
 	lua_error (L);
     }
-  lgi_marshal_val_2c (L, NULL, GI_TRANSFER_NOTHING, return_value, -1);
+
+  if (return_value)
+    lgi_marshal_val_2c (L, NULL, GI_TRANSFER_NOTHING, return_value, -1);
 
   /* Going back to C code, release back the mutex. */
+  lua_settop (L, top);
   g_static_rec_mutex_unlock (c->callback.mutex);
 }
 
