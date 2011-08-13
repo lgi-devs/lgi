@@ -844,6 +844,17 @@ function Object:_element(instance, name)
 			   Object._type):find_property(name:gsub('_', '%-'))
 end
 
+-- Checks whether given obj is of some ParamSpec type.
+local ParamSpec = repo.GObject.ParamSpec
+local function is_param_spec(element)
+   local typetable = (core.record.query(element, 'repo')
+		      or core.object.query(element, 'repo'))
+   while typetable do
+      if typetable == ParamSpec then return true end
+      typetable = typetable._parent
+   end
+end
+
 -- Custom access_element, reacts on dynamic properties
 function Object:_access_element(instance, name, element, ...)
    if element == nil then
@@ -859,8 +870,7 @@ function Object:_access_element(instance, name, element, ...)
    elseif gi.isinfo(element) and element.is_property then
       -- Process property using GI.
       return core.object.property(instance, element, ...)
-   elseif core.record.query(element, 'repo') == repo.GObject.ParamSpec or
-   core.object.query(element, 'repo') == repo.GObject.ParamSpec then
+   elseif is_param_spec(element) then
       -- Process property using GLib.
       local val = repo.GObject.Value()
       repo.GObject.Value.init(val, element.value_type)
