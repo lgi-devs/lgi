@@ -499,7 +499,7 @@ function component_mt.record:__call(...)
    local ctor = self._constructor
    if ctor then return ctor(...) end
 
-   -- Create the structure instance.
+   -- Find baseinfo of requested record.
    local info
    if self._gtype then
       -- Try to lookup info by gtype.
@@ -510,6 +510,8 @@ function component_mt.record:__call(...)
       local ns, name = self._name:match('^(.-)%.(.+)$')
       info = assert(gi[ns][name])
    end
+
+   -- Create the structure instance.
    local struct = core.record.new(info)
 
    -- Set values of fields.
@@ -521,10 +523,13 @@ end
 
 -- Object constructor, 'param' contains table with properties/signals
 -- to initialize.
-function component_mt.class:__call(args)
+function component_mt.class:__call(...)
+   -- If the type specified constructor, use it.
+   if self._constructor then return self._constructor(...) end
+
    -- Process 'args' table, separate properties from other fields.
    local props, others = {}, {}
-   for name, value in pairs(args or {}) do
+   for name, value in pairs(... or {}) do
       local argtype = self[name]
       if gi.isinfo(argtype) and argtype.is_property then
 	 props[argtype] = value
@@ -626,6 +631,21 @@ local function load_record(info)
    local record = create_component(info, component_mt.record)
    record._methods = get_category(info.methods, core.callable.new)
    record._fields = get_category(info.fields)
+
+   -- Check, whether global namespace contains 'constructor' method,
+   -- i.e. method which has the same name as our record type (except
+   -- that type is in CamelCase, while method is
+   -- under_score_delimited).  If not found, check for 'new' method.
+   local func = info.name:gsub('([%l%d])([%u])', '%1_%2'):lower()
+   local ctor = gi[info.namespace][func]
+   if not ctor then ctor = info.methods.new end
+
+   -- Check, whether ctor is valid.  In order to be valid, it must
+   -- return instance of this class.
+   if (ctor and ctor.return_type.tag =='interface'
+       and ctor.return_type.interface == info) then
+      record._constructor = core.callable.new(ctor)
+   end
    return record
 end
 
@@ -647,6 +667,19 @@ local function load_properties(info)
       function(name) return string.gsub(name, '%-', '_') end)
 end
 
+local function find_constructor(info)
+   local name = info.name:gsub('([%d%l])(%u)', '%1_%2'):lower()
+   local ctor = gi[info.namespace][name]
+
+   -- Check that return value conforms to info type.
+   if ctor then
+      local ret = ctor.return_type.interface
+      for walk in function(_, c) return c.parent end, nil, info do
+	 if ret and walk == ret then return core.callable.new(ctor) end
+      end
+   end
+end
+
 function typeloader.interface(namespace, info)
    -- Load all components of the interface.
    local interface = create_component(info, component_mt.interface)
@@ -661,6 +694,7 @@ function typeloader.interface(namespace, info)
 				       load_vfunc_name_reverse)
       interface._type = load_record(type_struct)
    end
+   interface._constructor = find_constructor(info)
    return interface, '_interfaces'
 end
 
@@ -693,6 +727,7 @@ function typeloader.object(namespace, info)
 	 class._parent = repo[ns][name]
       end
    end
+   class._constructor = find_constructor(info)
    return class, '_classes'
 end
 
