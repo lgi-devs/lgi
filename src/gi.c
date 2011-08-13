@@ -113,8 +113,8 @@ infos_index (lua_State *L)
 	  g_base_info_unref (info);
 	}
 
-      lua_concat (L, lgi_type_get_name (L, infos->info));
-      return luaL_error (L, "%s: `%s' not found", lua_tostring (L, -1), name);
+      lua_pushnil (L);
+      return 1;
     }
 }
 
