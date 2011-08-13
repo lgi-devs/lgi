@@ -464,6 +464,15 @@ info_index (lua_State *L)
 }
 
 static int
+info_eq (lua_State *L)
+{
+  GIBaseInfo **i1 = luaL_checkudata (L, 1, LGI_GI_INFO);
+  GIBaseInfo **i2 = luaL_checkudata (L, 2, LGI_GI_INFO);
+  lua_pushboolean (L, g_base_info_equal (*i1, *i2));
+  return 1;
+}
+
+static int
 info_gc (lua_State *L)
 {
   GIBaseInfo **info = luaL_checkudata (L, 1, LGI_GI_INFO);
@@ -474,6 +483,7 @@ info_gc (lua_State *L)
 static const luaL_Reg gi_info_reg[] = {
   { "__gc", info_gc },
   { "__index", info_index },
+  { "__eq", info_eq },
   { NULL, NULL }
 };
 
