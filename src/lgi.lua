@@ -486,7 +486,7 @@ function component_mt.class:_access_element(instance, name, element, ...)
       elseif element.is_vfunc then
 	 local typestruct = core.object.query(instance, 'class',
 					      element.container.gtype)
-	 return core.record.field(typestruct, self._type[element.name])
+	 return core.record.field(typestruct, self._class[element.name])
       end
    end
    return default_access_element(self, instance, name, element, ...)
@@ -692,7 +692,7 @@ function typeloader.interface(namespace, info)
    if type_struct then
       interface._vfuncs = get_category(info.vfuncs, nil, load_vfunc_name,
 				       load_vfunc_name_reverse)
-      interface._type = load_record(type_struct)
+      interface._class = load_record(type_struct)
    end
    interface._constructor = find_constructor(info)
    return interface, '_interfaces'
@@ -710,7 +710,7 @@ function typeloader.object(namespace, info)
    if type_struct then
       class._vfuncs = get_category(info.vfuncs, nil, load_vfunc_name,
 				   load_vfunc_name_reverse)
-      class._type = load_record(type_struct)
+      class._class = load_record(type_struct)
    end
 
    -- Populate inheritation information (_implements and _parent fields).
@@ -876,7 +876,7 @@ function Object:_element(instance, name)
    -- Element not found in the repo (typelib), try whether dynamic
    -- property of the specified name exists.
    return core.record.cast(core.object.query(instance, 'class'),
-			   Object._type):find_property(name:gsub('_', '%-'))
+			   Object._class):find_property(name:gsub('_', '%-'))
 end
 
 -- Checks whether given obj is of some ParamSpec type.

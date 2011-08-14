@@ -456,7 +456,7 @@ object_query (lua_State *L)
 		  gpointer typestruct = !G_TYPE_IS_INTERFACE (gtype)
 		    ? G_TYPE_INSTANCE_GET_CLASS (object, gtype, GTypeClass)
 		    : G_TYPE_INSTANCE_GET_INTERFACE (object, gtype, GTypeClass);
-		  lua_getfield (L, -1, "_type");
+		  lua_getfield (L, -1, "_class");
 		  lgi_record_2lua (L, typestruct, FALSE, 0);
 		}
 	      return 1;
