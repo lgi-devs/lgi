@@ -33,7 +33,7 @@ end
 local play = Gst.ElementFactory.make('playbin', 'play')
 play.uri = 'http://streamer-dtc-aa02.somafm.com:80/stream/1018'
 --play.uri = 'http://www.cybertechmedia.com/samples/raycharles.mov'
-local bus = play.bus
+local bus = play:get_bus()
 bus:add_watch(bus_callback)
 play:set_state(Gst.State.PLAYING)
 
