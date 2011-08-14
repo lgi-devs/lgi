@@ -23,16 +23,16 @@ end
 
 -- Move new_for_xxx into Gio.File scope.
 for _, name in ipairs { 'path', 'uri', 'commandline_arg' } do
-   if not Gio.File._methods['new_for_' .. name] then
-      Gio.File._methods['new_for_' .. name] = Gio['file_new_for_' .. name]
+   if not Gio.File._method['new_for_' .. name] then
+      Gio.File._method['new_for_' .. name] = Gio['file_new_for_' .. name]
       Gio['file_new_for_' .. name] = nil
    end
 end
-Gio.File._methods.new_for_parse_name = Gio.file_parse_name
+Gio.File._method.new_for_parse_name = Gio.file_parse_name
 Gio.file_parse_name = nil
 
-local file_parse_name = Gio.File._methods.parse_name
-Gio.File._methods.parse_name = nil
+local file_parse_name = Gio.File._method.parse_name
+Gio.File._method.parse_name = nil
 function Gio.File.new_for_parse_name(name)
    return file_parse_name(name)
 end

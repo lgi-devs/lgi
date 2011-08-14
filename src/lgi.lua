@@ -150,7 +150,7 @@ local function check_type(info)
    return info
 end
 
--- Gets table for category of compound (i.e. _fields of struct or _properties
+-- Gets table for category of compound (i.e. _field of struct or _property
 -- for class etc).  Installs metatable which performs on-demand lookup of
 -- symbols.
 local function get_category(children, xform_value,
@@ -383,16 +383,16 @@ end
 
 local component_mt = {
    namespace = create_component_meta {
-      '_classes', '_interfaces', '_structs', '_unions', '_enums',
-      '_functions', '_constants', },
+      '_class', '_interface', '_struct', '_union', '_enum',
+      '_function', '_constant', },
    record = create_component_meta {
-      '_methods', '_fields'
+      '_method', '_field'
    },
    interface = create_component_meta {
-      '_properties', '_vfuncs', '_methods', '_signals', '_constants' },
+      '_property', '_virtual', '_method', '_signal', '_constant' },
    class = create_component_meta {
-      '_properties', '_vfuncs', '_methods', '_signals', '_constants',
-      '_fields' },
+      '_property', '_virtual', '_method', '_signal', '_constant',
+      '_field' },
    bitflags = {},
    enum = {},
 }
@@ -571,11 +571,11 @@ local typeloader = {}
 
 typeloader['function'] =
    function(namespace, info)
-      return check_type(info) and core.callable.new(info), '_functions'
+      return check_type(info) and core.callable.new(info), '_function'
    end
 
 function typeloader.constant(namespace, info)
-   return check_type(info) and core.constant(info), '_constants'
+   return check_type(info) and core.constant(info), '_constant'
 end
 
 local function load_enum(info, meta)
@@ -595,11 +595,11 @@ local function load_enum(info, meta)
 end
 
 function typeloader.enum(namespace, info)
-   return load_enum(info, component_mt.enum), '_enums'
+   return load_enum(info, component_mt.enum), '_enum'
 end
 
 function typeloader.flags(namespace, info)
-   return load_enum(info, component_mt.bitflags), '_enums'
+   return load_enum(info, component_mt.bitflags), '_enum'
 end
 
 local function load_signal_name(name)
@@ -629,8 +629,8 @@ end
 -- Loads structure information into table representing the structure
 local function load_record(info)
    local record = create_component(info, component_mt.record)
-   record._methods = get_category(info.methods, core.callable.new)
-   record._fields = get_category(info.fields)
+   record._method = get_category(info.methods, core.callable.new)
+   record._field = get_category(info.fields)
 
    -- Check, whether global namespace contains 'constructor' method,
    -- i.e. method which has the same name as our record type (except
@@ -652,12 +652,12 @@ end
 function typeloader.struct(namespace, info)
    -- Avoid exposing internal structs created for object implementations.
    if not info.is_gtype_struct then
-      return load_record(info), '_structs'
+      return load_record(info), '_struct'
    end
 end
 
 function typeloader.union(namespace, info)
-   return load_record(info), '_unions'
+   return load_record(info), '_union'
 end
 
 local function load_properties(info)
@@ -683,33 +683,33 @@ end
 function typeloader.interface(namespace, info)
    -- Load all components of the interface.
    local interface = create_component(info, component_mt.interface)
-   interface._properties = load_properties(info)
-   interface._methods = get_category(info.methods, load_method)
-   interface._signals = get_category(info.signals, nil, load_signal_name,
+   interface._property = load_properties(info)
+   interface._method = get_category(info.methods, load_method)
+   interface._signal = get_category(info.signals, nil, load_signal_name,
 				     load_signal_name_reverse)
-   interface._constants = get_category(info.constants, core.constant)
+   interface._constant = get_category(info.constants, core.constant)
    local type_struct = info.type_struct
    if type_struct then
-      interface._vfuncs = get_category(info.vfuncs, nil, load_vfunc_name,
-				       load_vfunc_name_reverse)
+      interface._virtual = get_category(info.vfuncs, nil, load_vfunc_name,
+					load_vfunc_name_reverse)
       interface._class = load_record(type_struct)
    end
    interface._constructor = find_constructor(info)
-   return interface, '_interfaces'
+   return interface, '_interface'
 end
 
 function typeloader.object(namespace, info)
    local class = create_component(info, component_mt.class)
-   class._properties = load_properties(info)
-   class._methods = get_category(info.methods, load_method)
-   class._signals = get_category(info.signals, nil,
+   class._property = load_properties(info)
+   class._method = get_category(info.methods, load_method)
+   class._signal = get_category(info.signals, nil,
 				 load_signal_name, load_signal_name_reverse)
-   class._constants = get_category(info.constants, core.constant)
-   class._fields = get_category(info.fields)
+   class._constant = get_category(info.constants, core.constant)
+   class._field = get_category(info.fields)
    local type_struct = info.type_struct
    if type_struct then
-      class._vfuncs = get_category(info.vfuncs, nil, load_vfunc_name,
-				   load_vfunc_name_reverse)
+      class._virtual = get_category(info.vfuncs, nil, load_vfunc_name,
+				    load_vfunc_name_reverse)
       class._class = load_record(type_struct)
    end
 
@@ -728,7 +728,7 @@ function typeloader.object(namespace, info)
       end
    end
    class._constructor = find_constructor(info)
-   return class, '_classes'
+   return class, '_class'
 end
 
 -- Gets symbol of the specified namespace, if not present yet, tries to load it
@@ -941,9 +941,9 @@ local function get_notifier(target)
 end
 
 -- Install 'notify' signal.
-Object._signals = {}
-local _ = Object._vfuncs.on_notify
-Object._vfuncs.on_notify = nil
+Object._signal = {}
+local _ = Object._virtual.on_notify
+Object._virtual.on_notify = nil
 Object._custom = { on_notify= {} }
 -- Borrow signal format from GObject.ObjectClass.notify.
 local on_notify_info = gi.GObject.ObjectClass.fields.notify.typeinfo.interface
@@ -975,14 +975,14 @@ end
 -- removed, added possibility to construct closure from Lua
 -- function/callable userdata.
 local Closure = repo.GObject.Closure
-Closure._fields = nil
-local closure_methods = Closure._methods
-Closure._methods = {
-   invoke = closure_methods.invoke,
-   invalidate = closure_methods.invalidate
+Closure._field = nil
+local closure_method = Closure._method
+Closure._method = {
+   invoke = closure_method.invoke,
+   invalidate = closure_method.invalidate
 }
-closure_methods = nil
-local closure_mt = create_component_meta { '_methods' }
+closure_method = nil
+local closure_mt = create_component_meta { '_method' }
 function closure_mt:__call(target)
    return core.callable.closure(target)
 end
@@ -995,12 +995,12 @@ local value_info = gi.GObject.Value
 
 -- Value contents accessors - type-safe replacement for buch of
 -- set_xxx and get_xxx native C variants.
-Value._methods.get = core.value
-Value._methods.set = core.value
+Value._method.get = core.value
+Value._method.set = core.value
 
 -- Do not allow direct access to fields.
-local value_field_gtype = Value._fields.g_type
-Value._fields = nil
+local value_field_gtype = Value._field.g_type
+Value._field = nil
 
 -- Implements pseudo-properties 'g_type' and 'data', for safe
 -- read/write access to value's type and contents.
@@ -1039,7 +1039,7 @@ Value._custom.data = core.value
 -- (g_type and data).  The reason why it is overriden is that the
 -- order of initialization is important, and standard record
 -- intializer cannot enforce the order.
-local value_mt = create_component_meta { '_methods' }
+local value_mt = create_component_meta { '_method' }
 function value_mt:__call(gtype, data)
    local v = core.record.new(value_info)
    if gtype then v.g_type = gtype end

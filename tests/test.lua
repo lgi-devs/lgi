@@ -1164,9 +1164,9 @@ end
 
 function gireg.obj_methods()
    local R = lgi.Regress
-   if R.TestObj._methods.do_matrix then
-      R.TestObj._methods.invoke_matrix = R.TestObj._methods.do_matrix
-      R.TestObj._methods.do_matrix = nil
+   if R.TestObj._method.do_matrix then
+      R.TestObj._method.invoke_matrix = R.TestObj._method.do_matrix
+      R.TestObj._method.do_matrix = nil
    end
    local o = R.TestObj()
    check(o:instance_method() == -1)
@@ -1196,9 +1196,9 @@ end
 
 function gireg.obj_virtual_methods()
    local R = lgi.Regress
-   if R.TestObj._methods.do_matrix then
-      R.TestObj._methods.invoke_matrix = R.TestObj._methods.do_matrix
-      R.TestObj._methods.do_matrix = nil
+   if R.TestObj._method.do_matrix then
+      R.TestObj._method.invoke_matrix = R.TestObj._methods.do_matrix
+      R.TestObj._method.do_matrix = nil
    end
    local o = R.TestObj()
    check(o:do_matrix('unused') == 42)
@@ -1330,7 +1330,7 @@ function gireg.obj_prop_dynamic()
    -- Remove static property information, force lgi to use dynamic
    -- GLib property system.
    local old_prop = R.TestObj.int
-   R.TestObj._properties.int = nil
+   R.TestObj._property.int = nil
    check(R.TestObj.int == nil)
 
    check(o.int == 0)
@@ -1342,7 +1342,7 @@ function gireg.obj_prop_dynamic()
    check(not pcall(function() o.int = function() end end))
 
    -- Restore TestObj to work normally.
-   R.TestObj._properties.int = old_prop
+   R.TestObj._property.int = old_prop
 end
 
 function gireg.obj_subobj()
