@@ -12,7 +12,7 @@ local Gio = lgi.require('Gio', '2.0')
 local app = Gio.Application { application_id = 'org.lgi.samples.Clutter' }
 
 local stage = Clutter.Stage.get_default()
-stage.color = Clutter.Color { alpha = 255 }
+stage.color = Clutter.Color(0, 0, 0, 255)
 stage.width = 512
 stage.height = 512
 stage.title = 'LGI Clutter Demo'
@@ -20,12 +20,11 @@ stage.title = 'LGI Clutter Demo'
 local rects = {}
 for i = 1, 6 do
    rects[i] = Clutter.Rectangle {
-      color = Clutter.Color {
-	 red = 256 / 6 * ((i - 1) % 6),
-	 green = 256 / 6 * ((i + 3) % 6),
-	 blue = 256 / 6 * ((-i + 8) % 6),
-	 alpha = 128
-      },
+      color = Clutter.Color(
+	 256 / 6 * ((i - 1) % 6),
+	 256 / 6 * ((i + 3) % 6),
+	 256 / 6 * ((-i + 8) % 6),
+	 128),
       width = 100, height = 100,
       fixed_x = 200, fixed_y = 200,
       anchor_x = 128, anchor_y = 64,
