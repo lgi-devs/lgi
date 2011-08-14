@@ -332,7 +332,7 @@ local function default_access(typetable, instance, name, ...)
 
    -- Try custom override first.
    if element == nil then
-      local func = typetable:_element(instance, '_custom_' .. name)
+      local func = typetable:_element(instance, '_override_' .. name)
       if func then
 	 -- If custom element is a table, assume that this table
 	 -- contains 'get' and 'set' methods.  Dispatch to them, and
@@ -944,15 +944,15 @@ end
 Object._signal = {}
 local _ = Object._virtual.on_notify
 Object._virtual.on_notify = nil
-Object._custom = { on_notify= {} }
+Object._override = { on_notify= {} }
 -- Borrow signal format from GObject.ObjectClass.notify.
 local on_notify_info = gi.GObject.ObjectClass.fields.notify.typeinfo.interface
-function Object._custom.on_notify.set(instance, handler)
+function Object._override.on_notify.set(instance, handler)
    -- Assignment means 'connect signal for all properties'.
    core.object.connect(instance, on_notify_info.name, on_notify_info,
 		       get_notifier(handler))
 end
-function Object._custom.on_notify.get(instance)
+function Object._override.on_notify.get(instance)
    -- Reading yields table with signal operations.
    local pad = {}
    function pad:connect(target, property)
@@ -1004,12 +1004,12 @@ Value._field = nil
 
 -- Implements pseudo-properties 'g_type' and 'data', for safe
 -- read/write access to value's type and contents.
-Value._custom = { g_type = {} }
-function Value._custom.g_type.get(instance)
+Value._override = { g_type = {} }
+function Value._override.g_type.get(instance)
    -- Reading existing type is simple access to value's gtype field.
    return core.record.field(instance, value_field_gtype)
 end
-function Value._custom.g_type.set(instance, newtype)
+function Value._override.g_type.set(instance, newtype)
    local gtype = core.record.field(instance, value_field_gtype)
    if gtype then
       if newtype then
@@ -1033,7 +1033,7 @@ function Value._custom.g_type.set(instance, newtype)
 end
 
 -- Forward to access value directly.
-Value._custom.data = core.value
+Value._override.data = core.value
 
 -- Implement custom 'constructor', taking optionally two values
 -- (g_type and data).  The reason why it is overriden is that the

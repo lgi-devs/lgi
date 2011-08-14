@@ -25,7 +25,7 @@ Variant._setvalue = gi.GObject.Value.methods.set_variant
 Variant._getvalue = gi.GObject.Value.methods.get_variant
 
 -- Add 'type' property to variant, an alias to get_type().
-Variant._custom = { type = { get = Variant.get_type_string } }
+Variant._override = { type = { get = Variant.get_type_string } }
 
 local VariantBuilder = GLib.VariantBuilder
 local VariantType = GLib.VariantType
@@ -239,7 +239,7 @@ function variant_get(v)
 end
 
 -- Map simple unpacking to reading 'value' property.
-Variant._custom.value = { get = variant_get }
+Variant._override.value = { get = variant_get }
 
 -- Define meaning of # and number-indexing to children access. Note
 -- that GVariant g_asserts when these methods are invoked on variants
@@ -304,8 +304,8 @@ end
 
 -- Serialization support.  Override Variant:get_data() with safer
 -- method which fills size to the resulting ref.
-Variant._custom.data = {}
-function Variant._custom.data:get()
+Variant._override.data = {}
+function Variant._override.data:get()
    local buffer = bytes.new(Variant.get_size(self))
    Variant.store(self, buffer)
    return buffer
