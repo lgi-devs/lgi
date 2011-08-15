@@ -260,7 +260,9 @@ lgi_object_2c (lua_State *L, int narg, GType gtype, gboolean optional,
 
   /* Get instance and perform type check. */
   obj = object_check (L, narg);
-  if (!nothrow && (!obj || !g_type_is_a (G_TYPE_FROM_INSTANCE (obj), gtype)))
+  if (!nothrow
+      && (!obj || (gtype != G_TYPE_INVALID
+		   && !g_type_is_a (G_TYPE_FROM_INSTANCE (obj), gtype))))
     object_type_error (L, narg, gtype);
 
   return obj;
