@@ -266,7 +266,7 @@ lgi_object_2c (lua_State *L, int narg, GType gtype, gboolean optional,
   return obj;
 }
 
-void
+int
 lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
 {
   GType gtype;
@@ -275,7 +275,7 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
   if (!obj)
     {
       lua_pushnil (L);
-      return;
+      return 1;
     }
 
   /* Check, whether the object is already created (in the cache). */
@@ -294,7 +294,7 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
 	 already have. */
       if (own)
 	object_unref (L, obj, FALSE);
-      return;
+      return 1;
     }
 
   /* Create new userdata object and attach empty table as its environment. */
@@ -332,6 +332,8 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
       if (own)
 	g_object_unref (obj);
     }
+
+  return 1;
 }
 
 /* Worker method for __index and __newindex implementation. */

@@ -170,8 +170,9 @@ gpointer lgi_record_2c (lua_State *L, int narg, gboolean optional,
 			gboolean nothrow);
 
 /* Creates Lua-side part (proxy) of given object. If the object is not
-   owned (own == FALSE), an ownership is automatically acquired. */
-void
+   owned (own == FALSE), an ownership is automatically acquired.  Returns
+   number of elements pushed to the stack, i.e. always 1. */
+int
 lgi_object_2lua (lua_State *L, gpointer obj, gboolean own);
 
 /* Gets pointer to C-side object represented by given Lua proxy. If
