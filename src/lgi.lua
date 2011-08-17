@@ -1051,8 +1051,4 @@ for _, name in pairs { 'Variant', 'VariantType', 'VariantBuilder' } do
 end
 
 -- Access to module proxies the whole repo, for convenience.
-local lgi_mt = {}
-function lgi_mt:__index(name)
-   return repo[name]
-end
-return setmetatable(lgi, lgi_mt)
+return setmetatable(lgi, { __index = repo })
