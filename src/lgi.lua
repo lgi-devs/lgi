@@ -840,13 +840,22 @@ for gtype_name, gi_name in pairs {
    repo[gtype] = gi_type
 end
 
--- Add symbolic names for GTypes.
-repo.GObject.Type = {}
+-- Add synthetic GObject.Type, containing well-known GType constants
+-- and grouping some type_xxx methods.
+local Type = { STRV = 'GStrv', ARRAY = 'GArray', BYTE_ARRAY = 'GByteArray',
+	       PTR_ARRAY = 'GPtrArray', HASH_TABLE = 'GHashTable',
+	       ERROR = 'GError', GTYPE = 'GType' }
+repo.GObject.Type = Type
 for num, name in ipairs { 'NONE', 'INTERFACE', 'CHAR', 'UCHAR', 'BOOLEAN',
 			  'INT', 'UINT', 'LONG', 'ULONG', 'INT64', 'UINT64',
 			  'ENUM', 'FLAGS', 'FLOAT', 'DOUBLE', 'STRING',
 			  'POINTER', 'BOXED', 'PARAM', 'OBJECT', 'VARIANT' } do
-   repo.GObject.Type[name] = core.gtype(num * 4)
+   Type[name] = core.gtype(num * 4)
+end
+for _, name in pairs { 'name', 'qname', 'from_name', 'parent', 'depth',
+		       'next_base', 'is_a', 'children', 'interfaces',
+		       'query', 'fundamental_next', 'fundamental'} do
+   Type[name] = repo.GObject['type_' .. name]
 end
 
 -- GObject overrides.
@@ -860,7 +869,7 @@ function Object:_element(instance, name)
 
    -- List all interfaces implemented by this object and try whether
    -- they can handle specified _element request.
-   local interfaces = repo.GObject.type_interfaces(
+   local interfaces = repo.GObject.Type.interfaces(
       core.object.query(instance, 'gtype'))
    for i = 1, #interfaces do
       local info = gi[core.gtype(interfaces[i])]
