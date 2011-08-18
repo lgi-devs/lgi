@@ -804,7 +804,7 @@ function lgi.require(name, version)
 
       -- Make sure that all dependent namespaces are also loaded.
       for name, version in pairs(ns._dependencies or {}) do
-	 local _ = repo[name]
+	 lgi.require(name, version)
       end
 
       -- Try to load override, if it is present.
@@ -825,11 +825,7 @@ function lgi.require(name, version)
 end
 
 -- Install metatable into repo table, so that on-demand loading works.
-local repo_mt = {}
-function repo_mt:__index(name)
-   return lgi.require(name)
-end
-setmetatable(repo, repo_mt)
+setmetatable(repo, { __index = function(_, name) return lgi.require(name) end })
 
 -- Add gtypes to important GLib and GObject structures, for which the
 -- typelibs do not contain them.
