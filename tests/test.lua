@@ -1256,8 +1256,9 @@ function gireg.obj_prop_string()
    check(o.string == nil)
    o.string = 'lgi'
    check(o.string == 'lgi')
+   o.string = nil
+   check(o.string == nil)
    check(not pcall(function() o.string = {} end))
-   check(not pcall(function() o.string = nil end))
    check(not pcall(function() o.string = function() end end))
 end
 
@@ -1456,10 +1457,16 @@ end
 local variant = testgroup.new('variant')
 
 function variant.gvalue()
-   local var = GLib.Variant.new_string('foo')
-   local val = GObject.Value(GObject.Type.VARIANT, var)
-   check(val.g_type == GObject.Type.VARIANT)
-   check(val.data == var)
+   local var1, var2 = GLib.Variant.new_string('foo'),
+   GLib.Variant.new_string('bar')
+   local val = GObject.Value(GObject.Type.VARIANT, var1)
+   check(val.type == GObject.Type.VARIANT)
+   check(val.value == var1)
+   val.value = var2
+   check(val.value == var2)
+   val.value = nil
+   check(val.value == nil)
+   check(val.type == GObject.Type.VARIANT)
 end
 
 function variant.newv_basic()
