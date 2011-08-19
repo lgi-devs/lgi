@@ -105,6 +105,7 @@ lgi_record_2lua (lua_State *L, gpointer addr, gboolean own, int parent)
   /* NULL pointer results in 'nil'. */
   if (addr == NULL)
     {
+      lua_pop (L, 1);
       lua_pushnil (L);
       return;
     }
