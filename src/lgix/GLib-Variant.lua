@@ -175,7 +175,7 @@ function Variant.new(vt, val)
    end
    return v
 end
-Variant._constructor = Variant.new
+function Variant:_new(...) return Variant.new(...) end
 
 -- Implement VariantBuilder:add() using the same facade.
 function VariantBuilder:add(type, val)

@@ -378,6 +378,9 @@ local function create_component_meta(categories)
    function meta:__index(symbol)
       return getmetatable(self)._element(self, nil, symbol)
    end
+   function meta:__call(...)
+      return self:_new(...)
+   end
    return meta
 end
 
@@ -493,12 +496,7 @@ function component_mt.class:_access_element(instance, name, element, ...)
 end
 
 -- Create structure instance and initialize it with given fields.
-function component_mt.record:__call(...)
-   -- Check, whether we have '_constructor' field in the typetable.  If yes,
-   -- always use this method.
-   local ctor = self._constructor
-   if ctor then return ctor(...) end
-
+function component_mt.record:_new(...)
    -- Find baseinfo of requested record.
    local info
    if self._gtype then
@@ -521,29 +519,13 @@ function component_mt.record:__call(...)
    return struct
 end
 
--- Object constructor, 'param' contains table with properties/signals
--- to initialize.
-function component_mt.class:__call(...)
-   -- If the type specified constructor, use it.
-   if self._constructor then return self._constructor(...) end
-
-   -- Process 'args' table, separate properties from other fields.
-   local props, others = {}, {}
-   for name, value in pairs(... or {}) do
-      local argtype = self[name]
-      if gi.isinfo(argtype) and argtype.is_property then
-	 props[argtype] = value
-      else
-	 others[name] = value
-      end
-   end
-
+-- Object constructor, does not accept any arguments.  Overriden later
+-- for GObject which accepts properties table to initialize object
+-- with.
+local object_new = core.callable.new(gi.require('GObject').Object.methods.new)
+function component_mt.class:_new()
    -- Create the object.
-   local object = core.object.new(self._gtype, props)
-
-   -- Attach signals previously filtered out from creation.
-   for name, func in pairs(others) do object[name] = func end
-   return object
+   return object_new(self._gtype, {})
 end
 
 -- Creates new component and sets up common parts according to given
@@ -644,7 +626,8 @@ local function load_record(info)
    -- return instance of this class.
    if (ctor and ctor.return_type.tag =='interface'
        and ctor.return_type.interface == info) then
-      record._constructor = core.callable.new(ctor)
+      ctor = core.callable.new(ctor)
+      record._new = function(typetable, ...) return ctor(...) end
    end
    return record
 end
@@ -675,7 +658,10 @@ local function find_constructor(info)
    if ctor then
       local ret = ctor.return_type.interface
       for walk in function(_, c) return c.parent end, nil, info do
-	 if ret and walk == ret then return core.callable.new(ctor) end
+	 if ret and walk == ret then
+	    ctor = core.callable.new(ctor)
+	    return function(self, ...) return ctor(...) end
+	 end
       end
    end
 end
@@ -694,7 +680,7 @@ function typeloader.interface(namespace, info)
 					load_vfunc_name_reverse)
       interface._class = load_record(type_struct)
    end
-   interface._constructor = find_constructor(info)
+   interface._new = find_constructor(info)
    return interface, '_interface'
 end
 
@@ -727,7 +713,7 @@ function typeloader.object(namespace, info)
 	 class._parent = repo[ns][name]
       end
    end
-   class._constructor = find_constructor(info)
+   class._new = find_constructor(info)
    return class, '_class'
 end
 
@@ -885,7 +871,7 @@ function Type.from_typeinfo(ti)
 		and ti.is_zero_terminated) then
 	       gtype = Type.STRV
 	    end
-	 else 
+	 else
 	    gtype = ({ array = Type.ARRAY, byte_array = Type.BYTE_ARRAY,
 		       ptr_array = Type.PTR_ARRAY })[atype]
 	 end
@@ -1016,7 +1002,7 @@ Value._override.data = Value._override.value
 -- and value).  The reason why it is overriden is that the order of
 -- initialization is important, and standard record intializer cannot
 -- enforce the order.
-function Value:_constructor(gtype, value)
+function Value:_new(gtype, value)
    local v = core.record.new(value_info)
    if gtype then v.g_type = gtype end
    if value then v.value = value end
@@ -1025,6 +1011,51 @@ end
 
 -- GObject overrides.
 local Object = repo.GObject.Object
+
+-- Object constructor, 'param' contains table with properties/signals
+-- to initialize.
+local parameter_info = gi.GObject.Parameter
+function Object:_new(args)
+   -- Process 'args' table, separate properties from other fields.
+   local params, others, safe = {}, {}, {}
+   for name, arg in pairs(args or {}) do
+      local argtype = self[name]
+      if gi.isinfo(argtype) and argtype.is_property then
+	 local param = core.record.new(parameter_info)
+	 name = argtype.name
+
+	 -- Store the name string in some safe Lua place ('safe'
+	 -- table), because param is GParameter, which contains only
+	 -- non-owning pointer to the string, and it could be
+	 -- Lua-GC'ed while still referenced by GParameter instance.
+	 safe[#safe + 1] = name
+
+	 param.name = name
+	 local attrs = { typeinfo = argtype.typeinfo,
+			 gtype = Type.from_typeinfo(argtype.typeinfo) }
+	 Value.init(param.value, attrs.gtype)
+	 Value.find_marshaller(attrs)(param.value, attrs, arg)
+	 params[#params + 1] = param
+      else
+	 others[name] = arg
+      end
+   end
+
+   -- Create the object.
+   local object = object_new(self._gtype, params)
+
+   -- Attach arguments previously filtered out from creation.
+   for name, func in pairs(others) do object[name] = func end
+   return object
+end
+
+-- Initially unowned creation is similar to normal GObject creation,
+-- but we have to ref_sink newly created object.
+local InitiallyUnowned = repo.GObject.InitiallyUnowned
+function InitiallyUnowned:_new(args)
+   local object = Object._new(self, args)
+   return Object.ref_sink(object)
+end
 
 -- Custom _element implementation, checks dynamically inherited
 -- interfaces and dynamic properties.
