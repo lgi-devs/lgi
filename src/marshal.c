@@ -412,8 +412,12 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
   /* Get pointer to array data. */
   if (array == NULL)
     {
-      /* NULL array is represented by nil. */
-      lua_pushnil (L);
+      /* NULL array is represented by empty table for C arrays, nil
+	 for other types. */
+      if (atype == GI_ARRAY_TYPE_C)
+	lua_newtable (L);
+      else
+	lua_pushnil (L);
       return;
     }
 
@@ -1361,7 +1365,7 @@ lgi_marshal_arg_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
 	  case GI_INFO_TYPE_UNION:
 	    {
 	      gpointer addr = val->v_pointer;
-	      if (parent != 0)
+	      if (parent != 0 || !g_type_info_is_pointer (ti))
 		/* If struct or union allocated inside parent, the
 		   address is actually address of argument itself, not
 		   the pointer inside. */

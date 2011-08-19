@@ -628,7 +628,7 @@ end
 function gireg.array_int_null_out()
    local R = lgi.Regress
    local a = R.test_array_int_null_out()
-   check(a == nil)
+   check(type(a) == 'table' and not next(a))
 end
 
 function gireg.glist_nothing_return()
