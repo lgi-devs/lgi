@@ -550,7 +550,7 @@ end
 -- info.
 local function create_component(info, mt)
    -- Fill in meta of the compound.
-   local component = { _name = info.fullname or info.name }
+   local component = { _name = gi.isinfo(info) and info.fullname or info.name }
    if info.gtype then
       component._gtype = info.gtype
       repo[rawget(component, '_gtype')] = component
