@@ -393,7 +393,7 @@ record_new (lua_State *L)
   return 1;
 }
 
-static const char* const query_modes[] = { "gtype", "repo", NULL };
+static const char* const query_modes[] = { "gtype", "repo", "addr", NULL };
 
 /* Returns specific information mode about given record.  Lua prototype:
    res = record.query(instance, mode)
@@ -401,22 +401,41 @@ static const char* const query_modes[] = { "gtype", "repo", NULL };
 
    'gtype': retrns real gtype of this instance, G_TYPE_INVALID when it
 	    is not boxed.
-   'repo': returns repotable of this instance. */
+   'repo':  returns repotable of this instance.
+   'addr': returns address of the object.  If 3rd argument is either
+           gtype or info, checks, whether record conforms to the specs
+           and if not, throws an error.  */
 static int
 record_query (lua_State *L)
 {
-  Record *record = record_check (L, 1);
-  if (!record)
-    return 0;
-  lua_getfenv (L, 1);
-  if (luaL_checkoption (L, 2, query_modes[0], query_modes) == 0)
+  Record *record;
+  int mode = luaL_checkoption (L, 2, query_modes[0], query_modes);
+  if (mode < 2)
     {
-      if (lua_isnil (L, -1))
+      record = record_check (L, 1);
+      if (!record)
 	return 0;
 
-      lua_getfield (L, -1, "_gtype");
+      lua_getfenv (L, 1);
+      if (mode == 0)
+	{
+	  if (lua_isnil (L, -1))
+	    return 0;
+
+	  lua_getfield (L, -1, "_gtype");
+	}
+      return 1;
     }
-  return 1;
+  else
+    {
+      GType gtype = G_TYPE_INVALID;
+      GIBaseInfo **info = lgi_udata_test (L, 3, LGI_GI_INFO);
+      if (info == NULL)
+	gtype = lgi_type_get_gtype (L, 3);
+      lgi_type_get_repotype (L, gtype, info != NULL ? *info : NULL);
+      lua_pushlightuserdata (L, lgi_record_2c (L, 1, TRUE, FALSE));
+      return 1;
+    }
 }
 
 /* Implements set/get field operation. Lua prototypes:
