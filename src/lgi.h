@@ -92,9 +92,6 @@ gpointer lgi_callback_context (lua_State *L);
 lua_State *lgi_callback_enter (gpointer user_data);
 void lgi_callback_leave (gpointer user_data);
 
-/* Gets gtype of the type represented by typeinfo. */
-GType lgi_get_gtype (lua_State *L, GITypeInfo *ti);
-
 /* Marshalls single value from Lua to GLib/C. Returns number of temporary
    entries pushed to Lua stack, which should be popped before function call
    returns. */
@@ -102,10 +99,6 @@ int lgi_marshal_arg_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 			GITransfer xfer,  GIArgument *val, int narg,
 			gboolean in_parent, gboolean use_pointer,
 			GICallableInfo *ci, void **args);
-
-/* Marshalls single value from Lua to GValue. ti is optional. */
-void lgi_marshal_val_2c (lua_State *L, GITypeInfo *ti, GITransfer xfer,
-			 GValue *val, int narg);
 
 /* If given parameter is out;caller-allocates, tries to perform
    special 2c marshalling.  If not needed, returns FALSE, otherwise
@@ -119,10 +112,6 @@ gboolean lgi_marshal_arg_2c_caller_alloc (lua_State *L, GITypeInfo *ti,
 void lgi_marshal_arg_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 			   GIArgument *val, int parent, gboolean use_pointer,
 			   GICallableInfo *ci, void **args);
-
-/* Marshalls single value from GValue to Lua. ti is optional. */
-void lgi_marshal_val_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
-			   const GValue *val);
 
 /* Marshalls field to/from given memory (struct, union or
    object). Returns number of results pushed to the stack (0 or 1). */
@@ -151,9 +140,6 @@ gpointer lgi_closure_create (lua_State* L, gpointer user_data,
 
 /* GDestroyNotify-compatible callback for destroying closure. */
 void lgi_closure_destroy (gpointer user_data);
-
-/* Creates GClosure which invokes specified target. */
-GClosure *lgi_gclosure_create (lua_State *L, int target);
 
 /* Allocates and creates new record instance. */
 gpointer lgi_record_new (lua_State *L, GIBaseInfo *ri);

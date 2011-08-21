@@ -967,94 +967,6 @@ lgi_closure_create (lua_State *L, gpointer user_data,
   return call_addr;
 }
 
-typedef struct _GlibClosure
-{
-  GClosure closure;
-
-  /* Target callback of the closure. */
-  Callback callback;
-  int target_ref;
-} GlibClosure;
-
-static void
-lgi_gclosure_finalize (gpointer notify_data, GClosure *closure)
-{
-  GlibClosure *c = (GlibClosure *) closure;
-  luaL_unref (c->callback.L, LUA_REGISTRYINDEX, c->target_ref);
-  callback_destroy (&c->callback);
-}
-
-static void
-lgi_gclosure_marshal (GClosure *closure, GValue *return_value,
-		      guint n_param_values, const GValue *param_values,
-		      gpointer invocation_hint, gpointer marshal_data)
-{
-  GlibClosure *c = (GlibClosure *) closure;
-  int vals = 0, top;
-  gboolean call;
-
-  /* Prepare context in which will everything happen. */
-  lua_State *L = callback_prepare_call (&c->callback, c->target_ref, &call);
-  luaL_checkstack (L, n_param_values + 1, "");
-  top = lua_gettop (L);
-
-  /* Push parameters. */
-  while (n_param_values--)
-    {
-      lgi_marshal_val_2lua (L, NULL, GI_TRANSFER_NOTHING, param_values++);
-      vals++;
-    }
-
-  /* Invoke the function. */
-  if (call)
-    lua_call (L, vals, 1);
-  else
-    {
-      int res = lua_resume (L, vals);
-      if (res != 0 && res != LUA_YIELD)
-	lua_error (L);
-    }
-
-  if (return_value)
-    lgi_marshal_val_2c (L, NULL, GI_TRANSFER_NOTHING, return_value, -1);
-
-  /* Going back to C code, release back the mutex. */
-  lua_settop (L, top);
-  g_static_rec_mutex_unlock (c->callback.mutex);
-}
-
-GClosure *
-lgi_gclosure_create (lua_State *L, int target)
-{
-  GlibClosure *c;
-  int type = lua_type (L, target);
-
-  /* Check that target is something we can call. */
-  if (type != LUA_TFUNCTION && type != LUA_TTABLE && type != LUA_TUSERDATA)
-    {
-      luaL_typerror (L, target, lua_typename (L, LUA_TFUNCTION));
-      return NULL;
-    }
-
-  /* Create new closure instance. */
-  c = (GlibClosure *) g_closure_new_simple (sizeof (GlibClosure), NULL);
-
-  /* Initialize callback target. */
-  callback_create (L, &c->callback);
-  c->target_ref = callback_create_target (L, target);
-
-  /* Set marshaller for the closure. */
-  g_closure_set_marshal (&c->closure, lgi_gclosure_marshal);
-
-  /* Add destruction notifier. */
-  g_closure_add_finalize_notifier (&c->closure, NULL, lgi_gclosure_finalize);
-
-  /* Remove floating ref from the closure, it is useless for us. */
-  g_closure_ref (&c->closure);
-  g_closure_sink (&c->closure);
-  return &c->closure;
-}
-
 /* Creates new Callable instance according to given gi.info. Lua prototype:
    callable = callable.new(callable_info) */
 static int
@@ -1064,21 +976,9 @@ callable_new (lua_State *L)
 			      luaL_checkudata (L, 1, LGI_GI_INFO), NULL);
 }
 
-/* Creates new closure instance with given Lua target.  Lua prototype:
-   closure = callable.closure(target) */
-static int
-callable_closure (lua_State *L)
-{
-  /* Create closure instance wrapping argument and return it. */
-  if (lgi_type_get_repotype (L, G_TYPE_CLOSURE, NULL) != G_TYPE_INVALID)
-    lgi_record_2lua (L, lgi_gclosure_create (L, 1), TRUE, 0);
-  return 1;
-}
-
 /* Callable module public API table. */
 static const luaL_Reg callable_api_reg[] = {
   { "new", callable_new },
-  { "closure", callable_closure },
   { NULL, NULL }
 };
 

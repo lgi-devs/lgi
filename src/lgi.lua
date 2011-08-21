@@ -1396,7 +1396,7 @@ end
 function Object:_access_element(instance, name, element, ...)
    if element == nil then
       -- Check object's environment.
-      local env = core.object.env(instance)
+      local env = core.object.query(instance, 'env')
       if not env then error(("%s: no `%s'"):format(self._name, name)) end
       if select('#', ...) > 0 then
 	 env[name] = ...

@@ -363,78 +363,17 @@ static const luaL_Reg object_mt_reg[] = {
   { NULL, NULL }
 };
 
-/* Creation of specified object with given construction-time properties.
-   obj = object.new(gtype[, {gi.prop->val}]) */
-static int
-object_new (lua_State *L)
-{
-  gint n_params = 0;
-  GParameter *params = NULL, *param;
-  GIPropertyInfo *pi;
-  GITypeInfo *ti;
-  gpointer obj;
-  GType gtype = luaL_checknumber (L, 1);
-
-  g_assert (G_TYPE_IS_OBJECT (gtype));
-
-  /* Go through the table and extract and prepare
-     construction-time properties. */
-  luaL_checktype (L, 2, LUA_TTABLE);
-
-  /* Find out how many parameters we have. */
-  lua_pushnil (L);
-  for (lua_pushnil (L); lua_next (L, 2) != 0; lua_pop (L, 1))
-    n_params++;
-
-  if (n_params > 0)
-    {
-      /* Allocate GParameter array (on the stack) and fill it with
-	 parameters. */
-      param = params = g_newa (GParameter, n_params);
-      memset (params, 0, sizeof (GParameter) * n_params);
-      for (lua_pushnil (L); lua_next (L, 2) != 0; lua_pop (L, 1), param++)
-	{
-	  /* Get property info. */
-	  pi = *(GIBaseInfo **) luaL_checkudata (L, -2, LGI_GI_INFO);
-
-	  /* Extract property name. */
-	  param->name = g_base_info_get_name (pi);
-
-	  /* Initialize and load parameter value from the table
-	     contents. */
-	  ti = g_property_info_get_type (pi);
-	  lgi_gi_info_new (L, ti);
-	  g_value_init (&param->value, lgi_get_gtype (L, ti));
-	  lgi_marshal_val_2c (L, ti, GI_TRANSFER_NOTHING, &param->value, -2);
-	  lua_pop (L, 1);
-	}
-
-      /* Pop the repo class table. */
-      lua_pop (L, 1);
-    }
-
-  /* Create the object. */
-  obj = g_object_newv (gtype, n_params, params);
-
-  /* Free all parameters from params array. */
-  for (param = params; n_params > 0; param++, n_params--)
-    g_value_unset (&param->value);
-
-  /* Wrap Lua proxy around created object.  Note that if created
-     object is of G_INITIALLY_UNOWNED type, we do not have the
-     ownership. */
-  lgi_object_2lua (L, obj, !G_IS_INITIALLY_UNOWNED (obj));
-  return 1;
-}
-
-static const char *const query_mode[] = { "gtype", "repo", "class", NULL };
+static const char *const query_mode[] = {
+  "gtype", "repo", "class", "env", NULL
+ };
 
 /* Queries for assorted instance properties. Lua-side prototype:
    res = object.query(objectinstance, mode [, iface-gtype])
    Supported mode strings are:
    'gtype': returns real gtype of this instance.
-   'repo': returns repotable for this instance.
-   'class': returns class struct record of this instance. */
+   'repo':  returns repotable for this instance.
+   'class': returns class struct record of this instance.
+   'env':   returns environment table associated with the object. */
 static int
 object_query (lua_State *L)
 {
@@ -448,6 +387,11 @@ object_query (lua_State *L)
       if (mode == 0)
 	{
 	  lua_pushnumber (L, gtype);
+	  return 1;
+	}
+      else if (mode == 3)
+	{
+	  lua_getfenv (L, 1);
 	  return 1;
 	}
       else
@@ -486,131 +430,10 @@ object_field (lua_State *L)
   return lgi_marshal_field (L, object, getmode, 1, 2, 3);
 }
 
-/* Object property accessor.  Lua-side prototypes:
-   res = object.property(objectinstance, propinfo)
-   object.property(objectinstance, propinfo, newvalue) */
-static int
-object_property (lua_State *L)
-{
-  int vals = 0;
-  GValue val = {0};
-  GType gtype;
-  const gchar *name;
-
-  /* Check, whether we are doing set or get operation. */
-  gboolean getmode = lua_isnone (L, 3);
-
-  /* Get object instance. */
-  gpointer object = lgi_object_2c (L, 1, G_TYPE_OBJECT, FALSE, FALSE);
-  GIPropertyInfo *pi = *(GIPropertyInfo **) luaL_checkudata (L, 2, LGI_GI_INFO);
-  GITypeInfo *ti = g_property_info_get_type (pi);
-  lgi_gi_info_new (L, ti);
-  gtype = lgi_get_gtype (L, ti);
-  name = g_base_info_get_name (pi);
-
-  /* Check access control. */
-  if ((g_property_info_get_flags (pi)
-       & (getmode ? G_PARAM_READABLE : G_PARAM_WRITABLE)) == 0)
-    {
-      /* Prepare proper error message. */
-      object_type (L, G_OBJECT_TYPE (object));
-      lua_getfield (L, -1, "_name");
-      return luaL_error (L, "%s: property `%s' is not %s",
-			 lua_tostring (L, -1), name,
-			 getmode ? "readable" : "writable");
-    }
-
-  /* Initialize worker value with correct type. */
-  g_value_init (&val, gtype);
-  if (getmode)
-    {
-      g_object_get_property (object, name, &val);
-      lgi_marshal_val_2lua (L, ti, GI_TRANSFER_NOTHING, &val);
-      vals = 1;
-    }
-  else
-    {
-      lgi_marshal_val_2c (L, ti, GI_TRANSFER_NOTHING, &val, 3);
-      g_object_set_property (object, name, &val);
-    }
-
-  g_value_unset (&val);
-  return vals;
-}
-
-/* Returns internal custom object's table, free to store/load anything
-   into it. Lua-side prototype:
-   env_table = object.env(objectinstance) */
-static int
-object_env (lua_State *L)
-{
-  object_get (L, 1);
-  lua_getfenv (L, 1);
-  return 1;
-}
-
-static void
-gclosure_destroy (gpointer user_data, GClosure *closure)
-{
-  lgi_closure_destroy (user_data);
-}
-
-/* Connects signal to given compound.
- * Signature is:
- * handler_id = object.connect(obj, signame, callable, func, detail, after) */
-static int
-object_connect (lua_State *L)
-{
-  GObject *object;
-  const char *signame = luaL_checkstring (L, 2);
-  GICallableInfo *ci;
-  const char *detail = lua_tostring (L, 5);
-  gpointer call_addr, lgi_closure;
-  GClosure *gclosure;
-  guint signal_id;
-  gulong handler_id;
-
-  /* Get target objects. */
-  object = lgi_object_2c (L, 1, G_TYPE_OBJECT, FALSE, FALSE);
-  ci = *(GIBaseInfo **) luaL_checkudata (L, 3, LGI_GI_INFO);
-
-  /* Create GClosure instance to be used.  This is fast'n'dirty method; it
-     requires less lines of code to write, but a lot of code to execute when
-     the signal is emitted; the signal goes like this:
-
-     1) emitter prepares params as an array of GValues.
-     2) GLib's marshaller converts it to C function call.
-     3) this call lands in libffi's trampoline (closure)
-     4) this trampoline converts arguments to libffi array of args
-     5) LGI libffi glue code unmarshalls them to Lua stack and calls Lua func.
-
-     much better solution would be writing custom GClosure Lua marshaller, in
-     which case the scenraio would be following:
-
-     1) emitter prepares params as an array of GValues.
-     2) LGI custom marshaller marshalls then to Lua stack and calls Lua
-	function. */
-  lgi_closure = lgi_closure_allocate (L, 1);
-  call_addr = lgi_closure_create (L, lgi_closure, ci, 4, FALSE);
-  gclosure = g_cclosure_new (call_addr, lgi_closure, gclosure_destroy);
-
-  /* Connect closure to the signal. */
-  signal_id = g_signal_lookup (signame, G_OBJECT_TYPE (object));
-  handler_id =  g_signal_connect_closure_by_id (object, signal_id,
-						g_quark_from_string (detail),
-						gclosure, lua_toboolean (L, 6));
-  lua_pushnumber (L, handler_id);
-  return 1;
-}
-
 /* Object API table. */
 static const luaL_Reg object_api_reg[] = {
-  { "new", object_new },
   { "query", object_query },
   { "field", object_field },
-  { "property", object_property },
-  { "env", object_env },
-  { "connect", object_connect },
   { NULL, NULL }
 };
 

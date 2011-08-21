@@ -288,32 +288,6 @@ core_constant (lua_State *L)
   return 1;
 }
 
-/* Value contents 'access' function. Lua-side prototype:
-   res = core.value(val)
-   core.value(val, newval) */
-static int
-core_value (lua_State *L)
-{
-  GValue *val;
-  lgi_type_get_repotype (L, G_TYPE_VALUE, NULL);
-  val = lgi_record_2c (L, 1, FALSE, FALSE);
-  if (lua_isnone (L, 2))
-    {
-      /* Read the value from GValue. */
-      lgi_marshal_val_2lua (L, NULL, GI_TRANSFER_NOTHING, val);
-      return 1;
-    }
-  else
-    {
-      /* Write value to GValue, or reset it if source is 'nil'. */
-      if (lua_isnil (L, 2))
-	g_value_reset (val);
-      else
-	lgi_marshal_val_2c (L, NULL, GI_TRANSFER_NOTHING, val, 2);
-      return 0;
-    }
-}
-
 /* Helper structure, contents of lgi_call_mutex ud registry index.
    Contains pointer to mutex as the 1st member, and then auxiliary
    information so that logger can find the context. */
@@ -467,7 +441,6 @@ static const struct luaL_reg lgi_reg[] = {
   { "refptr", core_refptr },
   { "gtype", core_gtype },
   { "constant", core_constant },
-  { "value", core_value },
   { "yield", core_yield },
   { NULL, NULL }
 };
