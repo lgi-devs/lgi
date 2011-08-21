@@ -801,16 +801,16 @@ local Type = { STRV = 'GStrv', ARRAY = 'GArray', BYTE_ARRAY = 'GByteArray',
 	       PTR_ARRAY = 'GPtrArray', HASH_TABLE = 'GHashTable',
 	       ERROR = 'GError', GTYPE = 'GType' }
 repo.GObject.Type = Type
-for num, name in ipairs { 'NONE', 'INTERFACE', 'CHAR', 'UCHAR', 'BOOLEAN',
-			  'INT', 'UINT', 'LONG', 'ULONG', 'INT64', 'UINT64',
-			  'ENUM', 'FLAGS', 'FLOAT', 'DOUBLE', 'STRING',
-			  'POINTER', 'BOXED', 'PARAM', 'OBJECT', 'VARIANT' } do
-   Type[name] = core.gtype(num * 4)
-end
 for _, name in pairs { 'name', 'qname', 'from_name', 'parent', 'depth',
 		       'next_base', 'is_a', 'children', 'interfaces',
 		       'query', 'fundamental_next', 'fundamental'} do
    Type[name] = repo.GObject['type_' .. name]
+end
+for num, name in ipairs { 'NONE', 'INTERFACE', 'CHAR', 'UCHAR', 'BOOLEAN',
+			  'INT', 'UINT', 'LONG', 'ULONG', 'INT64', 'UINT64',
+			  'ENUM', 'FLAGS', 'FLOAT', 'DOUBLE', 'STRING',
+			  'POINTER', 'BOXED', 'PARAM', 'OBJECT', 'VARIANT' } do
+   Type[name] = Type.name(num * 4)
 end
 
 -- Map of basic typeinfo tags to GType.
@@ -829,7 +829,7 @@ function Type.from_typeinfo(ti)
    local gtype = type_tag_map[ti.tag]
    if not gtype then
       if ti.tag == 'interface' then
-	 gtype = core.gtype(ti.interface.gtype)
+	 gtype = Type.name(ti.interface.gtype)
       elseif ti.tag == 'array' then
 	 local atype = ti.array_type
 	 if atype == 'c' then
@@ -922,8 +922,7 @@ function(value, params, ...)
    if select('#', ...) > 0 then
       Value.set_boxed(value, core.record.query((...), 'addr', gtype))
    else
-      if type(gtype) == 'string' then gtype = core.gtype(gtype) end
-      return core.record.new(gi[gtype], Value.get_boxed(value))
+      return core.record.new(gi[core.gtype(gtype)], Value.get_boxed(value))
    end
 end
 

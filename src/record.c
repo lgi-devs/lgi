@@ -82,7 +82,7 @@ lgi_record_new (lua_State *L, GIBaseInfo *ri)
   record->store = RECORD_STORE_EMBEDDED;
 
   /* Get ref_repo table, attach it as an environment. */
-  lgi_type_get_repotype (L, G_TYPE_NONE, ri);
+  lgi_type_get_repotype (L, G_TYPE_INVALID, ri);
   lua_setfenv (L, -2);
 
   /* Store newly created record into the cache. */
@@ -386,7 +386,7 @@ record_new (lua_State *L)
 	? addr = lua_touserdata (L, 2)
 	: (gpointer) luaL_checkinteger (L, 2);
       gboolean owned = lua_toboolean (L, 3);
-      lgi_type_get_repotype (L, G_TYPE_NONE, *info);
+      lgi_type_get_repotype (L, G_TYPE_INVALID, *info);
       g_assert (!lua_isnil (L, -1));
       lgi_record_2lua (L, addr, owned, 0);
     }
@@ -399,8 +399,7 @@ static const char* const query_modes[] = { "gtype", "repo", "addr", NULL };
    res = record.query(instance, mode)
    Supported 'mode' strings are:
 
-   'gtype': retrns real gtype of this instance, G_TYPE_INVALID when it
-	    is not boxed.
+   'gtype': returns real gtype of this instance, nil when it is not boxed.
    'repo':  returns repotable of this instance.
    'addr': returns address of the object.  If 3rd argument is either
            gtype or info, checks, whether record conforms to the specs
@@ -419,10 +418,13 @@ record_query (lua_State *L)
       lua_getfenv (L, 1);
       if (mode == 0)
 	{
+	  GType gtype;
 	  if (lua_isnil (L, -1))
 	    return 0;
 
 	  lua_getfield (L, -1, "_gtype");
+	  gtype = luaL_optinteger (L, -1, G_TYPE_INVALID);
+	  lua_pushstring (L, g_type_name (gtype));
 	}
       return 1;
     }

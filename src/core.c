@@ -261,15 +261,11 @@ core_refptr (lua_State *L)
   return 1;
 }
 
-/* Converts GType from/to string. */
+/* Converts GType to number. */
 static int
 core_gtype (lua_State *L)
 {
-  GType gtype = lgi_type_get_gtype (L, 1);
-  if (lua_isnumber (L, 1))
-    lua_pushstring (L, g_type_name (gtype));
-  else
-    lua_pushnumber (L, gtype);
+  lua_pushinteger (L, lgi_type_get_gtype (L, 1));
   return 1;
 }
 
