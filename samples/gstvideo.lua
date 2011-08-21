@@ -8,7 +8,7 @@
 local lgi  = require 'lgi'
 local GLib = lgi.GLib
 local Gtk  = lgi.Gtk
-local Gst  = lgi.Gst
+local Gst  = lgi.require('Gst', '0.10')
 
 ---------------
 -- GTK Stuff --

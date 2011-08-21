@@ -29,7 +29,7 @@ end
 
 -- Gst.TagList adjustments
 if not Gst.TagList.copy_value then
-   Gst.TagList._methods.copy_value = Gst.tag_list_copy_value
+   Gst.TagList._method.copy_value = Gst.tag_list_copy_value
 end
 function Gst.TagList:get(tag)
    local value = self:copy_value(tag)
@@ -37,7 +37,7 @@ function Gst.TagList:get(tag)
 end
 
 -- Load additional Gst modules.
-local GstInterfaces = lgi.GstInterfaces
+local GstInterfaces = lgi.require('GstInterfaces', Gst._version)
 
 -- Initialize gstreamer.
 Gst.init()
