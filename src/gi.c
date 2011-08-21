@@ -147,6 +147,23 @@ static const luaL_Reg gi_infos_reg[] = {
 };
 
 static int
+info_push_transfer (lua_State *L, GITransfer transfer)
+{
+  if (0);
+#define H(n1, n2)				\
+  else if (transfer == GI_TRANSFER_ ## n1)	\
+    {						\
+      lua_pushstring (L, #n2);			\
+      return 1;					\
+    }
+  H(NOTHING, none)
+    H(CONTAINER, container)
+    H(EVERYTHING, full)
+#undef H
+    return 0;
+}
+
+static int
 info_index (lua_State *L)
 {
   GIBaseInfo **info = luaL_checkudata (L, 1, LGI_GI_INFO);
@@ -289,12 +306,21 @@ info_index (lua_State *L)
 	      lua_pushboolean (L, g_struct_info_is_gtype_struct (*info));
 	      return 1;
 	    }
+	  else if (strcmp (prop, "size") == 0)
+	    {
+	      lua_pushinteger (L, g_struct_info_get_size (*info));
+	      return 1;
+	    }
 	  INFOS (struct, field)
 	    INFOS (struct, method);
 	}
       else if (GI_IS_UNION_INFO (*info))
 	{
-	  if (0);
+	  if (strcmp (prop, "size") == 0)
+	    {
+	      lua_pushinteger (L, g_struct_info_get_size (*info));
+	      return 1;
+	    }
 	  INFOS (union, field)
 	    INFOS (union, method);
 	}
@@ -330,6 +356,8 @@ info_index (lua_State *L)
     {
       if (strcmp (prop, "return_type") == 0)
 	return lgi_gi_info_new (L, g_callable_info_get_return_type (*info));
+      else if (strcmp (prop, "return_transfer") == 0)
+	return info_push_transfer (L, g_callable_info_get_caller_owns (*info));
       INFOS (callable, arg);
 
       if (GI_IS_SIGNAL_INFO (*info))
@@ -402,6 +430,42 @@ info_index (lua_State *L)
 	}
     }
 
+  if (GI_IS_ARG_INFO (*info))
+    {
+      if (strcmp (prop, "direction") == 0)
+	{
+	  GIDirection dir = g_arg_info_get_direction (*info);
+	  if (dir == GI_DIRECTION_OUT)
+	    lua_pushstring (L, g_arg_info_is_caller_allocates (*info)
+			    ? "out-caller-alloc" : "out");
+	  else
+	    lua_pushstring (L, dir == GI_DIRECTION_IN ? "in" : "inout");
+	  return 1;
+	}
+      if (strcmp (prop, "transfer") == 0)
+	return info_push_transfer (L,
+				   g_arg_info_get_ownership_transfer (*info));
+      if (strcmp (prop, "optional") == 0)
+	{
+	  lua_pushboolean (L, g_arg_info_is_optional (*info)
+			   || g_arg_info_may_be_null (*info));
+	  return 1;
+	}
+    }
+
+  if (GI_IS_PROPERTY_INFO (*info))
+    {
+      if (strcmp (prop, "flags") == 0)
+	{
+	  lua_pushinteger (L, g_property_info_get_flags (*info));
+	  return 1;
+	}
+      else if (strcmp (prop, "transfer") == 0)
+	return
+	  info_push_transfer (L,
+			      g_property_info_get_ownership_transfer (*info));
+    }
+
   if (GI_IS_TYPE_INFO (*info))
     {
       GITypeTag tag = g_type_info_get_tag (*info);
@@ -453,6 +517,26 @@ info_index (lua_State *L)
 	    default:
 	      g_assert_not_reached ();
 	    }
+	}
+      else if (strcmp (prop, "is_zero_terminated") == 0
+	       && tag == GI_TYPE_TAG_ARRAY)
+	{
+	  lua_pushboolean (L, g_type_info_is_zero_terminated (*info));
+	  return 1;
+	}
+      else if (strcmp (prop, "array_length") == 0)
+	{
+	  int len = g_type_info_get_array_length (*info);
+	  if (len >= 0)
+	    {
+	      lua_pushinteger (L, len);
+	      return 1;
+	    }
+	}
+      else if (strcmp (prop, "is_pointer") == 0)
+	{
+	  lua_pushboolean (L, g_type_info_is_pointer (*info));
+	  return 1;
 	}
     }
 
