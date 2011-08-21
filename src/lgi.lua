@@ -858,6 +858,171 @@ for _, name in pairs { 'name', 'qname', 'from_name', 'parent', 'depth',
    Type[name] = repo.GObject['type_' .. name]
 end
 
+-- Map of basic typeinfo tags to GType.
+local type_tag_map = {
+   gboolean = Type.BOOLEAN, gint8 = Type.CHAR, guint8 = Type.UCHAR,
+   gint16 = Type.INT, guint16 = Type.UINT,
+   gint32 = Type.INT, guint32 = Type.UINT,
+   gint64 = Type.INT64, guint64 = Type.UINT64,
+   gfloat = Type.FLOAT, gdouble = Type.DOUBLE,
+   GType = Type.GTYPE, utf8 = Type.STRING, filename = Type.STRING,
+   ghash = Type.HASH_TABLE, glist = Type.POINTER, gslist = Type.POINTER,
+   error = Type.ERROR }
+
+-- Gets GType corresponding to specified typeinfo.
+function Type.from_typeinfo(ti)
+   local gtype = type_tag_map[ti.tag]
+   if not gtype then
+      if ti.tag == 'interface' then
+	 gtype = core.gtype(ti.interface.gtype)
+      elseif ti.tag == 'array' then
+	 local atype = ti.array_type
+	 if atype == 'c' then
+	    gtype = Type.POINTER
+	    -- Check for Strv.
+	    local etag = ti.params[1].tag
+	    if ((etag == 'utf8' or etag == 'filename')
+		and ti.is_zero_terminated) then
+	       gtype = Type.STRV
+	    end
+	 else 
+	    gtype = ({ array = Type.ARRAY, byte_array = Type.BYTE_ARRAY,
+		       ptr_array = Type.PTR_ARRAY })[atype]
+	 end
+      end
+   end
+   return gtype
+end
+
+-- Value is constructible from any kind of source Lua value, and the
+-- type of the value can be hinted by type name.
+local Value = repo.GObject.Value
+local value_info = gi.GObject.Value
+
+-- Workaround for incorrect annotations - g_value_set_xxx are missing
+-- (allow-none) annotations in glib < 2.30.
+for _, name in pairs { 'set_object', 'set_variant', 'set_string' } do
+   if not value_info.methods[name].args[1].optional then
+      log.message("g_value_%s() is missing (allow-none)", name)
+      local setter = Value[name]
+      Value._method[name] =
+      function(value, val)
+	 if not val then Value.reset(value) else setter(value, val) end
+      end
+   end
+end
+
+-- Do not allow direct access to fields.
+local value_field_gtype = Value._field.g_type
+Value._field = nil
+
+-- 'type' property controls gtype of the property.
+Value._override = { type = {} }
+function Value._override.type.get(value)
+   return core.record.field(value, value_field_gtype)
+end
+function Value._override.type.set(value, newtype)
+   local gtype = core.record.field(value, value_field_gtype)
+   if gtype then
+      if newtype then
+	 -- Try converting old value to new one.
+	 local dest = core.record.new(value_info)
+	 Value.init(dest, newtype)
+	 if not Value.transform(value, dest) then
+	    error(("GObject.Value: cannot convert `%s' to `%s'"):format(
+		     gtype, core.record.field(dest, value_field_gtype)))
+	 end
+	 Value.unset(value)
+	 Value.init(value, newtype)
+	 Value.copy(dest, value)
+      else
+	 Value.unset(value)
+      end
+   elseif newtype then
+      -- No value was set and some is requested, so set it.
+      Value.init(value, newtype)
+   end
+end
+
+local value_marshallers = {}
+for name, gtype in pairs(Type) do
+   local get = Value._method['get_' .. name:lower()]
+   local set = Value._method['set_' .. name:lower()]
+   if get and set then
+      value_marshallers[gtype] =
+      function(value, params, ...)
+	 return (select('#', ...) > 0 and set or get)(value, ...)
+      end
+   end
+end
+
+-- Interface marshaller is the same as object marshallers.
+value_marshallers[Type.INTERFACE] = value_marshallers[Type.OBJECT]
+
+-- Override 'boxed' marshaller, default one marshalls to gpointer
+-- instead of target boxed type.
+value_marshallers[Type.BOXED] =
+function(value, params, ...)
+   local gtype = core.record.field(value, value_field_gtype)
+   if select('#', ...) > 0 then
+      Value.set_boxed(value, core.record.query((...), 'addr', gtype))
+   else
+      if type(gtype) == 'string' then gtype = core.gtype(gtype) end
+      return core.record.new(gi[gtype], Value.get_boxed(value))
+   end
+end
+
+-- Create GStrv marshaller, implement it using typeinfo marshaller
+-- with proper null-terminated-array-of-utf8 typeinfo 'stolen' from
+-- g_shell_parse_argv().
+value_marshallers[Type.STRV] = core.marshal.container(
+   gi.GLib.shell_parse_argv.args[3].typeinfo)
+
+function Value._method.find_marshaller(attrs)
+   -- Check whether we can have marshaller for typeinfo.
+   local marshaller
+   if attrs.typeinfo then
+      marshaller = core.marshal.container(attrs.typeinfo, attrs.transfer)
+      if marshaller then return marshaller end
+   end
+
+   local gtype = attrs.gtype
+   -- Special marshaller, allowing only 'nil'.
+   if not gtype then return function() end end
+
+   -- Find marshaller according to gtype of the value.
+   while gtype do
+      -- Check simple and/or fundamental marshallers.
+      marshaller = value_marshallers[gtype] or core.marshal.fundamental(gtype)
+      if marshaller then return marshaller end
+      gtype = Type.parent(gtype)
+   end
+   error(("GValue marshaller for `%s' not found"):format(tostring(attrs.gtype)))
+end
+
+-- Value 'value' property provides access to GValue's embedded data.
+function Value._override:value(...)
+   local attrs = { gtype = core.record.field(self, value_field_gtype) }
+   local marshaller = Value._method.find_marshaller(attrs)
+   return marshaller(self, attrs, ...)
+end
+
+-- Implements pseudo-properties 'g_type' and 'data', for safe
+-- read/write access to value's type and contents.
+Value._override.g_type = Value._override.type
+Value._override.data = Value._override.value
+
+-- Implement custom 'constructor', taking optionally two values (type
+-- and value).  The reason why it is overriden is that the order of
+-- initialization is important, and standard record intializer cannot
+-- enforce the order.
+function Value:_constructor(gtype, value)
+   local v = core.record.new(value_info)
+   if gtype then v.g_type = gtype end
+   if value then v.value = value end
+   return v
+end
+
 -- GObject overrides.
 local Object = repo.GObject.Object
 
@@ -895,6 +1060,26 @@ local function is_param_spec(element)
    end
 end
 
+-- Sets/gets property using specified marshaller attributes.
+local function marshal_property(obj, name, flags, attrs, ...)
+   -- Check access rights of the property.
+   local mode = select('#', ...) > 0 and 'WRITABLE' or 'READABLE'
+   if not lgi.has_bit(flags, repo.GObject.ParamFlags[mode]) then
+      error(("%s: `%s' not %s"):format(core.object.query(obj, 'repo')._name,
+				       name, mode:lower()))
+   end
+   local marshaller = Value.find_marshaller(attrs)
+   local value = core.record.new(value_info)
+   Value.init(value, attrs.gtype)
+   if mode == 'WRITABLE' then
+      marshaller(value, attrs, ...)
+      Object.set_property(obj, name, value)
+   else
+      Object.get_property(obj, name, value)
+      return marshaller(value, attrs)
+   end
+end
+
 -- Custom access_element, reacts on dynamic properties
 function Object:_access_element(instance, name, element, ...)
    if element == nil then
@@ -909,19 +1094,15 @@ function Object:_access_element(instance, name, element, ...)
       end
    elseif gi.isinfo(element) and element.is_property then
       -- Process property using GI.
-      return core.object.property(instance, element, ...)
+      local typeinfo = element.typeinfo
+      return marshal_property(instance, element.name, element.flags,
+			      { gtype = Type.from_typeinfo(typeinfo),
+				typeinfo = typeinfo,
+				transfer = element.transfer }, ...)
    elseif is_param_spec(element) then
       -- Process property using GLib.
-      local val = repo.GObject.Value()
-      repo.GObject.Value.init(val, element.value_type)
-      if select('#', ...) > 0 then
-	 core.value(val, ...)
-	 Object.set_property(instance, element.name, val)
-	 return
-      else
-	 Object.get_property(instance, element.name, val)
-	 return core.value(val)
-      end
+      return marshal_property(instance, element.name, element.flags,
+			      { gtype = element.value_type }, ...)
    else
       -- Forward to 'inherited' generic object implementation.
       return component_mt.class._access_element(
@@ -992,66 +1173,6 @@ function closure_mt:__call(target)
    return core.callable.closure(target)
 end
 setmetatable(Closure, closure_mt)
-
--- Value is constructible from any kind of source Lua value, and the
--- type of the value can be hinted by type name.
-local Value = repo.GObject.Value
-local value_info = gi.GObject.Value
-
--- Value contents accessors - type-safe replacement for buch of
--- set_xxx and get_xxx native C variants.
-Value._method.get = core.value
-Value._method.set = core.value
-
--- Do not allow direct access to fields.
-local value_field_gtype = Value._field.g_type
-Value._field = nil
-
--- Implements pseudo-properties 'g_type' and 'data', for safe
--- read/write access to value's type and contents.
-Value._override = { g_type = {} }
-function Value._override.g_type.get(instance)
-   -- Reading existing type is simple access to value's gtype field.
-   return core.record.field(instance, value_field_gtype)
-end
-function Value._override.g_type.set(instance, newtype)
-   local gtype = core.record.field(instance, value_field_gtype)
-   if gtype then
-      if newtype then
-	 -- Try converting old value to new one.
-	 local dest = core.record.new(value_info)
-	 Value.init(dest, newtype)
-	 if not Value.transform(instance, dest) then
-	    error(("GObject.Value: cannot convert `%s' to `%s'"):format(
-		     gtype, core.record.field(dest, value_field_gtype)))
-	 end
-	 Value.unset(instance)
-	 Value.init(instance, newtype)
-	 Value.copy(dest, instance)
-      else
-	 Value.unset(instance)
-      end
-   elseif newtype then
-      -- No value was set and some is requested, so set it.
-      Value.init(instance, newtype)
-   end
-end
-
--- Forward to access value directly.
-Value._override.data = core.value
-
--- Implement custom 'constructor', taking optionally two values
--- (g_type and data).  The reason why it is overriden is that the
--- order of initialization is important, and standard record
--- intializer cannot enforce the order.
-local value_mt = create_component_meta { '_method' }
-function value_mt:__call(gtype, data)
-   local v = core.record.new(value_info)
-   if gtype then v.g_type = gtype end
-   if data then v.data = data end
-   return v
-end
-setmetatable(Value, value_mt)
 
 -- Create lazy-loading components for variant stuff.
 repo.GLib._precondition = {}

@@ -533,6 +533,7 @@ luaopen_lgi__core (lua_State* L)
   /* Initialize modules. */
   lgi_buffer_init (L);
   lgi_gi_init (L);
+  lgi_marshal_init (L);
   lgi_record_init (L);
   lgi_object_init (L);
   lgi_callable_init (L);

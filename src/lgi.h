@@ -51,6 +51,7 @@ void
 lgi_cache_create (lua_State *L, gpointer key, const char *mode);
 
 /* Initialization of modules. */
+void lgi_marshal_init (lua_State *L);
 void lgi_record_init (lua_State *L);
 void lgi_object_init (lua_State *L);
 void lgi_callable_init (lua_State *L);
