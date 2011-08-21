@@ -96,60 +96,6 @@ log.message('Lua to GObject-Introspection binding v0.1')
 -- loading on-demand.  Created by C-side bootstrap.
 local repo = core.repo
 
--- Weak table containing symbols which currently being loaded. It is used
--- mainly to avoid assorted kinds of infinite recursion which might happen
--- during symbol dependencies loading.
-local in_check = setmetatable({}, { __mode = 'v' })
-
--- Loads the type and all dependent subtypes.  Returns nil if it cannot be
--- loaded or the type itself if it is ok.
-local function check_type(info)
-   if not info then return nil end
-   local type = info.type
-   if type == 'type' then
-      -- Check the embedded typeinfo.
-      local tag = info.tag
-      if info.is_basic then
-	 return info
-      elseif tag == 'array' then
-	 return check_type(info.params[1]) and info
-      elseif tag == 'interface' then
-	 return check_type(info.interface) and info
-      elseif tag == 'glist' or tag == 'gslist' then
-	 return check_type(info.params[1]) and info
-      elseif tag == 'ghash' then
-	 return ((check_type(info.params[1]) and check_type(info.params[2]))
-	      and info)
-      elseif tag == 'error' then
-	 return info
-      else
-	 log.warning('unknown typetag %s', tag)
-	 return nil
-      end
-   elseif info.is_callable then
-      -- Check all callable arguments and return value.
-      if not check_type(info.return_type) then return nil end
-      local args = info.args
-      for i = 1, #args do
-	 if not check_type(args[i].typeinfo) then return nil end
-      end
-   elseif type == 'constant' or type == 'property' or type == 'field' then
-      if not check_type(info.typeinfo) then info = nil end
-   elseif info.is_registered_type then
-      -- Check, whether we can reach the symbol in the repo.
-      in_check[info.fullname] = info
-      if not in_check[info.fullname]
-	 and not repo[info.namespace][info.name] then
-	 info = nil
-      end
-      in_check[info.fullname] = nil
-   else
-      log.warning("unknown type `%s' of %s", type, info.fullname)
-      return nil
-   end
-   return info
-end
-
 -- Gets table for category of compound (i.e. _field of struct or _property
 -- for class etc).  Installs metatable which performs on-demand lookup of
 -- symbols.
@@ -181,7 +127,7 @@ local function get_category(children, xform_value,
 	 end
       end
       while #index > 0 do
-	 ei = check_type(children[table.remove(index)])
+	 ei = children[table.remove(index)]
 	 val = xvalue(ei)
 	 if val then
 	    en = ei.name
@@ -192,7 +138,7 @@ local function get_category(children, xform_value,
 
       -- Load all known indices.
       for en, idx in pairs(index) do
-	 val = xvalue(check_type(children[idx]))
+	 val = xvalue(children[idx])
 	 en = not xform_name_reverse and en or xform_name_reverse(en)
 	 if en then category[en] = val end
       end
@@ -239,7 +185,7 @@ local function get_category(children, xform_value,
 
       -- Transform found value and store it into the category (self)
       -- table.
-      if not check_type(val) then return nil end
+      if not val then return nil end
       if xform_value then val = xform_value(val) end
       if not val then return nil end
       self[requested_name] = val
@@ -522,11 +468,11 @@ local typeloader = {}
 
 typeloader['function'] =
    function(namespace, info)
-      return check_type(info) and core.callable.new(info), '_function'
+      return core.callable.new(info), '_function'
    end
 
 function typeloader.constant(namespace, info)
-   return check_type(info) and core.constant(info), '_constant'
+   return core.constant(info), '_constant'
 end
 
 local function load_enum(info, meta)
