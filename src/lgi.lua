@@ -441,35 +441,6 @@ local function access_field(field_accessor, instance, info, ...)
    end
 end
 
--- _access part for signals.
-local function access_signal(instance, info, ...)
-   if select('#', ...) > 0 then
-      -- Assignment means 'connect signal without detail'.
-      core.object.connect(instance, info.name, info, ...)
-   else
-      -- Reading yields table with signal operations.
-      local pad = {}
-      function pad:connect(target, detail, after)
-	 return core.object.connect(instance, info.name, info,
-				    target, detail, after)
-      end
-
-      -- If signal supports details, add metatable implementing
-      -- __newindex for connecting in the 'on_signal['detail'] =
-      -- handler' form.
-      if info.is_signal and info.flags.detailed then
-	 local meta = {}
-	 function meta:__newindex(detail, target)
-	    core.object.connect(instance, info.name, info, target, detail)
-	 end
-	 setmetatable(pad, meta);
-      end
-
-      -- Return created signal pad.
-      return pad
-   end
-end
-
 -- _access_element method for records.
 function component_mt.record:_access_element(instance, name, element, ...)
    if gi.isinfo(element) and element.is_field then
@@ -484,8 +455,6 @@ function component_mt.class:_access_element(instance, name, element, ...)
    if gi.isinfo(element) then
       if element.is_field then
 	 return access_field(core.object.field, instance, element, ...)
-      elseif element.is_signal then
-	 return access_signal(instance, element, ...)
       elseif element.is_vfunc then
 	 local typestruct = core.object.query(instance, 'class',
 					      element.container.gtype)
@@ -1009,6 +978,248 @@ function Value:_new(gtype, value)
    return v
 end
 
+-- Implementation of closure support, together with marshalling.
+local Closure = repo.GObject.Closure
+local closure_info = gi.GObject.Closure
+
+-- Compile callable_info into table which allows fast marshalling
+local function callable_info_compile(callable_info, to_lua)
+   local res = { has_self = (callable_info.is_signal
+			     or callable_info.is_virtual) }
+   local argc, gtype = 0
+
+   -- If this is a C array with explicit length argument, mark it.
+   local function mark_array_length(cell, ti)
+      local len = ti.array_length
+      if len then
+	 cell.len_index = 1 + len + (res.has_self and 1 or 0)
+	 if not res[cell.len_index] then res[cell.len_index] = {} end
+	 res[cell.len_index].internal = true
+      end
+   end
+
+   -- Fill in 'self' argument.
+   if res.has_self then
+      argc = 1
+      gtype = callable_info.container.gtype
+      res[1] = { dir = 'in', gtype = gtype,
+		 [to_lua and 'to_lua' or 'to_value']
+		 = Value.find_marshaller { gtype = gtype } }
+   end
+
+   -- Go through arguments.
+   local phantom_return
+   for i = 1, #callable_info.args do
+      local ai = callable_info.args[i]
+      local ti = ai.typeinfo
+
+      -- Prepare parameter cell in res array.
+      argc = argc + 1
+      if not res[argc] then res[argc] = {} end
+      local cell = res[argc]
+
+      -- Fill in marshaller(s) for the cell.
+      cell.dir = ai.direction
+      cell.gtype = Type.from_typeinfo(ti)
+      if (cell.dir == (to_lua and 'in' or 'out') or cell.dir == 'inout'
+	  or (to_lua and cell.dir == 'out-caller-alloc')) then
+	 cell.to_lua = Value.find_marshaller {
+	    gtype = cell.gtype, typeinfo = ti,
+	    transfer = (ai.direction == 'inout'
+			and 'none' or ti.transfer) }
+      end
+      if (cell.dir == (to_lua and 'out' or 'in') or cell.dir == 'inout'
+	  or (not to_lua and cell.dir == 'out-caller-alloc')) then
+	 cell.to_value = Value.find_marshaller {
+	    gtype = cell.gtype, typeinfo = ti,
+	    transfer = (ai.direction == 'inout'
+			and 'none' or ti.transfer) }
+      end
+      mark_array_length(cell, ti)
+
+      -- Check for output parameters; if present, enable
+      -- phantom-return heuristics.
+      phantom_return = phantom_return or cell.dir == 'out'
+   end
+
+   -- Prepare retval marshalling.
+   local ti = callable_info.return_type
+   if ti.tag ~= 'void' or ti.is_pointer then
+      gtype = Type.from_typeinfo(ti)
+      local ret = { dir = 'out', gtype = gtype,
+		    to_value = Value.find_marshaller {
+		       gtype = gtype,
+		       typeinfo = ti,
+		       transfer = callable_info.return_transfer } }
+      mark_array_length(ret, ti)
+      if phantom_return and ti.tag == 'gboolean' then
+	 res.ret = ret
+      else
+	 res.phantom = ret
+      end
+   end
+   return res
+end
+
+-- Marshal single call_info cell (either input or output).
+local function callable_info_marshal_cell(
+      call_info, cell, direction, args, argc,
+      marshalling_params, value, params)
+   local marshaller = cell[direction]
+   if not marshaller or cell.internal then return argc end
+   argc = argc + 1
+   local length_marshaller
+   if cell.len_index then
+      -- Prepare length argument marshaller.
+      length_marshaller = call_info[cell.len_index][direction]
+      if direction == 'to_lua' then
+	 marshalling_params.length = length_marshaller(
+	    params[cell.len_index], {})
+      end
+   end
+   if direction == 'to_lua' then
+      -- Marshal from C to Lua
+      args[argc] = marshaller(value, marshalling_params)
+   else
+      -- Marshal from Lua to C
+      marshaller(value, marshalling_params, args[argc])
+
+      -- Marshal array length output, if applicable.
+      if length_marshaller then
+	 length_marshaller(params[cell.len_index], {},
+			   marshalling_params.length)
+      end
+
+      -- Marshal phantom return, if applicable.
+      if retval and call_info.phantom and args[argc] == nil then
+	 call_info.phantom.to_value(retval, marshalling_params, false)
+      end
+   end
+   return argc
+end
+
+-- Creates GClosure marshaller, optionally with callable_info, in
+-- which case it is used for marshalling.
+local function get_closure_marshal(target, callable_info)
+   -- If callable_info is not specified, create simple marshaller
+   -- based on GValue types.
+   if not callable_info then
+      return function(closure, retval, params)
+		local args = {}
+		for i, val in ipairs(params) do args[i] = val.value end
+		local ret = target(unpack(args, 1, #params))
+		if retval then retval.value = ret end
+	     end
+   end
+
+   local call_info = callable_info_compile(callable_info, true)
+   return function (closure, retval, params)
+      local marshalling_params = { keepalive = {} }
+      local args, argc = {}, 0
+
+      -- Marshal input arguments.
+      for i = 1, #call_info do
+	 argc = callable_info_marshal_cell(
+	    call_info, call_info[i], 'to_lua', args, argc,
+	    marshalling_params, params[i], params)
+      end
+
+      -- Do the call.
+      args = { target(unpack(args, 1, argc)) }
+      argc = 0
+      marshalling_params = { keepalive = {} }
+
+      -- Marshall the return value.
+      if call_info.ret and retval then
+	 argc = callable_info_marshal_cell(
+	    call_info, call_info.ret, 'to_value', args, argc,
+	    marshalling_params, retval, params)
+      end
+
+      -- Prepare 'true' into phantom return, will be reset to 'false'
+      -- when some output argument is returned as 'nil'.
+      if call_info.phantom and retval then
+	 call_info.phantom.to_value(retval, marshalling_params, true)
+      end
+
+      -- Marshal output arguments.
+      for i = 1, #call_info do
+	 argc = callable_info_marshal_cell(
+	    call_info, call_info[i], 'to_value', args, argc,
+	    marshalling_params, params[i], params)
+      end
+   end
+end
+
+-- Marshalls Lua arguments into Values suitable for invoking closures
+-- and signals.  Returns Value (for retval), array of Value (for
+-- params) and keepalive value (which must be kept alive during the
+-- call)
+local function callable_info_pre_call(call_info, ...)
+   -- Prepare array of param values and initialize them with correct type.
+   local params = {}
+   for i = 1, #call_info do params[#params + 1] = Value(call_info[i].gtype) end
+   local marshalling_params = { keepalive = {} }
+
+   -- Marshal input values.
+   local args, argc = { ... }, 0
+   for i = 1, #call_info do
+      argc = callable_info_marshal_cell(
+	 call_info, call_info[i], 'to_value', args, argc,
+	 marshalling_params, params[i], params)
+   end
+
+   -- Prepare return value.
+   local retval = Value()
+   if call_info.ret then retval.type = call_info.ret.gtype end
+   if call_info.phantom then retval.type = call_info.phantom.gtype end
+   return retval, params, marshalling_params.keepalive
+end
+
+-- Unmarshalls Lua restuls from Values aftyer invoking closure or
+-- signal.  Returns all unmarshalled Lua values.
+local function callable_info_post_call(call_info, params, retval)
+   local marshalling_params = { keepalive = {} }
+   local args, argc = {}, 0
+   -- Check, whether phantom return exists and returned 'false'.  If
+   -- yes, return just nil.
+   if (call_info.phantom
+       and not call_info.phantom.to_lua(retval, marshalling_params)) then
+      return nil
+   end
+
+   -- Unmarshal return value.
+   if call_info.ret and retval then
+      argc = callable_info_marshal_cell(
+	 call_info, call_info.ret, 'to_lua', args, argc,
+	 marshalling_params, retval, params)
+   end
+
+   -- Unmarshal output arguments.
+   for i = 1, #call_info do
+      argc = callable_info_marshal_cell(
+	 call_info, call_info[i], 'to_lua', args, argc,
+	 marshalling_params, params[i], params)
+   end
+
+   -- Return all created Lua values.
+   return unpack(args, 1, argc)
+end
+
+-- Create new closure invoking Lua target function (or anything else
+-- that can be called).  Optionally callback_info specifies detailed
+-- information about how to marshal signals.
+function Closure:_new(target, callback_info)
+   local closure = Closure._method.new_simple(closure_info.size, nil)
+   if target then
+      core.marshal.closure_set_marshal(
+	 closure, get_closure_marshal(target, callback_info))
+   end
+   Closure.ref(closure)
+   Closure.sink(closure)
+   return closure
+end
+
 -- GObject overrides.
 local Object = repo.GObject.Object
 
@@ -1111,6 +1322,76 @@ local function marshal_property(obj, name, flags, attrs, ...)
    end
 end
 
+local quark_from_string = repo.GLib.quark_from_string
+local signal_lookup = repo.GObject.signal_lookup
+local signal_connect_closure_by_id = repo.GObject.signal_connect_closure_by_id
+local signal_emitv = repo.GObject.signal_emitv
+-- Connects signal to specified object instance.
+local function connect_signal(obj, gtype, name, closure, detail, after)
+   return signal_connect_closure_by_id(
+      obj, signal_lookup(name, gtype), quark_from_string(detail), closure,
+      after or false)
+end
+-- Emits signal on specified object instance.
+local function emit_signal(obj, gtype, info, detail, ...)
+   -- Compile callable info.
+   local call_info = callable_info_compile(info)
+
+   -- Marshal input arguments.
+   local retval, params, keepalive = callable_info_pre_call(call_info, obj, ...)
+
+   -- Invoke the signal.
+   signal_emitv(params, signal_lookup(info.name, gtype),
+		quark_from_string(detail), retval)
+
+   -- Unmarshal results.
+   return callable_info_post_call(call_info, params, retval)
+end
+
+-- Creates closure implementing _access_element for signals
+local function get_signal_accessor(info, gtype,
+				   get_target, get_detail, get_args)
+   local function get_closure(target)
+      return Closure(get_target and get_target(target) or target, info)
+   end
+   if not get_args then get_args = function(object, ...) return ... end end
+   local function access_signal(object, ...)
+      if select('#', ...) > 0 then
+	 -- Assignment means 'connect signal without detail'.
+	 connect_signal(object, gtype, info.name, get_closure(...))
+      else
+	 -- Reading yields table with signal operations.
+	 local pad = {}
+	 function pad:connect(target, detail, after)
+	    return connect_signal(object, gtype, info.name, get_closure(target),
+				  get_detail and get_detail(detail) or detail,
+				  after)
+	 end
+	 function pad:emit(detail, ...)
+	    return emit_signal(object, gtype, info,
+			       get_detail and get_detail(detail) or detail,
+			       get_args(object, ...))
+	 end
+
+	 -- If signal supports details, add metatable implementing
+	 -- __newindex for connecting in the 'on_signal['detail'] =
+	 -- handler' form.
+	 if not info.is_signal or info.flags.detailed then
+	    local meta = {}
+	    function meta:__newindex(detail, target)
+	       connect_signal(object, gtype, info.name, get_closure(target),
+			      get_detail and get_detail(detail) or detail)
+	    end
+	    setmetatable(pad, meta)
+	 end
+
+	 -- Return created signal pad.
+	 return pad
+      end
+   end
+   return access_signal
+end
+
 -- Custom access_element, reacts on dynamic properties
 function Object:_access_element(instance, name, element, ...)
    if element == nil then
@@ -1123,6 +1404,8 @@ function Object:_access_element(instance, name, element, ...)
       else
 	 return env[name]
       end
+   elseif gi.isinfo(element) and element.is_signal then
+      return get_signal_accessor(element, self._gtype)(instance, ...)
    elseif gi.isinfo(element) and element.is_property then
       -- Process property using GI.
       local typeinfo = element.typeinfo
@@ -1142,68 +1425,40 @@ function Object:_access_element(instance, name, element, ...)
 end
 
 -- Install 'on_notify' signal.  There are a few gotchas causing that the
--- signal is handled separately from common signal handling above:
+-- signal is handled separately from common signal handling:
 -- 1) There is no declaration of this signal in the typelib.
 -- 2) Real notify works with glib-style property names as details.  We
 --    use modified property names ('-' -> '_').
 -- 3) notify handler gets pspec, but we pass Lgi-mangled property name
 --    instead.
-
--- Real on_notify handler, converts its parameter from pspec to
--- Lgi-style property name.
-local function get_notifier(target)
-   return function(obj, pspec)
-	     return target(obj, (pspec.name:gsub('%-', '_')))
-	  end
-end
-
--- Install 'notify' signal.
 Object._signal = {}
-local _ = Object._virtual.on_notify
-Object._virtual.on_notify = nil
-Object._override = { on_notify= {} }
--- Borrow signal format from GObject.ObjectClass.notify.
-local on_notify_info = gi.GObject.ObjectClass.fields.notify.typeinfo.interface
-function Object._override.on_notify.set(instance, handler)
-   -- Assignment means 'connect signal for all properties'.
-   core.object.connect(instance, on_notify_info.name, on_notify_info,
-		       get_notifier(handler))
-end
-function Object._override.on_notify.get(instance)
-   -- Reading yields table with signal operations.
-   local pad = {}
-   function pad:connect(target, property)
-      return core.object.connect(instance, on_notify_info.name, on_notify_info,
-				 get_notifier(target),
-				 property:gsub('_', '%-'))
-   end
+Object._override = {
+   on_notify = get_signal_accessor(
+      -- Borrow signal format from GObject.ObjectClass.notify.
+      gi.GObject.ObjectClass.fields.notify.typeinfo.interface, Type.OBJECT,
+      function(target)
+	 return function(obj, pspec)
+		   return target(obj, (pspec.name:gsub('%-', '_')))
+		end
+      end,
+      function(detail)
+	 -- Detail is Lgi property name, convert it to gobject name.
+	 if gi.isinfo(detail) then detail = info.name end
+	 return detail:gsub('_', '%-')
+      end,
+      function(object, prop)
+	 -- If we have property as propertyinfo, convert it to string.
+	 if gi.isinfo(prop) and prop.is_property then prop = prop.name end
 
-   -- Add metatable allowing connection on specified detail.  Detail
-   -- is always specified as a property name for this signal.
-   local padmeta = {}
-   function padmeta:__newindex(property, target)
-      core.object.connect(instance, on_notify_info.name, on_notify_info,
-			  get_notifier(target), property:gsub('_', '%-'))
-   end
-   return setmetatable(pad, padmeta)
-end
-
--- Closure modifications.  All fields and most methods of closure are
--- removed, added possibility to construct closure from Lua
--- function/callable userdata.
-local Closure = repo.GObject.Closure
-Closure._field = nil
-local closure_method = Closure._method
-Closure._method = {
-   invoke = closure_method.invoke,
-   invalidate = closure_method.invalidate
-}
-closure_method = nil
-local closure_mt = create_component_meta { '_method' }
-function closure_mt:__call(target)
-   return core.callable.closure(target)
-end
-setmetatable(Closure, closure_mt)
+	 -- If we get property name as a string, convert it to pspec.
+	 if type(prop) == 'string' then
+	    local object_class = core.record.cast(
+	       core.object.query(object, 'class'), Object._class)
+	    prop = object_class:find_property(prop:gsub('_', '%-'))
+	 end
+	 return prop
+      end
+   )}
 
 -- Create lazy-loading components for variant stuff.
 repo.GLib._precondition = {}

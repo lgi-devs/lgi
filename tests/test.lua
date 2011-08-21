@@ -1058,9 +1058,12 @@ function gireg.boxed_equals()
    check(b1:equals(b2))
 end
 
-function gireg.closure()
+function gireg.closure_simple()
    local R = lgi.Regress
-   local closure = GObject.Closure(function() return 42 end)
+   local closure = GObject.Closure(function(...)
+				      check(select('#', ...) == 0)
+				      return 42
+				end)
    checkv(R.test_closure(closure, 42), 42, 'number')
    local res = GObject.Value('gint')
    closure:invoke(res, {}, nil)
@@ -1069,7 +1072,10 @@ end
 
 function gireg.closure_arg()
    local R = lgi.Regress
-   local closure = GObject.Closure(function(int) return int end)
+   local closure = GObject.Closure(function(int, ...)
+				      check(select('#', ...) == 0)
+				      return int
+				end)
    checkv(R.test_closure_one_arg(closure, 43), 43, 'number')
    local res = GObject.Value('gint')
    closure:invoke(res, { GObject.Value('gint', 43) }, nil)

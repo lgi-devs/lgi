@@ -1850,9 +1850,44 @@ marshal_fundamental (lua_State *L)
   return 1;
 }
 
+static void
+gclosure_destroy (gpointer user_data, GClosure *closure)
+{
+  lgi_closure_destroy (user_data);
+}
+
+/* This is workaround for missing glib function, which should look
+   like this:
+
+   void g_closure_set_marshal_with_data (GClosure        *closure,
+                                         GClosureMarshal  marshal,
+                                         gpointer         user_data,
+					 GDestroyNotify   destroy_notify);
+
+   Such method would be introspectable.
+*/
+static int
+core_closure_set_marshal (lua_State *L)
+{
+  GClosure *closure;
+  gpointer user_data;
+  GClosureMarshal marshal;
+  GIBaseInfo *ci;
+
+  ci = g_irepository_find_by_name (NULL, "GObject", "ClosureMarshal");
+  lgi_type_get_repotype (L, G_TYPE_CLOSURE, NULL);
+  closure = lgi_record_2c (L, 1, FALSE, FALSE);
+  user_data = lgi_closure_allocate (L, 1);
+  marshal = lgi_closure_create (L, user_data, ci, 2, FALSE);
+  g_closure_set_marshal (closure, marshal);
+  g_closure_add_invalidate_notifier (closure, user_data, gclosure_destroy);
+  return 0;
+}
+
 static const struct luaL_Reg marshal_api_reg[] = {
   { "container", marshal_container },
   { "fundamental", marshal_fundamental },
+  { "closure_set_marshal", core_closure_set_marshal },
   { NULL, NULL }
 };
 
