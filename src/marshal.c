@@ -54,6 +54,7 @@ marshal_2c_int (lua_State *L, GITypeTag tag, GIArgument *val, int narg,
       HANDLE_INT(UINT16, uint16, UINT, guint, 0, 0xffff);
       HANDLE_INT(INT32, int32, INT, gint, -0x80000000LL, 0x7fffffffLL);
       HANDLE_INT(UINT32, uint32, UINT, guint, 0, 0xffffffffUL);
+      HANDLE_INT(UNICHAR, uint32, UINT, guint, 0, 0x7fffffffLL);
       HANDLE_INT_NOPTR(INT64, int64, ((lua_Number) -0x7f00000000000000LL) - 1,
 		       0x7fffffffffffffffLL);
       HANDLE_INT_NOPTR(UINT64, uint64, 0, 0xffffffffffffffffULL);
@@ -96,6 +97,7 @@ marshal_2lua_int (lua_State *L, GITypeTag tag, GIArgument *val,
       HANDLE_INT(UINT16, uint16, UINT);
       HANDLE_INT(INT32, int32, INT);
       HANDLE_INT(UINT32, uint32, UINT);
+      HANDLE_INT(UNICHAR, uint32, UINT);
       HANDLE_INT(INT64, int64, INT);
       HANDLE_INT(UINT64, uint64, UINT);
 #undef HANDLE_INT
@@ -182,6 +184,7 @@ array_get_elt_size (GITypeInfo *ti)
       HANDLE_ELT(UINT16, guint16);
       HANDLE_ELT(INT32, gint32);
       HANDLE_ELT(UINT32, guint32);
+      HANDLE_ELT(UNICHAR, guint32);
       HANDLE_ELT(INT64, gint64);
       HANDLE_ELT(UINT64, guint64);
       HANDLE_ELT(FLOAT, gfloat);

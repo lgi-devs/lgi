@@ -765,7 +765,7 @@ local type_tag_map = {
    gint16 = Type.INT, guint16 = Type.UINT,
    gint32 = Type.INT, guint32 = Type.UINT,
    gint64 = Type.INT64, guint64 = Type.UINT64,
-   gfloat = Type.FLOAT, gdouble = Type.DOUBLE,
+   gunichar = Type.UINT, gfloat = Type.FLOAT, gdouble = Type.DOUBLE,
    GType = Type.GTYPE, utf8 = Type.STRING, filename = Type.STRING,
    ghash = Type.HASH_TABLE, glist = Type.POINTER, gslist = Type.POINTER,
    error = Type.ERROR }
