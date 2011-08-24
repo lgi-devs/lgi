@@ -168,3 +168,8 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own);
 gpointer
 lgi_object_2c (lua_State *L, int narg, GType gtype, gboolean optional,
 	       gboolean nothrow);
+
+/* Workaround for broken g_struct_info_get_size() for GValue, see
+   https://bugzilla.gnome.org/show_bug.cgi?id=657040 */
+gsize lgi_struct_info_get_size (GIStructInfo *info);
+#define g_struct_info_get_size lgi_struct_info_get_size

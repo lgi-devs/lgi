@@ -753,3 +753,14 @@ lgi_gi_init (lua_State *L)
   lua_setmetatable (L, -2);
   lua_setfield (L, -2, "gi");
 }
+
+/* Workaround for broken g_struct_info_get_size() for GValue, see
+   https://bugzilla.gnome.org/show_bug.cgi?id=657040 */
+#undef g_struct_info_get_size
+gsize
+lgi_struct_info_get_size (GIStructInfo *info)
+{
+  if (g_registered_type_info_get_g_type (info) == G_TYPE_VALUE)
+    return sizeof (GValue);
+  return g_struct_info_get_size (info);
+}
