@@ -25,7 +25,7 @@ Variant._setvalue = gi.GObject.Value.methods.set_variant
 Variant._getvalue = gi.GObject.Value.methods.get_variant
 
 -- Add 'type' property to variant, an alias to get_type().
-Variant._override = { type = { get = Variant.get_type_string } }
+Variant._attribute = { type = { get = Variant.get_type_string } }
 
 local VariantBuilder = GLib.VariantBuilder
 local VariantType = GLib.VariantType
@@ -239,35 +239,28 @@ function variant_get(v)
 end
 
 -- Map simple unpacking to reading 'value' property.
-Variant._override.value = { get = variant_get }
+Variant._attribute.value = { get = variant_get }
 
 -- Define meaning of # and number-indexing to children access. Note
 -- that GVariant g_asserts when these methods are invoked on variants
 -- of inappropriate type, so we have to check manually before.
-local function variant_is_compound(v)
-   return v:get_type_string():match('^[vmar%({]')
-end
-
 function Variant:_len()
    return self:is_container() and self:n_children() or 0
 end
 
 local variant_element = Variant._element
-function Variant:_element(instance, name)
-   if type(name) == 'number' then return name end
-   return variant_element(self, instance, name)
+function Variant:_element(variant, name)
+   -- If number is requested, consider it a special operation,
+   -- indexing a variant.
+   if type(name) == 'number' then return name, '_index' end
+   return variant_element(self, variant, name)
 end
 
-local variant_access_element = Variant._access_element
-function Variant:_access_element(instance, name, element, ...)
-   if type(element) == 'number' then
-      assert(select('#', ...) == 0, 'GLib.Variant is not writable')
-      if (Variant.is_container(instance) and
-	  Variant.n_children(instance) >= element) then
-	 return Variant.get_child_value(instance, element - 1).value
-      end
-   else
-      return variant_access_element(self, instance, name, element, ...)
+function Variant:_access_index(variant, index, ...)
+   assert(select('#', ...) == 0, 'GLib.Variant is not writable')
+   if (Variant.is_container(variant) and
+       Variant.n_children(variant) >= index) then
+      return Variant.get_child_value(variant, index - 1).value
    end
 end
 
@@ -304,8 +297,8 @@ end
 
 -- Serialization support.  Override Variant:get_data() with safer
 -- method which fills size to the resulting ref.
-Variant._override.data = {}
-function Variant._override.data:get()
+Variant._attribute.data = {}
+function Variant._attribute.data:get()
    local buffer = bytes.new(Variant.get_size(self))
    Variant.store(self, buffer)
    return buffer

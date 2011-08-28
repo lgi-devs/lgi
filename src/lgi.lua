@@ -149,9 +149,7 @@ local function get_category(children, xform_value,
 
    function mt:__index(requested_name)
       -- Check if closure for fully resolving the category is needed.
-      if requested_name == '_resolve' then
-	 return resolve
-      end
+      if requested_name == '_resolve' then return resolve end
 
       -- Transform name by transform function.
       local name = not xform_name and requested_name
@@ -194,7 +192,81 @@ local function get_category(children, xform_value,
    return setmetatable({}, mt)
 end
 
--- Keyword translation dictionary.  Used for translating LUa keywords
+-- Generic component metatable.  Component is any entity in the repo,
+-- e.g. record, object, enum, etc.
+local component_mt = {}
+
+-- Creates new component table by cloning all contents and setting
+-- categories table.
+function component_mt:clone(categories)
+   local new_component = {}
+   for key, value in pairs(self) do new_component[key] = value end
+   if categories then
+      categories[#categories + 1] = '_attribute'
+      new_component._categories = categories
+   end
+   return new_component
+end
+
+-- __index implementation, uses _element method to perform lookup.
+function component_mt:__index(key)
+   -- First try to invoke our own _element method.
+   local _element, mt = rawget(self, '_element')
+   if not _element then
+      mt = getmetatable(self)
+      _element = rawget(mt, '_element')
+   end
+   local value = _element(self, nil, key)
+   if value then return value end
+
+   -- If not found as object element, examine the metatable itself.
+   return rawget(mt or getmetatable(self), key)
+end
+
+-- __call implementation, uses _new method to create new instance of
+-- component type.
+function component_mt:__call(...)
+   return self:_new(...)
+end
+
+-- Fully resolves the whole typetable, i.e. load all symbols normally
+-- loaded on-demand at once.  Returns self, so that resolve can be
+-- easily chained for the caller.
+function component_mt:_resolve()
+   local categories = self._categories or {}
+   for i = 1, #categories do
+      -- Invoke '_resolve' function for all category tables, if they have it.
+      local category = rawget(self, categories[i])
+      local resolve = type(category) == 'table' and category._resolve
+      if resolve then resolve(category) end
+   end
+   return self
+end
+
+-- Implementation of _access method, which is called by _core when
+-- repo instance is accessed for reading or writing.
+function component_mt:_access(instance, symbol, ...)
+   -- Invoke _element, which converts symbol to element and category.
+   local element, category = self:_element(instance, symbol)
+   if not element then
+      error(("%s: no `%s'"):format(self._name, symbol))
+   end
+
+   -- Get category handler to be used, and invoke it.
+   local handler = self['_access' .. category]
+   if handler then return handler(self, instance, element, ...) end
+
+   -- If specific accessor does not exist, consider the element to be
+   -- 'static const' attribute of the class.  This works well for
+   -- methods, constants and assorted other elements added manually
+   -- into the class by overrides.
+   if select('#', ...) > 0 then
+      error(("%s: `%s' is not writable"):format(self._name, symbol))
+   end
+   return element
+end
+
+-- Keyword translation dictionary.  Used for translating Lua keywords
 -- which might appear as symbols in typelibs into Lua-neutral identifiers.
 local keyword_dictionary = {
    _end = 'end', _do = 'do', _then = 'then', _elseif = 'elseif', _in = 'in',
@@ -202,11 +274,16 @@ local keyword_dictionary = {
    _true = 'true', _and = 'and', _or = 'or', _not = 'not',
 }
 
--- Loads element from specified compound typetable.
-local function get_element(typetable, instance, symbol)
-   -- Check whether symbol directly exists.
-   local val = rawget(typetable, symbol)
-   if val then return val end
+-- Retrieves (element, category) pair from given componenttable and
+-- instance for given symbol.
+function component_mt:_element(instance, symbol)
+   -- Check keyword translation dictionary.  If the symbol can be
+   -- found there, try to lookup translated symbol.
+   symbol = keyword_dictionary[symbol] or symbol
+
+   -- Check whether symbol is directly accessible in the component.
+   local element = rawget(self, symbol)
+   if element then return element end
 
    -- Decompose symbol name, in case that it contains category prefix
    -- (e.g. '_field_name' when requesting explicitely field called
@@ -214,166 +291,54 @@ local function get_element(typetable, instance, symbol)
    local category, name = string.match(symbol, '^(_.-)_(.*)$')
    if category and name then
       -- Check requested category.
-      local cat = rawget(typetable, category)
-      val = cat and cat[name]
-      if val then return val end
+      local cat = rawget(self, category)
+      element = cat and cat[name]
+      if element then return element, category end
    elseif string.sub(symbol, 1, 1) ~= '_' then
       -- Check all available categories.
-      local categories = typetable._categories or {}
+      local categories = self._categories or {}
       for i = 1, #categories do
-	 local cat = rawget(typetable, categories[i])
-	 val = cat and cat[symbol]
-	 if val then return val end
+	 category = categories[i]
+	 local cat = rawget(self, category)
+	 element = cat and cat[symbol]
+	 if element then return element, category end
       end
    end
+end
 
-   -- Check parent and all implemented interfaces.
-   local parent = rawget(typetable, '_parent')
-   val = parent and parent[symbol]
-   if val then return val end
-   local implements = rawget(typetable, '_implements')
-   if implements then
-      for _, implemented in pairs(implements) do
-	 val = implemented[symbol]
-	 if val then return val end
+-- Implementation of attribute accessor.  Attribute is either function
+-- to be directly invoked, or table containing set and get functions.
+function component_mt:_access_attribute(instance, element, ...)
+   -- If element is a table, assume that this table contains 'get' and
+   -- 'set' methods.  Dispatch to them, and error out if they are
+   -- missing.
+   if type(element) == 'table' then
+      local mode = select('#', ...) == 0 and 'get' or 'set'
+      if not element[mode] then
+	 error(("%s: cannot %s `%s'"):format(
+		  self._name, mode == 'get' and 'read' or 'write',
+		  name))
       end
+      element = element[mode]
    end
 
-   -- metatable might contain fallback implementation.
-   local meta = getmetatable(typetable)
-   val = meta and meta[symbol]
-   if val then return val end
-
-   -- Finally, check translation table.  If the symbol can be found
-   -- there, try to lookup translated symbol.
-   local xlated = keyword_dictionary[symbol]
-   if xlated then val = get_element(typetable, instance, xlated) end
-   return val
+   -- Invoke attribute access function.
+   return element(instance, ...)
 end
 
--- Fully resolves the whole typetable, i.e. load all symbols normally
--- loaded on-demand at once.
-local function resolve_elements(typetable, recursive)
-   local categories = typetable._categories or {}
-   for i = 1, #categories do
-      local category = rawget(typetable, categories[i])
-      local resolve = type(category) == 'table' and category._resolve
-      local _ = resolve and resolve(category)
-   end
-   if recursive then
-      for _, iface in pairs(typetable._implements or {}) do
-	 iface:_resolve(recursive)
-      end
-      if typetable._parent then
-	 typetable._parent:_resolve(recursive)
-      end
-   end
-   return typetable
-end
+-- Implementation of record_mt, which is inherited from component_mt
+-- and provides customizations for structures and unions.
+local record_mt = component_mt:clone { '_method', '_field' }
 
--- Default _access method implementation.
-local function default_access(typetable, instance, name, ...)
-   -- Get element from typetable.
-   local element = typetable:_element(instance, name)
-
-   -- Try custom override first.
-   if element == nil then
-      local func = typetable:_element(instance, '_override_' .. name)
-      if func then
-	 -- If custom element is a table, assume that this table
-	 -- contains 'get' and 'set' methods.  Dispatch to them, and
-	 -- error ou if they are missing.
-	 if type(func) == 'table' then
-	    local mode = select('#', ...) == 0 and 'get' or 'set'
-	    if not func[mode] then
-	       error(("%s: cannot %s `%s'"):format(
-			typetable._name, mode == 'get' and 'read' or 'write',
-			name), 3)
-	    end
-	    func = func[mode]
-	 end
-	 return func(instance, ...)
-      end
-   end
-
-   -- Forward to access_element implementation.
-   return typetable:_access_element(instance, name, element, ...)
-end
-
--- Default _access_element implementation.
-local function default_access_element(typetable, instance, name, element, ...)
-   if element == nil then
-      -- Generic failure.
-      error(("%s: no `%s'"):format(typetable._name, name))
-   else
-      -- Static member, is always read-only when accessing per-instance.
-      assert(select('#', ...) == 0,
-	     ("%s: `%s' is not writable"):format(typetable._name, name))
-      return element
-   end
-end
-
--- Metatables for assorted repo components.
-local function create_component_meta(categories)
-   local meta = {
-      _categories = categories,
-      _resolve = resolve_elements,
-      _element = get_element,
-      _access = default_access,
-      _access_element = default_access_element }
-   function meta:__index(symbol)
-      return getmetatable(self)._element(self, nil, symbol)
-   end
-   function meta:__call(...)
-      return self:_new(...)
-   end
-   return meta
-end
-
-local component_mt = {
-   namespace = create_component_meta {
-      '_class', '_interface', '_struct', '_union', '_enum',
-      '_function', '_constant', },
-   record = create_component_meta {
-      '_method', '_field'
-   },
-   interface = create_component_meta {
-      '_property', '_virtual', '_method', '_signal', '_constant' },
-   class = create_component_meta {
-      '_property', '_virtual', '_method', '_signal', '_constant',
-      '_field' },
-   bitflags = {},
-   enum = {},
-}
-
--- Resolving arbitrary number to the table containing symbolic names
--- of contained bits.
-function component_mt.bitflags:__index(value)
-   if type(value) ~= 'number' then return end
-   local t = {}
-   for name, flag in pairs(self) do
-      if type(flag) == 'number' and lgi.has_bit(value, flag) then
-	 t[name] = flag
-      end
-   end
-   return t
-end
-
--- Enum reverse mapping, value->name.
-function component_mt.enum:__index(value)
-   for name, val in pairs(self) do
-      if val == value then return name end
-   end
-end
-
--- _access part for fields.
-local function access_field(field_accessor, instance, info, ...)
+-- Add accessor for handling fields.
+function record_mt:_access_field(instance, element, ...)
+   assert(gi.isinfo(element) and element.is_field)
    -- Check the type of the field.
-   local ii = info.typeinfo.interface
+   local ii = element.typeinfo.interface
    if ii and (ii.type == 'struct' or ii.type == 'union') then
       -- Nested structure, handle assignment to it specially.  Get
       -- access to underlying nested structure.
-      local subrecord = field_accessor(instance, info)
+      local subrecord = core.record.field(instance, element)
 
       -- Reading it is simple, we are done.
       if select('#', ...) == 0 then return subrecord end
@@ -381,37 +346,13 @@ local function access_field(field_accessor, instance, info, ...)
       -- Writing means assigning all fields from the source table.
       for name, value in pairs(...) do subrecord[name] = value end
    else
-      -- For other types, simple closure around elementof() is
-      -- sufficient.
-      return field_accessor(instance, info, ...)
+      -- In other cases, just access the instance using given info.
+      return core.record.field(instance, element, ...)
    end
-end
-
--- _access_element method for records.
-function component_mt.record:_access_element(instance, name, element, ...)
-   if gi.isinfo(element) and element.is_field then
-      return access_field(core.record.field, instance, element, ...)
-   end
-   return default_access_element(self, instance, name, element, ...)
-end
-
--- _access_element method for raw objects (fundamentals).  Specific
--- behavior for GObject will be overriden in GObject.Object._access_element().
-function component_mt.class:_access_element(instance, name, element, ...)
-   if gi.isinfo(element) then
-      if element.is_field then
-	 return access_field(core.object.field, instance, element, ...)
-      elseif element.is_vfunc then
-	 local typestruct = core.object.query(instance, 'class',
-					      element.container.gtype)
-	 return core.record.field(typestruct, self._class[element.name])
-      end
-   end
-   return default_access_element(self, instance, name, element, ...)
 end
 
 -- Create structure instance and initialize it with given fields.
-function component_mt.record:_new(...)
+function record_mt:_new(fields)
    -- Find baseinfo of requested record.
    local info
    if self._gtype then
@@ -428,29 +369,103 @@ function component_mt.record:_new(...)
    local struct = core.record.new(info)
 
    -- Set values of fields.
-   for name, value in pairs(... or {}) do
-      struct[name] = value
-   end
+   for name, value in pairs(fields or {}) do struct[name] = value end
    return struct
+end
+
+-- Implementation of class_mt, inherited from component_mt and
+-- providing basic class functionality.  Note that signals and
+-- properties are implemented later on GObject descendants only.
+local class_mt = component_mt:clone {
+   '_virtual', '_method', '_constant', '_field'
+}
+
+-- Resolver for classes, recursively resolves also all parents and
+-- implemented interfaces.
+function class_mt:_resolve(recursive)
+   -- Resolve itself using inherited implementation.
+   component_mt._resolve(self)
+
+   -- Go to parent and implemented interfaces and resolve them too.
+   if recursive then
+      for _, iface in pairs(self._implements or {}) do
+	 iface:_resolve(recursive)
+      end
+      if self._parent then
+	 self._parent:_resolve(recursive)
+      end
+   end
+   return self
+end
+
+-- _element implementation for objects, checks parent and implemented
+-- interfaces if element cannot be found in current typetable.
+function class_mt:_element(instance, symbol)
+   -- Check default implementation.
+   local element, category = component_mt._element(self, instance, symbol)
+   if element then return element, category end
+
+   -- Check parent and all implemented interfaces.
+   local parent = rawget(self, '_parent')
+   if parent then
+      element, category = parent:_element(instance, symbol)
+      if element then return element, category end
+   end
+   local implements = rawget(self, '_implements') or {}
+   for _, implemented in pairs(implements or {}) do
+      element, category = implemented:_element(instance, symbol)
+      if element then return element, category end
+   end
+end
+
+-- Implementation of field accessor.  Note that compound fields are
+-- not supported in classes (because they are not seen in the wild and
+-- I'm lazy).
+function class_mt:_access_field(instance, field, ...)
+   return core.object.field(instance, field, ...)
+end
+
+-- Implementation of virtual method accessor.  Virtuals are
+-- implemented by accessing callback pointer in the class struct of
+-- the class.  Note that currently we support only reading of them,
+-- writing would mean overriding, which is not supported yet.
+function class_mt:_access_virtual(instance, vfunc, ...)
+   if select('#', ...) > 0 then
+      error(("%s: cannot override virtual `%s' "):format(
+	       self._name, vfunc.name))
+   end
+   -- Get typestruct of this class.
+   local typestruct = core.object.query(instance, 'class',
+					vfunc.container.gtype)
+
+   -- Resolve the field of the typestruct with the virtual name.  This
+   -- returns callback to the virtual, which can be directly called.
+   return core.record.field(typestruct, self._class[vfunc.name])
 end
 
 -- Object constructor, does not accept any arguments.  Overriden later
 -- for GObject which accepts properties table to initialize object
 -- with.
 local object_new = core.callable.new(gi.require('GObject').Object.methods.new)
-function component_mt.class:_new()
+function class_mt:_new()
    -- Create the object.
    return object_new(self._gtype, {})
 end
+
+-- Implementation of interface_mt.
+local interface_mt = component_mt:clone {
+   '_virtual', '_property', '_signal', '_method', '_constant'
+}
 
 -- Creates new component and sets up common parts according to given
 -- info.
 local function create_component(info, mt)
    -- Fill in meta of the compound.
-   local component = { _name = gi.isinfo(info) and info.fullname or info.name }
+   local component = { _name = info.fullname }
    if info.gtype then
+      -- Bind component in repo, make the relation using GType.
       component._gtype = info.gtype
-      repo[rawget(component, '_gtype')] = component
+      repo[info.gtype] = component
    end
    return setmetatable(component, mt)
 end
@@ -491,12 +506,34 @@ local function load_enum(info, meta)
    return value
 end
 
+-- Enum reverse mapping, value->name.
+local enum_mt = {}
+function enum_mt:__index(value)
+   for name, val in pairs(self) do
+      if val == value then return name end
+   end
+end
+
 function typeloader.enum(namespace, info)
-   return load_enum(info, component_mt.enum), '_enum'
+   return load_enum(info, enum_mt), '_enum'
+end
+
+-- Resolving arbitrary number to the table containing symbolic names
+-- of contained bits.
+local bitflags_mt = {}
+function bitflags_mt:__index(value)
+   if type(value) ~= 'number' then return end
+   local t = {}
+   for name, flag in pairs(self) do
+      if type(flag) == 'number' and lgi.has_bit(value, flag) then
+	 t[name] = flag
+      end
+   end
+   return t
 end
 
 function typeloader.flags(namespace, info)
-   return load_enum(info, component_mt.bitflags), '_enum'
+   return load_enum(info, bitflags_mt), '_enum'
 end
 
 local function load_signal_name(name)
@@ -509,11 +546,11 @@ local function load_signal_name_reverse(name)
 end
 
 local function load_vfunc_name(name)
-   return name:match('^do_(.+)$')
+   return name:match('^virtual_(.+)$')
 end
 
 local function load_vfunc_name_reverse(name)
-   return 'do_' .. name
+   return 'virtual_' .. name
 end
 
 local function load_method(mi)
@@ -525,7 +562,7 @@ end
 
 -- Loads structure information into table representing the structure
 local function load_record(info)
-   local record = create_component(info, component_mt.record)
+   local record = create_component(info, record_mt)
    record._method = get_category(info.methods, core.callable.new)
    record._field = get_category(info.fields)
 
@@ -538,7 +575,7 @@ local function load_record(info)
    if not ctor then ctor = info.methods.new end
 
    -- Check, whether ctor is valid.  In order to be valid, it must
-   -- return instance of this class.
+   -- return instance of this record.
    if (ctor and ctor.return_type.tag =='interface'
        and ctor.return_type.interface == info) then
       ctor = core.callable.new(ctor)
@@ -583,7 +620,7 @@ end
 
 function typeloader.interface(namespace, info)
    -- Load all components of the interface.
-   local interface = create_component(info, component_mt.interface)
+   local interface = create_component(info, interface_mt)
    interface._property = load_properties(info)
    interface._method = get_category(info.methods, load_method)
    interface._signal = get_category(info.signals, nil, load_signal_name,
@@ -600,7 +637,20 @@ function typeloader.interface(namespace, info)
 end
 
 function typeloader.object(namespace, info)
-   local class = create_component(info, component_mt.class)
+   -- Find parent record, if available.
+   local parent = info.parent
+   if parent then
+      local ns, name = parent.namespace, parent.name
+      if ns ~= namespace._name or name ~= info.name then
+	 parent = repo[ns][name]
+      end
+   end
+
+   -- Create class instance, copy mt from parent, if parent exists,
+   -- otherwise defaults to class_mt.
+   local class = create_component(info,
+				  parent and getmetatable(parent) or class_mt)
+   class._parent = parent
    class._property = load_properties(info)
    class._method = get_category(info.methods, load_method)
    class._signal = get_category(info.signals, nil,
@@ -621,20 +671,22 @@ function typeloader.object(namespace, info)
       implements[iface.fullname] = repo[iface.namespace][iface.name]
    end
    class._implements = implements
-   local parent = info.parent
-   if parent then
-      local ns, name = parent.namespace, parent.name
-      if ns ~= namespace._name or name ~= info.name then
-	 class._parent = repo[ns][name]
-      end
-   end
    class._new = find_constructor(info)
    return class, '_class'
 end
 
+-- Repo namespace metatable.
+local namespace_mt = {
+   _categories = { '_class', '_interface', '_struct', '_union', '_enum',
+		   '_function', '_constant', } }
+
 -- Gets symbol of the specified namespace, if not present yet, tries to load it
 -- on-demand.
-function component_mt.namespace:__index(symbol)
+function namespace_mt:__index(symbol)
+   -- Check whether symbol is present in the metatable.
+   local val = namespace_mt[symbol]
+   if val then return val end
+
    -- Check, whether there is some precondition in the lazy-loading table.
    local preconditions = rawget(self, '_precondition')
    local precondition = preconditions and preconditions[symbol]
@@ -650,7 +702,7 @@ function component_mt.namespace:__index(symbol)
    end
 
    -- Check, whether symbol is already loaded.
-   local val = get_element(self, nil, symbol)
+   val = component_mt._element(self, nil, symbol, namespace_mt._categories)
    if val then return val end
 
    -- Lookup baseinfo of requested symbol in the GIRepository.
@@ -665,8 +717,12 @@ function component_mt.namespace:__index(symbol)
 
       -- Cache the symbol in specified category in the namespace.
       if val then
-	 local cat = rawget(self, category) or {}
-	 self[category] = cat
+	 local cat = rawget(self, category)
+	 if not cat then
+	    cat = {}
+	    self[category] = cat
+	 end
+	 assert(not cat[symbol])
 	 cat[symbol] = val
       end
    end
@@ -674,16 +730,16 @@ function component_mt.namespace:__index(symbol)
 end
 
 -- Resolves everything in the namespace by iterating through it.
-function component_mt.namespace:_resolve(deep)
+function namespace_mt:_resolve(recurse)
    -- Iterate through all items in the namespace and dereference them,
    -- which causes them to be loaded in and cached inside the namespace
    -- table.
    local gi_ns = gi[self._name]
    for i = 1, #gi_ns do
       local ok, component = pcall(function() return self[gi_ns[i].name] end)
-      if ok and deep and type(component) == 'table' then
+      if ok and recurse and type(component) == 'table' then
 	 local resolve = component._resolve
-	 if resolve then resolve(component, deep) end
+	 if resolve then resolve(component, recurse) end
       end
    end
    return self
@@ -698,9 +754,9 @@ function lgi.require(name, version)
    -- If the repository table does not exist yet, create it.
    local ns = rawget(repo, name)
    if not ns then
-      ns = create_component(ns_info, component_mt.namespace)
-      ns._version = ns_info.version
-      ns._dependencies = ns_info.dependencies
+      ns = setmetatable({ _name = name, _version = ns_info.version,
+			  _dependencies = ns_info.dependencies },
+			namespace_mt)
       repo[name] = ns
 
       -- Make sure that all dependent namespaces are also loaded.
@@ -818,11 +874,11 @@ local value_field_gtype = Value._field.g_type
 Value._field = nil
 
 -- 'type' property controls gtype of the property.
-Value._override = { type = {} }
-function Value._override.type.get(value)
+Value._attribute = { gtype = {} }
+function Value._attribute.gtype.get(value)
    return core.record.field(value, value_field_gtype)
 end
-function Value._override.type.set(value, newtype)
+function Value._attribute.gtype.set(value, newtype)
    local gtype = core.record.field(value, value_field_gtype)
    if gtype then
       if newtype then
@@ -901,16 +957,11 @@ function Value._method.find_marshaller(attrs)
 end
 
 -- Value 'value' property provides access to GValue's embedded data.
-function Value._override:value(...)
+function Value._attribute:value(...)
    local attrs = { gtype = core.record.field(self, value_field_gtype) }
    local marshaller = Value._method.find_marshaller(attrs)
    return marshaller(self, attrs, ...)
 end
-
--- Implements pseudo-properties 'g_type' and 'data', for safe
--- read/write access to value's type and contents.
-Value._override.g_type = Value._override.type
-Value._override.data = Value._override.value
 
 -- Implement custom 'constructor', taking optionally two values (type
 -- and value).  The reason why it is overriden is that the order of
@@ -918,7 +969,7 @@ Value._override.data = Value._override.value
 -- enforce the order.
 function Value:_new(gtype, value)
    local v = core.record.new(value_info)
-   if gtype then v.g_type = gtype end
+   if gtype then v.gtype = gtype end
    if value then v.value = value end
    return v
 end
@@ -1121,7 +1172,7 @@ local function callable_info_pre_call(call_info, ...)
    return retval, params, marshalling_params.keepalive
 end
 
--- Unmarshalls Lua restuls from Values aftyer invoking closure or
+-- Unmarshalls Lua restuls from Values after invoking closure or
 -- signal.  Returns all unmarshalled Lua values.
 local function callable_info_post_call(call_info, params, retval)
    local marshalling_params = { keepalive = {} }
@@ -1165,8 +1216,11 @@ function Closure:_new(target, callback_info)
    return closure
 end
 
--- GObject overrides.
-local Object = repo.GObject.Object
+-- GObject overrides.  Create new mt table for GObject.
+local gobject_mt = class_mt:clone {
+   '_virtual', '_property', '_signal', '_method', '_constant', '_field'
+}
+local Object = setmetatable(repo.GObject.Object, gobject_mt)
 
 -- Object constructor, 'param' contains table with properties/signals
 -- to initialize.
@@ -1215,36 +1269,35 @@ end
 
 -- Custom _element implementation, checks dynamically inherited
 -- interfaces and dynamic properties.
-function Object:_element(instance, name)
-   local element = component_mt.class._element(self, instance, name)
-   if element then return element end
+function Object:_element(object, name)
+   local element, category = class_mt._element(self, object, name)
+   if element then return element, category end
+
+   -- Everything else works only if we have object instance.
+   if not object then return nil end
 
    -- List all interfaces implemented by this object and try whether
    -- they can handle specified _element request.
-   local interfaces = repo.GObject.Type.interfaces(
-      core.object.query(instance, 'gtype'))
+   local interfaces = Type.interfaces(core.object.query(object, 'gtype'))
    for i = 1, #interfaces do
       local info = gi[core.gtype(interfaces[i])]
       local iface = repo[info.namespace][info.name]
-      element = iface and iface:_element(instance, name)
-      if element then return element end
+      element, category = iface and iface:_element(object, name)
+      if element then return element, category end
    end
 
    -- Element not found in the repo (typelib), try whether dynamic
    -- property of the specified name exists.
-   return core.record.cast(core.object.query(instance, 'class'),
-			   Object._class):find_property(name:gsub('_', '%-'))
-end
+   local class = core.record.cast(core.object.query(object, 'class'),
+				  Object._class)
+   local property = Object._class.find_property(class, name:gsub('_', '%-'))
+   if property then return property, '_paramspec' end
 
--- Checks whether given obj is of some ParamSpec type.
-local ParamSpec = repo.GObject.ParamSpec
-local function is_param_spec(element)
-   local typetable = (core.record.query(element, 'repo')
-		      or core.object.query(element, 'repo'))
-   while typetable do
-      if typetable == ParamSpec then return true end
-      typetable = typetable._parent
-   end
+   -- If nothing else is found, return simple artificial attribute
+   -- which reads/writes object's env table.
+   local env = core.object.query(object, 'env')
+   return { get = function(obj) return env.name end,
+	    set = function(obj, val) env.name = val end, }, '_attribute'
 end
 
 -- Sets/gets property using specified marshaller attributes.
@@ -1265,6 +1318,21 @@ local function marshal_property(obj, name, flags, attrs, ...)
       Object.get_property(obj, name, value)
       return marshaller(value, attrs)
    end
+end
+
+-- GI property accessor.
+function Object:_access_property(object, property, ...)
+   local typeinfo = property.typeinfo
+   return marshal_property(object, property.name, property.flags,
+			   { gtype = Type.from_typeinfo(typeinfo),
+			     typeinfo = typeinfo,
+			     transfer = property.transfer }, ...)
+end
+
+-- GLib property accessor (paramspec).
+function Object:_access_paramspec(object, pspec, ...)
+   return marshal_property(object, pspec.name, pspec.flags,
+			   { gtype = pspec.value_type }, ...)
 end
 
 local quark_from_string = repo.GLib.quark_from_string
@@ -1294,7 +1362,7 @@ local function emit_signal(obj, gtype, info, detail, ...)
 end
 
 -- Creates closure implementing _access_element for signals
-local function get_signal_accessor(info, gtype,
+local function get_signal_attribute(info, gtype,
 				   get_target, get_detail, get_args)
    local function get_closure(target)
       return Closure(get_target and get_target(target) or target, info)
@@ -1338,72 +1406,25 @@ local function get_signal_accessor(info, gtype,
 end
 
 -- Custom access_element, reacts on dynamic properties
-function Object:_access_element(instance, name, element, ...)
-   if element == nil then
-      -- Check object's environment.
-      local env = core.object.query(instance, 'env')
-      if not env then error(("%s: no `%s'"):format(self._name, name)) end
-      if select('#', ...) > 0 then
-	 env[name] = ...
-	 return
-      else
-	 return env[name]
-      end
-   elseif gi.isinfo(element) and element.is_signal then
-      return get_signal_accessor(element, self._gtype)(instance, ...)
+function Object:_accessor_attribute(object, element, ...)
+   if gi.isinfo(element) and element.is_signal then
+      return get_signal_attribute(element, self._gtype)(object, ...)
    elseif gi.isinfo(element) and element.is_property then
       -- Process property using GI.
       local typeinfo = element.typeinfo
-      return marshal_property(instance, element.name, element.flags,
+      return marshal_property(object, element.name, element.flags,
 			      { gtype = Type.from_typeinfo(typeinfo),
 				typeinfo = typeinfo,
 				transfer = element.transfer }, ...)
    elseif is_param_spec(element) then
       -- Process property using GLib.
-      return marshal_property(instance, element.name, element.flags,
+      return marshal_property(object, element.name, element.flags,
 			      { gtype = element.value_type }, ...)
    else
       -- Forward to 'inherited' generic object implementation.
-      return component_mt.class._access_element(
-	 self, instance, name, element, ...)
+      return class_mt._attribute(self, object, element, ...)
    end
 end
-
--- Install 'on_notify' signal.  There are a few gotchas causing that the
--- signal is handled separately from common signal handling:
--- 1) There is no declaration of this signal in the typelib.
--- 2) Real notify works with glib-style property names as details.  We
---    use modified property names ('-' -> '_').
--- 3) notify handler gets pspec, but we pass Lgi-mangled property name
---    instead.
-Object._signal = {}
-Object._override = {
-   on_notify = get_signal_accessor(
-      -- Borrow signal format from GObject.ObjectClass.notify.
-      gi.GObject.ObjectClass.fields.notify.typeinfo.interface, Type.OBJECT,
-      function(target)
-	 return function(obj, pspec)
-		   return target(obj, (pspec.name:gsub('%-', '_')))
-		end
-      end,
-      function(detail)
-	 -- Detail is Lgi property name, convert it to gobject name.
-	 if gi.isinfo(detail) then detail = info.name end
-	 return detail:gsub('_', '%-')
-      end,
-      function(object, prop)
-	 -- If we have property as propertyinfo, convert it to string.
-	 if gi.isinfo(prop) and prop.is_property then prop = prop.name end
-
-	 -- If we get property name as a string, convert it to pspec.
-	 if type(prop) == 'string' then
-	    local object_class = core.record.cast(
-	       core.object.query(object, 'class'), Object._class)
-	    prop = object_class:find_property(prop:gsub('_', '%-'))
-	 end
-	 return prop
-      end
-   )}
 
 -- Create lazy-loading components for variant stuff.
 repo.GLib._precondition = {}

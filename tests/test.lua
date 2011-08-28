@@ -1067,7 +1067,7 @@ function gireg.closure_simple()
    checkv(R.test_closure(closure, 42), 42, 'number')
    local res = GObject.Value('gint')
    closure:invoke(res, {}, nil)
-   check(res.g_type == 'gint' and res.data == 42)
+   check(res.gtype == 'gint' and res.value == 42)
 end
 
 function gireg.closure_arg()
@@ -1079,39 +1079,39 @@ function gireg.closure_arg()
    checkv(R.test_closure_one_arg(closure, 43), 43, 'number')
    local res = GObject.Value('gint')
    closure:invoke(res, { GObject.Value('gint', 43) }, nil)
-   check(res.g_type == 'gint' and res.data == 43)
+   check(res.gtype == 'gint' and res.value == 43)
 end
 
 function gireg.gvalue_assign()
    local V = GObject.Value
 
    local v = V()
-   check(v.g_type == nil)
-   check(v.data == nil)
-   v.g_type = 'gchararray'
-   check(v.g_type == 'gchararray')
-   check(v.data == nil)
-   v.data = 'label'
-   check(v.data == 'label')
-   v.data = nil
-   check(v.data == nil)
-   check(v.g_type == 'gchararray')
-   v.data = 'label'
-   v.g_type = nil
-   check(v.g_type == nil)
-   check(v.data == nil)
+   check(v.gtype == nil)
+   check(v.value == nil)
+   v.gtype = 'gchararray'
+   check(v.gtype == 'gchararray')
+   check(v.value == nil)
+   v.value = 'label'
+   check(v.value == 'label')
+   v.value = nil
+   check(v.value == nil)
+   check(v.gtype == 'gchararray')
+   v.value = 'label'
+   v.gtype = nil
+   check(v.gtype == nil)
+   check(v.value == nil)
 
-   v.g_type = 'gint'
-   v.data = 1
-   check(v.g_type == 'gint')
-   check(v.data == 1)
-   v.g_type = 'gdouble'
-   check(v.g_type == 'gdouble')
-   check(v.data == 1)
-   v.data = 3.14
-   v.g_type = 'gint'
-   check(v.g_type == 'gint')
-   check(v.data == 3)
+   v.gtype = 'gint'
+   v.value = 1
+   check(v.gtype == 'gint')
+   check(v.value == 1)
+   v.gtype = 'gdouble'
+   check(v.gtype == 'gdouble')
+   check(v.value == 1)
+   v.value = 3.14
+   v.gtype = 'gint'
+   check(v.gtype == 'gint')
+   check(v.value == 3)
 end
 
 function gireg.gvalue_arg()
@@ -1122,39 +1122,39 @@ end
 function gireg.gvalue_return()
    local R = lgi.Regress
    local v = R.test_value_return(43)
-   checkv(v.data, 43, 'number')
-   check(v.g_type == 'gint', 'incorrect value type')
+   checkv(v.value, 43, 'number')
+   check(v.gtype == 'gint', 'incorrect value type')
 end
 
 function gireg.gvalue_date()
    local R = lgi.Regress
    local v = R.test_date_in_gvalue()
-   check(v.g_type == 'GDate')
-   check(v.data:get_day() == 5)
-   check(v.data:get_month() == 12)
-   check(v.data:get_year() == 1984)
+   check(v.gtype == 'GDate')
+   check(v.value:get_day() == 5)
+   check(v.value:get_month() == 12)
+   check(v.value:get_year() == 1984)
    local d = GLib.Date()
    d:set_dmy(25, 1, 1975)
    v = GObject.Value(GLib.Date, d)
-   check(v.g_type == 'GDate')
-   check(v.data:get_day() == 25)
-   check(v.data:get_month() == 1)
-   check(v.data:get_year() == 1975)
+   check(v.gtype == 'GDate')
+   check(v.value:get_day() == 25)
+   check(v.value:get_month() == 1)
+   check(v.value:get_year() == 1975)
 end
 
 function gireg.gvalue_strv()
    local R = lgi.Regress
    local v = R.test_strv_in_gvalue()
-   check(v.g_type == 'GStrv')
-   check(#v.data == 3)
-   check(v.data[1] == 'one')
-   check(v.data[2] == 'two')
-   check(v.data[3] == 'three')
+   check(v.gtype == 'GStrv')
+   check(#v.value == 3)
+   check(v.value[1] == 'one')
+   check(v.value[2] == 'two')
+   check(v.value[3] == 'three')
    v = GObject.Value('GStrv', { '1', '2', '3' })
-   check(#v.data == 3)
-   check(v.data[1] == '1')
-   check(v.data[2] == '2')
-   check(v.data[3] == '3')
+   check(#v.value == 3)
+   check(v.value[1] == '1')
+   check(v.value[2] == '2')
+   check(v.value[3] == '3')
 end
 
 function gireg.obj_create()
@@ -1202,12 +1202,8 @@ end
 
 function gireg.obj_virtual_methods()
    local R = lgi.Regress
-   if R.TestObj._method.do_matrix then
-      R.TestObj._method.invoke_matrix = R.TestObj._methods.do_matrix
-      R.TestObj._method.do_matrix = nil
-   end
    local o = R.TestObj()
-   check(o:do_matrix('unused') == 42)
+   check(o:virtual_matrix('unused') == 42)
 end
 
 function gireg.obj_prop_int()
@@ -1392,7 +1388,7 @@ function gireg.obj_fundamental()
    check(f)
    check(f.data == 'foo-nda-mental')
    local v = lgi.GObject.Value(R.TestFundamentalSubObject, f)
-   check(v.data == f)
+   check(v.value == f)
    f = nil
    collectgarbage()
 end
@@ -1460,13 +1456,13 @@ function variant.gvalue()
    local var1, var2 = GLib.Variant.new_string('foo'),
    GLib.Variant.new_string('bar')
    local val = GObject.Value(GObject.Type.VARIANT, var1)
-   check(val.type == GObject.Type.VARIANT)
+   check(val.gtype == GObject.Type.VARIANT)
    check(val.value == var1)
    val.value = var2
    check(val.value == var2)
    val.value = nil
    check(val.value == nil)
-   check(val.type == GObject.Type.VARIANT)
+   check(val.gtype == GObject.Type.VARIANT)
 end
 
 function variant.newv_basic()
@@ -1679,7 +1675,7 @@ local groups = {
 }
 
 -- Check for debug mode.
-if tests_debug then
+if tests_debug or package.loaded.debugger then
    for _, name in ipairs(groups) do
       groups[name].debug = true
       _G[name] = groups[name]

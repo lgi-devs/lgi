@@ -15,8 +15,8 @@ local Gio = lgi.Gio
 local GObject = lgi.GObject
 
 -------------------- Gio.File
-Gio.File._override = { contents = {} }
-function Gio.File._override.contents.read(file)
+Gio.File._accessor = { contents = {} }
+function Gio.File._accessor.contents.read(file)
    local ok, contents = assert(Gio.File.load_contents(file))
    return contents
 end
@@ -39,7 +39,7 @@ end
 
 -- Add accessor properties for filename's get_foo methods.
 for _, name in pairs { 'basename', 'path', 'uri', 'parse_name' }  do
-   Gio.File._override[name] = {
+   Gio.File._accessor[name] = {
       get = function(file)
 		return Gio.File['get_' .. name](file)
 	     end }
