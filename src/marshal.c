@@ -1335,18 +1335,24 @@ marshal_container_marshaller (lua_State *L)
 
   /* If there are any temporary objects, try to store them into
      attrs.keepalive table, if it is present. */
-  lua_getfield (L, 2, "keepalive");
-  if (!lua_isnil (L, -1))
-    for (lua_insert (L, -nret - 1); nret > 0; nret--)
-      {
-	lua_pushnumber (L, lua_objlen (L, -nret - 1));
-	lua_insert (L, -2);
-	lua_settable (L, -nret - 3);
-	lua_pop (L, 1);
-      }
+  if (!lua_isnoneornil (L, 2))
+    {
+      lua_getfield (L, 2, "keepalive");
+      if (!lua_isnil (L, -1))
+	for (lua_insert (L, -nret - 1); nret > 0; nret--)
+	  {
+	    lua_pushnumber (L, lua_objlen (L, -nret - 1));
+	    lua_insert (L, -2);
+	    lua_settable (L, -nret - 3);
+	    lua_pop (L, 1);
+	  }
+      else
+	lua_pop (L, nret);
+      lua_pop (L, 1);
+    }
   else
     lua_pop (L, nret);
-  lua_pop (L, 1);
+
   return get_mode ? 1 : 0;
 }
 
