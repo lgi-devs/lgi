@@ -147,7 +147,7 @@ function CallInfo:get_closure_marshaller(target)
 
       -- Marshal input arguments.
       for i = 1, #self do
-	 argc = callable_info_marshal_cell(
+	 argc = marshal_cell(
 	    self, self[i], 'to_lua', args, argc,
 	    marshalling_params, params[i], params)
       end
@@ -159,7 +159,7 @@ function CallInfo:get_closure_marshaller(target)
 
       -- Marshall the return value.
       if self.ret and retval then
-	 argc = callable_info_marshal_cell(
+	 argc = marshal_cell(
 	    self, self.ret, 'to_value', args, argc,
 	    marshalling_params, retval, params)
       end
@@ -172,7 +172,7 @@ function CallInfo:get_closure_marshaller(target)
 
       -- Marshal output arguments.
       for i = 1, #self do
-	 argc = callable_info_marshal_cell(
+	 argc = marshal_cell(
 	    self, self[i], 'to_value', args, argc,
 	    marshalling_params, params[i], params)
       end
@@ -192,7 +192,7 @@ function CallInfo:pre_call(...)
    -- Marshal input values.
    local args, argc = { ... }, 0
    for i = 1, #self do
-      argc = callable_info_marshal_cell(
+      argc = marshal_cell(
 	 self, self[i], 'to_value', args, argc,
 	 marshalling_params, params[i], params)
    end
@@ -218,14 +218,14 @@ function CallInfo:post_call(params, retval)
 
    -- Unmarshal return value.
    if self.ret and retval then
-      argc = callable_info_marshal_cell(
+      argc = marshal_cell(
 	 self, self.ret, 'to_lua', args, argc,
 	 marshalling_params, retval, params)
    end
 
    -- Unmarshal output arguments.
    for i = 1, #self do
-      argc = callable_info_marshal_cell(
+      argc = marshal_cell(
 	 self, self[i], 'to_lua', args, argc,
 	 marshalling_params, params[i], params)
    end
@@ -243,7 +243,7 @@ function Closure:_new(target, callback_info)
       local marshaller
       if callback_info then
 	 -- Create marshaller based on callinfo.
-	 local call_info = CallInfo.new(callable_info, true)
+	 local call_info = CallInfo.new(callback_info, true)
 	 marshaller = call_info:get_closure_marshaller(target)
       else
 	 -- Create marshaller based only on Value types.

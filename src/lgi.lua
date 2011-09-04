@@ -253,8 +253,10 @@ function component_mt:_access(instance, symbol, ...)
    end
 
    -- Get category handler to be used, and invoke it.
-   local handler = self['_access' .. category]
-   if handler then return handler(self, instance, element, ...) end
+   if category then
+      local handler = self['_access' .. category]
+      if handler then return handler(self, instance, element, ...) end
+   end
 
    -- If specific accessor does not exist, consider the element to be
    -- 'static const' attribute of the class.  This works well for
@@ -648,8 +650,8 @@ function typeloader.object(namespace, info)
 
    -- Create class instance, copy mt from parent, if parent exists,
    -- otherwise defaults to class_mt.
-   local class = create_component(info,
-				  parent and getmetatable(parent) or class_mt)
+   local class = create_component(
+      info, parent and getmetatable(parent) or class_mt)
    class._parent = parent
    class._property = load_properties(info)
    class._method = get_category(info.methods, load_method)
@@ -790,6 +792,7 @@ repo.GObject._precondition = {}
 for _, name in pairs { 'Type', 'Value', 'Closure', 'Object' } do
    repo.GObject._precondition[name] = 'GObject-' .. name
 end
+repo.GObject._precondition.InitiallyUnowned = 'GObject-Object'
 
 -- Create lazy-loading components for variant stuff.
 repo.GLib._precondition = {}
