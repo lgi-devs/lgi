@@ -1449,6 +1449,30 @@ function gireg.callback_async()
    check(R.test_callback_thaw_async() == 1)
 end
 
+-- Basic GObject testing
+local gobject = testgroup.new('gobject')
+
+function gobject.object_new()
+   local GObject = lgi.GObject
+   local o = GObject.Object()
+   o = nil
+   collectgarbage()
+   collectgarbage()
+end
+
+function gobject.initunk_new()
+   local GObject = lgi.GObject
+   local o = GObject.InitiallyUnowned()
+
+   -- Simulate sink by external container
+   o:ref_sink()
+   o:unref()
+
+   o = nil
+   collectgarbage()
+   collectgarbage()
+end
+
 -- Variant testing
 local variant = testgroup.new('variant')
 
@@ -1671,6 +1695,7 @@ end
 -- Available groups
 local groups = {
    'gireg', gireg = gireg,
+   'gobject', gobject=gobject,
    'variant', variant = variant,
 }
 
