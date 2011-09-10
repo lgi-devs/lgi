@@ -121,8 +121,8 @@ infos_index (lua_State *L)
 static int
 infos_gc (lua_State *L)
 {
-  GIBaseInfo **info = luaL_checkudata (L, 1, LGI_GI_INFOS);
-  g_base_info_unref (*info);
+  Infos *infos = luaL_checkudata (L, 1, LGI_GI_INFOS);
+  g_base_info_unref (infos->info);
   return 0;
 }
 
@@ -466,6 +466,36 @@ info_index (lua_State *L)
 			      g_property_info_get_ownership_transfer (*info));
     }
 
+  if (GI_IS_FIELD_INFO (*info))
+    {
+      if (strcmp (prop, "flags") == 0)
+	{
+	  GIFieldInfoFlags flags = g_field_info_get_flags (*info);
+	  lua_newtable (L);
+	  if (0);
+#define H(n1, n2)					\
+	      else if ((flags & GI_FIELD_ ## n1) != 0)	\
+		{					\
+		  lua_pushboolean (L, 1);		\
+		  lua_setfield (L, -2, #n2);		\
+		}
+	      H(IS_READABLE, is_readable)
+		H(IS_WRITABLE, is_writable)
+#undef H
+	      return 1;
+	}
+      else if (strcmp (prop, "size") == 0)
+	{
+	  lua_pushinteger (L, g_field_info_get_size (*info));
+	  return 1;
+	}
+      else if (strcmp (prop, "offset") == 0)
+	{
+	  lua_pushinteger (L, g_field_info_get_offset (*info));
+	  return 1;
+	}
+    }
+
   if (GI_IS_TYPE_INFO (*info))
     {
       GITypeTag tag = g_type_info_get_tag (*info);
@@ -533,6 +563,15 @@ info_index (lua_State *L)
 	      return 1;
 	    }
 	}
+      else if (strcmp (prop, "fixed_size") == 0)
+	{
+	  int size = g_type_info_get_array_fixed_size (*info);
+	  if (size >= 0)
+	    {
+	      lua_pushinteger (L, size);
+	      return 1;
+	    }
+	}
       else if (strcmp (prop, "is_pointer") == 0)
 	{
 	  lua_pushboolean (L, g_type_info_is_pointer (*info));
@@ -578,7 +617,7 @@ static int
 namespace_len (lua_State *L)
 {
   const gchar *ns = luaL_checkudata (L, 1, LGI_GI_NAMESPACE);
-  lua_pushinteger (L, g_irepository_get_n_infos (NULL, ns) + 1);
+  lua_pushinteger (L, g_irepository_get_n_infos (NULL, ns));
   return 1;
 }
 
@@ -658,13 +697,10 @@ gi_require (lua_State *L)
   GITypelib *typelib;
 
   if (typelib_dir == NULL)
-    typelib = g_irepository_require (NULL, namespace, version,
-				     G_IREPOSITORY_LOAD_FLAG_LAZY, &err);
+    typelib = g_irepository_require (NULL, namespace, version, 0, &err);
   else
     typelib = g_irepository_require_private (NULL, typelib_dir, namespace,
-					     version,
-					     G_IREPOSITORY_LOAD_FLAG_LAZY,
-					     &err);
+					     version, 0, &err);
   if (!typelib)
     {
       lua_pushboolean (L, 0);
