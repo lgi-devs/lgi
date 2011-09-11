@@ -95,23 +95,22 @@ void lgi_callback_leave (gpointer user_data);
 /* Marshalls single value from Lua to GLib/C. Returns number of temporary
    entries pushed to Lua stack, which should be popped before function call
    returns. */
-int lgi_marshal_arg_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
-			GITransfer xfer,  GIArgument *val, int narg,
-			gboolean in_parent, gboolean use_pointer,
-			GICallableInfo *ci, void **args);
+int lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
+		    GITransfer xfer,  gpointer target, int narg,
+		    int parent, GICallableInfo *ci, void **args);
 
-/* If given parameter is out;caller-allocates, tries to perform
+/* If given parameter is out:caller-allocates, tries to perform
    special 2c marshalling.  If not needed, returns FALSE, otherwise
    stores single value with value prepared to be returned to C. */
-gboolean lgi_marshal_arg_2c_caller_alloc (lua_State *L, GITypeInfo *ti,
-					  GIArgument *val, int pos);
+gboolean lgi_marshal_2c_caller_alloc (lua_State *L, GITypeInfo *ti,
+				      GIArgument *target, int pos);
 
 /* Marshalls single value from GLib/C to Lua. If parent is non-0, it
    is stack index of parent structure/array in which this C value
    resides. */
-void lgi_marshal_arg_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
-			   GIArgument *val, int parent, gboolean use_pointer,
-			   GICallableInfo *ci, void **args);
+void lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
+		       gpointer source, int parent,
+		       GICallableInfo *ci, void **args);
 
 /* Marshalls field to/from given memory (struct, union or
    object). Returns number of results pushed to the stack (0 or 1). */
