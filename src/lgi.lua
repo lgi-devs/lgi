@@ -202,7 +202,7 @@ function component_mt:clone(categories)
    local new_component = {}
    for key, value in pairs(self) do new_component[key] = value end
    if categories then
-      categories[#categories + 1] = '_attribute'
+      table.insert(categories, 1, '_attribute')
       new_component._categories = categories
    end
    return new_component
@@ -251,7 +251,11 @@ function component_mt:_access(instance, symbol, ...)
    if not element then
       error(("%s: no `%s'"):format(self._name, symbol))
    end
+   return self:_access_element(instance, category, element, ...)
+end
 
+-- Internal worker of access, which works over already resolved element.
+function component_mt:_access_element(instance, category, element, ...)
    -- Get category handler to be used, and invoke it.
    if category then
       local handler = self['_access' .. category]
@@ -291,7 +295,7 @@ function component_mt:_element(instance, symbol)
    -- (e.g. '_field_name' when requesting explicitely field called
    -- name).
    local category, name = string.match(symbol, '^(_.-)_(.*)$')
-   if category and name then
+   if category and name and category ~= '_access' then
       -- Check requested category.
       local cat = rawget(self, category)
       element = cat and cat[name]
@@ -332,6 +336,28 @@ end
 -- and provides customizations for structures and unions.
 local record_mt = component_mt:clone { '_method', '_field' }
 
+function record_mt:_element(instance, symbol)
+   -- First of all, try normal inherited functionality.
+   local element, category = component_mt._element(self, instance, symbol)
+   if element then return element, category end
+
+   -- If the record has parent struct, try it there.
+   local parent = rawget(self, '_parent')
+   if parent then
+      element, category = parent:_element(instance, symbol)
+      if element then
+	 -- If category shows that returned element is already from
+	 -- inherited, leave it so, otherwise wrap returned element
+	 -- into _inherited category.
+	 if category ~= '_inherited' then
+	    element = { element = element, category = category, type = parent }
+	    category = '_inherited'
+	 end
+	 return element, category
+      end
+   end
+end
+
 -- Add accessor for handling fields.
 function record_mt:_access_field(instance, element, ...)
    assert(gi.isinfo(element) and element.is_field)
@@ -351,6 +377,15 @@ function record_mt:_access_field(instance, element, ...)
       -- In other cases, just access the instance using given info.
       return core.record.field(instance, element, ...)
    end
+end
+
+-- Add accessor for accessing inherited elements.
+function record_mt:_access_inherited(instance, element, ...)
+   -- Cast instance to inherited type.
+   instance = core.record.cast(instance, element.type)
+
+   -- Forward to normal _access_element implementation.
+   return self:_access_element(instance, element.category, element.element, ...)
 end
 
 -- Create structure instance and initialize it with given fields.
@@ -664,6 +699,7 @@ function typeloader.object(namespace, info)
       class._virtual = get_category(info.vfuncs, nil, load_vfunc_name,
 				    load_vfunc_name_reverse)
       class._class = load_record(type_struct)
+      if parent then class._class._parent = parent._class end
    end
 
    -- Populate inheritation information (_implements and _parent fields).

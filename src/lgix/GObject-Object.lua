@@ -66,6 +66,12 @@ function InitiallyUnowned:_new(args)
    return Object.ref_sink(object)
 end
 
+-- Reading 'class' yields real instance of the object class.
+Object._attribute = { class = {} }
+function Object._attribute.class:get()
+   return core.object.query(self, 'class')
+end
+
 -- Custom _element implementation, checks dynamically inherited
 -- interfaces and dynamic properties.
 local inherited_element = Object._element
@@ -88,8 +94,7 @@ function Object:_element(object, name)
 
    -- Element not found in the repo (typelib), try whether dynamic
    -- property of the specified name exists.
-   local class = core.record.cast(core.object.query(object, 'class'),
-				  Object._class)
+   local class = core.record.cast(core.object.query(object, 'class'), Object._class)
    local property = Object._class.find_property(class, name:gsub('_', '%-'))
    if property then return property, '_paramspec' end
 
@@ -161,9 +166,6 @@ end
 
 -- Signal accessor.
 function Object:_access_signal(object, info, ...)
--- Creates closure implementing _access_element for signals
---local function get_signal_attribute(info, gtype,
---				   get_target, get_detail, get_args)
    local gtype = self._gtype
    if select('#', ...) > 0 then
       -- Assignment means 'connect signal without detail'.
