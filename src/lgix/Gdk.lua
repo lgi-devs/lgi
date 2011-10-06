@@ -13,6 +13,11 @@ local lgi = require 'lgi'
 local core = require 'lgi._core'
 local Gdk = lgi.Gdk
 
+-- Gdk.Rectangle does not exist at all, beacuse it is aliased to
+-- cairo.RectangleInt.  Make sure that we have it exists, because it
+-- is very commonly used in API documentation.
+Gdk.Rectangle = lgi.cairo.RectangleInt
+
 -- Declare GdkAtoms which are #define'd in Gdk sources and not
 -- introspected in gir.
 for name, val in pairs {
