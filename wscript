@@ -28,8 +28,8 @@ def configure(conf):
         conf.fatal("Lua pkgconfig package not found.")
     conf.check_cfg(package='gobject-introspection-1.0', uselib_store='GI',
                    mandatory=True,
-                   args='gobject-introspection-1.0 >= 0.9.7 --cflags --libs',
-                   msg='Checking for gobject-introspection >= 0.9.7')
+                   args='gobject-introspection-1.0 >= 1.30 --cflags --libs',
+                   msg='Checking for gobject-introspection >= 1.30')
     conf.env.append_unique('CCFLAGS', '-Wall')
     conf.env.append_unique('CCFLAGS', Options.options.debug
                            and '-g' or ['-O2', '-DNDEBUG'])
