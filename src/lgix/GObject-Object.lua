@@ -184,7 +184,7 @@ function Object:_access_signal(object, info, ...)
       -- If signal supports details, add metatable implementing
       -- __newindex for connecting in the 'on_signal['detail'] =
       -- handler' form.
-      if not info.is_signal or info.flags.detailed then
+      if info.is_signal and info.flags.detailed then
 	 local mt = {}
 	 function mt:__newindex(detail, target)
 	    connect_signal(object, gtype, info.name, Closure(target, info),
