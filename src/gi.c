@@ -364,9 +364,8 @@ info_index (lua_State *L)
 	    {
 	      GSignalFlags flags = g_signal_info_get_flags (*info);
 	      lua_newtable (L);
-	      if (0);
 #define H(n1, n2)					\
-	      else if ((flags & G_SIGNAL_ ## n1) != 0)	\
+	      if ((flags & G_SIGNAL_ ## n1) != 0)	\
 		{					\
 		  lua_pushboolean (L, 1);		\
 		  lua_setfield (L, -2, #n2);		\
