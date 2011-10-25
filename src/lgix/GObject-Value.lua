@@ -111,6 +111,8 @@ function Value._method.find_marshaller(gtype, typeinfo, transfer)
    end
 
    local gt = gtype
+   if type(gt) == 'number' then gt = Type.name(gt) end
+
    -- Special marshaller, allowing only 'nil'.
    if not gt then return function() end end
 
