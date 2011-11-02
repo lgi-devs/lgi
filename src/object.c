@@ -438,10 +438,45 @@ object_field (lua_State *L)
   return lgi_marshal_field (L, object, getmode, 1, 2, 3);
 }
 
+/* Object creator.  Normally Lua code uses GObject.Object.new(), which
+   maps directly to g_object_newv(), but for some reason GOI < 1.0
+   does not export this method in the typelib. */
+static int
+object_new (lua_State *L)
+{
+  /* Get GType - 1st argument. */
+  GParameter *params;
+  size_t size, i;
+  GIBaseInfo *gparam_info;
+  GType gtype = lgi_type_get_gtype (L, 1);
+  luaL_checktype (L, 2, LUA_TTABLE);
+
+  /* Find BaseInfo of GParameter. */
+  gparam_info = g_irepository_find_by_name (NULL, "GObject", "Parameter");
+  *lgi_guard_create (L, (GDestroyNotify) g_base_info_unref) = gparam_info;
+
+  /* Prepare array of GParameter structures. */
+  size = lua_objlen (L, 2);
+  params = g_newa (GParameter, size);
+  for (i = 0; i < size; ++i)
+    {
+      lua_pushinteger (L, i + 1);
+      lua_gettable (L, 2);
+      lgi_type_get_repotype (L, G_TYPE_INVALID, gparam_info);
+      memcpy (&params[i], lgi_record_2c (L, -2, FALSE, FALSE),
+	      sizeof (GParameter));
+      lua_pop (L, 1);
+    }
+
+  /* Create the object and return it. */
+  return lgi_object_2lua (L, g_object_newv (gtype, size, params), TRUE);
+}
+
 /* Object API table. */
 static const luaL_Reg object_api_reg[] = {
   { "query", object_query },
   { "field", object_field },
+  { "new", object_new },
   { NULL, NULL }
 };
 

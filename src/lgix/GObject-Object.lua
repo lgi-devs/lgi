@@ -23,7 +23,15 @@ local Object = repo.GObject.Object
 -- Object constructor, 'param' contains table with properties/signals
 -- to initialize.
 local parameter_info = gi.GObject.Parameter
-local object_new = core.callable.new(gi.GObject.Object.methods.new)
+local object_new = gi.GObject.Object.methods.new
+if object_new then
+   object_new = core.callable.new(object_new)
+else
+   -- Unfortunately, older GI (<1.30) does not export g_object_newv()
+   -- in the typelib, so we have to workaround here with manually
+   -- implemented C version.
+   object_new = core.object.new
+end
 function Object:_new(args)
    -- Process 'args' table, separate properties from other fields.
    local params, others, safe = {}, {}, {}

@@ -485,7 +485,15 @@ end
 -- Object constructor, does not accept any arguments.  Overriden later
 -- for GObject which accepts properties table to initialize object
 -- with.
-local object_new = core.callable.new(gi.require('GObject').Object.methods.new)
+local object_new = gi.require('GObject').Object.methods.new
+if object_new then
+   object_new = core.callable.new(object_new)
+else
+   -- Unfortunately, older GI (<1.30) does not export g_object_newv()
+   -- in the typelib, so we have to workaround here with manually
+   -- implemented C version.
+   object_new = core.object.new
+end
 function class_mt:_new()
    -- Create the object.
    return object_new(self._gtype, {})
