@@ -685,9 +685,9 @@ end
 
 function typeloader.object(namespace, info)
    -- Find parent record, if available.
-   local parent = info.parent
-   if parent then
-      local ns, name = parent.namespace, parent.name
+   local parent_info, parent = info.parent
+   if parent_info then
+      local ns, name = parent_info.namespace, parent_info.name
       if ns ~= namespace._name or name ~= info.name then
 	 parent = repo[ns][name]
       end
