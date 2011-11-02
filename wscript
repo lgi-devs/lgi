@@ -47,8 +47,8 @@ def configure(conf):
     # Check for gobject-introspection package.
     conf.check_cfg(package='gobject-introspection-1.0', uselib_store='GI',
                    mandatory=True,
-                   args='gobject-introspection-1.0 >= 1.30 --cflags --libs',
-                   msg='Checking for gobject-introspection >= 1.30')
+                   args='gobject-introspection-1.0 >= 0.10.8 --cflags --libs',
+                   msg='Checking for gobject-introspection >= 0.10.8')
 
     # Modify flags according to debug/release build.
     conf.env.append_unique('CCFLAGS', '-Wall')
