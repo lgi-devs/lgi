@@ -103,11 +103,33 @@ value_marshallers[Type.STRV] = core.marshal.container(
 -- Finds marshaller closure which can marshal type described either by
 -- gtype or typeinfo/transfer combo.
 function Value._method.find_marshaller(gtype, typeinfo, transfer)
-   -- Check whether we can have marshaller for typeinfo.
+   -- Check whether we can have marshaller for typeinfo, if the
+   -- typeinfo is container.
    local marshaller
    if typeinfo then
       marshaller = core.marshal.container(typeinfo, transfer)
       if marshaller then return marshaller end
+   end
+
+   -- Special case for non-gtype records.
+   if not gtype and typeinfo and typeinfo.tag == 'interface' then
+      return function(value, params, ...)
+		-- Find out proper getter/setter method for the value.
+		local get, set
+		local gtype = core.record.field(value, value_field_gtype)
+		if Type.is_a(gtype, Type.BOXED) then
+		   get, set = Value.get_boxed, Value.set_boxed
+		else
+		   get, set = Value.get_pointer, Value.set_pointer
+		end
+		-- Do GValue<->record transfer.
+		local record_info = typeinfo.interface
+		if select('#', ...) > 0 then
+		   set(value, core.record.query((...), 'addr', record_info))
+		else
+		   return core.record.new(record_info, get(value))
+		end
+	     end
    end
 
    local gt = gtype
