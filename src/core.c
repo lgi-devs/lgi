@@ -96,7 +96,7 @@ core_set(lua_State *L)
   else if (strcmp (name, "getgtype") == 0)
     key = &core_addr_getgtype;
   else
-    luaL_argerror (L, 1, "invalid key");
+    return luaL_argerror (L, 1, "invalid key");
 
   lua_pushlightuserdata (L, key);
   lua_pushvalue (L, 2);
@@ -447,9 +447,8 @@ luaopen_lgi__core (lua_State* L)
 {
   CallMutex *mutex;
 
-  /* Early GLib initializations. Make sure that following G_TYPEs are
-     already initialized, because GIRepo does not initialize them (it
-     does not know that they are boxed). */
+  /* Early GLib initializations. Make sure that following fundamental
+     G_TYPEs are already initialized. */
   setlocale (LC_ALL, "");
   g_type_init ();
   volatile GType unused;
@@ -457,6 +456,7 @@ luaopen_lgi__core (lua_State* L)
   unused = G_TYPE_REGEX;
   unused = G_TYPE_DATE_TIME;
   unused = G_TYPE_VARIANT_TYPE;
+  unused = G_TYPE_STRV;
   unused = unused;
 
   /* Register 'guard' metatable. */
