@@ -38,10 +38,12 @@ function about_button:on_clicked()
       program_name = 'LGI Demo',
       title = 'About...',
       name = 'LGI Hello',
-      copyright = '(C) Copyright 2010 Pavel Holejšovský',
+      copyright = '(C) Copyright 2010, 2011 Pavel Holejšovský',
       authors = { 'Adrian Perez de Castro', 'Pavel Holejšovský', },
    }
-   dlg.license_type = Gtk.License.MIT_X11
+   if tonumber(Gtk._version) >= 3 then
+      dlg.license_type = Gtk.License.MIT_X11
+   end
    dlg:run()
    dlg:hide()
 end
