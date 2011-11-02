@@ -88,13 +88,14 @@ function Object:_element(object, name)
    for i = 1, #interfaces do
       local info = gi[core.gtype(interfaces[i])]
       local iface = repo[info.namespace][info.name]
-      element, category = iface and iface:_element(object, name)
+      if iface then element, category = iface:_element(object, name) end
       if element then return element, category end
    end
 
    -- Element not found in the repo (typelib), try whether dynamic
    -- property of the specified name exists.
-   local class = core.record.cast(core.object.query(object, 'class'), Object._class)
+   local class = core.record.cast(core.object.query(object, 'class'),
+				  Object._class)
    local property = Object._class.find_property(class, name:gsub('_', '%-'))
    if property then return property, '_paramspec' end
 
