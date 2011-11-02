@@ -251,11 +251,11 @@ function component_mt:_access(instance, symbol, ...)
    if not element then
       error(("%s: no `%s'"):format(self._name, symbol))
    end
-   return self:_access_element(instance, category, element, ...)
+   return self:_access_element(instance, category, symbol, element, ...)
 end
 
 -- Internal worker of access, which works over already resolved element.
-function component_mt:_access_element(instance, category, element, ...)
+function component_mt:_access_element(instance, category, symbol, element, ...)
    -- Get category handler to be used, and invoke it.
    if category then
       local handler = self['_access' .. category]
@@ -350,7 +350,8 @@ function record_mt:_element(instance, symbol)
 	 -- inherited, leave it so, otherwise wrap returned element
 	 -- into _inherited category.
 	 if category ~= '_inherited' then
-	    element = { element = element, category = category, type = parent }
+	    element = { element = element, category = category,
+			symbol = symbol, type = parent }
 	    category = '_inherited'
 	 end
 	 return element, category
@@ -385,7 +386,8 @@ function record_mt:_access_inherited(instance, element, ...)
    instance = core.record.cast(instance, element.type)
 
    -- Forward to normal _access_element implementation.
-   return self:_access_element(instance, element.category, element.element, ...)
+   return self:_access_element(instance, element.category, element.symbol,
+			       element.element, ...)
 end
 
 -- Create structure instance and initialize it with given fields.
