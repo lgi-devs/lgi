@@ -4,7 +4,7 @@
 -- http://live.gnome.org/Vala/GTKSample#Clipboard
 
 local lgi = require 'lgi'
-local Gtk = lgi.Gtk
+local Gtk = lgi.require('Gtk', '3.0')
 local Gdk = lgi.Gdk
 
 local app = Gtk.Application { application_id = 'org.lgi.samples.gtkclipboard' }

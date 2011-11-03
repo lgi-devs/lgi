@@ -7,8 +7,8 @@
 --
 
 local lgi = require 'lgi'
-local Gtk = lgi.Gtk
-local Vte = lgi.Vte
+local Gtk = lgi.require('Gtk', '3.0')
+local Vte = lgi.require('Vte', '2.90')
 
 -- Simple readline implementation with asynchronous interface.
 local ReadLine = {}
