@@ -10,6 +10,7 @@
  */
 
 #include "lgi.h"
+#include <string.h>
 #include <ffi.h>
 
 /* Represents single parameter in callable description. */
@@ -55,6 +56,7 @@ typedef struct _Callable
   guint throws : 1;
   guint nargs : 6;
   guint ignore_retval : 1;
+  guint is_closure_marshal : 1;
 
   /* Initialized FFI CIF structure. */
   ffi_cif cif;
@@ -271,6 +273,7 @@ lgi_callable_create (lua_State *L, GICallableInfo *info, gpointer addr)
   callable->has_self = 0;
   callable->throws = 0;
   callable->ignore_retval = 0;
+  callable->is_closure_marshal = 0;
   callable->address = addr;
   if (GI_IS_FUNCTION_INFO (info))
     {
@@ -353,6 +356,17 @@ lgi_callable_create (lua_State *L, GICallableInfo *info, gpointer addr)
       if (param->dir != GI_DIRECTION_IN
 	  && g_type_info_get_tag (&callable->retval.ti) == GI_TYPE_TAG_BOOLEAN)
 	callable->ignore_retval = 1;
+    }
+
+  /* Manual adjustment of 'GObject.ClosureMarshal' type, which is
+     crucial for lgi but is missing an array annotation in
+     glib/gobject-introspection < 1.30. */
+  if (!GLIB_CHECK_VERSION (2, 30, 0)
+      && !strcmp (g_base_info_get_namespace (info), "GObject")
+      && !strcmp (g_base_info_get_name (info), "ClosureMarshal"))
+    {
+      callable->is_closure_marshal = 1;
+      callable->params[2].internal = 1;
     }
 
   /* Add ffi info for 'err' argument. */
@@ -759,9 +773,27 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   for (i = 0; i < callable->nargs; ++i, ++param)
     if (!param->internal && param->dir != GI_DIRECTION_OUT)
       {
-	lgi_marshal_2lua (L, &param->ti, GI_TRANSFER_NOTHING,
-			  args[i + callable->has_self], 0,
-			  callable->info, args + callable->has_self);
+	if (i != 3 || !callable->is_closure_marshal)
+	  lgi_marshal_2lua (L, &param->ti, GI_TRANSFER_NOTHING,
+			    args[i + callable->has_self], 0,
+			    callable->info, args + callable->has_self);
+	else
+	  {
+	    /* Workaround incorrectly annotated but crucial
+	       ClosureMarshal callback.  Its 3rd argument is actually
+	       an array of GValue, not a single GValue as missing
+	       annotation suggests. */
+	    guint i, nvals = ((GIArgument *)args[2])->v_uint32;
+	    GValue* vals = ((GIArgument *)args[3])->v_pointer;
+	    lua_createtable (L, nvals, 0);
+	    for (i = 0; i < nvals; ++i)
+	      {
+		lua_pushinteger (L, i + 1);
+		lgi_type_get_repotype (L, G_TYPE_VALUE, NULL);
+		lgi_record_2lua (L, &vals[i], FALSE, 0);
+		lua_settable (L, -3);
+	      }
+	  }
 	npos++;
       }
 
