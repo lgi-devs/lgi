@@ -10,7 +10,7 @@
 
 local select, type, pairs, unpack = select, type, pairs, unpack
 local lgi = require 'lgi'
-local core = require 'lgi._core'
+local core = require 'lgi.core'
 local Gdk = lgi.Gdk
 
 -- Gdk.Rectangle does not exist at all, beacuse it is aliased to

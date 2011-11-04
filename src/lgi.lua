@@ -17,7 +17,7 @@ next, select =
 local package, math = package, math
 
 -- Require core lgi utilities, used during bootstrap.
-local core = require 'lgi._core'
+local core = require 'lgi.core'
 
 -- Initialize GI wrapper from the core.
 local gi = core.gi

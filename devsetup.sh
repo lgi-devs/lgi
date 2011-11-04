@@ -8,13 +8,14 @@ test -f ./devsetup.sh || {
 build_dir=`pwd`/build
 ext=.so; pfx=lib
 test x`uname -o` != xCygwin || { ext=.dll; pfx=cyg; }
-test -x $build_dir/src/lgi${ext} &&			\
+test -x $build_dir/src/core${ext} &&		        \
     test -x $build_dir/tests/${pfx}regress${ext} &&	\
     test -r $build_dir/tests/Regress-1.0.typelib || {	\
     echo 'LGI must be built first.'; return; }
 
 # Create links from files to root 'build' dir.
-(cd $build_dir && ln -sf src/lgi${ext} &&			\
+(cd $build_dir && mkdir -p lgi &&                               \
+    (cd lgi && ln -sf ../src/core${ext}) &&                     \
     ln -sf ../src/*.lua . &&					\
     mkdir -p lgix && (cd lgix && ln -sf ../../src/lgix/* .) &&	\
     ln -sf tests/${pfx}regress${ext} &&				\

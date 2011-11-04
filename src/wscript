@@ -13,7 +13,6 @@ def apply_lua_so_name(self):
 def build(bld):
     bld(
         features = 'c cshlib luaext',
-
         source = ['core.c',
                   'gi.c',
                   'buffer.c',
@@ -21,10 +20,10 @@ def build(bld):
                   'marshal.c',
                   'record.c',
                   'object.c'],
-        target = 'lgi',
+        target = 'core',
         uselib = ['LUA', 'GI'],
         cflags = bld.env.CCFLAGS,
-        install_path = '${LUA_INSTALL_CMOD}',
+        install_path = '${LUA_INSTALL_CMOD}/lgi',
         )
     bld.install_files('${LUA_INSTALL_LMOD}/', 'lgi.lua')
     bld.install_files('${LUA_INSTALL_LMOD}/lgix/',

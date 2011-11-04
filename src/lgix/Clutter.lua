@@ -10,7 +10,6 @@
 
 local select, type, pairs = select, type, pairs
 local lgi = require 'lgi'
-local core = require 'lgi._core'
 local Clutter = lgi.Clutter
 local GObject = lgi.GObject
 

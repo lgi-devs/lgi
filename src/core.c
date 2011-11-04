@@ -443,7 +443,7 @@ static const struct luaL_reg lgi_reg[] = {
 int lgi_addr_repo;
 
 int
-luaopen_lgi__core (lua_State* L)
+luaopen_lgi_core (lua_State* L)
 {
   CallMutex *mutex;
 
@@ -484,7 +484,7 @@ luaopen_lgi__core (lua_State* L)
   luaL_ref (L, LUA_REGISTRYINDEX); /* Keep thread fixed in registry forever. */
   lua_rawset (L, LUA_REGISTRYINDEX);
 
-  /* Register _core interface. */
+  /* Register 'lgi.core' interface. */
   lua_newtable (L);
   luaL_register (L, NULL, lgi_reg);
 

@@ -10,7 +10,7 @@
 
 local assert, pairs = assert, pairs
 local lgi = require 'lgi'
-local core = require 'lgi._core'
+local core = require 'lgi.core'
 local repo = core.repo
 local gi = core.gi
 local Type = repo.GObject.Type

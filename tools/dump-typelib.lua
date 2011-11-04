@@ -9,7 +9,7 @@
 --
 ------------------------------------------------------------------------------
 
-local lgi_core = require 'lgi._core'
+local lgi_core = require 'lgi.core'
 local gi = lgi_core.gi
 require 'debugger'
 

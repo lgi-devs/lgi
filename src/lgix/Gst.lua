@@ -9,7 +9,7 @@
 ------------------------------------------------------------------------------
 
 local lgi = require 'lgi'
-local gi = require('lgi._core').gi
+local gi = require('lgi.core').gi
 local GLib = lgi.GLib
 local Gst = lgi.Gst
 

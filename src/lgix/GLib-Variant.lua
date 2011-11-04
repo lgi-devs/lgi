@@ -10,7 +10,7 @@
 
 local select, type, pairs, tostring = select, type, pairs, tostring
 local lgi = require 'lgi'
-local core = require 'lgi._core'
+local core = require 'lgi.core'
 local bytes = require 'bytes'
 local gi = core.gi
 local GLib = lgi.GLib

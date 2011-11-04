@@ -11,7 +11,7 @@
 
 local type, pairs, ipairs, unpack = type, pairs, ipairs, unpack or table.unpack
 
-local core = require 'lgi._core'
+local core = require 'lgi.core'
 local gi = core.gi
 local repo = core.repo
 

@@ -10,8 +10,7 @@
 
 local select, type, pairs, unpack = select, type, pairs, unpack
 local lgi = require 'lgi'
-local core = require 'lgi._core'
-local gi = core.gi
+local core = require 'lgi.core'
 local Gtk = lgi.Gtk
 local Gdk = lgi.Gdk
 local GObject = lgi.GObject

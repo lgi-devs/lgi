@@ -9,7 +9,7 @@
 ------------------------------------------------------------------------------
 
 local assert, pairs, ipairs = assert, pairs, ipairs
-local core = require 'lgi._core'
+local core = require 'lgi.core'
 local repo = core.repo
 
 -- Add synthetic GObject.Type, containing well-known GType constants

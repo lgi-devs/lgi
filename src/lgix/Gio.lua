@@ -10,6 +10,5 @@
 
 local select, type, pairs = select, type, pairs
 local lgi = require 'lgi'
-local core = require 'lgi._core'
 local Gio = lgi.Gio
 local GObject = lgi.GObject
