@@ -159,7 +159,7 @@ object_refsink (lua_State *L, gpointer obj)
   GIObjectInfo *info = g_irepository_find_by_gtype (NULL, gtype);
   if (info == NULL)
     info = g_irepository_find_by_gtype (NULL, G_TYPE_FUNDAMENTAL (gtype));
-  if (info != NULL)
+  if (info != NULL && g_object_info_get_fundamental (info))
     {
       GIObjectInfoRefFunction ref =
 	g_object_info_get_ref_function_pointer (info);
@@ -211,7 +211,7 @@ object_unref (lua_State *L, gpointer obj, gboolean remove_proxy)
   GIObjectInfo *info = g_irepository_find_by_gtype (NULL, gtype);
   if (info == NULL)
     info = g_irepository_find_by_gtype (NULL, G_TYPE_FUNDAMENTAL (gtype));
-  if (info != NULL)
+  if (info != NULL && g_object_info_get_fundamental (info))
     {
       GIObjectInfoUnrefFunction unref =
 	g_object_info_get_unref_function_pointer (info);

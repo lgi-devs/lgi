@@ -1389,7 +1389,7 @@ marshal_fundamental (lua_State *L)
   if (info)
     {
       lgi_gi_info_new (L, info);
-      if (GI_IS_OBJECT_INFO (info))
+      if (GI_IS_OBJECT_INFO (info) && g_object_info_get_fundamental (info))
 	{
 	  GIObjectInfoGetValueFunction get_value =
 	    g_object_info_get_get_value_function_pointer (info);
