@@ -154,8 +154,9 @@ local signal_emitv = repo.GObject.signal_emitv
 -- Connects signal to specified object instance.
 local function connect_signal(obj, gtype, name, closure, detail, after)
    return signal_connect_closure_by_id(
-      obj, signal_lookup(name, gtype), quark_from_string(detail), closure,
-      after or false)
+      obj, signal_lookup(name, gtype),
+      detail and quark_from_string(detail) or 0,
+      closure, after or false)
 end
 -- Emits signal on specified object instance.
 local function emit_signal(obj, gtype, info, detail, ...)
@@ -167,7 +168,7 @@ local function emit_signal(obj, gtype, info, detail, ...)
 
    -- Invoke the signal.
    signal_emitv(params, signal_lookup(info.name, gtype),
-		quark_from_string(detail), retval)
+		detail and quark_from_string(detail) or 0, retval)
 
    -- Unmarshal results.
    return call_info:post_call(params, retval)
