@@ -1,5 +1,24 @@
-LGI is GObject-Introspection-based Lua binding to GObject based libraries.
+# LGI
+
+GObject-Introspection-based Lua binding to GObject based libraries.
 
 Licensed under MIT-style license
 http://www.opensource.org/licenses/mit-license.php, see LICENSE file
 for full text.
+
+## Installation:
+
+- Preferred way is to use LuaRocks.
+
+    luarocks install lgi
+
+- Otherwise, use bundled 'waf' building tool:
+
+    ./waf configure --prefix=<prefix>
+    ./waf build
+    [sudo] ./waf install
+
+## Usage:
+See examples in samples/ directory.  Documentation is available in
+doc/ directory in markdown format.  Process it with your favorite
+markdown processor if you want to read it in HTML.
