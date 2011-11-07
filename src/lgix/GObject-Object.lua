@@ -207,3 +207,13 @@ function Object:_access_signal(object, info, ...)
       return pad
    end
 end
+
+-- GOI<1.30 does not export 'Object.on_notify' signal from the
+-- typelib.  Work-around this problem by implementing custom on_notify
+-- attribute.
+if not gi.GObject.Object.signals.notify then
+   local notify_info = gi.GObject.ObjectClass.fields.notify.typeinfo.interface
+   function Object._attribute:on_notify(object, ...)
+      return Object._access_signal(self, object, notify_info, ...)
+   end
+end
