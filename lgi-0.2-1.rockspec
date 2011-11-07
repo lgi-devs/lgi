@@ -1,5 +1,5 @@
 package = 'LGI'
-version = '0.1-1'
+version = '0.2-1'
 
 description = {
    summary = "Lua bindings to GObject libraries",
@@ -16,7 +16,7 @@ supported_platforms = { "unix" }
 
 source = {
    url = 'git://gitorious.org/lgi/lgi.git',
-   tag = '0.1'
+   tag = '0.2'
 }
 
 dependencies = {

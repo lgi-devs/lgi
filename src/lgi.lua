@@ -90,7 +90,7 @@ end
 -- For the rest of bootstrap, prepare logging to Lgi domain.
 local log = logtable.domain('Lgi')
 
-log.message('Lua to GObject-Introspection binding v0.1')
+log.message('Lua to GObject-Introspection binding v0.2')
 
 -- Repository, table with all loaded namespaces.  Its metatable takes care of
 -- loading on-demand.  Created by C-side bootstrap.
