@@ -18,7 +18,7 @@ window.toolbar:add_actor(hbox)
 
 local button = Mx.Button {
    label = "Click me",
-   tooltip_text = "Please click this button!"
+   tooltip_text = "Please click this button!",
    on_clicked = function(self) self.label = "Thank you!" end
 }
 
