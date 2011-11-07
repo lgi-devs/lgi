@@ -180,8 +180,14 @@ object_refsink (lua_State *L, gpointer obj)
       return TRUE;
     }
 
-  /* There is no known wasy how to ref this kind of object. */
+  /* There is no known wasy how to ref this kind of object.  But this
+     typically appears when handling GParamSpec, and GParamSpec
+     handling generally works fine even without ref/unref, so the
+     warnings produced are generally junk, so disabled until a way to
+     handle ParamSpec properly is found. */
+#if 0
   g_warning ("no way to ref type `%s'", g_type_name (gtype));
+#endif
   return FALSE;
 }
 
@@ -224,7 +230,9 @@ object_unref (lua_State *L, gpointer obj, gboolean remove_proxy)
       return;
     }
 
+#if 0
   g_warning ("no way to unref type `%s'", g_type_name (gtype));
+#endif
 }
 
 static int
