@@ -194,7 +194,7 @@ function Object:_access_signal(object, info, ...)
       -- If signal supports details, add metatable implementing
       -- __newindex for connecting in the 'on_signal['detail'] =
       -- handler' form.
-      if info.is_signal and info.flags.detailed then
+      if not info.is_signal or info.flags.detailed then
 	 local mt = {}
 	 function mt:__newindex(detail, target)
 	    connect_signal(object, gtype, info.name, Closure(target, info),
@@ -213,7 +213,8 @@ end
 -- attribute.
 if not gi.GObject.Object.signals.notify then
    local notify_info = gi.GObject.ObjectClass.fields.notify.typeinfo.interface
-   function Object._attribute:on_notify(object, ...)
-      return Object._access_signal(self, object, notify_info, ...)
+   function Object._attribute.on_notify(object, ...)
+      local repotable = core.object.query(object, 'repo')
+      return Object._access_signal(repotable, object, notify_info, ...)
    end
 end
