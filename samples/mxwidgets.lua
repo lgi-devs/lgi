@@ -6,6 +6,7 @@
 --
 
 local lgi = require('lgi')
+local GObject = lgi.GObject
 local Mx = lgi.require('Mx', '1.0')
 local Clutter = lgi.require('Clutter', '1.0')
 
@@ -92,6 +93,10 @@ checkbutton:set_style_class('check-box')
 table:add_actor(checkbutton, 3, 1)
 table.meta[checkbutton].y_fill = false
 table.meta[checkbutton].x_fill = false
+
+-- Just for fun, create binding between both kinds of toggles.
+togglebutton:bind_property('toggled', checkbutton, 'toggled', 
+			   GObject.BindingFlags.BIDIRECTIONAL)
 
 scrollbar = Mx.ScrollBar {
    adjustment = Mx.Adjustment {

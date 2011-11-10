@@ -218,3 +218,12 @@ if not gi.GObject.Object.signals.notify then
       return Object._access_signal(repotable, object, notify_info, ...)
    end
 end
+
+-- Bind property implementation.  For some strange reason, GoI<1.30
+-- exports it only on GInitiallyUnowned and not on GObject.  Oh
+-- well...
+for _, name in pairs { 'bind_property', 'bind_property_full' } do
+   if not Object[name] then
+      Object._method[name] = InitiallyUnowned[name]
+   end
+end
