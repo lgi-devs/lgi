@@ -83,7 +83,6 @@ lgi_cache_create (lua_State *L, gpointer key, const char *mode)
   lua_rawset (L, LUA_REGISTRYINDEX);
 }
 
-static int core_addr_logger;
 static int core_addr_getgtype;
 
 static int
@@ -91,9 +90,7 @@ core_set(lua_State *L)
 {
   const char *name = luaL_checkstring (L, 1);
   int *key;
-  if (strcmp (name, "logger") == 0)
-    key = &core_addr_logger;
-  else if (strcmp (name, "getgtype") == 0)
+  if (strcmp (name, "getgtype") == 0)
     key = &core_addr_getgtype;
   else
     return luaL_argerror (L, 1, "invalid key");
@@ -285,7 +282,7 @@ core_constant (lua_State *L)
 
 /* Helper structure, contents of lgi_call_mutex ud registry index.
    Contains pointer to mutex as the 1st member, and then auxiliary
-   information so that logger can find the context. */
+   information so that callback-2-Lua can find the context. */
 typedef struct _CallMutex
 {
   GStaticRecMutex mutex;
@@ -330,7 +327,8 @@ lgi_callback_enter (gpointer user_data)
   return mutex->L;
 }
 
-void lgi_callback_leave (gpointer user_data)
+void
+lgi_callback_leave (gpointer user_data)
 {
   CallMutex *mutex = user_data;
   g_assert (lua_gettop (mutex->L) == 0);
@@ -349,67 +347,6 @@ core_log (lua_State *L)
   const char *message = luaL_checkstring (L, 3);
   g_log (domain, level, "%s", message);
   return 0;
-}
-
-static void
-log_handler (const gchar *log_domain, GLogLevelFlags log_level,
-	     const gchar *message, gpointer user_data)
-{
-  lua_State *L;
-  const gchar **level;
-  gboolean handled = FALSE, throw = FALSE;
-  gint level_bit;
-
-  /* Convert log_level to string. */
-  level = log_levels;
-  for (level_bit = G_LOG_LEVEL_ERROR; level_bit <= G_LOG_LEVEL_DEBUG;
-       level_bit <<= 1, level++)
-    if (log_level & level_bit)
-      break;
-
-  /* Enter Lua state, protected by the CallMutex. */
-  L = lgi_callback_enter (user_data);
-
-  /* Check, whether there is handler registered in Lua. */
-  luaL_checkstack (L, 4, "");
-  lua_pushlightuserdata (L, &core_addr_logger);
-  lua_rawget (L, LUA_REGISTRYINDEX);
-  if (!lua_isnil (L, -1))
-    {
-      /* Push arguments and invoke custom log handler. */
-      lua_pushstring (L, log_domain);
-      lua_pushstring (L, *level);
-      lua_pushstring (L, message);
-      switch (lua_pcall (L, 3, 1, 0))
-	{
-	case 0:
-	  /* If function returns non-nil, do not report on our own. */
-	  handled = lua_toboolean (L, -1);
-	  break;
-
-	case LUA_ERRRUN:
-	  /* Force throwing an exception. */
-	  throw = TRUE;
-	  break;
-
-	default:
-	  break;
-	}
-    }
-
-  /* Stack cleanup; either nil, boolean or err is popped. */
-  lua_pop (L, 1);
-
-  /* In case that the level was fatal, throw a lua error. */
-  if (throw || log_level & (G_LOG_FLAG_FATAL | G_LOG_LEVEL_ERROR))
-    luaL_error (L, "%s-%s **: %s", log_domain, *level, message);
-
-  /* Leaving the handler, so leave also call mutex. */
-  lgi_callback_leave (user_data);
-
-  /* If not handled by our handler, use default system logger. */
-  if (!handled)
-    g_log_default_handler (log_domain, log_level, message, NULL);
 }
 
 static int
@@ -474,15 +411,18 @@ luaopen_lgi_core (lua_State* L)
 
   /* Create call mutex guard, keep it locked initially (it is unlocked
      only when we are calling out to C code) and store it into the
-     registry. Also create an auxiliary Lua thread which will be
-     exclusively used only for callbacks. */
+     registry. */
   lua_pushlightuserdata (L, &lgi_call_mutex);
   mutex = lua_newuserdata (L, sizeof (*mutex));
   g_static_rec_mutex_init (&mutex->mutex);
   g_static_rec_mutex_lock (&mutex->mutex);
-  mutex->L = lua_newthread (L);
-  luaL_ref (L, LUA_REGISTRYINDEX); /* Keep thread fixed in registry forever. */
   lua_rawset (L, LUA_REGISTRYINDEX);
+
+  /* Also create an auxiliary Lua thread which will be exclusively
+     used only for callbacks.  Keep that thread fixed in registry
+     forever. */
+  mutex->L = lua_newthread (L);
+  luaL_ref (L, LUA_REGISTRYINDEX);
 
   /* Register 'lgi.core' interface. */
   lua_newtable (L);
@@ -494,9 +434,6 @@ luaopen_lgi_core (lua_State* L)
   lua_pushvalue (L, -2);
   lua_rawset (L, LUA_REGISTRYINDEX);
   lua_setfield (L, -2, "repo");
-
-  /* Install custom log handler. */
-  g_log_set_default_handler (log_handler, mutex);
 
   /* Initialize modules. */
   lgi_buffer_init (L);

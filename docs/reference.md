@@ -31,10 +31,6 @@ namespace, caller has to use the return value from `require` call.
       string and inserts, which are formatted according to Lua's
       `string.format` conventions.
 
-- `lgi.log.ERROR` when this variable is set to 'assert' string (which
-  is default setting), GLib assertions generate Lua `error()` call
-  instead of crashing the whole process with C `abort()` call.
-
 - `lgi.yield()` when called, unlocks LGI state lock, for a while, thus
   allowing potentially blocked callbacks or signals to enter the Lua
   state.  When using LGI with GLib's MainLoop, this call is not needed

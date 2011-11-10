@@ -506,13 +506,6 @@ usage follows:
 Note that format string is formatted using Lua's `string.format()`, so
 the rules for Lua formatting strings apply here.
 
-LGI also overrides default logging handler, so that when an assertion
-is met, instead of aborting the process, Lua `error()` is thrown.
-This behavior is turned on by default by setting `lgi.log.ERROR`
-variable to `assert` value.  To restore normal GLib behavior of
-crashing the whole process with C `abort()` call, set this variable to
-`nil`: `lgi.log.ERROR = nil`.
-
 ## 8. GObject basic constructs
 
 Although GObject library is already covered by gobject-introspection,

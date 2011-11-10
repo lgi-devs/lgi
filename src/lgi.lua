@@ -45,52 +45,33 @@ end
 
 -- Prepare logging support.  'log' is module-exported table, containing all
 -- functionality related to logging wrapped around GLib g_log facility.
-local logtable = { ERROR = 'assert', DEBUG = 'silent' }
-lgi.log = logtable
-core.set('logger',
-	 function(domain, level, message)
-	    -- Create domain table in the log table if it does not
-	    -- exist yet.
-	    if not logtable[domain] then logtable[domain] = {} end
-
-	    -- Check whether message should generate assert (i.e. Lua
-	    -- exception).
-	    local setting = logtable[domain][level] or logtable[level]
-	    if setting == 'assert' then error() end
-	    if setting == 'silent' then return true end
-
-	    -- Get handler for the domain and invoke it.
-	    local handler = logtable[domain].handler or logtable.handler
-	    return handler and handler(domain, level, message)
-	 end)
-
--- Main logging facility.
-function logtable.log(domain, level, format, ...)
-   local ok, msg = pcall(string.format, format, ...)
-   if not ok then msg = ("BAD FMT: `%s', `%s'"):format(format, msg) end
-   core.log(domain, level, msg)
-end
+lgi.log = {}
 
 -- Creates table containing methods 'message', 'warning', 'critical', 'error',
 -- 'debug' methods which log to specified domain.
-function logtable.domain(name)
-   local domain = logtable[name] or {}
+function lgi.log.domain(name)
+   local domain = lgi.log[name] or {}
    for _, level in ipairs { 'message', 'warning', 'critical',
 			    'error', 'debug' } do
       if not domain[level] then
-	 domain[level] = function(format, ...)
-			    logtable.log(name, level:upper(), format, ...)
-			 end
+	 domain[level] =
+	    function(format, ...)
+	       local ok, msg = pcall(string.format, format, ...)
+	       if not ok then
+		  msg = ("BAD FMT: `%s', `%s'"):format(format, msg)
+	       end
+	       core.log(name, level:upper(), msg)
+	    end
       end
    end
-   logtable[name] = domain
+   lgi.log[name] = domain
    return domain
 end
 
 -- For the rest of bootstrap, prepare logging to Lgi domain.
-local log = logtable.domain('Lgi')
+local log = lgi.log.domain('Lgi')
 
-log.message('Lua to GObject-Introspection binding v0.2')
+log.message('Lua to GObject-Introspection binding v0.3')
 
 -- Repository, table with all loaded namespaces.  Its metatable takes care of
 -- loading on-demand.  Created by C-side bootstrap.
