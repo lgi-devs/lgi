@@ -11,6 +11,8 @@ def configure(conf):
                    args='--cflags --libs')
     conf.check_cfg(package='cairo', uselib_store='CAIRO',
                    args='--cflags --libs')
+    conf.check_cfg(package='cairo-gobject', uselib_store='CAIRO_GOBJECT',
+                   args='--cflags --libs')
 
 def build(bld):
     # Copy GObjectIntrospection regress suite source files into our own build
@@ -24,7 +26,7 @@ def build(bld):
 
     # Build its shared library.
     bld(features = 'c cshlib',
-        uselib = ['LUA', 'GI', 'GIO', 'CAIRO'],
+        uselib = ['LUA', 'GI', 'GIO', 'CAIRO', 'CAIRO_GOBJECT'],
         source = 'regress.c',
         target = 'regress',
         cflags = bld.env.CCFLAGS,
