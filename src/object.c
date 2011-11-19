@@ -11,11 +11,9 @@
 #include <string.h>
 #include "lgi.h"
 
-/* lightuserdata keys to registry, containing tables representing
-   strong and weak caches.  Objects are always in weak cache, and
-   added/removed from strong cache according to gobject's toggle_ref
-   notifications. */
-static int cache_weak, cache_strong;
+/* lightuserdata keys to registry, containing table representing weak
+   cache of known objects. */
+static int cache;
 
 /* lightuserdata key to registry for metatable of objects. */
 static int object_mt;
@@ -98,38 +96,6 @@ object_get (lua_State *L, int narg)
   return obj;
 }
 
-/* GObject toggle-ref notification callback.  Inserts or removes given
-   object from/to strong reference cache. */
-static void
-object_toggle_notify (gpointer data, GObject *object, gboolean is_last_ref)
-{
-  lua_State *L = lgi_callback_enter (data);
-  luaL_checkstack (L, 3, "");
-  lua_pushlightuserdata (L, &cache_strong);
-  lua_rawget (L, LUA_REGISTRYINDEX);
-  lua_pushlightuserdata (L, object);
-  if (is_last_ref)
-    {
-      /* Remove from strong cache (i.e. assign nil to that slot). */
-      lua_pushnil (L);
-    }
-  else
-    {
-      /* Find proxy object in the weak table and assign it to the
-	 strong table. */
-      lua_pushlightuserdata (L, &cache_weak);
-      lua_rawget (L, LUA_REGISTRYINDEX);
-      lua_pushvalue (L, -2);
-      lua_rawget (L, -2);
-      lua_replace (L, -2);
-    }
-
-  /* Store new value to the strong cache. */
-  lua_rawset (L, -3);
-  lua_pop (L, 1);
-  lgi_callback_leave (data);
-}
-
 /* Retrieves requested typetable function for the object. */
 static gpointer
 object_load_function (lua_State *L, GType gtype, const gchar *name)
@@ -193,16 +159,12 @@ object_refsink (lua_State *L, gpointer obj)
 
 /* Removes one reference from the object. */
 static void
-object_unref (lua_State *L, gpointer obj, gboolean remove_proxy)
+object_unref (lua_State *L, gpointer obj)
 {
   GType gtype = G_TYPE_FROM_INSTANCE (obj);
   if (G_TYPE_IS_OBJECT (gtype))
     {
-      if (remove_proxy)
-	g_object_remove_toggle_ref (obj, object_toggle_notify,
-				    lgi_callback_context (L));
-      else
-	g_object_unref (obj);
+      g_object_unref (obj);
       return;
     }
 
@@ -238,7 +200,7 @@ object_unref (lua_State *L, gpointer obj, gboolean remove_proxy)
 static int
 object_gc (lua_State *L)
 {
-  object_unref (L, object_get (L, 1), TRUE);
+  object_unref (L, object_get (L, 1));
   return 0;
 }
 
@@ -279,8 +241,6 @@ lgi_object_2c (lua_State *L, int narg, GType gtype, gboolean optional,
 int
 lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
 {
-  GType gtype;
-
   /* NULL pointer results in nil. */
   if (!obj)
     {
@@ -290,7 +250,7 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
 
   /* Check, whether the object is already created (in the cache). */
   luaL_checkstack (L, 6, "");
-  lua_pushlightuserdata (L, &cache_weak);
+  lua_pushlightuserdata (L, &cache);
   lua_rawget (L, LUA_REGISTRYINDEX);
   lua_pushlightuserdata (L, obj);
   lua_rawget (L, -2);
@@ -303,7 +263,7 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
 	 because our proxy always keeps only one reference, which we
 	 already have. */
       if (own)
-	object_unref (L, obj, FALSE);
+	object_unref (L, obj);
       return 1;
     }
 
@@ -313,33 +273,19 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
   lua_rawget (L, LUA_REGISTRYINDEX);
   lua_setmetatable (L, -2);
 
-  /* Store newly created userdata proxy into weak cache. */
+  /* Store newly created userdata proxy into cache. */
   lua_pushlightuserdata (L, obj);
   lua_pushvalue (L, -2);
   lua_rawset (L, -5);
 
-  /* Stack cleanup, remove unnecessary weak cache and nil under userdata. */
+  /* Stack cleanup, remove unnecessary cache and nil under userdata. */
   lua_replace (L, -3);
   lua_pop (L, 1);
 
   /* If we don't own the object, take its ownership (and also remove
      floating reference if there is any). */
-  gtype = G_TYPE_FROM_INSTANCE (obj);
-  if (!own && object_refsink (L, obj))
-    own = TRUE;
-
-  if (G_TYPE_IS_OBJECT (gtype))
-    {
-      /* Create toggle reference and add object to the strong cache. */
-      gpointer user_data = lgi_callback_context (L);
-      g_object_add_toggle_ref (obj, object_toggle_notify, user_data);
-      object_toggle_notify (user_data, obj, FALSE);
-
-      /* If the object was already pre-owned, remove one reference
-	 (because we have added one owning toggle reference). */
-      if (own)
-	g_object_unref (obj);
-    }
+  if (!own)
+    object_refsink (L, obj);
 
   return 1;
 }
@@ -481,9 +427,8 @@ lgi_object_init (lua_State *L)
   luaL_register (L, NULL, object_mt_reg);
   lua_rawset (L, LUA_REGISTRYINDEX);
 
-  /* Initialize caches. */
-  lgi_cache_create (L, &cache_weak, "v");
-  lgi_cache_create (L, &cache_strong, NULL);
+  /* Initialize object cache. */
+  lgi_cache_create (L, &cache, "v");
 
   /* Create object API table and set it to the parent. */
   lua_newtable (L);

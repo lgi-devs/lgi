@@ -248,16 +248,6 @@ lgi_guard_create (lua_State *L, GDestroyNotify destroy)
   return &guard->data;
 }
 
-/* Creates Lua string from lightuserdata (containing pointer to
-   buffer) and length. */
-static int
-core_refptr (lua_State *L)
-{
-  luaL_checktype (L, 1, LUA_TLIGHTUSERDATA);
-  lua_pushlstring (L, lua_touserdata (L, 1), luaL_checkint (L, 2));
-  return 1;
-}
-
 /* Converts GType to number. */
 static int
 core_gtype (lua_State *L)
@@ -280,22 +270,13 @@ core_constant (lua_State *L)
   return 1;
 }
 
-/* Helper structure, contents of lgi_call_mutex ud registry index.
-   Contains pointer to mutex as the 1st member, and then auxiliary
-   information so that callback-2-Lua can find the context. */
-typedef struct _CallMutex
-{
-  GStaticRecMutex mutex;
-  lua_State *L;
-} CallMutex;
-
-/* GC method for CallMutex structure, which lives inside lua_State. */
+/* GC method for GStaticRecMutex structure, which lives inside lua_State. */
 static int
 call_mutex_gc (lua_State* L)
 {
-  CallMutex *mutex = lua_touserdata (L, 1);
-  g_static_rec_mutex_unlock (&mutex->mutex);
-  g_static_rec_mutex_free (&mutex->mutex);
+  GStaticRecMutex *mutex = lua_touserdata (L, 1);
+  g_static_rec_mutex_unlock (mutex);
+  g_static_rec_mutex_free (mutex);
   return 0;
 }
 
@@ -305,35 +286,6 @@ static int call_mutex_mt;
 /* lightuserdata of address of this member is key to LUA_REGISTRYINDEX
    where CallMutex instance for this state resides. */
 int lgi_call_mutex;
-
-gpointer
-lgi_callback_context (lua_State *L)
-{
-  /* Get context from the callback thread. */
-  gpointer user_data;
-  lua_pushlightuserdata (L, &lgi_call_mutex);
-  lua_rawget (L, LUA_REGISTRYINDEX);
-  user_data = lua_touserdata (L, -1);
-  lua_pop (L, 1);
-  return user_data;
-}
-
-lua_State *
-lgi_callback_enter (gpointer user_data)
-{
-  /* user_data is actually a pointer to CallMutex structure. */
-  CallMutex *mutex = user_data;
-  g_static_rec_mutex_lock (&mutex->mutex);
-  return mutex->L;
-}
-
-void
-lgi_callback_leave (gpointer user_data)
-{
-  CallMutex *mutex = user_data;
-  g_assert (lua_gettop (mutex->L) == 0);
-  g_static_rec_mutex_unlock (&mutex->mutex);
-}
 
 static const char* log_levels[] = {
   "ERROR", "CRITICAL", "WARNING", "MESSAGE", "INFO", "DEBUG", "???", NULL
@@ -353,7 +305,7 @@ static int
 core_yield (lua_State *L)
 {
   /* Get CallMutex from the state. */
-  CallMutex *mutex;
+  GStaticRecMutex *mutex;
   lua_pushlightuserdata (L, &lgi_call_mutex);
   lua_rawget (L, LUA_REGISTRYINDEX);
   mutex = lua_touserdata (L, -1);
@@ -361,16 +313,15 @@ core_yield (lua_State *L)
   /* Perform yield with unlocked mutex; this might force another
      threads waiting on the mutex to perform what they need to do
      (i.e. enter Lua with callbacks). */
-  g_static_rec_mutex_unlock (&mutex->mutex);
+  g_static_rec_mutex_unlock (mutex);
   g_thread_yield ();
-  g_static_rec_mutex_lock (&mutex->mutex);
+  g_static_rec_mutex_lock (mutex);
   return 0;
 }
 
 static const struct luaL_reg lgi_reg[] = {
   { "set", core_set },
   { "log",  core_log },
-  { "refptr", core_refptr },
   { "gtype", core_gtype },
   { "constant", core_constant },
   { "yield", core_yield },
@@ -382,7 +333,7 @@ int lgi_addr_repo;
 int
 luaopen_lgi_core (lua_State* L)
 {
-  CallMutex *mutex;
+  GStaticRecMutex *mutex;
 
   /* Early GLib initializations. Make sure that following fundamental
      G_TYPEs are already initialized. */
@@ -410,19 +361,13 @@ luaopen_lgi_core (lua_State* L)
   lua_rawset (L, LUA_REGISTRYINDEX);
 
   /* Create call mutex guard, keep it locked initially (it is unlocked
-     only when we are calling out to C code) and store it into the
-     registry. */
+     only when we are calling out to GObject-C code) and store it into
+     the registry. */
   lua_pushlightuserdata (L, &lgi_call_mutex);
   mutex = lua_newuserdata (L, sizeof (*mutex));
-  g_static_rec_mutex_init (&mutex->mutex);
-  g_static_rec_mutex_lock (&mutex->mutex);
+  g_static_rec_mutex_init (mutex);
+  g_static_rec_mutex_lock (mutex);
   lua_rawset (L, LUA_REGISTRYINDEX);
-
-  /* Also create an auxiliary Lua thread which will be exclusively
-     used only for callbacks.  Keep that thread fixed in registry
-     forever. */
-  mutex->L = lua_newthread (L);
-  luaL_ref (L, LUA_REGISTRYINDEX);
 
   /* Register 'lgi.core' interface. */
   lua_newtable (L);
