@@ -168,7 +168,11 @@ gpointer
 lgi_object_2c (lua_State *L, int narg, GType gtype, gboolean optional,
 	       gboolean nothrow);
 
+#if !GLIB_CHECK_VERSION(2, 30, 0)
 /* Workaround for broken g_struct_info_get_size() for GValue, see
    https://bugzilla.gnome.org/show_bug.cgi?id=657040 */
 gsize lgi_struct_info_get_size (GIStructInfo *info);
 #define g_struct_info_get_size lgi_struct_info_get_size
+int lgi_field_info_get_offset (GIFieldInfo *info);
+#define g_field_info_get_offset lgi_field_info_get_offset
+#endif

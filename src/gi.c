@@ -787,13 +787,38 @@ lgi_gi_init (lua_State *L)
   lua_setfield (L, -2, "gi");
 }
 
+#if !GLIB_CHECK_VERSION(2, 30, 0)
 /* Workaround for broken g_struct_info_get_size() for GValue, see
    https://bugzilla.gnome.org/show_bug.cgi?id=657040 */
+static GIStructInfo *parameter_info = NULL;
+static GIFieldInfo *parameter_value_info = NULL;
+
 #undef g_struct_info_get_size
 gsize
 lgi_struct_info_get_size (GIStructInfo *info)
 {
+  if (parameter_info == NULL)
+    parameter_info = g_irepository_find_by_name (NULL, "GObject", "Parameter");
   if (g_registered_type_info_get_g_type (info) == G_TYPE_VALUE)
     return sizeof (GValue);
+  else if (parameter_info && g_base_info_equal (info, parameter_info))
+    return sizeof (GParameter);
   return g_struct_info_get_size (info);
 }
+
+#undef g_field_info_get_offset
+gint
+lgi_field_info_get_offset (GIFieldInfo *info)
+{
+  if (parameter_value_info == NULL)
+    {
+      if (parameter_info == NULL)
+        parameter_info = g_irepository_find_by_name (NULL,
+                                                     "GObject", "Parameter");
+      parameter_value_info = g_struct_info_get_field (parameter_info, 1);
+    }
+  if (parameter_value_info && g_base_info_equal (info, parameter_value_info))
+    return G_STRUCT_OFFSET (GParameter, value);
+  return g_field_info_get_offset (info);
+}
+#endif
