@@ -106,12 +106,6 @@ function Object:_element(object, name)
 				  Object._class)
    local property = Object._class.find_property(class, name:gsub('_', '%-'))
    if property then return property, '_paramspec' end
-
-   -- If nothing else is found, return simple artificial attribute
-   -- which reads/writes object's env table.
-   local env = core.object.query(object, 'env')
-   return { get = function(obj) return env.name end,
-	    set = function(obj, val) env.name = val end, }, '_attribute'
 end
 
 -- Sets/gets property using specified marshaller attributes.

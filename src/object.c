@@ -307,13 +307,11 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
       return 1;
     }
 
-  /* Create new userdata object and attach empty table as its environment. */
+  /* Create new userdata object. */
   *(gpointer *) lua_newuserdata (L, sizeof (obj)) = obj;
   lua_pushlightuserdata (L, &object_mt);
   lua_rawget (L, LUA_REGISTRYINDEX);
   lua_setmetatable (L, -2);
-  lua_newtable (L);
-  lua_setfenv (L, -2);
 
   /* Store newly created userdata proxy into weak cache. */
   lua_pushlightuserdata (L, obj);
@@ -372,7 +370,7 @@ static const luaL_Reg object_mt_reg[] = {
 };
 
 static const char *const query_mode[] = {
-  "gtype", "repo", "class", "env", NULL
+  "gtype", "repo", "class", NULL
  };
 
 /* Queries for assorted instance properties. Lua-side prototype:
@@ -380,8 +378,7 @@ static const char *const query_mode[] = {
    Supported mode strings are:
    'gtype': returns real gtype of this instance.
    'repo':  returns repotable for this instance.
-   'class': returns class struct record of this instance.
-   'env':   returns environment table associated with the object. */
+   'class': returns class struct record of this instance. */
 static int
 object_query (lua_State *L)
 {
@@ -395,11 +392,6 @@ object_query (lua_State *L)
       if (mode == 0)
 	{
 	  lua_pushnumber (L, gtype);
-	  return 1;
-	}
-      else if (mode == 3)
-	{
-	  lua_getfenv (L, 1);
 	  return 1;
 	}
       else
