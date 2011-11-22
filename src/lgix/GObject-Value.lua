@@ -8,7 +8,8 @@
 --
 ------------------------------------------------------------------------------
 
-local assert, pairs = assert, pairs
+local assert, pairs, select, type, tostring, error =
+   assert, pairs, select, type, tostring, error
 local lgi = require 'lgi'
 local core = require 'lgi.core'
 local repo = core.repo

@@ -8,7 +8,7 @@
 --
 ------------------------------------------------------------------------------
 
-local pairs = pairs
+local pairs, select, setmetatable, error = pairs, select, setmetatable, error
 
 local core = require 'lgi.core'
 local gi = core.gi
