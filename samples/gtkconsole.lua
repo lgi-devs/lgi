@@ -166,12 +166,20 @@ end
 -- Instantiate terminal widget and couple it with our custom readline.
 local terminal = Vte.Terminal {
    delete_binding = Vte.TerminalEraseBinding.ASCII_DELETE,
-   readline = ReadLine.new(),
- }
-function terminal:on_size_allocate(rect)
-   self.readline.columns = self:get_column_count()
+}
+local readline = ReadLine.new()
+
+if Vte.Terminal.on_size_allocate then
+   -- 'size_allocate' signal is not present in some older Gtk-3.0.gir files
+   -- due to bug in older GI versions.  Make sure that this does not trip us
+   -- completely, it only means that readline will not react on the terminal
+   -- resize events.
+   function terminal:on_size_allocate(rect)
+      readline.columns = self:get_column_count()
+   end
 end
-function terminal.readline.display(str)
+
+function readline.display(str)
    -- Make sure that \n is always replaced with \r\n.  Also make sure
    -- that after \n, kill-rest-of-line is always issued, so that
    -- random garbage does not stay on the screen.
@@ -179,10 +187,10 @@ function terminal.readline.display(str)
    terminal:feed(str, #str)
 end
 function terminal:on_commit(str, length)
-   self.readline.columns = self:get_column_count()
-   self.readline:receive(str)
+   readline.columns = self:get_column_count()
+   readline:receive(str)
 end
-function terminal.readline.commit(line)
+function readline.commit(line)
    -- Try to execute input line.
    line = line:gsub('^%s?(=)%s*', 'return ')
    local chunk, answer = loadstring(line, '=stdin')
@@ -200,12 +208,12 @@ function terminal.readline.commit(line)
     end)(pcall(chunk))
    end
    if answer then
-      terminal.readline.display(answer .. '\n')
+      readline.display(answer .. '\n')
    end
 
    -- Store the line into rl history and start reading new line.
-   terminal.readline:add_line(line)
-   terminal.readline:start_line(_PROMPT or '> ')
+   readline:add_line(line)
+   readline:start_line(_PROMPT or '> ')
 end
 
 -- Create the application.
@@ -219,7 +227,7 @@ function app:on_activate()
 	       adjustment = terminal.adjustment,
 	 })
    terminal.expand = true
-   terminal.readline.display [[
+   readline.display [[
 This is terminal emulation of standard Lua console.  Enter Lua
 commands as in interactive Lua console.  The advantage over standard
 console is that in this context, GMainLoop is running, so this
@@ -241,8 +249,8 @@ window.title = 'Different' <Enter>
       child = grid,
    }
    window:show_all()
-   terminal.readline.columns = terminal:get_column_count()
-   terminal.readline:start_line(_PROMPT or '> ')
+   readline.columns = terminal:get_column_count()
+   readline:start_line(_PROMPT or '> ')
 
    -- For convenience, propagate 'lgi' into the global namespace.
    _G.lgi = lgi
