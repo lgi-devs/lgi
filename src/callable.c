@@ -80,8 +80,9 @@ typedef struct _Callback
   lua_State *L;
   int thread_ref;
 
-  /* Mutex which should be locked before calling Lua code. */
-  GStaticRecMutex *mutex;
+  /* State lock, to be passed to lgi_state_enter() when callback is
+     invoked. */
+  gpointer state_lock;
 } Callback;
 
 typedef struct _FfiClosureBlock FfiClosureBlock;
@@ -446,7 +447,7 @@ callable_call (lua_State *L)
   GIArgument retval, *args;
   void **ffi_args, **redirect_out;
   GError *err = NULL;
-  GStaticRecMutex *mutex;
+  gpointer state_lock = lgi_state_get_lock (L);
   Callable *callable = callable_get (L, 1);
 
   /* Make sure that all unspecified arguments are set as nil; during
@@ -554,18 +555,14 @@ callable_call (lua_State *L)
       ffi_args[nargs] = &redirect_out[nargs];
     }
 
-  /* Get and unlock the mutex. */
-  lua_pushlightuserdata (L, &lgi_call_mutex);
-  lua_rawget (L, LUA_REGISTRYINDEX);
-  mutex = (GStaticRecMutex *) lua_touserdata (L, -1);
-  lua_pop (L, 1);
-  g_static_rec_mutex_unlock (mutex);
+  /* Unlock the state. */
+  lgi_state_leave (state_lock);
 
   /* Call the function. */
   ffi_call (&callable->cif, callable->address, &retval, ffi_args);
 
-  /* Heading back to Lua, lock the mutex back again. */
-  g_static_rec_mutex_lock (mutex);
+  /* Heading back to Lua, lock the state back again. */
+  lgi_state_enter (state_lock);
 
   /* Pop any temporary items from the stack which might be stored there by
      marshalling code. */
@@ -672,24 +669,21 @@ callback_create (lua_State *L, Callback *callback)
   lua_pushthread (L);
   callback->thread_ref = luaL_ref (L, LUA_REGISTRYINDEX);
 
-  /* Retrieve and remember call mutex address. */
-  lua_pushlightuserdata (L, &lgi_call_mutex);
-  lua_rawget (L, LUA_REGISTRYINDEX);
-  callback->mutex = (GStaticRecMutex *) lua_touserdata (L, -1);
-  lua_pop (L, 1);
+  /* Retrieve and remember state lock. */
+  callback->state_lock = lgi_state_get_lock (L);
 }
 
 /* Prepares environment for the target to be called; sets up state
-   (and returns it), locks call mutex and stores target to be invoked
-   to the state and sets *call to TRUE.  If the target thread should
-   not be called but resumed instead, sets *call to FALSE and does not
+   (and returns it), enters state and stores target to be invoked to
+   the state and sets *call to TRUE.  If the target thread should not
+   be called but resumed instead, sets *call to FALSE and does not
    push anything to the stack. */
 static lua_State *
 callback_prepare_call (Callback *callback, int target_ref, gboolean *call)
 {
   /* Get access to proper Lua context. */
   lua_State *L = callback->L;
-  g_static_rec_mutex_lock (callback->mutex);
+  lgi_state_enter (callback->state_lock);
   lua_rawgeti (L, LUA_REGISTRYINDEX, callback->thread_ref);
   L = lua_tothread (L, -1);
   *call = (target_ref != LUA_NOREF);
@@ -897,8 +891,8 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
      used pretty much tidied. */
   lua_settop (L, stacktop);
 
-  /* Going back to C code, release call mutex again. */
-  g_static_rec_mutex_unlock (block->callback.mutex);
+  /* Going back to C code, release the state synchronization. */
+  lgi_state_leave (block->callback.state_lock);
 }
 
 /* Destroys specified closure. */

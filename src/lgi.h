@@ -78,11 +78,13 @@ int lgi_gi_info_new (lua_State *L, GIBaseInfo *info);
    NULL if table does not contain such field. */
 gpointer lgi_gi_load_function(lua_State *L, int typetable, const char *name);
 
-/* lightuserdata key to call mutex guard object. This mutex is locked
-   when inside Lua state and unlocked when calling out.  Protects
-   lua_State from being accessed from multiple threads when external
-   code uses multithreading.*/
-extern int lgi_call_mutex;
+/* Retrieve synchronization state, which can be used for entering and
+   leaving the state using lgi_state_enter() and lgi_state_leave(). */
+gpointer lgi_state_get_lock (lua_State *L);
+
+/* Enters/leaves Lua state. */
+void lgi_state_enter (gpointer left_state);
+void lgi_state_leave (gpointer state_lock);
 
 /* Marshalls single value from Lua to GLib/C. Returns number of temporary
    entries pushed to Lua stack, which should be popped before function call
