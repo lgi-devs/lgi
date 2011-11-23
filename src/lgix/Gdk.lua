@@ -13,6 +13,9 @@ local lgi = require 'lgi'
 local core = require 'lgi.core'
 local Gdk = lgi.Gdk
 
+-- Take over internal GDK synchronization lock.
+core.registerlock('Gdk', 'gdk_threads_set_lock_functions')
+
 -- Gdk.Rectangle does not exist at all, beacuse it is aliased to
 -- cairo.RectangleInt.  Make sure that we have it exists, because it
 -- is very commonly used in API documentation.

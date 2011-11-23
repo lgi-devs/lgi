@@ -10,6 +10,7 @@
 
 local select, type, pairs = select, type, pairs
 local lgi = require 'lgi'
+local core = require 'lgi.core'
 local Clutter = lgi.Clutter
 
 Clutter.Container._attribute = {}
@@ -30,5 +31,13 @@ function Clutter.Container._attribute.meta:get()
    return setmetatable({ _container = self }, container_child_meta_mt)
 end
 
--- Automatically initialize clutter.
-Clutter.init()
+-- Take over internal Clutter synchronization lock.
+core.registerlock('Clutter', 'clutter_threads_set_lock_functions')
+
+-- Automatically initialize clutter, avoid continuing if
+-- initialization fails.
+local status = Clutter.init()
+if status ~= Clutter.InitError.SUCCESS then
+   error(("Clutter initialization failed: %s"):format(
+	    Clutter.InitError(status)))
+end
