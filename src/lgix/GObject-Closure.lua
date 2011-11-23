@@ -105,7 +105,7 @@ end
 -- Marshal single call_info cell (either input or output).
 local function marshal_cell(
       call_info, cell, direction, args, argc,
-      marshalling_params, value, params)
+      marshalling_params, value, params, retval)
    local marshaller = cell[direction]
    if not marshaller or cell.internal then return argc end
    argc = argc + 1
@@ -174,7 +174,7 @@ function CallInfo:get_closure_marshaller(target)
       for i = 1, #self do
 	 argc = marshal_cell(
 	    self, self[i], 'to_value', args, argc,
-	    marshalling_params, params[i], params)
+	    marshalling_params, params[i], params, retval)
       end
    end
 end
