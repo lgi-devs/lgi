@@ -779,7 +779,8 @@ end
 -- Makes sure that the namespace (optionally with requested version)
 -- is properly loaded.
 function lgi.require(name, version)
-   -- Load the namespace info for GIRepository.
+   -- Load the namespace info for GIRepository.  This also verifies
+   -- whether requested version can be loaded.
    local ns_info = assert(gi.require(name, version))
 
    -- If the repository table does not exist yet, create it.
@@ -804,10 +805,6 @@ function lgi.require(name, version)
 	 assert(msg:find("module '" .. lgix_name .. "' not found:", 1, true),
 		msg)
       end
-   else
-      assert(not version or ns._version == version,
-	     ("loading '%s-%s', but version '%s' is already loaded"):format(
-	  ns._name, version, ns._version))
    end
    return ns
 end
