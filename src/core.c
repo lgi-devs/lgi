@@ -437,7 +437,6 @@ luaopen_lgi_core (lua_State* L)
 
   /* Early GLib initializations. Make sure that following fundamental
      G_TYPEs are already initialized. */
-  setlocale (LC_ALL, "");
   g_type_init ();
   volatile GType unused;
   unused = G_TYPE_DATE;
