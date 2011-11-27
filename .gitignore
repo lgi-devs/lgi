@@ -2,9 +2,5 @@
 *.so
 *.dll
 *.stackdump
-.cproject
-.project
-.settings
-.waf*
-build
-.lock-wafbuild
+.depcheck
+*.rockspec

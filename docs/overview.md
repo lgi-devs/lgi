@@ -40,18 +40,14 @@ plain `luarocks install lgi` does not work yet, although it will be
 preferred way to install LGI in the future.  Currently, LGI source
 must be downloaded, unpacked and installed using `luarocks make`.
 
-### Installing by 'waf' tool
+### Installing using Makefile
 
-Another way to install LGI is using bundled `waf` tool.  Type
+Another way to install LGI is using makefiles:
 
-    ./waf configure
-    ./waf
-    sudo ./waf install
+    make
+    sudo make install [PREFIX=prefix-path] [DESTDIR=destir-path]
 
-to build and install LGI into default location (either /usr/local
-prefix or into Lua modules location specified by Lua's pkg-config .pc
-file, if present).  Use `./waf --help` to see other possible options,
-mainly for influencing target installation directories.
+Default `PREFIX` is `/usr/local` and default `DESTDIR` is empty.
 
 ## Quick overview
 

@@ -25,7 +25,7 @@ assert(gi.require ('GLib', '2.0'))
 assert(gi.require ('GObject', '2.0'))
 
 -- Create lgi table, containing the module.
-local lgi = { _NAME = 'lgi', _VERSION = '0.3' }
+local lgi = { _NAME = 'lgi', _VERSION = require 'lgi.version' }
 
 -- Add simple flag-checking function, avoid compatibility hassle with
 -- importing bitlib just because of this simple operation.
@@ -723,7 +723,7 @@ function namespace_mt:__index(symbol)
       local package = preconditions[symbol]
       if not preconditions[package] then
 	 preconditions[package] = true
-	 require('lgix.' .. package)
+	 require('lgi.override.' .. package)
 	 preconditions[package] = nil
       end
       preconditions[symbol] = nil
@@ -797,13 +797,17 @@ function lgi.require(name, version)
       end
 
       -- Try to load override, if it is present.
-      local lgix_name = 'lgix.' .. ns._name
-      local ok, msg = pcall(require, lgix_name)
+      local override_name = 'lgi.override.' .. ns._name
+      local ok, msg = pcall(require, override_name)
       if not ok then
 	 -- Try parsing message; if it is something different than
-	 -- "module xxx not found", then rethrow the exception.
-	 assert(msg:find("module '" .. lgix_name .. "' not found:", 1, true),
-		msg)
+	 -- "module xxx not found", then attempt to load again and let
+	 -- the exception fly out.
+	 if not msg:find("module '" .. override_name .. "' not found:",
+			 1, true) then
+	    package.loaded[override_name] = nil
+	    require(override_name)
+	 end
       end
    end
    return ns

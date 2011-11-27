@@ -431,7 +431,7 @@ static const struct luaL_reg lgi_reg[] = {
 int lgi_addr_repo;
 
 int
-luaopen_lgi_core (lua_State* L)
+luaopen_lgi_corelgistdlua (lua_State* L)
 {
   LgiStateMutex *mutex;
 

@@ -14,15 +14,14 @@ although preferred version is >= 1.30.  The development package is
 called `libgirepository1.0-dev` on debian-based systems (like Ubuntu)
 and `gobject-introspection-devel` on RedHat-based systems (like Fedora).
 
-- Using LuaRocks:
+Using LuaRocks:
 
     luarocks install lgi
 
-- Otherwise, use bundled 'waf' building tool:
+Alternatively, use make-based installation
 
-    ./waf configure --prefix=<prefix>
-    ./waf build
-    [sudo] ./waf install
+    make
+    [sudo] make install [PREFIX=<prefix>] [DESTDIR=<destdir>]
 
 ## Usage:
 See examples in samples/ directory.  Documentation is available in
