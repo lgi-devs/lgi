@@ -1,5 +1,5 @@
 package = 'LGI'
-version = '0.2-1'
+version = '0.3-1'
 
 description = {
    summary = "Lua bindings to GObject libraries",
@@ -16,7 +16,7 @@ supported_platforms = { "unix" }
 
 source = {
    url = 'git://gitorious.org/lgi/lgi.git',
-   tag = '0.2'
+   tag = '0.3'
 }
 
 dependencies = {
@@ -30,5 +30,5 @@ build = {
       "--prefix=$(PREFIX) --datadir=$(LUADIR) --libdir=$(LIBDIR); " ..
       "python waf build",
    install_command = "python waf install",
-   copy_directories = { 'docs' }
+   copy_directories = { 'docs', 'samples' }
 }

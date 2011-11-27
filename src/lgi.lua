@@ -25,7 +25,7 @@ assert(gi.require ('GLib', '2.0'))
 assert(gi.require ('GObject', '2.0'))
 
 -- Create lgi table, containing the module.
-local lgi = {}
+local lgi = { _NAME = 'lgi', _VERSION = '0.3' }
 
 -- Add simple flag-checking function, avoid compatibility hassle with
 -- importing bitlib just because of this simple operation.
@@ -71,7 +71,7 @@ end
 -- For the rest of bootstrap, prepare logging to Lgi domain.
 local log = lgi.log.domain('Lgi')
 
-log.message('Lua to GObject-Introspection binding v0.3')
+log.message('Lua to GObject-Introspection binding ' .. lgi._VERSION)
 
 -- Repository, table with all loaded namespaces.  Its metatable takes care of
 -- loading on-demand.  Created by C-side bootstrap.

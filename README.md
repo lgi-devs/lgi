@@ -8,7 +8,13 @@ for full text.
 
 ## Installation:
 
-- Preferred way is to use LuaRocks.
+In order to be able to compile native part of lgi,
+gobject-introspection >= 0.10.8 development package must be installed,
+although preferred version is >= 1.30.  The development package is
+called `libgirepository1.0-dev` on debian-based systems (like Ubuntu)
+and `gobject-introspection-devel` on RedHat-based systems (like Fedora).
+
+- Using LuaRocks:
 
     luarocks install lgi
 
