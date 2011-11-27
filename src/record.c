@@ -179,7 +179,7 @@ lgi_record_2lua (lua_State *L, gpointer addr, gboolean own, int parent)
   lua_setfenv (L, -2);
 
   /* Store newly created record into the cache. */
-  if (parent == 0)
+  if (parent == 0 && own)
     {
       lua_pushlightuserdata (L, addr);
       lua_pushvalue (L, -2);
