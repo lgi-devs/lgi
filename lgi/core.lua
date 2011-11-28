@@ -11,4 +11,4 @@
 -- This module decides what kind of core routines should be loaded.
 -- Currently only one implementation exists, standard-Lua C-side
 -- implementation, LuaJIT-FFI-based one is planned.
-return require 'lgi.corelgistdlua'
+return require 'lgi.corelgilua51'
