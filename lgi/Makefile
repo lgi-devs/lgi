@@ -12,10 +12,10 @@ LUA_SHAREDIR = $(PREFIX)/share/lua/5.1
 GINAME = gobject-introspection-1.0
 VERSION_FILE = version.lua
 
-ifneq ($(filter $(shell uname -s),Cygwin MSys),)
+ifeq ($(shell uname -o),Cygwin)
 CORE = corelgilua51.dll
-LIBS += -llua5.1
 LIBFLAG = -shared
+LIBS += -llua
 else
 CORE = corelgilua51.so
 LIBFLAG = -shared

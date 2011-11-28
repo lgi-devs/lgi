@@ -5,10 +5,9 @@
 # License: MIT
 #
 
-ifneq ($(filter $(shell uname -s),Cygwin),)
+ifeq ($(shell uname -o),Cygwin)
 EXT = .dll
 PFX = cyg
-LIBS += -llua5.1
 LIBFLAG = -shared
 else
 EXT = .so
@@ -17,7 +16,7 @@ LIBFLAG = -shared
 CCSHARED = -fPIC
 endif
 
-PKGS = gobject-introspection-1.0 cairo cairo-gobject
+PKGS = gio-2.0 cairo cairo-gobject gobject-introspection-1.0
 
 COPTFLAGS = -Wall -g
 CFLAGS = $(CCSHARED) $(COPTFLAGS) $(LUA_CFLAGS) $(shell pkg-config --cflags $(PKGS))
