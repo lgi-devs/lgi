@@ -409,7 +409,7 @@ core_registerlock (lua_State *L)
   lua_rawget (L, LUA_REGISTRYINDEX);
   mutex = lua_touserdata (L, -1);
   wait_on = g_atomic_pointer_get (&mutex->mutex);
-  if (wait_on != &mutex->state_mutex)
+  if (wait_on != &package_mutex)
     {
       g_static_rec_mutex_lock (&package_mutex);
       g_atomic_pointer_set (&mutex->mutex, &package_mutex);
@@ -464,6 +464,7 @@ luaopen_lgi_corelgilua51 (lua_State* L)
      the registry. */
   lua_pushlightuserdata (L, &call_mutex);
   mutex = lua_newuserdata (L, sizeof (*mutex));
+  mutex->mutex = &mutex->state_mutex;
   g_static_rec_mutex_init (&mutex->state_mutex);
   g_static_rec_mutex_lock (&mutex->state_mutex);
   lua_rawset (L, LUA_REGISTRYINDEX);
