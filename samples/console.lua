@@ -205,9 +205,10 @@ entry.keytable = {
 function entry.view:on_key_press_event(event)
    -- Lookup action to be activated for specified key combination.
    local action = entry.keytable[event.keyval]
-   local expected_state = actions.multiline.active
-      and Gdk.ModifierType.CONTROL_MASK or 0
-   if not action or expected_state ~= event.state then
+   local mask = Gdk.ModifierType[event.state]
+   local wants_control = actions.multiline.active
+      and Gdk.ModifierType.CONTROL_MASK or nil
+   if not action or mask.SHIFT_MASK or mask.CONTROL_MASK ~= wants_control then
       return false
    end
 
@@ -240,7 +241,6 @@ end
 local app = Gtk.Application { application_id = 'org.lgi.gtkconsole' }
 function app:on_activate()
    local grid = Gtk.Grid {
-      margin = 5,
       orientation = Gtk.Orientation.VERTICAL
    }
    local toolbar = Gtk.Toolbar {}
