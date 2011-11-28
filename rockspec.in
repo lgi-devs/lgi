@@ -1,4 +1,4 @@
-package = 'LGI'
+package = 'lgi'
 version = '%VERSION%-1'
 
 description = {
@@ -9,13 +9,13 @@ description = {
 	 directly from Lua.
    ]],
    license = 'MIT/X11',
-   homepage = 'https://gitorious.org/lgi/lgi'
+   homepage = 'http://github.com/pavouk/lgi'
 }
 
 supported_platforms = { 'unix' }
 
 source = {
-   url = 'git://gitorious.org/lgi/lgi.git',
+   url = 'git://github.com/pavouk/lgi.git',
    tag = '%VERSION%'
 }
 
