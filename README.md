@@ -35,6 +35,8 @@ markdown processor if you want to read it in HTML.
 
 ## History
 
+### 0.4
+
 ### 0.3
 
 - Project hosting moved to GitHub.
