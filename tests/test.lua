@@ -99,6 +99,16 @@ function testsuite.checkv(val, exp, exptype)
 				 tostring(val), tostring(exp)), 2)
 end
 
+-- Load all known test source files.
+local testpath = arg[0]:sub(1, arg[0]:find('[^%/\\]+$') - 1):gsub('[/\\]$', '')
+for _, sourcefile in ipairs {
+   'gireg.lua',
+   'gobject.lua',
+   'variant.lua'
+			    } do
+   dofile(testpath .. '/' .. sourcefile)
+end
+
 -- Check for debug mode.
 if tests_debug or package.loaded.debugger then
    -- Make logs verbose (do not mute DEBUG level).
@@ -108,16 +118,6 @@ if tests_debug or package.loaded.debugger then
       groups[name].debug = true
       _G[name] = groups[name]
    end
-end
-
--- Load all known test source files.
-local testpath = arg[0]:sub(1, arg[0]:find('[^%/\\]+$') - 1):gsub('[/\\]$', '')
-for _, sourcefile in ipairs {
-   'gireg.lua',
-   'gobject.lua',
-   'variant.lua'
-			    } do
-   dofile(testpath .. '/' .. sourcefile)
 end
 
 -- Cmdline runner.
