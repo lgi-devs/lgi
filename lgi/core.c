@@ -83,24 +83,6 @@ lgi_cache_create (lua_State *L, gpointer key, const char *mode)
   lua_rawset (L, LUA_REGISTRYINDEX);
 }
 
-static int core_addr_getgtype;
-
-static int
-core_set(lua_State *L)
-{
-  const char *name = luaL_checkstring (L, 1);
-  int *key;
-  if (strcmp (name, "getgtype") == 0)
-    key = &core_addr_getgtype;
-  else
-    return luaL_argerror (L, 1, "invalid key");
-
-  lua_pushlightuserdata (L, key);
-  lua_pushvalue (L, 2);
-  lua_rawset (L, LUA_REGISTRYINDEX);
-  return 0;
-}
-
 int
 lgi_type_get_name (lua_State *L, GIBaseInfo *info)
 {
@@ -203,20 +185,18 @@ lgi_type_get_gtype (lua_State *L, int narg)
     case LUA_TSTRING:
       return g_type_from_name (lua_tostring (L, narg));
 
-    default:
+    case LUA_TTABLE:
       {
-	GType gtype = G_TYPE_INVALID;
-	lua_pushlightuserdata (L, &core_addr_getgtype);
-	lua_rawget (L, LUA_REGISTRYINDEX);
-	if (!lua_isnil (L, -1))
-	  {
-	    lua_pushvalue (L, narg);
-	    lua_call (L, 1, 1);
-	    gtype = lgi_type_get_gtype (L, -1);
-	  }
-	lua_pop (L, 1);
-	return gtype;
+        GType gtype;
+        lua_getfield (L, narg, "_gtype");
+        gtype = lgi_type_get_gtype (L, -1);
+        lua_pop (L, 1);
+        return gtype;
       }
+
+    default:
+      return luaL_error (L, "GType expected, got %s",
+                         lua_typename (L, lua_type (L, narg)));
     }
 }
 
@@ -419,7 +399,6 @@ core_registerlock (lua_State *L)
 }
 
 static const struct luaL_reg lgi_reg[] = {
-  { "set", core_set },
   { "log",  core_log },
   { "gtype", core_gtype },
   { "constant", core_constant },

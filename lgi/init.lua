@@ -498,13 +498,6 @@ local function create_component(info, mt)
    return setmetatable(component, mt)
 end
 
--- Core callback, gets gtype from advanced types like structs and objects.
-core.set('getgtype',
-	 function(t)
-	    assert(type(t) == 'table', 'bad argument, not GType')
-	    return t._gtype
-	 end)
-
 -- Table containing loaders for various GI types, indexed by
 -- gi.InfoType constants.
 local typeloader = {}
