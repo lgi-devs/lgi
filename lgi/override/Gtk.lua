@@ -92,7 +92,11 @@ for _, name in pairs { 'string', 'file' } do
       function(...)
 	 local res, err1, err2 = Gtk.Builder._method['add_from_' .. name](...)
 	 res = res and res ~= 0
-	 return res, err1, err2
+	 if err1 ~= nil then
+	    return res, err1, err2
+	 else
+	    return res
+	 end
       end
    Gtk.Builder['new_from_' .. name] =
       function(source)
@@ -100,7 +104,11 @@ for _, name in pairs { 'string', 'file' } do
 	 local res, err1, err2 =
 	    Gtk.Builder._method['add_from_' .. name](builder, source)
 	 if not res or res == 0 then builder = nil end
-	 return builder, err1, err2
+	 if err1 ~= nil then
+	    return builder, err1, err2
+	 else
+	    return builder
+	 end
       end
 end
 
