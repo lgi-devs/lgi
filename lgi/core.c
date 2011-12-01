@@ -188,7 +188,9 @@ lgi_type_get_gtype (lua_State *L, int narg)
     case LUA_TTABLE:
       {
         GType gtype;
-        lua_getfield (L, narg, "_gtype");
+	lgi_makeabs (L, narg);
+	lua_pushstring (L, "_gtype");
+        lua_rawget (L, narg);
         gtype = lgi_type_get_gtype (L, -1);
         lua_pop (L, 1);
         return gtype;
