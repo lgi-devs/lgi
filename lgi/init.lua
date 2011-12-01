@@ -68,10 +68,9 @@ function lgi.log.domain(name)
    return domain
 end
 
--- For the rest of bootstrap, prepare logging to Lgi domain.
-local log = lgi.log.domain('Lgi')
-
-log.message('Lua to GObject-Introspection binding ' .. lgi._VERSION)
+-- For the rest of bootstrap, prepare logging to lgi domain.
+local log = lgi.log.domain('lgi')
+log.message('gobject-introspection binding for Lua, ' .. lgi._VERSION)
 
 -- Repository, table with all loaded namespaces.  Its metatable takes care of
 -- loading on-demand.  Created by C-side bootstrap.
