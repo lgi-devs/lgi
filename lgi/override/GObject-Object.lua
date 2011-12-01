@@ -75,9 +75,12 @@ function InitiallyUnowned:_new(args)
 end
 
 -- Reading 'class' yields real instance of the object class.
-Object._attribute = { class = {} }
+Object._attribute = { class = {}, type = {} }
 function Object._attribute.class:get()
    return core.object.query(self, 'class')
+end
+function Object._attribute.type:get()
+   return core.object.query(self, 'repo')
 end
 
 -- Custom _element implementation, checks dynamically inherited
