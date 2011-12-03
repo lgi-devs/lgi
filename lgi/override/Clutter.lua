@@ -34,6 +34,9 @@ end
 -- Take over internal Clutter synchronization lock.
 core.registerlock('Clutter', 'clutter_threads_set_lock_functions')
 
+-- Initialize clutter with threading.
+Clutter.threads_init()
+
 -- Automatically initialize clutter, avoid continuing if
 -- initialization fails.
 local status = Clutter.init()
