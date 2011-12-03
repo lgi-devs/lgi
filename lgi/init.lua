@@ -229,7 +229,7 @@ function component_mt:_access(instance, symbol, ...)
    -- Invoke _element, which converts symbol to element and category.
    local element, category = self:_element(instance, symbol)
    if not element then
-      error(("%s: no `%s'"):format(self._name, symbol))
+      error(("%s: no `%s'"):format(self._name, symbol), 3)
    end
    return self:_access_element(instance, category, symbol, element, ...)
 end
@@ -247,7 +247,7 @@ function component_mt:_access_element(instance, category, symbol, element, ...)
    -- methods, constants and assorted other elements added manually
    -- into the class by overrides.
    if select('#', ...) > 0 then
-      error(("%s: `%s' is not writable"):format(self._name, symbol))
+      error(("%s: `%s' is not writable"):format(self._name, symbol), 4)
    end
    return element
 end
@@ -279,7 +279,6 @@ function component_mt:_element(instance, symbol)
       -- Check requested category.
       local cat = rawget(self, category)
       element = cat and cat[name]
-      if element then return element, category end
    elseif string.sub(symbol, 1, 1) ~= '_' then
       -- Check all available categories.
       local categories = self._categories or {}
@@ -287,8 +286,17 @@ function component_mt:_element(instance, symbol)
 	 category = categories[i]
 	 local cat = rawget(self, category)
 	 element = cat and cat[symbol]
-	 if element then return element, category end
+	 if element then break end
       end
+   end
+   if element then
+      -- Make sure that table-based attributes have symbol name, so
+      -- that potential errors contain the name of referenced
+      -- attribute.
+      if type(element) == 'table' and category == '_attribute' then
+	 element._name = element._name or symbol
+      end
+      return element, category
    end
 end
 
@@ -303,7 +311,7 @@ function component_mt:_access_attribute(instance, element, ...)
       if not element[mode] then
 	 error(("%s: cannot %s `%s'"):format(
 		  self._name, mode == 'get' and 'read' or 'write',
-		  name))
+		  element._name or '<unknown>'), 5)
       end
       element = element[mode]
    end
@@ -451,7 +459,7 @@ end
 function class_mt:_access_virtual(instance, vfunc, ...)
    if select('#', ...) > 0 then
       error(("%s: cannot override virtual `%s' "):format(
-	       self._name, vfunc.name))
+	       self._name, vfunc.name), 5)
    end
    -- Get typestruct of this class.
    local typestruct = core.object.query(instance, 'class',
