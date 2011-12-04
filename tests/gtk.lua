@@ -36,6 +36,74 @@ function gtk.buildable_id()
    checkv(w.id, 'new_id', 'string')
 end
 
+function gtk.container_property()
+   local c, w, v = Gtk.Grid(), Gtk.Label()
+   c:add(w)
+
+   c.property[w].left_attach = 1
+   v = GObject.Value(GObject.Type.INT)
+   c:child_get_property(w, 'left-attach', v)
+   checkv(v.value, 1, 'number')
+   v.value = 2
+   c:child_set_property(w, 'left-attach', v)
+   checkv(c.property[w].left_attach, 2)
+   check(not pcall(function() c.property[w].notexistent = 1 end))
+end
+
+function gtk.container_add_method()
+   local c, w
+   c, w = Gtk.Grid(), Gtk.Label()
+   c:add(w)
+   check(w.parent == c)
+
+   c, w = Gtk.Grid(), Gtk.Label()
+   c:add { w, left_attach = 0, width = 2 }
+   check(w.parent == c)
+   checkv(c.property[w].left_attach, 0, 'number')
+   checkv(c.property[w].width, 2, 'number')
+
+   c, w = Gtk.Grid(), Gtk.Label()
+   c:add(w, { left_attach = 0, width = 2 })
+   check(w.parent == c)
+   checkv(c.property[w].left_attach, 0, 'number')
+   checkv(c.property[w].width, 2, 'number')
+end
+
+function gtk.container_add_child()
+   local c, w
+   c, w = Gtk.Grid(), Gtk.Label()
+   c.child = w
+   check(w.parent == c)
+
+   c, w = Gtk.Grid(), Gtk.Label()
+   c.child = { w, left_attach = 0, width = 2 }
+   check(w.parent == c)
+   checkv(c.property[w].left_attach, 0, 'number')
+   checkv(c.property[w].width, 2, 'number')
+end
+
+function gtk.container_add_ctor()
+   local l1, l2 = Gtk.Label(), Gtk.Label()
+   local c = Gtk.Grid { { l1, width = 2 }, { l2, height = 3 } }
+   check(l1.parent == c)
+   check(l2.parent == c)
+   checkv(c.property[l1].width, 2, 'number')
+   checkv(c.property[l2].height, 3, 'number')
+end
+
+function gtk.container_child_find()
+   local l1, l2 = Gtk.Label { id = 'id_l1' }, Gtk.Label { id = 'id_l2' }
+   local c = Gtk.Grid {
+      { l1, width = 2 },
+      Gtk.Grid { id = 'in_g', { l2, height = 3 } }
+   }
+
+   check(c.child.id_l1 == l1)
+   check(c.child.id_l2 == l2)
+   check(c.child.id_l2.parent == c.child.in_g)
+   check(c.child.notexistent == nil)
+end
+
 local uidef = [[
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>

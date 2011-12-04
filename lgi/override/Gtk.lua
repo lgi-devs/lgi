@@ -76,37 +76,95 @@ end
 -------------------------------- Gtk.Container overrides.
 Gtk.Container._attribute = {}
 
+-- Extand add() functionality to allow adding child properties.
+local container_add = Gtk.Container.add
+function Gtk.Container._method:add(widget, props)
+   if type(widget) == 'table' then
+      props = widget
+      widget = widget[1]
+   end
+   container_add(self, widget)
+   if props then
+      local properties = self.property[widget]
+      for name, value in pairs(props) do
+	 if type(name) == 'string' then
+	    properties[name] = value
+	 end
+      end
+   end
+end
+
 -- Accessing child properties is preferrably done by accessing
--- 'children' property.
-Gtk.Container._attribute.children = {}
-local container_child_mt = {}
-function container_child_mt:__index(name)
+-- 'property' attribute.
+Gtk.Container._attribute.property = {}
+local container_property_item_mt = {}
+function container_property_item_mt:__index(name)
    name = name:gsub('_', '%-')
    local pspec = self._container.class:find_child_property(name)
+   if not pspec then
+      error(("%s: no child property `%s'"):format(
+	       self._container.type._name, name:gsub('%-', '_')), 2)
+   end
    local value = GObject.Value(pspec.value_type)
    self._container:child_get_property(self._child, name, value)
    return value.value
 end
-function container_child_mt:__newindex(name, val)
+function container_property_item_mt:__newindex(name, val)
    name = name:gsub('_', '%-')
    local pspec = self._container.class:find_child_property(name)
+   if not pspec then
+      error(("%s: no child property `%s'"):format(
+	       self._container.type._name, name:gsub('%-', '_')), 2)
+   end
    local value = GObject.Value(pspec.value_type, val)
    self._container:child_set_property(self._child, name, value)
 end
-local container_children_mt = {}
-function container_children_mt:__index(child)
+local container_property_mt = {}
+function container_property_mt:__index(child)
    return setmetatable({ _container = self._container, _child = child },
-		       container_child_mt)
+		       container_property_item_mt)
 end
-function Gtk.Container._attribute.children:get()
-   return setmetatable({ _container = self }, container_children_mt)
+function Gtk.Container._attribute.property:get()
+   return setmetatable({ _container = self }, container_property_mt)
 end
 
-local container_add = Gtk.Container.add
-function Gtk.Container._method:add(widget, props)
-   container_add(self, widget)
-   local child_props = self.children[widget]
-   for name, value in pairs(props or {}) do child_props[name] = value end
+-- Override 'child' attribute; writing allows adding child with
+-- children properties (similarly as add() override), reading provides
+-- table which can lookup subchildren by Gtk.Buildable.id.
+Gtk.Container._attribute.child = {}
+local container_child_mt = {}
+function container_child_mt:__index(id)
+   local found = (Gtk.Buildable.get_name(self._container) == id
+	       and self._container)
+   if not found then
+      for _, child in ipairs(self) do
+	 found = child.child[id]
+	 if found then break end
+      end
+   end
+   return found or nil
+end
+function Gtk.Container._attribute.child:get()
+   local children = self:get_children()
+   children._container = self
+   return setmetatable(children, container_child_mt)
+end
+function Gtk.Container._attribute.child:set(widget)
+   self:add(widget)
+end
+
+-- Override constructor, use array-part of the constructor table for adding
+-- children.
+function Gtk.Container:_new(args)
+   -- Create container object with properties.
+   local container = Gtk.Widget._new(self, args)
+
+   -- Add all children in correct order.
+   for _, child in ipairs(args or {}) do
+      container:add(child)
+   end
+
+   return container
 end
 
 -------------------------------- Gtk.Builder overrides.
