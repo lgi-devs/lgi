@@ -125,5 +125,23 @@ function Gtk.Builder._attribute.objects:get()
    return setmetatable({ _builder = self }, builder_objects_mt)
 end
 
+-------------------------------- Gtk.TextTagTable overrides.
+Gtk.TextTagTable._attribute = { tag = {} }
+
+local text_tag_table_tag_mt = {}
+function text_tag_table_tag_mt:__index(id)
+   return self._table:lookup(id)
+end
+function Gtk.TextTagTable._attribute.tag:get()
+   return setmetatable({ _table = self }, text_tag_table_tag_mt)
+end
+
+-- Constructor which adds tags from array part
+function Gtk.TextTagTable:_new(args)
+   local table = GObject.Object._new(self, args)
+   for _, tag in ipairs(args or {}) do table:add(tag) end
+   return table
+end
+
 -- Initialize GTK.
 Gtk.init()

@@ -132,3 +132,19 @@ function gtk.builder_objects()
    check(builder.objects.statusbar1 == builder:get_object('statusbar1'))
    check(not builder.objects.notexistent)
 end
+
+function gtk.text_tag_table_ctor()
+   local t1, t2 = Gtk.TextTag { name = 'tag1' }, Gtk.TextTag { name = 'tag2' }
+   local t = Gtk.TextTagTable { t1, t2 }
+   check(t:lookup('tag1') == t1)
+   check(t:lookup('tag2') == t2)
+   check(t:lookup('notexist') == nil)
+end
+
+function gtk.text_tag_table_tag()
+   local t1, t2 = Gtk.TextTag { name = 'tag1' }, Gtk.TextTag { name = 'tag2' }
+   local t = Gtk.TextTagTable { t1, t2 }
+   check(t.tag.tag1 == t1)
+   check(t.tag.tag2 == t2)
+   check(t.tag.notexist == nil)
+end
