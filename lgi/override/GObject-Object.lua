@@ -8,7 +8,8 @@
 --
 ------------------------------------------------------------------------------
 
-local pairs, select, setmetatable, error = pairs, select, setmetatable, error
+local pairs, select, setmetatable, error, type
+   = pairs, select, setmetatable, error, type
 
 local core = require 'lgi.core'
 local gi = core.gi
@@ -36,25 +37,28 @@ function Object:_new(args)
    -- Process 'args' table, separate properties from other fields.
    local params, others, safe = {}, {}, {}
    for name, arg in pairs(args or {}) do
-      local argtype = self[name]
-      if gi.isinfo(argtype) and argtype.is_property then
-	 local param = core.record.new(parameter_info)
-	 name = argtype.name
+      if type(name) == 'string' then
+	 local argtype = self[name]
+	 if gi.isinfo(argtype) and argtype.is_property then
+	    local param = core.record.new(parameter_info)
+	    name = argtype.name
 
-	 -- Store the name string in some safe Lua place ('safe'
-	 -- table), because param is GParameter, which contains only
-	 -- non-owning pointer to the string, and it could be
-	 -- Lua-GC'ed while still referenced by GParameter instance.
-	 safe[#safe + 1] = name
+	    -- Store the name string in some safe Lua place ('safe'
+	    -- table), because param is GParameter, which contains
+	    -- only non-owning pointer to the string, and it could be
+	    -- Lua-GC'ed while still referenced by GParameter
+	    -- instance.
+	    safe[#safe + 1] = name
 
-	 param.name = name
-	 local gtype = Type.from_typeinfo(argtype.typeinfo)
-	 Value.init(param.value, gtype)
-	 local marshaller = Value.find_marshaller(gtype, argtype.typeinfo)
-	 marshaller(param.value, nil, arg)
-	 params[#params + 1] = param
-      else
-	 others[name] = arg
+	    param.name = name
+	    local gtype = Type.from_typeinfo(argtype.typeinfo)
+	    Value.init(param.value, gtype)
+	    local marshaller = Value.find_marshaller(gtype, argtype.typeinfo)
+	    marshaller(param.value, nil, arg)
+	    params[#params + 1] = param
+	 else
+	    others[name] = arg
+	 end
       end
    end
 
@@ -62,7 +66,9 @@ function Object:_new(args)
    local object = object_new(self._gtype, params)
 
    -- Attach arguments previously filtered out from creation.
-   for name, func in pairs(others) do object[name] = func end
+   for name, value in pairs(others) do
+      if type(name) == 'string' then object[name] = value end
+   end
    return object
 end
 
