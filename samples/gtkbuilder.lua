@@ -31,7 +31,8 @@ if gtk_builder_use_standard_api then
    end
 else
    -- Instantiate builder and load objects.
-   local ui = assert(Gtk.Builder.new_from_file('demo.ui')).objects
+   local builder = Gtk.Builder()
+   local ui = assert(builder:add_from_file('demo.ui')).objects
 
    -- Get top-level window from the builder.
    window = ui.window1
