@@ -26,6 +26,16 @@ function gtk.widget_style()
    check(not pcall(function() return w.style.nonexistent end))
 end
 
+function gtk.buildable_id()
+   local w = Gtk.Label()
+   checkv(w.id, nil, nil)
+   w.id = 'label_id'
+   checkv(w.id, 'label_id', 'string')
+   checkv(Gtk.Buildable.get_name(w), 'label_id', 'string')
+   Gtk.Buildable.set_name(w, 'new_id')
+   checkv(w.id, 'new_id', 'string')
+end
+
 local uidef = [[
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>

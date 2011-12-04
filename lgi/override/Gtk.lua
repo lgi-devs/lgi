@@ -52,6 +52,27 @@ function Gtk.Widget._attribute.style:get()
    return setmetatable({ _widget = self }, widget_style_mt)
 end
 
+-------------------------------- Gtk.Buildable overrides.
+Gtk.Buildable._attribute = { id = {}, child = {} }
+
+-- Create custom 'id' property, mapped to buildable name.
+function Gtk.Buildable._attribute.id:set(id)
+   Gtk.Buildable.set_name(self, id)
+end
+function Gtk.Buildable._attribute.id:get()
+   return Gtk.Buildable.get_name(self)
+end
+
+-- Custom 'child' property, which returns widget in the subhierarchy
+-- with specified id.
+local buildable_child_mt = {}
+function buildable_child_mt:__index(id)
+   return self._buildable.id == id and self._buildable or nil
+end
+function Gtk.Buildable._attribute.child:get()
+   return setmetatable({ _buildable = self }, buildable_child_mt)
+end
+
 -------------------------------- Gtk.Container overrides.
 Gtk.Container._attribute = {}
 
