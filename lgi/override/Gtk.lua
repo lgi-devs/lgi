@@ -91,30 +91,28 @@ end
 -------------------------------- Gtk.Builder overrides.
 Gtk.Builder._attribute = {}
 
--- Override braindead return value type of gtk_builder_add_from_xxx.
-for _, name in pairs { 'string', 'file' } do
-   Gtk.Builder['add_from_' .. name] =
-      function(...)
-	 local res, err1, err2 = Gtk.Builder._method['add_from_' .. name](...)
-	 res = res and res ~= 0
-	 if err1 ~= nil then
-	    return res, err1, err2
-	 else
-	    return res
-	 end
-      end
-   Gtk.Builder['new_from_' .. name] =
-      function(source)
-	 local builder = Gtk.Builder()
-	 local res, err1, err2 =
-	    Gtk.Builder._method['add_from_' .. name](builder, source)
-	 if not res or res == 0 then builder = nil end
-	 if err1 ~= nil then
-	    return builder, err1, err2
-	 else
-	    return builder
-	 end
-      end
+-- Override add_from_ family of functions, their C-signatures are
+-- completely braindead.
+local function builder_fix_return(res, e1, e2)
+   if res and res ~= 0 then return true end
+   return false, e1, e2
+end
+function Gtk.Builder:add_from_file(filename)
+   return builder_fix_return(Gtk.Builder._method.add_from_file(self, filename))
+end
+function Gtk.Builder:add_objects_from_file(filename, object_ids)
+   return builder_fix_return(Gtk.Builder._method.add_objects_from_file(
+				self, filename, object_ids))
+end
+function Gtk.Builder:add_from_string(string, len)
+   if not len or len == -1 then len = #string end
+   return builder_fix_return(Gtk.Builder._method.add_from_string(
+				self, string, len))
+end
+function Gtk.Builder:add_objects_from_string(string, len, object_ids)
+   if not len or len == -1 then len = #string end
+   return builder_fix_return(Gtk.Builder._method.add_objects_from_string(
+				self, string, len, object_ids))
 end
 
 -- Wrapping get_object() using 'objects' attribute.
