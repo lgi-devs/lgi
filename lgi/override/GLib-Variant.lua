@@ -8,7 +8,9 @@
 --
 ------------------------------------------------------------------------------
 
-local select, type, pairs, tostring = select, type, pairs, tostring
+local select, type, pairs, tostring, setmetatable, error, assert
+   = select, type, pairs, tostring, setmetatable, error, assert
+
 local lgi = require 'lgi'
 local core = require 'lgi.core'
 local bytes = require 'bytes'
@@ -189,7 +191,7 @@ local simple_unpack_map = {
    i = 'int32', u = 'uint32', x = 'int64', t = 'uint64',
    d = 'double', s = 'string', o = 'string', g = 'string', v = 'variant'
 }
-function variant_get(v)
+local function variant_get(v)
    local type = v:get_type_string()
    local func = simple_unpack_map[type]
    if func then
