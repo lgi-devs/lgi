@@ -8,7 +8,8 @@
 --
 ------------------------------------------------------------------------------
 
-local select, type, pairs, unpack = select, type, pairs, unpack
+local select, type, pairs, ipairs, unpack, setmetatable, error
+   = select, type, pairs, ipairs, unpack, setmetatable, error
 local lgi = require 'lgi'
 local core = require 'lgi.core'
 local Gtk = lgi.Gtk
@@ -39,6 +40,10 @@ local widget_style_mt = {}
 function widget_style_mt:__index(name)
    name = name:gsub('_', '%-')
    local pspec = self._widget.class:find_style_property(name)
+   if not pspec then
+      error(("%s: no style property `%s'"):format(
+	       self._widget.type._name, name:gsub('%-', '_')), 2)
+   end
    local value = GObject.Value(pspec.value_type)
    self._widget:style_get_property(name, value)
    return value.value
