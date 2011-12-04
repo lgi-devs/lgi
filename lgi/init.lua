@@ -400,10 +400,30 @@ function record_mt:_new(fields)
    return struct
 end
 
+-- Implementation of interface_mt.
+local interface_mt = component_mt:clone {
+   '_virtual', '_property', '_signal', '_method', '_constant'
+}
+
+-- Checks whether given argument is type of this class.
+function interface_mt:is_type_of(instance)
+   if type(instance) == 'userdata' then
+      local instance_type = core.object.query(instance, 'repo')
+      while instance_type do
+	 if instance_type == self
+	    or instance_type._implements[self._name] == self then
+	    return true
+	 end
+	 instance_type = rawget(instance_type, '_parent')
+      end
+   end
+   return false
+end
+
 -- Implementation of class_mt, inherited from component_mt and
 -- providing basic class functionality.  Note that signals and
 -- properties are implemented later on GObject descendants only.
-local class_mt = component_mt:clone {
+local class_mt = interface_mt:clone {
    '_virtual', '_property', '_signal', '_method', '_constant', '_field'
 }
 
@@ -486,11 +506,6 @@ function class_mt:_new()
    -- Create the object.
    return object_new(self._gtype, {})
 end
-
--- Implementation of interface_mt.
-local interface_mt = component_mt:clone {
-   '_virtual', '_property', '_signal', '_method', '_constant'
-}
 
 -- Creates new component and sets up common parts according to given
 -- info.
