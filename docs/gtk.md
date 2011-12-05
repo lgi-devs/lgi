@@ -130,3 +130,23 @@ their identifier, so that instead of `builder:get_object('id')` it
 is possible to use `builder.objects.id`
 
 See `samples/gtkbuilder.lua` for typical `Gtk.Builder` usage.
+
+## Gtk.TextTagTable
+
+It is possible to populate new instance of the tag table with tags
+during the construction, an array part of constructor argument table is
+expected to contain `Gtk.TextTag` instances which are then automatically
+added to the table.
+
+A new attribute `tag` is added, provides Lua table which can be indexed
+by string representing tag name and returns the appropriate tag (so it is
+essentially a wrapper around `Gtk.TextTagTable:lookup()` method).
+
+Following example demonstrates both capabilities:
+
+    local tag_table = Gtk.TextTagTable {
+       Gtk.TextTag { name = 'plain', color = 'blue' },
+       Gtk.TextTag { name = 'error', color = 'red' },
+    }
+
+    assert(tag_table.tag.plain == tag_table:lookup('plain'))
