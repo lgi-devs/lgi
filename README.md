@@ -35,12 +35,17 @@ markdown processor if you want to read it in HTML.
 
 ## History
 
-### 0.4
+### unreleased
 
-### 0.3
+- existing Gtk overrides reworked and improved, there is now a way to
+  describe and create widget hierarchies in Lua-friendly way.  See
+  `docs/gtk.lua`, chapter about `Gtk.Container` for overview and
+  samples.
+
+### 0.3 (28-Nov-2011)
 
 - Project hosting moved to GitHub.
-- Build system swicthed from `waf` to simple Makefile-based one
+- Build system switched from `waf` to simple Makefile-based one
 - Added automatic locking of thread-sensitive libraries (Gdk and
   Clutter).  There is no need to add `Gdk.threads_enter()`,
   `Gdk.threads_leave()` and `Clutter.threads_enter()`,
@@ -55,10 +60,10 @@ markdown processor if you want to read it in HTML.
   even when testsuite is not needed at all.
 - Remove `setlocale()` initialization, which could break Lua when used
   with some regional locales.  The downside of this change is that
-  marshalling filenames containing non-ASCII characters on systems
+  marshaling file names containing non-ASCII characters on systems
   which define `G_BROKEN_FILENAMES` environment variable (probably
   only Fedora 15) does not work now.
 
-### 0.2
+### 0.2 (7-Nov-2011)
 
 First public release
