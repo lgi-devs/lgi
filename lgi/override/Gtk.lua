@@ -77,13 +77,12 @@ end
 Gtk.Container._attribute = {}
 
 -- Extand add() functionality to allow adding child properties.
-local container_add = Gtk.Container.add
-function Gtk.Container._method:add(widget, props)
+function Gtk.Container:add(widget, props)
    if type(widget) == 'table' then
       props = widget
       widget = widget[1]
    end
-   container_add(self, widget)
+   Gtk.Container._method.add(self, widget)
    if props then
       local properties = self.property[widget]
       for name, value in pairs(props) do
@@ -93,6 +92,10 @@ function Gtk.Container._method:add(widget, props)
       end
    end
 end
+
+-- Map 'add' method also to '_container_add', so that ctor can use it
+-- for adding widgets from the array part.
+Gtk.Container._container_add = Gtk.Container.add
 
 -- Accessing child properties is preferrably done by accessing
 -- 'property' attribute.
@@ -153,20 +156,6 @@ function Gtk.Container._attribute.child:set(widget)
    self:add(widget)
 end
 
--- Override constructor, use array-part of the constructor table for adding
--- children.
-function Gtk.Container:_new(args)
-   -- Create container object with properties.
-   local container = Gtk.Widget._new(self, args)
-
-   -- Add all children in correct order.
-   for _, child in ipairs(args or {}) do
-      container:add(child)
-   end
-
-   return container
-end
-
 -------------------------------- Gtk.Builder overrides.
 Gtk.Builder._attribute = {}
 
@@ -215,12 +204,8 @@ function Gtk.TextTagTable._attribute.tag:get()
    return setmetatable({ _table = self }, text_tag_table_tag_mt)
 end
 
--- Constructor which adds tags from array part
-function Gtk.TextTagTable:_new(args)
-   local table = GObject.Object._new(self, args)
-   for _, tag in ipairs(args or {}) do table:add(tag) end
-   return table
-end
+-- Map adding of tags in constructor array part to add() method.
+Gtk.TextTagTable._container_add = Gtk.TextTagTable.add
 
 -- Initialize GTK.
 Gtk.init()

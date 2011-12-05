@@ -69,6 +69,13 @@ function Object:_new(args)
    for name, value in pairs(others) do
       if type(name) == 'string' then object[name] = value end
    end
+
+   -- In case that type has _container_add() method, use it to process
+   -- array part of the args.
+   local add = self._container_add
+   if add and args then
+      for i = 1, #args do add(object, args[i]) end
+   end
    return object
 end
 

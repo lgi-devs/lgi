@@ -203,6 +203,22 @@ construction:
        on_destroy = function() print("Destroyed") end
     }
 
+For some classes, which behave like containers of other things, lgi
+allows adding also a list of children into the array part of the
+argument table, which contains children element to be added.  A
+typical example is `Gtk.Container`, which allows adding element in the
+constructor table, allowing construction of the whole widget
+hierarchy in Lua-friendly way:
+
+    local window = Gtk.Window {
+       title = "Title",
+       on_destroy = function() print("Destroyed") end,
+       Gtk.Grid {
+          Gtk.Label { label = "Contents", expand = true },
+          Gtk.Statusbar {}
+       }
+    }
+
 ### 3.2. Calling methods
 
 Methods are functions grouped inside class (or interface)
