@@ -45,28 +45,7 @@ end
 
 -- Prepare logging support.  'log' is module-exported table, containing all
 -- functionality related to logging wrapped around GLib g_log facility.
-lgi.log = {}
-
--- Creates table containing methods 'message', 'warning', 'critical', 'error',
--- 'debug' methods which log to specified domain.
-function lgi.log.domain(name)
-   local domain = lgi.log[name] or {}
-   for _, level in ipairs { 'message', 'warning', 'critical',
-			    'error', 'debug' } do
-      if not domain[level] then
-	 domain[level] =
-	    function(format, ...)
-	       local ok, msg = pcall(string.format, format, ...)
-	       if not ok then
-		  msg = ("BAD FMT: `%s', `%s'"):format(format, msg)
-	       end
-	       core.log(name, level:upper(), msg)
-	    end
-      end
-   end
-   lgi.log[name] = domain
-   return domain
-end
+lgi.log = require 'lgi.log'
 
 -- For the rest of bootstrap, prepare logging to lgi domain.
 local log = lgi.log.domain('lgi')
