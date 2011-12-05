@@ -354,6 +354,34 @@ Running `dump_props(Gtk.Window())` yields following output:
     sensitive	gboolean
     ... (and so on)
 
+### 3.7. Querying the type of the object instances
+
+To query whether given Lua value is actually an instance of specified
+class or subclass, class types define `is_type_of` method.  This
+class-method takes one argument and checks, whether given argument as an
+instance of specified class (or implements specified interface, when
+called on interface instances).  Following examples demonstrate usage of
+this construct:
+
+    local window = Gtk.Window()
+    print(Gtk.Window:is_type_of(window))    -- prints 'true'
+    print(Gtk.Widget:is_type_of(window))    -- prints 'true'
+    print(Gtk.Buildable:is_type_of(window)) -- prints 'true'
+    print(Gtk.Action:is_type_of(window))    -- prints 'false'
+    print(Gtk.Window:is_type_of('string'))  -- prints 'false'
+    print(Gtk.Window:is_type_of('string'))  -- prints 'false'
+    print(Gtk.Window:is_type_of(nil))       -- prints 'false'
+
+There is also possibility to query the type-table from instantiated
+object, using `type` property.
+
+    -- Checks, whether 'unknown' conforms to the type of the 'template'
+    -- object.
+    function same_type(template, unknown)
+       local type = template.type
+       return type:is_type_of(unknown)
+    end
+
 ## 4. Structures and unions
 
 Structures and unions are supported in a very similar way to classes.
