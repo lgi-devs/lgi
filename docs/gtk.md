@@ -21,7 +21,7 @@ property from Gtk.Window instance:
 Child properties are properties of the relation between a container
 and child.  A Lua-friendly access to these properties is implemented
 by `property` attribute of `Gtk.Container`.  Following example
-illustrates writing and reading of `x-padding` property of `Gtk.Grid`
+illustrates writing and reading of `width` property of `Gtk.Grid`
 and child `Gtk.Button`:
 
     local grid, button = Gtk.Grid(), Gtk.Button()
@@ -37,7 +37,7 @@ that it accepts either widget, or table containing widget at index 1
 and the rest `name=value` pairs define child properties.  Therefore
 this method is full replacement of unintrospectable
 `gtk_container_add_with_properties()` function.  Example from previous
-chapter simplified using this techinque follows:
+chapter simplified using this technique follows:
 
     local grid, button = Gtk.Grid(), Gtk.Button()
     grid:add { button, width = 2 }
@@ -58,10 +58,10 @@ this:
 
 Another important feature is that all widgets support `id` property,
 which can hold an arbitrary string which is used to identify the
-widget.  `id` is assigned by caller, defaults to `nil`.  To lookup
+widget.  `id` is assigned by caller, defaults to `nil`.  To look up
 widget with specified id in the container's widget tree (i.e. not only
 in direct container children), query `child` property of the container
-with requested id.  Previous example rewritten with this techinque
+with requested id.  Previous example rewritten with this technique
 would look like this:
 
     local grid = Gtk.Grid {
@@ -113,10 +113,11 @@ Note: the `id` property is implemented by piggybacking on
 
 ## Gtk.Builder
 
-Although Lua's declarative style for creating widget hierarchies is
-generally preferred to builder's XML authoring by hand, `Gtk.Builder`
-can still be useful when widget hierarchies are designed in some
-external tool like `glade`.
+Although Lua's declarative style for creating widget hierarchies (as
+presented in chapter discussing `Gtk.Container` extensions) is generally
+preferred to builder's XML authoring by hand, `Gtk.Builder` can still be
+useful when widget hierarchies are designed in some external tool like
+`glade`.
 
 Original `gtk_builder_add_from_file` and `gtk_builder_add_from_string`
 return `guint` instead of `gboolean`, which would make direct usage
@@ -124,9 +125,8 @@ from Lua awkward.  Lgi overrides these methods to return `boolean` as
 the first return value, so that typical
 `assert(builder:add_from_file(filename))` can be used.
 
-- `objects` attribute provides direct access to loaded objects by
-  their identifier, so that instead of `builder:get_object('id')` it
-  is possible to use `builder.objects.id`
+A new `objects` attribute provides direct access to loaded objects by
+their identifier, so that instead of `builder:get_object('id')` it
+is possible to use `builder.objects.id`
 
-See `samples/gtkbuilder.lua` in the Lgi source distribution for
-typical `Gtk.Builder` usage.
+See `samples/gtkbuilder.lua` for typical `Gtk.Builder` usage.

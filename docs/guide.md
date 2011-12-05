@@ -28,7 +28,7 @@ version)`:
 ### 1.1. Repository structure
 
 Importing library creates table containing all elements which are
-present in the library namespace - all classes, structs, global
+present in the library namespace - all classes, structures, global
 functions, constants etc.  All those elements are directly accessible, e.g.
 
     assert(GLib.PRIORITY_DEFAULT == 0)
@@ -36,7 +36,7 @@ functions, constants etc.  All those elements are directly accessible, e.g.
 Note that all elements in the namespace are lazy-loaded to avoid
 excessive memory overhead and initial loading time.  To force
 eager-loading, all namespaces (and container elements in them, like
-classes, structs, enums etc) contains `_resolve(deep)` method, which
+classes, structures, enums etc) contains `_resolve(deep)` method, which
 loads all contents eagerly, possibly recursively if `deep` argument is
 `true`.  So e.g.
 
@@ -211,7 +211,7 @@ Most usual technique to invoke method is using `:` operator,
 e.g. `window:show_all()`.  This is of course identical with
 `window.show_all(window)`, as is convention in plain Lua.
 
-Method declaration itself is also avavilable in the class and it is
+Method declaration itself is also available in the class and it is
 possible to invoke it without object notation, so previous example can
 be also rewritten as `Gtk.Window.show_all(window)`.  Note that this
 way of invoking removes dynamic lookup of the method from the object
@@ -229,7 +229,7 @@ first argument) are usually invoked using class namespace,
 e.g. `Gtk.Window.list_toplevels()`.  Very common form of static
 methods are `new` constructors, e.g. `Gtk.Window.new()`.  Note that in
 most cases, `new` constructors are provided only as convenience for C
-programmers, in LGI it might be preferrable to use `window =
+programmers, in LGI it might be preferable to use `window =
 Gtk.Window { type = Gtk.WindowType.TOPLEVEL }` instead of `window =
 Gtk.Window.new(Gtk.WindowType.TOPLEVEL)`.
 
@@ -265,7 +265,7 @@ following way:
        print("Destroyed", self)
     end
 
-Reading signal entity provides temprary table which can be used for
+Reading signal entity provides temporary table which can be used for
 connecting signal with specification of the signal detail (see GObject
 documentation on signal detail explanation).  An example of handler
 which is notified whenever window is activated or deactivated follows:
@@ -402,7 +402,7 @@ directly instead.
 
 ### 5.1. Accessing values
 
-In order to retrieve realenum values from symbolic names, enum and
+In order to retrieve real enum values from symbolic names, enum and
 bitflags are loaded into repository as tables mapping symbolic names
 to numeric constants.  Fro example, dumping `Gtk.WindowType` enum
 yields following output:
@@ -491,7 +491,7 @@ All logging is controlled by `lgi.log` table.  To allow logging in
 LGI-enabled code, `lgi.log.domain(name)` method exists.  This method
 returns table containing methods `message`, `warning`, `critical`,
 `error` and `debug` methods, which take format string optionally
-followed by inserts and logs specifed string.  An example of typical
+followed by inserts and logs specified string.  An example of typical
 usage follows:
 
     local lgi = require 'lgi'
@@ -500,7 +500,7 @@ usage follows:
     -- This is equivalent of C 'g_message("A message %d", 1)'
     log.message("A message %d", 1)
 
-    -- This is equivalent ot C 'g_warning("Not found")'
+    -- This is equivalent to C 'g_warning("Not found")'
     log.warning("Not found")
 
 Note that format string is formatted using Lua's `string.format()`, so
