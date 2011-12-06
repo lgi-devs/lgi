@@ -37,13 +37,13 @@ markdown processor if you want to read it in HTML.
 
 ## History
 
-### unreleased
+### 0.4 (unreleased)
 
-- existing Gtk overrides reworked and improved, there is now a way to
+- Existing Gtk overrides reworked and improved, there is now a way to
   describe and create widget hierarchies in Lua-friendly way.  See
   `docs/gtk.lua`, chapter about `Gtk.Container` for overview and
   samples.
-- various portability fixes.
+- Various portability fixes.
 
 ### 0.3 (28-Nov-2011)
 
