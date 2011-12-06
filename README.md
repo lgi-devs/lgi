@@ -8,7 +8,7 @@ Licensed under
 [MIT-style](http://www.opensource.org/licenses/mit-license.php)
 license, see LICENSE file for full text.
 
-Home of the project is on [GitHub](http//github.com/pavouk/lgi).
+Home of the project is on [GitHub](http://github.com/pavouk/lgi).
 
 ## Installation:
 
