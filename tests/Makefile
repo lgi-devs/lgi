@@ -5,7 +5,7 @@
 # License: MIT
 #
 
-ifeq ($(shell uname -o),Cygwin)
+ifeq ($(shell uname -s),$(wildcard CYGWIN*))
 EXT = .dll
 PFX = cyg
 LIBFLAG = -shared
