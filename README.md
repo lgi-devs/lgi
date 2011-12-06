@@ -43,6 +43,7 @@ markdown processor if you want to read it in HTML.
   describe and create widget hierarchies in Lua-friendly way.  See
   `docs/gtk.lua`, chapter about `Gtk.Container` for overview and
   samples.
+- various portability fixes.
 
 ### 0.3 (28-Nov-2011)
 
