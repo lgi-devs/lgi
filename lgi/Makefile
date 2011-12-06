@@ -56,6 +56,7 @@ object.o : object.c lgi.h $(DEPCHECK)
 record.o : record.c lgi.h $(DEPCHECK)
 
 OVERRIDES = $(wildcard override/*.lua)
+CORESOURCES = $(wildcard *.lua)
 
 install : $(CORE) $(VERSION_FILE)
 	mkdir -p $(DESTDIR)$(LUA_LIBDIR)/lgi
@@ -63,6 +64,6 @@ install : $(CORE) $(VERSION_FILE)
 	mkdir -p $(DESTDIR)$(LUA_SHAREDIR)
 	cp ../lgi.lua $(DESTDIR)$(LUA_SHAREDIR)
 	mkdir -p $(DESTDIR)$(LUA_SHAREDIR)/lgi
-	cp init.lua core.lua $(VERSION_FILE) $(DESTDIR)$(LUA_SHAREDIR)/lgi
+	cp $(CORESOURCES) $(VERSION_FILE) $(DESTDIR)$(LUA_SHAREDIR)/lgi
 	mkdir -p $(DESTDIR)$(LUA_SHAREDIR)/lgi/override
 	cp $(OVERRIDES) $(DESTDIR)$(LUA_SHAREDIR)/lgi/override
