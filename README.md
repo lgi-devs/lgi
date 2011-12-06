@@ -27,6 +27,8 @@ Alternatively, use make-based installation:
     make
     [sudo] make install [PREFIX=<prefix>] [DESTDIR=<destdir>]
 
+Please note that on BSD-systems you may need to use 'gmake'.
+
 ## Usage
 
 See examples in samples/ directory.  Documentation is available in
