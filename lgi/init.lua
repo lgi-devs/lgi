@@ -55,6 +55,7 @@ log.message('gobject-introspection binding for Lua, ' .. lgi._VERSION)
 -- loading on-demand.  Created by C-side bootstrap.
 local repo = core.repo
 
+local enum = require 'lgi.enum'
 local component = require 'lgi.component'
 local record = require 'lgi.record'
 local class = require 'lgi.class'
@@ -72,50 +73,12 @@ function typeloader.constant(namespace, info)
    return core.constant(info), '_constant'
 end
 
-local function load_enum(info, meta)
-   local value = {}
-
-   -- Load all enum values.
-   local values = info.values
-   for i = 1, #values do
-      local mi = values[i]
-      value[mi.name:upper()] = mi.value
-   end
-
-   -- Install metatable providing reverse lookup (i.e name(s) by
-   -- value).
-   setmetatable(value, meta)
-   return value
-end
-
--- Enum reverse mapping, value->name.
-local enum_mt = {}
-function enum_mt:__index(value)
-   for name, val in pairs(self) do
-      if val == value then return name end
-   end
-end
-
 function typeloader.enum(namespace, info)
-   return load_enum(info, enum_mt), '_enum'
-end
-
--- Resolving arbitrary number to the table containing symbolic names
--- of contained bits.
-local bitflags_mt = {}
-function bitflags_mt:__index(value)
-   if type(value) ~= 'number' then return end
-   local t = {}
-   for name, flag in pairs(self) do
-      if type(flag) == 'number' and core.has_bit(value, flag) then
-	 t[name] = flag
-      end
-   end
-   return t
+   return enum.load(info, enum.enum_mt), '_enum'
 end
 
 function typeloader.flags(namespace, info)
-   return load_enum(info, bitflags_mt), '_enum'
+   return enum.load(info, enum.bitflags_mt), '_enum'
 end
 
 function typeloader.struct(namespace, info)
