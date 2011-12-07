@@ -6,13 +6,14 @@
 #
 
 VERSION = 0.4
+MAKE ?= make
 
 ROCK = lgi-$(VERSION)-1.rockspec
 
 .PHONY : rock all clean install check
 
 all :
-	make -C lgi
+	$(MAKE) -C lgi
 
 rock : $(ROCK)
 $(ROCK) : rockspec.in Makefile
@@ -20,13 +21,13 @@ $(ROCK) : rockspec.in Makefile
 
 clean :
 	rm -f *.rockspec
-	make -C lgi clean
-	make -C tests clean
+	$(MAKE) -C lgi clean
+	$(MAKE) -C tests clean
 
 install :
-	make -C lgi install
+	$(MAKE) -C lgi install
 
 check : all
-	make -C tests check
+	$(MAKE) -C tests check
 
 export VERSION

@@ -8,7 +8,7 @@ Licensed under
 [MIT-style](http://www.opensource.org/licenses/mit-license.php)
 license, see LICENSE file for full text.
 
-Home of the project is on [GitHub](http//github.com/pavouk/lgi).
+Home of the project is on [GitHub](http://github.com/pavouk/lgi).
 
 ## Installation:
 
@@ -27,6 +27,8 @@ Alternatively, use make-based installation:
     make
     [sudo] make install [PREFIX=<prefix>] [DESTDIR=<destdir>]
 
+Please note that on BSD-systems you may need to use 'gmake'.
+
 ## Usage
 
 See examples in samples/ directory.  Documentation is available in
@@ -35,12 +37,13 @@ markdown processor if you want to read it in HTML.
 
 ## History
 
-### unreleased
+### 0.4 (unreleased)
 
-- existing Gtk overrides reworked and improved, there is now a way to
+- Existing Gtk overrides reworked and improved, there is now a way to
   describe and create widget hierarchies in Lua-friendly way.  See
   `docs/gtk.lua`, chapter about `Gtk.Container` for overview and
   samples.
+- Various portability fixes.
 
 ### 0.3 (28-Nov-2011)
 
