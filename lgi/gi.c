@@ -415,7 +415,10 @@ info_index (lua_State *L)
 	  lua_pushstring (L, g_type_tag_to_string (tag));
 	  return 1;
 	}
-      INFOS (enum, value);
+#if GLIB_CHECK_VERSION (2, 30, 0)
+      INFOS (enum, method)
+#endif
+	INFOS (enum, value);
     }
 
   if (GI_IS_VALUE_INFO (*info))
