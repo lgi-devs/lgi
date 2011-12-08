@@ -9,27 +9,9 @@ local Gdk = lgi.require('Gdk', '3.0')
 local Pango = lgi.Pango
 local GtkSource = lgi.GtkSource
 
-local Output = {}
-Output.__index = Output
-
-function Output.new(args)
-   local output = setmetatable(
-      {
-	 buffer = Gtk.TextBuffer {
-	 },
-      }, Output)
-   output.end_mark = output.buffer:create_mark(
-      nil, output.buffer:get_end_iter(), false)
-   return output
-end
-
--- Appends given text to output view, with specified tag.
-function Output:append(text, tag)
-end
-
 -- Creates new console instance.
 local function Console()
-   -- Define consoel object actions.
+   -- Define console object actions.
    local actions = {
       execute = Gtk.Action {
 	 name = 'execute', stock_id = Gtk.STOCK_OK, is_important = true,
