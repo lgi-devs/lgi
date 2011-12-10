@@ -110,8 +110,9 @@ function Object:_element(object, name)
    -- they can handle specified _element request.
    local interfaces = Type.interfaces(core.object.query(object, 'gtype'))
    for i = 1, #interfaces do
-      local info = gi[core.gtype(interfaces[i])]
-      local iface = repo[info.namespace][info.name]
+      local iface_ns, iface_name =
+	 core.repotype(interfaces[i])._name:match('([^%.*]+)%.(.+)')
+      local iface = repo[iface_ns][iface_name]
       if iface then element, category = iface:_element(object, name) end
       if element then return element, category end
    end

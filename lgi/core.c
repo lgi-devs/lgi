@@ -230,14 +230,6 @@ lgi_guard_create (lua_State *L, GDestroyNotify destroy)
   return &guard->data;
 }
 
-/* Converts GType to number. */
-static int
-core_gtype (lua_State *L)
-{
-  lua_pushinteger (L, lgi_type_get_gtype (L, 1));
-  return 1;
-}
-
 /* Converts either GType or gi.info into repotype table. */
 static int
 core_repotype (lua_State *L)
@@ -414,7 +406,6 @@ core_registerlock (lua_State *L)
 
 static const struct luaL_reg lgi_reg[] = {
   { "log",  core_log },
-  { "gtype", core_gtype },
   { "repotype", core_repotype },
   { "constant", core_constant },
   { "yield", core_yield },
