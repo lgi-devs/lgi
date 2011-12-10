@@ -963,7 +963,10 @@ lgi_marshal_2c_caller_alloc (lua_State *L, GITypeInfo *ti, GIArgument *val,
 	if (type == GI_INFO_TYPE_STRUCT || type == GI_INFO_TYPE_UNION)
 	  {
 	    if (pos == 0)
-	      val->v_pointer = lgi_record_new (L, ii);
+	      {
+		lgi_type_get_repotype (L, G_TYPE_INVALID, ii);
+		val->v_pointer = lgi_record_new (L);
+	      }
 	    handled = TRUE;
 	  }
 

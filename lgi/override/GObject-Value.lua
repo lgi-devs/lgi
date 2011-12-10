@@ -50,7 +50,7 @@ function Value._attribute.gtype.set(value, newtype)
    if gtype then
       if newtype then
 	 -- Try converting old value to new one.
-	 local dest = core.record.new(value_info)
+	 local dest = core.record.new(Value)
 	 Value.init(dest, newtype)
 	 if not Value.transform(value, dest) then
 	    error(("GObject.Value: cannot convert `%s' to `%s'"):format(
@@ -91,7 +91,7 @@ function(value, params, ...)
    if select('#', ...) > 0 then
       Value.set_boxed(value, core.record.query((...), 'addr', gtype))
    else
-      return core.record.new(gi[core.gtype(gtype)], Value.get_boxed(value))
+      return core.record.new(core.repotype(gtype), Value.get_boxed(value))
    end
 end
 
@@ -138,7 +138,7 @@ function Value._method.find_marshaller(gtype, typeinfo, transfer)
 	 if select('#', ...) > 0 then
 	    set(value, core.record.query((...), 'addr', record_info))
 	 else
-	    return core.record.new(record_info, get(value))
+	    return core.record.new(core.repotype(record_info), get(value))
 	 end
       end
       return marshal_record_no_gtype
@@ -172,7 +172,7 @@ end
 -- initialization is important, and standard record intializer cannot
 -- enforce the order.
 function Value:_new(gtype, value)
-   local v = core.record.new(value_info)
+   local v = core.record.new(Value)
    if gtype then v.gtype = gtype end
    if value then v.value = value end
    return v

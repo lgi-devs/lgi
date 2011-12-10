@@ -76,20 +76,8 @@ end
 
 -- Create structure instance and initialize it with given fields.
 function record.mt:_new(fields)
-   -- Find baseinfo of requested record.
-   local info
-   if self._gtype then
-      -- Try to lookup info by gtype.
-      info = gi[self._gtype]
-   end
-   if not info then
-      -- GType is not available, so lookup info by name.
-      local ns, name = self._name:match('^(.-)%.(.+)$')
-      info = assert(gi[ns][name])
-   end
-
    -- Create the structure instance.
-   local struct = core.record.new(info)
+   local struct = core.record.new(self)
 
    -- Set values of fields.
    for name, value in pairs(fields or {}) do struct[name] = value end
@@ -99,6 +87,7 @@ end
 -- Loads structure information into table representing the structure
 function record.load(info)
    local record = component.create(info, record.mt)
+   record._size = info.size
    record._method = component.get_category(info.methods, core.callable.new)
    record._field = component.get_category(info.fields)
 

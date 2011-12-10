@@ -59,7 +59,7 @@ static int record_cache;
 static int parent_cache;
 
 gpointer
-lgi_record_new (lua_State *L, GIBaseInfo *ri)
+lgi_record_new (lua_State *L)
 {
   Record *record;
   size_t size;
@@ -67,9 +67,9 @@ lgi_record_new (lua_State *L, GIBaseInfo *ri)
   luaL_checkstack (L, 4, "");
 
   /* Calculate size of the record to allocate. */
-  size = G_STRUCT_OFFSET (Record, data)
-    + ((g_base_info_get_type (ri) == GI_INFO_TYPE_UNION)
-       ? g_union_info_get_size (ri) : g_struct_info_get_size (ri));
+  lua_getfield (L, -1, "_size");
+  size = G_STRUCT_OFFSET (Record, data) + lua_tointeger (L, -1);
+  lua_pop (L, 1);
 
   /* Allocate new userdata for record object, attach proper
      metatable. */
@@ -81,8 +81,8 @@ lgi_record_new (lua_State *L, GIBaseInfo *ri)
   memset (record->addr, 0, size - G_STRUCT_OFFSET (Record, data));
   record->store = RECORD_STORE_EMBEDDED;
 
-  /* Get ref_repo table, attach it as an environment. */
-  lgi_type_get_repotype (L, G_TYPE_INVALID, ri);
+  /* Attach repotable as an environment. */
+  lua_pushvalue (L, -2);
   lua_setfenv (L, -2);
 
   /* Store newly created record into the cache. */
@@ -364,7 +364,7 @@ static const struct luaL_Reg record_meta_reg[] = {
    unless 'addr' argument (lightuserdata or integer) is specified, in
    which case wraps specified address as record.  Lua prototype:
 
-   recordinstance = core.record.new(structinfo|unioninfo[, addr[, own]])
+   recordinstance = core.record.new(record-repotype[, addr[, own]])
 
    own (default false) means whether Lua takes record ownership
    (i.e. if it tries to deallocate the record when created Lua proxy
@@ -372,13 +372,9 @@ static const struct luaL_Reg record_meta_reg[] = {
 static int
 record_new (lua_State *L)
 {
-  GIBaseInfo **info = luaL_checkudata (L, 1, LGI_GI_INFO);
-  GIInfoType type = g_base_info_get_type (*info);
-  luaL_argcheck (L, type == GI_INFO_TYPE_STRUCT || type == GI_INFO_TYPE_UNION,
-		 1, "record expected");
   if (lua_isnoneornil (L, 2))
     /* Create new record instance. */
-    lgi_record_new (L, *info);
+    lgi_record_new (L);
   else
     {
       /* Wrap record at existing address. */
@@ -386,8 +382,7 @@ record_new (lua_State *L)
 	? addr = lua_touserdata (L, 2)
 	: (gpointer) luaL_checkinteger (L, 2);
       gboolean owned = lua_toboolean (L, 3);
-      lgi_type_get_repotype (L, G_TYPE_INVALID, *info);
-      g_assert (!lua_isnil (L, -1));
+      lua_pushvalue (L, 1);
       lgi_record_2lua (L, addr, owned, 0);
     }
   return 1;

@@ -40,7 +40,7 @@ for name, val in pairs {
    SELECTION_TYPE_PIXMAP = 20,
    SELECTION_TYPE_WINDOW = 33,
    SELECTION_TYPE_STRING = 31,
-} do Gdk[name] = core.record.new(core.gi.Gdk.Atom, val) end
+} do Gdk[name] = core.record.new(Gdk.Atom, val) end
 
 -- Make sure that Gdk is initialized with threads.
 Gdk.threads_init()
