@@ -231,6 +231,18 @@ core_gtype (lua_State *L)
   return 1;
 }
 
+/* Converts either GType or gi.info into repotype table. */
+static int
+core_repotype (lua_State *L)
+{
+  GType gtype = G_TYPE_INVALID;
+  GIBaseInfo **info = lgi_udata_test (L, 1, LGI_GI_INFO);
+  if (!info)
+    gtype = lgi_type_get_gtype (L, 1);
+  lgi_type_get_repotype (L, gtype, info ? *info : NULL);
+  return 1;
+}
+
 /* Instantiate constant from given gi_info. */
 static int
 core_constant (lua_State *L)
@@ -396,6 +408,7 @@ core_registerlock (lua_State *L)
 static const struct luaL_Reg lgi_reg[] = {
   { "log",  core_log },
   { "gtype", core_gtype },
+  { "repotype", core_repotype },
   { "constant", core_constant },
   { "yield", core_yield },
   { "registerlock", core_registerlock },
