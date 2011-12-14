@@ -315,13 +315,9 @@ marshal_create (lua_State *L, int code_index, int *code_pos, int *temps,
       break;
 
     case MARSHAL_TYPE_RECORD:
-      /* Get repotype from next position of codetype and create new
-	 raw 0-initialized record from it. */
+      /* Create new record instance from the type in the codetable. */
       lua_rawgeti (L, code_index, (*code_pos)++);
-      lua_getfield (L, -1, "_size");
-      *lgi_guard_create (L, g_free) = g_malloc0 (lua_tointeger (L, -1));
-      lua_replace (L, -3);
-      lua_pop (L, 1);
+      lgi_record_new (L);
       break;
 
     case MARSHAL_TYPE_CARRAY:
@@ -354,8 +350,6 @@ lgi_marshal (lua_State *L, int code_index, int *code_pos,
   luaL_checkstack (L, 1, NULL);
   for (;;)
     {
-      gpointer *guard = NULL;
-
       /* Retrieve the instruction from the stream. */
       lua_rawgeti (L, code_index, (*code_pos)++);
       type = (guint32) lua_tointeger (L, -1);
@@ -369,12 +363,8 @@ lgi_marshal (lua_State *L, int code_index, int *code_pos,
       offset = (type & MARSHAL_CODE_INPUT_MASK) >> MARSHAL_CODE_INPUT_SHIFT;
       input = inputs_base + offset;
       if (native == NULL)
-	{
-	  /* Get address from the input (which must be a guard) and
-	     deactivate the guard. */
-	  *guard = lua_touserdata (L, input);
-	  native = *guard;
-	}
+	/* Get address from the input. */
+	native = *(gpointer *) lua_touserdata (L, input);
 
       /* Invoke proper code handler. */
       luaL_checkstack (L, 4, NULL);
@@ -382,11 +372,6 @@ lgi_marshal (lua_State *L, int code_index, int *code_pos,
       if (!handler)
 	return temps;
       handler(L, code_index, code_pos, &temps, type, input, native);
-
-      /* After processing the handler, make sure that the guard for
-	 caller-alloc marshalled value is deactivated. */
-      if (guard != NULL)
-	*guard = NULL;
     }
 }
 
