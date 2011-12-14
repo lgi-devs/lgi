@@ -8,6 +8,7 @@
  * Implements marshalling as virtual machine running marshalling 'scripts'
  */
 
+#include <string.h>
 #include "lgi.h"
 
 typedef enum _Marshal
@@ -272,14 +273,59 @@ static void
 marshal_2c_record (lua_State *L, int code_index, int *code_pos, guint32 type,
 		   int input, gpointer native)
 {
-  GIArgument *arg = native;
+  gsize size = 0;
+  gpointer record;
 
-  /* It is not possible to copy records by value. */
-  g_assert ((type & MARSHAL_SUBTYPE_MASK) == MARSHAL_SUBTYPE_REF);
+  /* Get record type. */
+  lua_rawgeti (L, code_index, (*code_pos)++);
+  if ((type & MARSHAL_SUBTYPE_MASK) == MARSHAL_SUBTYPE_VALUE)
+    {
+      lua_getfield (L, -1, "_size");
+      size = lua_tointeger (L, -1);
+      g_assert (size > 0);
+      lua_pop (L, 1);
+    }
 
   /* Get record type and marshal record instance. */
+  record = lgi_record_2c (L, input, type & MARSHAL_ALLOW_NIL, FALSE);
+  if (size == 0)
+    /* Assign pointer to return address. */
+    ((GIArgument *) native)->v_pointer = record;
+  else
+    /* Copy contents of the record into the target. */
+    memcpy (native, record, size);
+}
+
+static void
+marshal_2lua_object (lua_State *L, int code_index, int *code_pos, int *temps,
+		     guint32 type, gpointer native)
+{
+  /* Just skip type record, it is unused in current implementation. */
+  (*code_pos)++;
+
+  /* Marshal object to lua. */
+  lgi_object_2lua (L, ((GIArgument *) native)->v_pointer,
+		   type & MARSHAL_TRANSFER_OWNERSHIP);
+  if (*temps > 0)
+    lua_insert (L, - *temps - 1);
+}
+
+static void
+marshal_2c_object (lua_State *L, int code_index, int *code_pos, guint32 type,
+		   int input, gpointer native)
+{
+  GIArgument *arg = native;
+  GType gtype;
+
+  /* Get object type. */
   lua_rawgeti (L, code_index, (*code_pos)++);
-  arg->v_pointer = lgi_record_2c (L, input, type & MARSHAL_ALLOW_NIL, FALSE);
+  lua_getfield (L, -1, "_gtype");
+  gtype = lua_tonumber (L, -1);
+  lua_pop (L, 1);
+
+  /* Get record type and marshal record instance. */
+  arg->v_pointer = lgi_object_2c (L, input, gtype,
+				  type & MARSHAL_ALLOW_NIL, FALSE);
 }
 
 typedef void
@@ -308,6 +354,9 @@ marshal_2lua (lua_State *L, int code_index, int *code_pos, int *temps,
       marshal_2lua_record (L, code_index, code_pos, temps,
 			   type, native, 0);
       break;
+    case MARSHAL_TYPE_OBJECT:
+      marshal_2lua_object (L, code_index, code_pos, temps, type, native);
+      break;
     default:
       g_assert_not_reached ();
     }
@@ -333,6 +382,9 @@ marshal_2c (lua_State *L, int code_index, int *code_pos, int *temps,
       break;
     case MARSHAL_TYPE_RECORD:
       marshal_2c_record (L, code_index, code_pos, type, input, native);
+      break;
+    case MARSHAL_TYPE_OBJECT:
+      marshal_2c_object (L, code_index, code_pos, type, input, native);
       break;
     default:
       g_assert_not_reached ();
