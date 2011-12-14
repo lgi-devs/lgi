@@ -253,6 +253,35 @@ marshal_2c_string (lua_State *L, int *temps, guint32 type, int input,
   arg->v_string = (gchar *) str;
 }
 
+static void
+marshal_2lua_record (lua_State *L, int code_index, int *code_pos, int *temps,
+		     guint32 type, gpointer native, int parent)
+{
+  /* Handle ref/value difference. */
+  if ((type & MARSHAL_SUBTYPE_MASK) == MARSHAL_SUBTYPE_REF)
+    native = ((GIArgument *) native)->v_pointer;
+
+  /* Get record type and marshal record instance. */
+  lua_rawgeti (L, code_index, (*code_pos)++);
+  lgi_record_2lua (L, native, type & MARSHAL_TRANSFER_OWNERSHIP, parent);
+  if (*temps > 0)
+    lua_insert (L, - *temps - 1);
+}
+
+static void
+marshal_2c_record (lua_State *L, int code_index, int *code_pos, guint32 type,
+		   int input, gpointer native)
+{
+  GIArgument *arg = native;
+
+  /* It is not possible to copy records by value. */
+  g_assert ((type & MARSHAL_SUBTYPE_MASK) == MARSHAL_SUBTYPE_REF);
+
+  /* Get record type and marshal record instance. */
+  lua_rawgeti (L, code_index, (*code_pos)++);
+  arg->v_pointer = lgi_record_2c (L, input, type & MARSHAL_ALLOW_NIL, FALSE);
+}
+
 typedef void
 (*marshal_code_fun)(lua_State *L, int code_index, int *code_pos, int *temps,
 		    guint32 type, int input, gpointer native);
@@ -274,6 +303,10 @@ marshal_2lua (lua_State *L, int code_index, int *code_pos, int *temps,
       break;
     case MARSHAL_TYPE_STRING:
       marshal_2lua_string (L, temps, type, native);
+      break;
+    case MARSHAL_TYPE_RECORD:
+      marshal_2lua_record (L, code_index, code_pos, temps,
+			   type, native, 0);
       break;
     default:
       g_assert_not_reached ();
@@ -297,6 +330,9 @@ marshal_2c (lua_State *L, int code_index, int *code_pos, int *temps,
       break;
     case MARSHAL_TYPE_STRING:
       marshal_2c_string (L, temps, type, input, native);
+      break;
+    case MARSHAL_TYPE_RECORD:
+      marshal_2c_record (L, code_index, code_pos, type, input, native);
       break;
     default:
       g_assert_not_reached ();
