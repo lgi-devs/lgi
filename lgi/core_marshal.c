@@ -437,6 +437,14 @@ marshal_2lua_array (lua_State *L, int code_index, int *code_pos, int *temps,
           /* Reset subtype code position for each iteration. */
           *code_pos = pos;
 
+	  /* Check for zero-termination. */
+	  if (length < 0 &&
+	      ((element_size == 1 && *(guint8 *) data == 0)
+	       || (element_size == 2 && *(guint16 *) data == 0)
+	       || (element_size == 4 && *(guint32 *) data == 0)
+	       || (element_size == 8 && *(guint64 *) data == 0)))
+	    break;
+
           /* Marshal single array element into Lua. */
           marshal_2lua (L, code_index, code_pos, temps, element_type, 0,
                         (gpointer) data, -(*temps + 1));
