@@ -95,8 +95,7 @@ marshal_2lua_int (lua_State *L, int *temps, guint32 type, gpointer native)
       g_assert_not_reached ();
     }
 
-  if (*temps > 0)
-    lua_insert (L, - *temps - 1);
+  lua_insert (L, -(*temps + 1));
 }
 
 static void
@@ -162,8 +161,7 @@ marshal_2lua_float (lua_State *L, int *temps, guint32 type, gpointer native)
       g_assert_not_reached ();
     }
 
-  if (*temps > 0)
-    lua_insert (L, - *temps - 1);
+  lua_insert (L, -(*temps + 1));
 }
 
 static void
@@ -193,8 +191,7 @@ marshal_2lua_boolean (lua_State *L, int *temps, guint32 type, gpointer native)
 {
   GIArgument *arg = native;
   lua_pushboolean (L, arg->v_boolean);
-  if (*temps > 0)
-    lua_insert (L, - *temps - 1);
+  lua_insert (L, -(*temps + 1));
 }
 
 static void
@@ -221,8 +218,7 @@ marshal_2lua_string (lua_State *L, int *temps, guint32 type, gpointer native)
   if (type & MARSHAL_TYPE_TRANSFER_OWNERSHIP)
     g_free (str);
 
-  if (*temps > 0)
-    lua_insert (L, - *temps - 1);
+  lua_insert (L, -(*temps + 1));
 }
 
 static void
@@ -265,8 +261,7 @@ marshal_2lua_record (lua_State *L, int code_index, int *code_pos, int *temps,
   /* Get record type and marshal record instance. */
   lua_rawgeti (L, code_index, (*code_pos)++);
   lgi_record_2lua (L, native, type & MARSHAL_TYPE_TRANSFER_OWNERSHIP, parent);
-  if (*temps > 0)
-    lua_insert (L, - *temps - 1);
+  lua_insert (L, -(*temps + 1));
 }
 
 static void
@@ -306,8 +301,7 @@ marshal_2lua_object (lua_State *L, int code_index, int *code_pos, int *temps,
   /* Marshal object to lua. */
   lgi_object_2lua (L, ((GIArgument *) native)->v_pointer,
 		   type & MARSHAL_TYPE_TRANSFER_OWNERSHIP);
-  if (*temps > 0)
-    lua_insert (L, - *temps - 1);
+  lua_insert (L, -(*temps + 1));
 }
 
 static void
@@ -336,6 +330,7 @@ static void
 marshal_2lua (lua_State *L, int code_index, int *code_pos, int *temps,
 	      guint32 type, int input, gpointer native)
 {
+  luaL_checkstack (L, 4, NULL);
   switch (type & MARSHAL_TYPE_BASE_MASK)
     {
     case MARSHAL_TYPE_BASE_INT:
@@ -366,6 +361,7 @@ static void
 marshal_2c (lua_State *L, int code_index, int *code_pos, int *temps,
 	    guint32 type, int input, gpointer native)
 {
+  luaL_checkstack (L, 4, NULL);
   switch (type & MARSHAL_TYPE_BASE_MASK)
     {
     case MARSHAL_TYPE_BASE_INT:
@@ -395,6 +391,7 @@ static void
 marshal_create (lua_State *L, int code_index, int *code_pos, int *temps,
 		guint32 type, int input, gpointer native)
 {
+  luaL_checkstack (L, 2, NULL);
   switch (type & MARSHAL_TYPE_BASE_MASK)
     {
     case MARSHAL_TYPE_BASE_DIRECT:
@@ -461,7 +458,6 @@ lgi_marshal (lua_State *L, int code_index, int *code_pos,
         input = lua_gettop (L) - temps;
 
       /* Invoke proper code handler. */
-      luaL_checkstack (L, 4, NULL);
       handler = marshal_code[(type & MARSHAL_CODE_MASK) >> MARSHAL_CODE_SHIFT];
       if (!handler)
 	return temps;
