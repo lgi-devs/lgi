@@ -46,7 +46,7 @@ typedef enum _Marshal
     MARSHAL_SUBTYPE_VALUE   = 0x00000000,
     MARSHAL_SUBTYPE_REF     = 0x00000010,
 
-    MARSHAL_SUBTYPE_CALLABLE_MANUAL   = 0x00000000,
+    MARSHAL_SUBTYPE_CALLABLE_BOUND    = 0x00000000,
     MARSHAL_SUBTYPE_CALLABLE_CALL     = 0x00000010,
     MARSHAL_SUBTYPE_CALLABLE_ASYNC    = 0x00000020,
     MARSHAL_SUBTYPE_CALLABLE_NOTIFIED = 0x00000030,
@@ -61,6 +61,7 @@ typedef enum _Marshal
     MARSHAL_CODE_TO_LUA    = 0x00000200,
     MARSHAL_CODE_TO_C      = 0x00000300,
 
+    MARSHAL_CODE_INPUT_POP   = 0x00000800,
     MARSHAL_CODE_INPUT_MASK  = 0x0000f000,
     MARSHAL_CODE_INPUT_SHIFT = 12,
 
@@ -434,8 +435,10 @@ lgi_marshal (lua_State *L, int code_index, int *code_pos,
   gsize offset;
   int input;
 
-  /* Iterate through the type stream. */
   luaL_checkstack (L, 1, NULL);
+  lgi_makeabs (L, inputs_base);
+
+  /* Iterate through the type stream. */
   for (;;)
     {
       /* Retrieve the instruction from the stream. */
@@ -449,10 +452,16 @@ lgi_marshal (lua_State *L, int code_index, int *code_pos,
 
       /* Prepare input argument offset. */
       offset = (type & MARSHAL_CODE_INPUT_MASK) >> MARSHAL_CODE_INPUT_SHIFT;
-      input = inputs_base + offset;
-      if (native == NULL)
-	/* Get address from the input. */
-	native = *(gpointer *) lua_touserdata (L, input);
+      if (offset != MARSHAL_CODE_INPUT_SHIFT)
+        {
+          input = inputs_base + offset;
+          if (native == NULL)
+            /* Get address from the input. */
+            native = *(gpointer *) lua_touserdata (L, input);
+        }
+      else
+        /* Input for this operand is the last output to be popped. */
+        input = lua_gettop (L) - temps;
 
       /* Invoke proper code handler. */
       luaL_checkstack (L, 4, NULL);
@@ -460,6 +469,10 @@ lgi_marshal (lua_State *L, int code_index, int *code_pos,
       if (!handler)
 	return temps;
       handler(L, code_index, code_pos, &temps, type, input, native);
+
+      /* If the input should be removed after processing, do it now. */
+      if (type & MARSHAL_CODE_INPUT_POP)
+        lua_remove (L, input);
     }
 }
 
