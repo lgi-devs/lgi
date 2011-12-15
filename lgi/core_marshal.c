@@ -70,8 +70,7 @@ typedef enum _Marshal
 
 static void
 marshal_2lua (lua_State *L, int code_index, int *code_pos, int *temps,
-	      guint32 type, int input, gpointer native);
-
+	      guint32 type, int input, gpointer native, int parent);
 
 static void
 marshal_2lua_int (lua_State *L, int *temps, guint32 type, gpointer native)
@@ -261,7 +260,10 @@ marshal_2lua_record (lua_State *L, int code_index, int *code_pos, int *temps,
 {
   /* Handle ref/value difference. */
   if (type & MARSHAL_TYPE_IS_POINTER)
-    native = ((GIArgument *) native)->v_pointer;
+    {
+      native = ((GIArgument *) native)->v_pointer;
+      parent = 0;
+    }
 
   /* Get record type and marshal record instance. */
   lua_rawgeti (L, code_index, (*code_pos)++);
@@ -388,7 +390,7 @@ marshal_2lua_array (lua_State *L, int code_index, int *code_pos, int *temps,
 {
   int pos, index;
   gssize length, element_size;
-  const guint8* data;
+  const guint8 *data;
   guint32 element_type;
 
   /* Remember code_pos, because we will iterate through it while
@@ -424,17 +426,20 @@ marshal_2lua_array (lua_State *L, int code_index, int *code_pos, int *temps,
     }
   else
     {
-      /* Create the target table, marshal elements inside one by one. */
+      /* Create the target table, */
       lua_createtable (L, length >= 0 ? length : 0, 0);
       lua_insert (L, -(*temps + 1));
-      for (index = 0; length >=0 && index < length; ++index)
+
+      /* Marshal elements inside one by one. */
+      for (index = 0; length >=0 && index < length;
+	   ++index, data += element_size)
         {
           /* Reset subtype code position for each iteration. */
           *code_pos = pos;
 
           /* Marshal single array element into Lua. */
           marshal_2lua (L, code_index, code_pos, temps, element_type, 0,
-                        (gpointer) data + index * element_size);
+                        (gpointer) data, -(*temps + 1));
 
           /* Store marshalled element into the results table. */
           lua_pushvalue (L, -(*temps + 1));
@@ -466,11 +471,11 @@ marshal_2lua_array (lua_State *L, int code_index, int *code_pos, int *temps,
 
 typedef void
 (*marshal_code_fun)(lua_State *L, int code_index, int *code_pos, int *temps,
-		    guint32 type, int input, gpointer native);
+		    guint32 type, int input, gpointer native, int parent);
 
 static void
 marshal_2lua (lua_State *L, int code_index, int *code_pos, int *temps,
-	      guint32 type, int input, gpointer native)
+	      guint32 type, int input, gpointer native, int parent)
 {
   luaL_checkstack (L, 4, NULL);
   switch (type & MARSHAL_TYPE_BASE_MASK)
@@ -488,13 +493,15 @@ marshal_2lua (lua_State *L, int code_index, int *code_pos, int *temps,
       marshal_2lua_string (L, temps, type, native);
       break;
     case MARSHAL_TYPE_BASE_RECORD:
+      lgi_makeabs (L, parent);
       marshal_2lua_record (L, code_index, code_pos, temps,
-			   type, native, 0);
+			   type, native, parent);
       break;
     case MARSHAL_TYPE_BASE_OBJECT:
       marshal_2lua_object (L, code_index, code_pos, temps, type, native);
       break;
     case MARSHAL_TYPE_BASE_ARRAY:
+      lgi_makeabs (L, parent);
       marshal_2lua_array (L, code_index, code_pos, temps, type, native);
       break;
     default:
@@ -504,7 +511,7 @@ marshal_2lua (lua_State *L, int code_index, int *code_pos, int *temps,
 
 static void
 marshal_2c (lua_State *L, int code_index, int *code_pos, int *temps,
-	    guint32 type, int input, gpointer native)
+	    guint32 type, int input, gpointer native, int parent)
 {
   luaL_checkstack (L, 4, NULL);
   switch (type & MARSHAL_TYPE_BASE_MASK)
@@ -534,7 +541,7 @@ marshal_2c (lua_State *L, int code_index, int *code_pos, int *temps,
 
 static void
 marshal_create (lua_State *L, int code_index, int *code_pos, int *temps,
-		guint32 type, int input, gpointer native)
+		guint32 type, int input, gpointer native, int parent)
 {
   luaL_checkstack (L, 2, NULL);
   switch (type & MARSHAL_TYPE_BASE_MASK)
@@ -606,7 +613,7 @@ lgi_marshal (lua_State *L, int code_index, int *code_pos,
       handler = marshal_code[(type & MARSHAL_CODE_MASK) >> MARSHAL_CODE_SHIFT];
       if (!handler)
 	return temps;
-      handler(L, code_index, code_pos, &temps, type, input, native);
+      handler(L, code_index, code_pos, &temps, type, input, native, 0);
 
       /* If the input should be removed after processing, do it now. */
       if (type & MARSHAL_CODE_INPUT_POP)
