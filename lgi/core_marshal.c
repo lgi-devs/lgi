@@ -13,53 +13,52 @@
 
 typedef enum _Marshal
   {
-    MARSHAL_TYPE_MASK       = 0x0000000f,
-    MARSHAL_TYPE_INT        = 0,
-    MARSHAL_TYPE_FLOAT      = 1,
-    MARSHAL_TYPE_BOOLEAN    = 2,
-    MARSHAL_TYPE_STRING     = 3,
+    MARSHAL_TYPE_BASE_MASK       = 0x0000000f,
+    MARSHAL_TYPE_BASE_INT        = 0,
+    MARSHAL_TYPE_BASE_FLOAT      = 1,
+    MARSHAL_TYPE_BASE_BOOLEAN    = 2,
+    MARSHAL_TYPE_BASE_STRING     = 3,
+    MARSHAL_TYPE_BASE_RECORD     = 4,
+    MARSHAL_TYPE_BASE_OBJECT     = 5,
+    MARSHAL_TYPE_BASE_ARRAY      = 6,
+    MARSHAL_TYPE_BASE_LIST       = 7,
+    MARSHAL_TYPE_BASE_HASHTABLE  = 8,
+    MARSHAL_TYPE_BASE_CALLABLE   = 9,
+    MARSHAL_TYPE_BASE_PTR        = 10,
+    MARSHAL_TYPE_BASE_DIRECT     = 11,
 
-    MARSHAL_TYPE_RECORD     = 4,
-    MARSHAL_TYPE_OBJECT     = 5,
+    MARSHAL_TYPE_IS_POINTER         = 0x00000010,
+    MARSHAL_TYPE_TRANSFER_OWNERSHIP = 0x00000020,
+    MARSHAL_TYPE_ALLOW_NIL          = 0x00000040,
 
-    MARSHAL_TYPE_CARRAY     = 6,
-    MARSHAL_TYPE_GARRAY     = 7,
-    MARSHAL_TYPE_GBYTEARRAY = 8,
-    MARSHAL_TYPE_GLIST      = 9,
-    MARSHAL_TYPE_GHASHTABLE = 10,
+    MARSHAL_TYPE_NUMBER_SIZE_MASK   = 0x00000060,
+    MARSHAL_TYPE_NUMBER_SIZE_SHIFT  = 5,
+    MARSHAL_TYPE_NUMBER_UNSIGNED    = 0x00000080,
 
-    MARSHAL_TYPE_CALLABLE   = 11,
+    MARSHAL_TYPE_STRING_FILENAME    = 0x00000080,
 
-    MARSHAL_TYPE_PTR        = 12,
+    MARSHAL_TYPE_ARRAY_MASK         = 0x00000180,
+    MARSHAL_TYPE_ARRAY_C            = 0x00000000,
+    MARSHAL_TYPE_ARRAY_GARRAY       = 0x00000080,
+    MARSHAL_TYPE_ARRAY_GPTRARRAY    = 0x00000100,
+    MARSHAL_TYPE_ARRAY_GBYTEARRAY   = 0x00000180,
 
-    MARSHAL_TYPE_DIRECT     = 13,
+    MARSHAL_TYPE_LIST_MASK         = 0x00000080,
+    MARSHAL_TYPE_LIST_GSLIST       = 0x00000000,
+    MARSHAL_TYPE_LIST_GLIST        = 0x00000080,
 
-    MARSHAL_SUBTYPE_MASK    = 0x00000070,
+    MARSHAL_TYPE_CALLABLE_MASK     = 0x00000180,
+    MARSHAL_TYPE_CALLABLE_BOUND    = 0x00000000,
+    MARSHAL_TYPE_CALLABLE_CALL     = 0x00000080,
+    MARSHAL_TYPE_CALLABLE_ASYNC    = 0x00000100,
+    MARSHAL_TYPE_CALLABLE_NOTIFIED = 0x00000180,
 
-    MARSHAL_SUBTYPE_NUMBER_SIZE       = 0x00000030,
-    MARSHAL_SUBTYPE_NUMBER_SIZE_SHIFT = 4,
-
-    MARSHAL_SUBTYPE_INT_SIGNED = 0x00000040,
-
-    MARSHAL_SUBTYPE_STRING_FILENAME = 0x00000010,
-
-    MARSHAL_SUBTYPE_VALUE   = 0x00000000,
-    MARSHAL_SUBTYPE_REF     = 0x00000010,
-
-    MARSHAL_SUBTYPE_CALLABLE_BOUND    = 0x00000000,
-    MARSHAL_SUBTYPE_CALLABLE_CALL     = 0x00000010,
-    MARSHAL_SUBTYPE_CALLABLE_ASYNC    = 0x00000020,
-    MARSHAL_SUBTYPE_CALLABLE_NOTIFIED = 0x00000030,
-
-    MARSHAL_TRANSFER_OWNERSHIP = 0x00000040,
-    MARSHAL_ALLOW_NIL          = 0x00000080,
-
-    MARSHAL_CODE_MASK      = 0x00000300,
-    MARSHAL_CODE_SHIFT     = 8,
+    MARSHAL_CODE_MASK      = 0x00000600,
+    MARSHAL_CODE_SHIFT     = 9,
     MARSHAL_CODE_END       = 0x00000000,
-    MARSHAL_CODE_CREATE    = 0x00000100,
-    MARSHAL_CODE_TO_LUA    = 0x00000200,
-    MARSHAL_CODE_TO_C      = 0x00000300,
+    MARSHAL_CODE_CREATE    = 0x00000200,
+    MARSHAL_CODE_TO_LUA    = 0x00000400,
+    MARSHAL_CODE_TO_C      = 0x00000600,
 
     MARSHAL_CODE_INPUT_POP   = 0x00000800,
     MARSHAL_CODE_INPUT_MASK  = 0x0000f000,
@@ -73,11 +72,11 @@ static void
 marshal_2lua_int (lua_State *L, int *temps, guint32 type, gpointer native)
 {
   GIArgument *arg = native;
-  switch (type & MARSHAL_SUBTYPE_MASK)
+  switch (type & (MARSHAL_TYPE_NUMBER_SIZE_MASK | MARSHAL_TYPE_NUMBER_UNSIGNED))
     {
 #define HANDLE_INT(sign, size, name)			\
-      case (sign ? MARSHAL_SUBTYPE_INT_SIGNED : 0)	\
-	| (size << MARSHAL_SUBTYPE_NUMBER_SIZE_SHIFT):	\
+      case (sign ? 0 : MARSHAL_TYPE_NUMBER_UNSIGNED)    \
+	| (size << MARSHAL_TYPE_NUMBER_SIZE_SHIFT):	\
 	lua_pushnumber (L, arg->v_ ## name);		\
 	break
 
@@ -107,11 +106,11 @@ marshal_2c_int (lua_State *L, guint32 type, int input, gpointer native)
   GIArgument *arg = native;
   lua_Number number = luaL_checknumber (L, input);
   lua_Number low_limit, high_limit;
-  switch (type & MARSHAL_SUBTYPE_MASK)
+  switch (type & (MARSHAL_TYPE_NUMBER_SIZE_MASK | MARSHAL_TYPE_NUMBER_UNSIGNED))
     {
 #define HANDLE_INT(sign, size, name, low, high)		\
-      case (sign ? MARSHAL_SUBTYPE_INT_SIGNED : 0)	\
-	| (size << MARSHAL_SUBTYPE_NUMBER_SIZE_SHIFT):	\
+      case (sign ? 0 : MARSHAL_TYPE_NUMBER_UNSIGNED)	\
+	| (size << MARSHAL_TYPE_NUMBER_SIZE_SHIFT):	\
 	arg->v_ ## name = number;			\
 	low_limit = low;				\
 	high_limit = high;				\
@@ -147,10 +146,10 @@ static void
 marshal_2lua_float (lua_State *L, int *temps, guint32 type, gpointer native)
 {
   GIArgument *arg = native;
-  switch (type & MARSHAL_SUBTYPE_MASK)
+  switch (type & MARSHAL_TYPE_NUMBER_SIZE_MASK)
     {
 #define HANDLE_FLOAT(size, name)			\
-      case size << MARSHAL_SUBTYPE_NUMBER_SIZE_SHIFT:	\
+      case size << MARSHAL_TYPE_NUMBER_SIZE_SHIFT:	\
 	lua_pushnumber (L, arg->v_ ## name);		\
 	break
 
@@ -172,10 +171,10 @@ marshal_2c_float (lua_State *L, guint32 type, int input, gpointer native)
 {
   /* Get number from the Lua side inputs. */
   GIArgument *arg = native;
-  switch (type & MARSHAL_SUBTYPE_MASK)
+  switch (type & MARSHAL_TYPE_NUMBER_SIZE_MASK)
     {
 #define HANDLE_FLOAT(size, name)			\
-      case size << MARSHAL_SUBTYPE_NUMBER_SIZE_SHIFT:	\
+      case size << MARSHAL_TYPE_NUMBER_SIZE_SHIFT:	\
 	arg->v_ ## name = luaL_checknumber (L, input);	\
 	break
 
@@ -210,7 +209,7 @@ marshal_2lua_string (lua_State *L, int *temps, guint32 type, gpointer native)
 {
   GIArgument *arg = native;
   gchar *str = arg->v_string;
-  if (type & MARSHAL_SUBTYPE_STRING_FILENAME)
+  if (type & MARSHAL_TYPE_STRING_FILENAME)
     {
       gchar *filename = g_filename_to_utf8 (str, -1, NULL, NULL, NULL);
       lua_pushstring (L, filename);
@@ -219,7 +218,7 @@ marshal_2lua_string (lua_State *L, int *temps, guint32 type, gpointer native)
   else
     lua_pushstring (L, str);
 
-  if (type & MARSHAL_TRANSFER_OWNERSHIP)
+  if (type & MARSHAL_TYPE_TRANSFER_OWNERSHIP)
     g_free (str);
 
   if (*temps > 0)
@@ -232,25 +231,25 @@ marshal_2c_string (lua_State *L, int *temps, guint32 type, int input,
 {
   const gchar *str;
   GIArgument *arg = native;
-  if (lua_isnoneornil (L, input) && (type & MARSHAL_ALLOW_NIL) != 0)
+  if (lua_isnoneornil (L, input) && (type & MARSHAL_TYPE_ALLOW_NIL) != 0)
     {
       arg->v_string = NULL;
       return;
     }
 
   str = luaL_checkstring (L, input);
-  if (type & MARSHAL_SUBTYPE_STRING_FILENAME)
+  if (type & MARSHAL_TYPE_STRING_FILENAME)
     {
       /* Convert from filename encoding and create temporary guard for
 	 newly created filename string. */
       str = g_filename_from_utf8 (str, -1, NULL, NULL, NULL);
-      if ((type & MARSHAL_TRANSFER_OWNERSHIP) == 0)
+      if ((type & MARSHAL_TYPE_TRANSFER_OWNERSHIP) == 0)
 	{
 	  *lgi_guard_create (L, g_free) = (gpointer) str;
 	  (*temps)++;
 	}
     }
-  else if (type & MARSHAL_TRANSFER_OWNERSHIP)
+  else if (type & MARSHAL_TYPE_TRANSFER_OWNERSHIP)
     str = g_strdup (str);
   arg->v_string = (gchar *) str;
 }
@@ -260,12 +259,12 @@ marshal_2lua_record (lua_State *L, int code_index, int *code_pos, int *temps,
 		     guint32 type, gpointer native, int parent)
 {
   /* Handle ref/value difference. */
-  if ((type & MARSHAL_SUBTYPE_MASK) == MARSHAL_SUBTYPE_REF)
+  if (type & MARSHAL_TYPE_IS_POINTER)
     native = ((GIArgument *) native)->v_pointer;
 
   /* Get record type and marshal record instance. */
   lua_rawgeti (L, code_index, (*code_pos)++);
-  lgi_record_2lua (L, native, type & MARSHAL_TRANSFER_OWNERSHIP, parent);
+  lgi_record_2lua (L, native, type & MARSHAL_TYPE_TRANSFER_OWNERSHIP, parent);
   if (*temps > 0)
     lua_insert (L, - *temps - 1);
 }
@@ -279,7 +278,7 @@ marshal_2c_record (lua_State *L, int code_index, int *code_pos, guint32 type,
 
   /* Get record type. */
   lua_rawgeti (L, code_index, (*code_pos)++);
-  if ((type & MARSHAL_SUBTYPE_MASK) == MARSHAL_SUBTYPE_VALUE)
+  if ((type & MARSHAL_TYPE_IS_POINTER) == 0)
     {
       lua_getfield (L, -1, "_size");
       size = lua_tointeger (L, -1);
@@ -288,7 +287,7 @@ marshal_2c_record (lua_State *L, int code_index, int *code_pos, guint32 type,
     }
 
   /* Get record type and marshal record instance. */
-  record = lgi_record_2c (L, input, type & MARSHAL_ALLOW_NIL, FALSE);
+  record = lgi_record_2c (L, input, type & MARSHAL_TYPE_ALLOW_NIL, FALSE);
   if (size == 0)
     /* Assign pointer to return address. */
     ((GIArgument *) native)->v_pointer = record;
@@ -306,7 +305,7 @@ marshal_2lua_object (lua_State *L, int code_index, int *code_pos, int *temps,
 
   /* Marshal object to lua. */
   lgi_object_2lua (L, ((GIArgument *) native)->v_pointer,
-		   type & MARSHAL_TRANSFER_OWNERSHIP);
+		   type & MARSHAL_TYPE_TRANSFER_OWNERSHIP);
   if (*temps > 0)
     lua_insert (L, - *temps - 1);
 }
@@ -326,7 +325,7 @@ marshal_2c_object (lua_State *L, int code_index, int *code_pos, guint32 type,
 
   /* Get record type and marshal record instance. */
   arg->v_pointer = lgi_object_2c (L, input, gtype,
-				  type & MARSHAL_ALLOW_NIL, FALSE);
+				  type & MARSHAL_TYPE_ALLOW_NIL, FALSE);
 }
 
 typedef void
@@ -337,25 +336,25 @@ static void
 marshal_2lua (lua_State *L, int code_index, int *code_pos, int *temps,
 	      guint32 type, int input, gpointer native)
 {
-  switch (type & MARSHAL_TYPE_MASK)
+  switch (type & MARSHAL_TYPE_BASE_MASK)
     {
-    case MARSHAL_TYPE_INT:
+    case MARSHAL_TYPE_BASE_INT:
       marshal_2lua_int (L, temps, type, native);
       break;
-    case MARSHAL_TYPE_FLOAT:
+    case MARSHAL_TYPE_BASE_FLOAT:
       marshal_2lua_float (L, temps, type, native);
       break;
-    case MARSHAL_TYPE_BOOLEAN:
+    case MARSHAL_TYPE_BASE_BOOLEAN:
       marshal_2lua_boolean (L, temps, type, native);
       break;
-    case MARSHAL_TYPE_STRING:
+    case MARSHAL_TYPE_BASE_STRING:
       marshal_2lua_string (L, temps, type, native);
       break;
-    case MARSHAL_TYPE_RECORD:
+    case MARSHAL_TYPE_BASE_RECORD:
       marshal_2lua_record (L, code_index, code_pos, temps,
 			   type, native, 0);
       break;
-    case MARSHAL_TYPE_OBJECT:
+    case MARSHAL_TYPE_BASE_OBJECT:
       marshal_2lua_object (L, code_index, code_pos, temps, type, native);
       break;
     default:
@@ -367,24 +366,24 @@ static void
 marshal_2c (lua_State *L, int code_index, int *code_pos, int *temps,
 	    guint32 type, int input, gpointer native)
 {
-  switch (type & MARSHAL_TYPE_MASK)
+  switch (type & MARSHAL_TYPE_BASE_MASK)
     {
-    case MARSHAL_TYPE_INT:
+    case MARSHAL_TYPE_BASE_INT:
       marshal_2c_int (L, type, input, native);
       break;
-    case MARSHAL_TYPE_FLOAT:
+    case MARSHAL_TYPE_BASE_FLOAT:
       marshal_2c_float (L, type, input, native);
       break;
-    case MARSHAL_TYPE_BOOLEAN:
+    case MARSHAL_TYPE_BASE_BOOLEAN:
       marshal_2c_boolean (L, type, input, native);
       break;
-    case MARSHAL_TYPE_STRING:
+    case MARSHAL_TYPE_BASE_STRING:
       marshal_2c_string (L, temps, type, input, native);
       break;
-    case MARSHAL_TYPE_RECORD:
+    case MARSHAL_TYPE_BASE_RECORD:
       marshal_2c_record (L, code_index, code_pos, type, input, native);
       break;
-    case MARSHAL_TYPE_OBJECT:
+    case MARSHAL_TYPE_BASE_OBJECT:
       marshal_2c_object (L, code_index, code_pos, type, input, native);
       break;
     default:
@@ -396,20 +395,17 @@ static void
 marshal_create (lua_State *L, int code_index, int *code_pos, int *temps,
 		guint32 type, int input, gpointer native)
 {
-  switch (type & MARSHAL_TYPE_MASK)
+  switch (type & MARSHAL_TYPE_BASE_MASK)
     {
-    case MARSHAL_TYPE_DIRECT:
+    case MARSHAL_TYPE_BASE_DIRECT:
       /* Get direct value from codetype and leave it on the stack. */
       lua_rawgeti (L, code_index, (*code_pos)++);
       break;
 
-    case MARSHAL_TYPE_RECORD:
+    case MARSHAL_TYPE_BASE_RECORD:
       /* Create new record instance from the type in the codetable. */
       lua_rawgeti (L, code_index, (*code_pos)++);
       lgi_record_new (L);
-      break;
-
-    case MARSHAL_TYPE_CARRAY:
       break;
 
     default:
@@ -437,6 +433,7 @@ lgi_marshal (lua_State *L, int code_index, int *code_pos,
 
   luaL_checkstack (L, 1, NULL);
   lgi_makeabs (L, inputs_base);
+  lgi_makeabs (L, code_index);
 
   /* Iterate through the type stream. */
   for (;;)
