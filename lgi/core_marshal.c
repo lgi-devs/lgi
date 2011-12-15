@@ -13,23 +13,23 @@
 
 typedef enum _Marshal
   {
-    MARSHAL_TYPE_BASE_MASK       = 0x0000000f,
-    MARSHAL_TYPE_BASE_INT        = 0,
-    MARSHAL_TYPE_BASE_FLOAT      = 1,
-    MARSHAL_TYPE_BASE_BOOLEAN    = 2,
-    MARSHAL_TYPE_BASE_STRING     = 3,
-    MARSHAL_TYPE_BASE_RECORD     = 4,
-    MARSHAL_TYPE_BASE_OBJECT     = 5,
-    MARSHAL_TYPE_BASE_ARRAY      = 6,
-    MARSHAL_TYPE_BASE_LIST       = 7,
-    MARSHAL_TYPE_BASE_HASHTABLE  = 8,
-    MARSHAL_TYPE_BASE_CALLABLE   = 9,
-    MARSHAL_TYPE_BASE_PTR        = 10,
-    MARSHAL_TYPE_BASE_DIRECT     = 11,
+    MARSHAL_TYPE_BASE_MASK	 = 0x0000000f,
+    MARSHAL_TYPE_BASE_INT	 = 0,
+    MARSHAL_TYPE_BASE_FLOAT	 = 1,
+    MARSHAL_TYPE_BASE_BOOLEAN	 = 2,
+    MARSHAL_TYPE_BASE_STRING	 = 3,
+    MARSHAL_TYPE_BASE_RECORD	 = 4,
+    MARSHAL_TYPE_BASE_OBJECT	 = 5,
+    MARSHAL_TYPE_BASE_ARRAY	 = 6,
+    MARSHAL_TYPE_BASE_LIST	 = 7,
+    MARSHAL_TYPE_BASE_HASHTABLE	 = 8,
+    MARSHAL_TYPE_BASE_CALLABLE	 = 9,
+    MARSHAL_TYPE_BASE_PTR	 = 10,
+    MARSHAL_TYPE_BASE_DIRECT	 = 11,
 
-    MARSHAL_TYPE_IS_POINTER         = 0x00000010,
+    MARSHAL_TYPE_IS_POINTER	    = 0x00000010,
     MARSHAL_TYPE_TRANSFER_OWNERSHIP = 0x00000020,
-    MARSHAL_TYPE_ALLOW_NIL          = 0x00000040,
+    MARSHAL_TYPE_ALLOW_NIL	    = 0x00000040,
 
     MARSHAL_TYPE_NUMBER_SIZE_MASK   = 0x00000060,
     MARSHAL_TYPE_NUMBER_SIZE_SHIFT  = 5,
@@ -37,28 +37,28 @@ typedef enum _Marshal
 
     MARSHAL_TYPE_STRING_FILENAME    = 0x00000080,
 
-    MARSHAL_TYPE_ARRAY_MASK         = 0x00000180,
-    MARSHAL_TYPE_ARRAY_C            = 0x00000000,
-    MARSHAL_TYPE_ARRAY_GARRAY       = 0x00000080,
+    MARSHAL_TYPE_ARRAY_MASK	    = 0x00000180,
+    MARSHAL_TYPE_ARRAY_C	    = 0x00000000,
+    MARSHAL_TYPE_ARRAY_GARRAY	    = 0x00000080,
     MARSHAL_TYPE_ARRAY_GPTRARRAY    = 0x00000100,
     MARSHAL_TYPE_ARRAY_GBYTEARRAY   = 0x00000180,
 
-    MARSHAL_TYPE_LIST_MASK         = 0x00000080,
-    MARSHAL_TYPE_LIST_GSLIST       = 0x00000000,
-    MARSHAL_TYPE_LIST_GLIST        = 0x00000080,
+    MARSHAL_TYPE_LIST_MASK	   = 0x00000080,
+    MARSHAL_TYPE_LIST_GSLIST	   = 0x00000000,
+    MARSHAL_TYPE_LIST_GLIST	   = 0x00000080,
 
-    MARSHAL_TYPE_CALLABLE_MASK     = 0x00000180,
-    MARSHAL_TYPE_CALLABLE_BOUND    = 0x00000000,
-    MARSHAL_TYPE_CALLABLE_CALL     = 0x00000080,
-    MARSHAL_TYPE_CALLABLE_ASYNC    = 0x00000100,
+    MARSHAL_TYPE_CALLABLE_MASK	   = 0x00000180,
+    MARSHAL_TYPE_CALLABLE_BOUND	   = 0x00000000,
+    MARSHAL_TYPE_CALLABLE_CALL	   = 0x00000080,
+    MARSHAL_TYPE_CALLABLE_ASYNC	   = 0x00000100,
     MARSHAL_TYPE_CALLABLE_NOTIFIED = 0x00000180,
 
-    MARSHAL_CODE_MASK      = 0x00000600,
-    MARSHAL_CODE_SHIFT     = 9,
-    MARSHAL_CODE_END       = 0x00000000,
-    MARSHAL_CODE_CREATE    = 0x00000200,
-    MARSHAL_CODE_TO_LUA    = 0x00000400,
-    MARSHAL_CODE_TO_C      = 0x00000600,
+    MARSHAL_CODE_MASK	   = 0x00000600,
+    MARSHAL_CODE_SHIFT	   = 9,
+    MARSHAL_CODE_END	   = 0x00000000,
+    MARSHAL_CODE_CREATE	   = 0x00000200,
+    MARSHAL_CODE_TO_LUA	   = 0x00000400,
+    MARSHAL_CODE_TO_C	   = 0x00000600,
 
     MARSHAL_CODE_INPUT_POP   = 0x00000800,
     MARSHAL_CODE_INPUT_MASK  = 0x0000f000,
@@ -150,6 +150,7 @@ marshal_scan_type (lua_State *L, guint32 *type, int code_index, int *code_pos,
 }
 
 
+/* --- Marshaling of integer types. */
 static void
 marshal_2lua_int (lua_State *L, int *temps, guint32 type, gpointer native)
 {
@@ -157,7 +158,7 @@ marshal_2lua_int (lua_State *L, int *temps, guint32 type, gpointer native)
   switch (type & (MARSHAL_TYPE_NUMBER_SIZE_MASK | MARSHAL_TYPE_NUMBER_UNSIGNED))
     {
 #define HANDLE_INT(sign, size, name)			\
-      case (sign ? 0 : MARSHAL_TYPE_NUMBER_UNSIGNED)    \
+      case (sign ? 0 : MARSHAL_TYPE_NUMBER_UNSIGNED)	\
 	| (size << MARSHAL_TYPE_NUMBER_SIZE_SHIFT):	\
 	lua_pushnumber (L, arg->v_ ## name);		\
 	break
@@ -223,6 +224,7 @@ marshal_2c_int (lua_State *L, guint32 type, int input, gpointer native)
     }
 }
 
+/* --- Marshaling of float types. */
 static void
 marshal_2lua_float (lua_State *L, int *temps, guint32 type, gpointer native)
 {
@@ -268,6 +270,7 @@ marshal_2c_float (lua_State *L, guint32 type, int input, gpointer native)
     }
 }
 
+/* --- Marshaling of booleans. */
 static void
 marshal_2lua_boolean (lua_State *L, int *temps, guint32 type, gpointer native)
 {
@@ -283,6 +286,7 @@ marshal_2c_boolean (lua_State *L, guint32 type, int input, gpointer native)
   arg->v_boolean = lua_toboolean (L, input);
 }
 
+/* -- Marshaling of strings and filenames. */
 static void
 marshal_2lua_string (lua_State *L, int *temps, guint32 type, gpointer native)
 {
@@ -332,6 +336,7 @@ marshal_2c_string (lua_State *L, int *temps, guint32 type, int input,
   arg->v_string = (gchar *) str;
 }
 
+/* --- Marshaling of records (structs and unions). */
 static void
 marshal_2lua_record (lua_State *L, int code_index, int *code_pos, int *temps,
 		     guint32 type, gpointer native, int parent)
@@ -376,6 +381,7 @@ marshal_2c_record (lua_State *L, int code_index, int *code_pos, guint32 type,
     memcpy (native, record, size);
 }
 
+/* -- Marshaling of GType-based objects. */
 static void
 marshal_2lua_object (lua_State *L, int code_index, int *code_pos, int *temps,
 		     guint32 type, gpointer native)
@@ -407,6 +413,7 @@ marshal_2c_object (lua_State *L, int code_index, int *code_pos, guint32 type,
 				  type & MARSHAL_TYPE_ALLOW_NIL, FALSE);
 }
 
+/* -- Marshaling of assorted types of arrays. */
 static void
 marshal_2lua_array (lua_State *L, int code_index, int *code_pos, int *temps,
 		    guint32 type, gpointer native)
@@ -444,7 +451,7 @@ marshal_2lua_array (lua_State *L, int code_index, int *code_pos, int *temps,
     {
       /* Arrays of 8bit integers are translated into simple strings. */
       lua_pushlstring (L, (const char *) data,
-                       length >= 0 ? length : strlen ((const char *) data));
+		       length >= 0 ? length : strlen ((const char *) data));
       lua_insert (L, -(*temps + 1));
     }
   else
@@ -468,38 +475,39 @@ marshal_2lua_array (lua_State *L, int code_index, int *code_pos, int *temps,
 	       || (element_size == 8 && *(guint64 *) data == 0)))
 	    break;
 
-          /* Marshal single array element into Lua. */
-          marshal_2lua (L, code_index, code_pos, temps, element_type, 0,
-                        (gpointer) data, -(*temps + 1));
+	  /* Marshal single array element into Lua. */
+	  marshal_2lua (L, code_index, &pos, temps, element_type, 0,
+			(gpointer) data, -(*temps + 1));
 
-          /* Store marshalled element into the results table. */
-          lua_pushvalue (L, -(*temps + 1));
-          lua_rawseti (L, -(*temps + 3), index + 1);
-          lua_remove (L, -(*temps + 1));
-        }
+	  /* Store marshalled element into the results table. */
+	  lua_pushvalue (L, -(*temps + 1));
+	  lua_rawseti (L, -(*temps + 3), index + 1);
+	  lua_remove (L, -(*temps + 1));
+	}
     }
 
   /* If the ownership was transferred, destroy the old array. */
   if (type & MARSHAL_TYPE_TRANSFER_OWNERSHIP)
     {
       switch (type & MARSHAL_TYPE_ARRAY_MASK)
-        {
-        case MARSHAL_TYPE_ARRAY_C:
-          g_free (native);
-          break;
-        case MARSHAL_TYPE_ARRAY_GARRAY:
-          g_array_free (native, TRUE);
-          break;
-        case MARSHAL_TYPE_ARRAY_GPTRARRAY:
-          g_ptr_array_free (native, TRUE);
-          break;
-        case MARSHAL_TYPE_ARRAY_GBYTEARRAY:
-          g_byte_array_free (native, TRUE);
-          break;
-        }
+	{
+	case MARSHAL_TYPE_ARRAY_C:
+	  g_free (native);
+	  break;
+	case MARSHAL_TYPE_ARRAY_GARRAY:
+	  g_array_free (native, TRUE);
+	  break;
+	case MARSHAL_TYPE_ARRAY_GPTRARRAY:
+	  g_ptr_array_free (native, TRUE);
+	  break;
+	case MARSHAL_TYPE_ARRAY_GBYTEARRAY:
+	  g_byte_array_free (native, TRUE);
+	  break;
+	}
     }
 }
 
+/* --- Instructions code handlers. */
 typedef void
 (*marshal_code_fun)(lua_State *L, int code_index, int *code_pos, int *temps,
 		    guint32 type, int input, gpointer native, int parent);
@@ -630,15 +638,15 @@ lgi_marshal (lua_State *L, int code_index, int *code_pos,
       /* Prepare input argument offset. */
       offset = (type & MARSHAL_CODE_INPUT_MASK) >> MARSHAL_CODE_INPUT_SHIFT;
       if (offset != MARSHAL_CODE_INPUT_SHIFT)
-        {
-          input = inputs_base + offset;
-          if (native == NULL)
-            /* Get address from the input. */
-            native = *(gpointer *) lua_touserdata (L, input);
-        }
+	{
+	  input = inputs_base + offset;
+	  if (native == NULL)
+	    /* Get address from the input. */
+	    native = *(gpointer *) lua_touserdata (L, input);
+	}
       else
-        /* Input for this operand is the last output to be popped. */
-        input = lua_gettop (L) - temps;
+	/* Input for this operand is the last output to be popped. */
+	input = lua_gettop (L) - temps;
 
       /* Invoke proper code handler. */
       handler = marshal_code[(type & MARSHAL_CODE_MASK) >> MARSHAL_CODE_SHIFT];
@@ -648,7 +656,7 @@ lgi_marshal (lua_State *L, int code_index, int *code_pos,
 
       /* If the input should be removed after processing, do it now. */
       if (type & MARSHAL_CODE_INPUT_POP)
-        lua_remove (L, input);
+	lua_remove (L, input);
     }
 }
 
