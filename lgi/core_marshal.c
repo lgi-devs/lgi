@@ -69,6 +69,11 @@ typedef enum _Marshal
   } Marhal;
 
 static void
+marshal_2lua (lua_State *L, int code_index, int *code_pos, int *temps,
+	      guint32 type, int input, gpointer native);
+
+
+static void
 marshal_2lua_int (lua_State *L, int *temps, guint32 type, gpointer native)
 {
   GIArgument *arg = native;
@@ -322,6 +327,143 @@ marshal_2c_object (lua_State *L, int code_index, int *code_pos, guint32 type,
 				  type & MARSHAL_TYPE_ALLOW_NIL, FALSE);
 }
 
+static gssize
+marshal_get_size (lua_State *L, guint32 *type, int code_index, int code_pos,
+                  int param_index)
+{
+  gssize size = sizeof (gpointer);
+
+  /* Get the type opcode. */
+  lua_rawgeti (L, code_index, code_pos);
+  *type = lua_tonumber (L, -1);
+  lua_pop (L, 1);
+
+  /* Decide according the real type. */
+  switch (*type & MARSHAL_TYPE_BASE_MASK)
+    {
+    case MARSHAL_TYPE_BASE_INT:
+    case MARSHAL_TYPE_BASE_FLOAT:
+      /* Size is encoded in the subtype. */
+      size = 1 << ((*type & MARSHAL_TYPE_NUMBER_SIZE_MASK)
+                   >> MARSHAL_TYPE_NUMBER_SIZE_SHIFT);
+      break;
+
+    case MARSHAL_TYPE_BASE_BOOLEAN:
+      size = sizeof (gboolean);
+      break;
+
+    case MARSHAL_TYPE_BASE_RECORD:
+      if ((*type & MARSHAL_TYPE_IS_POINTER) == 0)
+        {
+          /* Get real record size. */
+          lua_rawgeti (L, code_index, ++code_pos);
+          lua_getfield (L, -1, "_size");
+          size = lua_tonumber (L, -1);
+          lua_pop (L, 2);
+        }
+      break;
+
+    case MARSHAL_TYPE_BASE_ARRAY:
+      /* Special handling for fixed-size C arrays stored by-value. */
+      if ((*type & MARSHAL_TYPE_ARRAY_MASK) == MARSHAL_TYPE_ARRAY_C
+          && (*type & MARSHAL_TYPE_IS_POINTER) == 0)
+        {
+          /* Try to get real array size. */
+          gssize element;
+          guint32 element_type;
+          luaL_checkstack (L, 2, NULL);
+          element = marshal_get_size (L, &element_type, code_index,
+                                      code_pos + 1, param_index - 1);
+          size = element * lua_tointeger (L, param_index);
+        }
+      break;
+    }
+
+  return size;
+}
+
+static void
+marshal_2lua_array (lua_State *L, int code_index, int *code_pos, int *temps,
+		    guint32 type, gpointer native)
+{
+  int pos, index;
+  gssize length, element_size;
+  const guint8* data;
+  guint32 element_type;
+
+  /* Remember code_pos, because we will iterate through it while
+     marshalling elements. */
+  pos = *code_pos;
+
+  /* Get element size of the array. */
+  element_size = marshal_get_size (L, &element_type, code_index, pos,
+                                   -(*temps + 1));
+
+  /* Get length (in elts) and base array pointer. */
+  if ((type & MARSHAL_TYPE_ARRAY_MASK) == MARSHAL_TYPE_ARRAY_C)
+    {
+      /* Get length from last marshalled item, and remove that item. */
+      length = lua_tointeger (L, -(*temps + 1));
+      lua_remove (L, -(*temps + 1));
+      data = native;
+    }
+  else
+    {
+      /* Get length from native array. */
+      length = ((GArray *) native)->len;
+      data = (const guint8 *) ((GArray *) native)->data;
+    }
+
+  if (element_size == 1
+      && (element_type & MARSHAL_TYPE_BASE_MASK) == MARSHAL_TYPE_BASE_INT)
+    {
+      /* Arrays of 8bit integers are translated into simple strings. */
+      lua_pushlstring (L, (const char *) data,
+                       length >= 0 ? length : strlen ((const char *) data));
+      lua_insert (L, -(*temps + 1));
+    }
+  else
+    {
+      /* Create the target table, marshal elements inside one by one. */
+      lua_createtable (L, length >= 0 ? length : 0, 0);
+      lua_insert (L, -(*temps + 1));
+      for (index = 0; length >=0 && index < length; ++index)
+        {
+          /* Reset subtype code position for each iteration. */
+          *code_pos = pos;
+
+          /* Marshal single array element into Lua. */
+          marshal_2lua (L, code_index, code_pos, temps, element_type, 0,
+                        (gpointer) data + index * element_size);
+
+          /* Store marshalled element into the results table. */
+          lua_pushvalue (L, -(*temps + 1));
+          lua_rawseti (L, -(*temps + 3), index + 1);
+          lua_remove (L, -(*temps + 1));
+        }
+    }
+
+  /* If the ownership was transferred, destroy the old array. */
+  if (type & MARSHAL_TYPE_TRANSFER_OWNERSHIP)
+    {
+      switch (type & MARSHAL_TYPE_ARRAY_MASK)
+        {
+        case MARSHAL_TYPE_ARRAY_C:
+          g_free (native);
+          break;
+        case MARSHAL_TYPE_ARRAY_GARRAY:
+          g_array_free (native, TRUE);
+          break;
+        case MARSHAL_TYPE_ARRAY_GPTRARRAY:
+          g_ptr_array_free (native, TRUE);
+          break;
+        case MARSHAL_TYPE_ARRAY_GBYTEARRAY:
+          g_byte_array_free (native, TRUE);
+          break;
+        }
+    }
+}
+
 typedef void
 (*marshal_code_fun)(lua_State *L, int code_index, int *code_pos, int *temps,
 		    guint32 type, int input, gpointer native);
@@ -351,6 +493,9 @@ marshal_2lua (lua_State *L, int code_index, int *code_pos, int *temps,
       break;
     case MARSHAL_TYPE_BASE_OBJECT:
       marshal_2lua_object (L, code_index, code_pos, temps, type, native);
+      break;
+    case MARSHAL_TYPE_BASE_ARRAY:
+      marshal_2lua_array (L, code_index, code_pos, temps, type, native);
       break;
     default:
       g_assert_not_reached ();
