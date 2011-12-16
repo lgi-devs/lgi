@@ -208,16 +208,16 @@ marshal_2c_int (lua_State *L, guint32 type, int input, gpointer native)
   GIArgument *arg = native;
   lua_Number number = luaL_checknumber (L, input);
   lua_Number low_limit, high_limit;
-  gint64 base;
   if (type & MARSHAL_TYPE_IS_POINTER)
     {
+      gint64 base;
       if (type & MARSHAL_TYPE_NUMBER_UNSIGNED)
 	arg->v_pointer = GUINT_TO_POINTER ((guint) number);
       else
 	arg->v_pointer = GINT_TO_POINTER ((gint) number);
 
-      base = 1LL << (1 << ((type & MARSHAL_TYPE_NUMBER_SIZE_MASK)
-			   >> MARSHAL_TYPE_NUMBER_SIZE_SHIFT));
+      base = 0x1LL << (8 << ((type & MARSHAL_TYPE_NUMBER_SIZE_MASK)
+                               >> MARSHAL_TYPE_NUMBER_SIZE_SHIFT));
       if (type & MARSHAL_TYPE_NUMBER_UNSIGNED)
 	{
 	  low_limit = 0;
@@ -557,11 +557,11 @@ static void
 marshal_2c_array (lua_State *L, int code_index, int *code_pos, int *temps,
 		  guint32 type, int input, gpointer native)
 {
-  int start_pos, pos, index;
-  gssize length, element_size;
+  int start_pos, pos, index, length;
+  gssize element_size;
   guint8 *data;
   guint32 element_type;
-
+  gpointer *guard;
 
   /* Remember code_pos, because we will iterate through it while
      marshalling elements. */
@@ -570,6 +570,43 @@ marshal_2c_array (lua_State *L, int code_index, int *code_pos, int *temps,
   /* Scan the type of array element and calculate element instance size. */
   marshal_scan_type (L, &element_type, code_index, code_pos,
 		     -(*temps + 1), &element_size);
+
+  /* Create the array instance, put it into guard and store it into temps
+     area. */
+  length = lua_objlen (L, input);
+  switch (type & MARSHAL_TYPE_ARRAY_MASK)
+    {
+    case MARSHAL_TYPE_ARRAY_C:
+      /* Create continous memory of specified length. */
+      guard = lgi_guard_create (L, g_free);
+      *guard = g_malloc0 (length * element_size);
+      data = *guard;
+      break;
+
+    case MARSHAL_TYPE_ARRAY_GARRAY:
+      guard = lgi_guard_create (L, (GDestroyNotify) g_array_unref);
+      *guard = g_array_new (FALSE, TRUE, element_size);
+      g_array_set_size (*guard, length);
+      data = (guint8 *) ((GArray *) *guard)->data;
+      break;
+
+    case MARSHAL_TYPE_ARRAY_GPTRARRAY:
+      guard = lgi_guard_create (L, (GDestroyNotify) g_ptr_array_unref);
+      *guard = g_ptr_array_new ();
+      g_ptr_array_set_size (*guard, length);
+      data = (guint8 *) ((GPtrArray *) *guard)->pdata;
+      break;
+
+    case MARSHAL_TYPE_ARRAY_GBYTEARRAY:
+      guard = lgi_guard_create (L, (GDestroyNotify) g_byte_array_unref);
+      *guard = g_byte_array_new ();
+      g_byte_array_set_size (*guard, length);
+      data = ((GByteArray *) *guard)->data;
+      break;
+    }
+
+  /* Array data holder is stored into temporary area. */
+  (*temps)++;
 }
 
 /* --- Instructions code handlers. */
