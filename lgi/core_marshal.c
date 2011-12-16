@@ -73,6 +73,9 @@ marshal_2lua (lua_State *L, int code_index, int *code_pos, int *temps,
 	      guint32 type, int input, gpointer native, int parent);
 
 static void
+marshal_2c (lua_State *L, int code_index, int *code_pos, int *temps,
+	    guint32 type, int input, gpointer native, int parent);
+
 /* Recursively scans the type, finds end of its definition and
    optionally calculates size of the type instance. */
 static void
@@ -550,6 +553,25 @@ marshal_2lua_array (lua_State *L, int code_index, int *code_pos, int *temps,
     }
 }
 
+static void
+marshal_2c_array (lua_State *L, int code_index, int *code_pos, int *temps,
+		  guint32 type, int input, gpointer native)
+{
+  int start_pos, pos, index;
+  gssize length, element_size;
+  guint8 *data;
+  guint32 element_type;
+
+
+  /* Remember code_pos, because we will iterate through it while
+     marshalling elements. */
+  start_pos = *code_pos;
+
+  /* Scan the type of array element and calculate element instance size. */
+  marshal_scan_type (L, &element_type, code_index, code_pos,
+		     -(*temps + 1), &element_size);
+}
+
 /* --- Instructions code handlers. */
 typedef void
 (*marshal_code_fun)(lua_State *L, int code_index, int *code_pos, int *temps,
@@ -615,6 +637,9 @@ marshal_2c (lua_State *L, int code_index, int *code_pos, int *temps,
       break;
     case MARSHAL_TYPE_BASE_OBJECT:
       marshal_2c_object (L, code_index, code_pos, type, input, native);
+      break;
+    case MARSHAL_TYPE_BASE_ARRAY:
+      marshal_2c_array (L, code_index, code_pos, temps, type, input, native);
       break;
     default:
       g_assert_not_reached ();
