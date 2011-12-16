@@ -88,6 +88,7 @@ marshal_scan_type (lua_State *L, guint32 *type, int code_index, int *code_pos,
   *type = lua_tonumber (L, -1);
   lua_pop (L, 1);
 
+  /* Prepare default value for size. */
   if (size)
     *size = sizeof (gpointer);
 
@@ -97,7 +98,7 @@ marshal_scan_type (lua_State *L, guint32 *type, int code_index, int *code_pos,
     case MARSHAL_TYPE_BASE_INT:
     case MARSHAL_TYPE_BASE_FLOAT:
       /* Size is encoded in the subtype. */
-      if (size)
+      if (size && (*type & MARSHAL_TYPE_IS_POINTER) == 0)
 	*size = 1 << ((*type & MARSHAL_TYPE_NUMBER_SIZE_MASK)
 		     >> MARSHAL_TYPE_NUMBER_SIZE_SHIFT);
       break;
@@ -146,6 +147,11 @@ marshal_scan_type (lua_State *L, guint32 *type, int code_index, int *code_pos,
       marshal_scan_type (L, &element_type, code_index, code_pos, 0, NULL);
       marshal_scan_type (L, &element_type, code_index, code_pos, 0, NULL);
       break;
+
+    case MARSHAL_TYPE_BASE_DIRECT:
+      /* Skip direct value. */
+      (*code_pos)++;
+      break;
     }
 }
 
@@ -155,27 +161,38 @@ static void
 marshal_2lua_int (lua_State *L, int *temps, guint32 type, gpointer native)
 {
   GIArgument *arg = native;
-  switch (type & (MARSHAL_TYPE_NUMBER_SIZE_MASK | MARSHAL_TYPE_NUMBER_UNSIGNED))
+  if (type & MARSHAL_TYPE_IS_POINTER)
     {
-#define HANDLE_INT(sign, size, name)			\
-      case (sign ? 0 : MARSHAL_TYPE_NUMBER_UNSIGNED)	\
-	| (size << MARSHAL_TYPE_NUMBER_SIZE_SHIFT):	\
-	lua_pushnumber (L, arg->v_ ## name);		\
-	break
+      if (type & MARSHAL_TYPE_NUMBER_UNSIGNED)
+	lua_pushnumber (L, GPOINTER_TO_UINT (arg->v_pointer));
+      else
+	lua_pushnumber (L, GPOINTER_TO_INT (arg->v_pointer));
+    }
+  else
+    {
+      switch (type & (MARSHAL_TYPE_NUMBER_SIZE_MASK
+		      | MARSHAL_TYPE_NUMBER_UNSIGNED))
+	{
+#define HANDLE_INT(sign, size, name)				\
+	  case (sign ? 0 : MARSHAL_TYPE_NUMBER_UNSIGNED)	\
+	    | (size << MARSHAL_TYPE_NUMBER_SIZE_SHIFT):		\
+	    lua_pushnumber (L, arg->v_ ## name);		\
+	    break
 
-      HANDLE_INT(1, 0, int8);
-      HANDLE_INT(1, 1, int16);
-      HANDLE_INT(1, 2, int32);
-      HANDLE_INT(1, 3, int64);
-      HANDLE_INT(0, 0, uint8);
-      HANDLE_INT(0, 1, uint16);
-      HANDLE_INT(0, 2, uint32);
-      HANDLE_INT(0, 3, uint64);
+	  HANDLE_INT(1, 0, int8);
+	  HANDLE_INT(1, 1, int16);
+	  HANDLE_INT(1, 2, int32);
+	  HANDLE_INT(1, 3, int64);
+	  HANDLE_INT(0, 0, uint8);
+	  HANDLE_INT(0, 1, uint16);
+	  HANDLE_INT(0, 2, uint32);
+	  HANDLE_INT(0, 3, uint64);
 
 #undef HANDLE_INT
 
-    default:
-      g_assert_not_reached ();
+	default:
+	  g_assert_not_reached ();
+	}
     }
 
   lua_insert (L, -(*temps + 1));
@@ -188,31 +205,57 @@ marshal_2c_int (lua_State *L, guint32 type, int input, gpointer native)
   GIArgument *arg = native;
   lua_Number number = luaL_checknumber (L, input);
   lua_Number low_limit, high_limit;
-  switch (type & (MARSHAL_TYPE_NUMBER_SIZE_MASK | MARSHAL_TYPE_NUMBER_UNSIGNED))
+  gint64 base;
+  if (type & MARSHAL_TYPE_IS_POINTER)
     {
-#define HANDLE_INT(sign, size, name, low, high)		\
-      case (sign ? 0 : MARSHAL_TYPE_NUMBER_UNSIGNED)	\
-	| (size << MARSHAL_TYPE_NUMBER_SIZE_SHIFT):	\
-	arg->v_ ## name = number;			\
-	low_limit = low;				\
-	high_limit = high;				\
-	break
+      if (type & MARSHAL_TYPE_NUMBER_UNSIGNED)
+	arg->v_pointer = GUINT_TO_POINTER ((guint) number);
+      else
+	arg->v_pointer = GINT_TO_POINTER ((gint) number);
 
-      HANDLE_INT(1, 0, int8, -0x80, 0x7f);
-      HANDLE_INT(1, 1, int16, -0x8000, 0x7fff);
-      HANDLE_INT(1, 2, int32, -0x80000000LL, 0x7fffffffLL);
-      HANDLE_INT(1, 3, int64,
-		 ((lua_Number) -0x7f00000000000000LL) - 1,
-		 0x7fffffffffffffffLL);
-      HANDLE_INT(0, 0, uint8, 0, 0xff);
-      HANDLE_INT(0, 1, uint16, 0, 0xffff);
-      HANDLE_INT(0, 2, uint32, 0, 0xffffffffUL);
-      HANDLE_INT(0, 3, uint64, 0, 0xffffffffffffffffULL);
+      base = 1LL << (1 << ((type & MARSHAL_TYPE_NUMBER_SIZE_MASK)
+			   >> MARSHAL_TYPE_NUMBER_SIZE_SHIFT));
+      if (type & MARSHAL_TYPE_NUMBER_UNSIGNED)
+	{
+	  low_limit = 0;
+	  high_limit = base - 1;
+	}
+      else
+	{
+	  base >>= 1;
+	  low_limit = -base;
+	  high_limit = base - 1;
+	}
+    }
+  else
+    {
+      switch (type & (MARSHAL_TYPE_NUMBER_SIZE_MASK
+		      | MARSHAL_TYPE_NUMBER_UNSIGNED))
+	{
+#define HANDLE_INT(sign, size, name, low, high)			\
+	  case (sign ? 0 : MARSHAL_TYPE_NUMBER_UNSIGNED)	\
+	    | (size << MARSHAL_TYPE_NUMBER_SIZE_SHIFT):		\
+	    arg->v_ ## name = number;				\
+	    low_limit = low;					\
+	    high_limit = high;					\
+	    break
+
+	  HANDLE_INT(1, 0, int8, -0x80, 0x7f);
+	  HANDLE_INT(1, 1, int16, -0x8000, 0x7fff);
+	  HANDLE_INT(1, 2, int32, -0x80000000LL, 0x7fffffffLL);
+	  HANDLE_INT(1, 3, int64,
+		     ((lua_Number) -0x7f00000000000000LL) - 1,
+		     0x7fffffffffffffffLL);
+	  HANDLE_INT(0, 0, uint8, 0, 0xff);
+	  HANDLE_INT(0, 1, uint16, 0, 0xffff);
+	  HANDLE_INT(0, 2, uint32, 0, 0xffffffffUL);
+	  HANDLE_INT(0, 3, uint64, 0, 0xffffffffffffffffULL);
 
 #undef HANDLE_INT
 
-    default:
-      g_assert_not_reached ();
+	default:
+	  g_assert_not_reached ();
+	}
     }
 
   /* Check that the number falls into the limits. */
