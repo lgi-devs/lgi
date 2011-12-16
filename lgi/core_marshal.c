@@ -69,11 +69,11 @@ typedef enum _Marshal
   } Marhal;
 
 static void
-marshal_2lua (lua_State *L, int code_index, int *code_pos, int *temps,
+marshal_2lua (lua_State *L, int code_index, int *code_pos, int temps[2],
 	      guint32 type, int input, gpointer native, int parent);
 
 static void
-marshal_2c (lua_State *L, int code_index, int *code_pos, int *temps,
+marshal_2c (lua_State *L, int code_index, int *code_pos, int temps[2],
 	    guint32 type, int input, gpointer native, int parent);
 
 /* Recursively scans the type, finds end of its definition and
@@ -161,7 +161,7 @@ marshal_scan_type (lua_State *L, guint32 *type, int code_index, int *code_pos,
 
 /* --- Marshaling of integer types. */
 static void
-marshal_2lua_int (lua_State *L, int *temps, guint32 type, gpointer native)
+marshal_2lua_int (lua_State *L, int temps[2], guint32 type, gpointer native)
 {
   GIArgument *arg = native;
   if (type & MARSHAL_TYPE_IS_POINTER)
@@ -198,7 +198,7 @@ marshal_2lua_int (lua_State *L, int *temps, guint32 type, gpointer native)
 	}
     }
 
-  lua_insert (L, -(*temps + 1));
+  lua_insert (L, -(temps[0] + 1));
 }
 
 static void
@@ -272,7 +272,7 @@ marshal_2c_int (lua_State *L, guint32 type, int input, gpointer native)
 
 /* --- Marshaling of float types. */
 static void
-marshal_2lua_float (lua_State *L, int *temps, guint32 type, gpointer native)
+marshal_2lua_float (lua_State *L, int temps[2], guint32 type, gpointer native)
 {
   GIArgument *arg = native;
   switch (type & MARSHAL_TYPE_NUMBER_SIZE_MASK)
@@ -291,7 +291,7 @@ marshal_2lua_float (lua_State *L, int *temps, guint32 type, gpointer native)
       g_assert_not_reached ();
     }
 
-  lua_insert (L, -(*temps + 1));
+  lua_insert (L, -(temps[0] + 1));
 }
 
 static void
@@ -318,11 +318,11 @@ marshal_2c_float (lua_State *L, guint32 type, int input, gpointer native)
 
 /* --- Marshaling of booleans. */
 static void
-marshal_2lua_boolean (lua_State *L, int *temps, guint32 type, gpointer native)
+marshal_2lua_boolean (lua_State *L, int temps[2], guint32 type, gpointer native)
 {
   GIArgument *arg = native;
   lua_pushboolean (L, arg->v_boolean);
-  lua_insert (L, -(*temps + 1));
+  lua_insert (L, -(temps[0] + 1));
 }
 
 static void
@@ -334,7 +334,7 @@ marshal_2c_boolean (lua_State *L, guint32 type, int input, gpointer native)
 
 /* -- Marshaling of strings and filenames. */
 static void
-marshal_2lua_string (lua_State *L, int *temps, guint32 type, gpointer native)
+marshal_2lua_string (lua_State *L, int temps[2], guint32 type, gpointer native)
 {
   GIArgument *arg = native;
   gchar *str = arg->v_string;
@@ -350,11 +350,11 @@ marshal_2lua_string (lua_State *L, int *temps, guint32 type, gpointer native)
   if (type & MARSHAL_TYPE_TRANSFER_OWNERSHIP)
     g_free (str);
 
-  lua_insert (L, -(*temps + 1));
+  lua_insert (L, -(temps[0] + 1));
 }
 
 static void
-marshal_2c_string (lua_State *L, int *temps, guint32 type, int input,
+marshal_2c_string (lua_State *L, int temps[2], guint32 type, int input,
 		   gpointer native)
 {
   const gchar *str;
@@ -371,20 +371,29 @@ marshal_2c_string (lua_State *L, int *temps, guint32 type, int input,
       /* Convert from filename encoding and create temporary guard for
 	 newly created filename string. */
       str = g_filename_from_utf8 (str, -1, NULL, NULL, NULL);
-      if ((type & MARSHAL_TYPE_TRANSFER_OWNERSHIP) == 0)
+      *lgi_guard_create (L, g_free) = (gpointer) str;
+      temps[0]++;
+      if (type & MARSHAL_TYPE_TRANSFER_OWNERSHIP)
 	{
-	  *lgi_guard_create (L, g_free) = (gpointer) str;
-	  (*temps)++;
+	  /* Move guard to 'clean only if call fails' area. */
+	  lua_insert (L, -(temps[0] + 1));
+	  temps[1]++;
 	}
     }
   else if (type & MARSHAL_TYPE_TRANSFER_OWNERSHIP)
-    str = g_strdup (str);
+    {
+      str = g_strdup (str);
+      *lgi_guard_create (L, g_free) = (gpointer) str;
+      lua_insert (L, -(temps[0] + 1));
+      temps[0]++;
+      temps[1]++;
+    }
   arg->v_string = (gchar *) str;
 }
 
 /* --- Marshaling of records (structs and unions). */
 static void
-marshal_2lua_record (lua_State *L, int code_index, int *code_pos, int *temps,
+marshal_2lua_record (lua_State *L, int code_index, int *code_pos, int temps[2],
 		     guint32 type, gpointer native, int parent)
 {
   /* Handle ref/value difference. */
@@ -397,7 +406,7 @@ marshal_2lua_record (lua_State *L, int code_index, int *code_pos, int *temps,
   /* Get record type and marshal record instance. */
   lua_rawgeti (L, code_index, (*code_pos)++);
   lgi_record_2lua (L, native, type & MARSHAL_TYPE_TRANSFER_OWNERSHIP, parent);
-  lua_insert (L, -(*temps + 1));
+  lua_insert (L, -(temps[0] + 1));
 }
 
 static void
@@ -429,7 +438,7 @@ marshal_2c_record (lua_State *L, int code_index, int *code_pos, guint32 type,
 
 /* -- Marshaling of GType-based objects. */
 static void
-marshal_2lua_object (lua_State *L, int code_index, int *code_pos, int *temps,
+marshal_2lua_object (lua_State *L, int code_index, int *code_pos, int temps[2],
 		     guint32 type, gpointer native)
 {
   /* Just skip type record, it is unused in current implementation. */
@@ -438,7 +447,7 @@ marshal_2lua_object (lua_State *L, int code_index, int *code_pos, int *temps,
   /* Marshal object to lua. */
   lgi_object_2lua (L, ((GIArgument *) native)->v_pointer,
 		   type & MARSHAL_TYPE_TRANSFER_OWNERSHIP);
-  lua_insert (L, -(*temps + 1));
+  lua_insert (L, -(temps[0] + 1));
 }
 
 static void
@@ -461,7 +470,7 @@ marshal_2c_object (lua_State *L, int code_index, int *code_pos, guint32 type,
 
 /* -- Marshaling of assorted types of arrays. */
 static void
-marshal_2lua_array (lua_State *L, int code_index, int *code_pos, int *temps,
+marshal_2lua_array (lua_State *L, int code_index, int *code_pos, int temps[2],
 		    guint32 type, gpointer native)
 {
   int pos, start_pos, index;
@@ -475,14 +484,14 @@ marshal_2lua_array (lua_State *L, int code_index, int *code_pos, int *temps,
 
   /* Get element size of the array. */
   marshal_scan_type (L, &element_type, code_index, code_pos,
-		     -(*temps + 1), &element_size);
+		     -(temps[0] + 1), &element_size);
 
   /* Get length (in elts) and base array pointer. */
   if ((type & MARSHAL_TYPE_ARRAY_MASK) == MARSHAL_TYPE_ARRAY_C)
     {
       /* Get length from last marshalled item, and remove that item. */
-      length = lua_tointeger (L, -(*temps + 1));
-      lua_remove (L, -(*temps + 1));
+      length = lua_tointeger (L, -(temps[0] + 1));
+      lua_remove (L, -(temps[0] + 1));
       data = native;
     }
   else
@@ -498,13 +507,13 @@ marshal_2lua_array (lua_State *L, int code_index, int *code_pos, int *temps,
       /* Arrays of 8bit integers are translated into simple strings. */
       lua_pushlstring (L, (const char *) data,
 		       length >= 0 ? length : strlen ((const char *) data));
-      lua_insert (L, -(*temps + 1));
+      lua_insert (L, -(temps[0] + 1));
     }
   else
     {
       /* Create the target table, */
       lua_createtable (L, length >= 0 ? length : 0, 0);
-      lua_insert (L, -(*temps + 1));
+      lua_insert (L, -(temps[0] + 1));
 
       /* Marshal elements inside one by one. */
       for (index = 0; length >=0 && index < length;
@@ -523,12 +532,12 @@ marshal_2lua_array (lua_State *L, int code_index, int *code_pos, int *temps,
 
 	  /* Marshal single array element into Lua. */
 	  marshal_2lua (L, code_index, &pos, temps, element_type, 0,
-			(gpointer) data, -(*temps + 1));
+			(gpointer) data, -(temps[0] + 1));
 
 	  /* Store marshalled element into the results table. */
-	  lua_pushvalue (L, -(*temps + 1));
-	  lua_rawseti (L, -(*temps + 3), index + 1);
-	  lua_remove (L, -(*temps + 1));
+	  lua_pushvalue (L, -(temps[0] + 1));
+	  lua_rawseti (L, -(temps[0] + 3), index + 1);
+	  lua_remove (L, -(temps[0] + 1));
 	}
     }
 
@@ -554,7 +563,7 @@ marshal_2lua_array (lua_State *L, int code_index, int *code_pos, int *temps,
 }
 
 static void
-marshal_2c_array (lua_State *L, int code_index, int *code_pos, int *temps,
+marshal_2c_array (lua_State *L, int code_index, int *code_pos, int temps[2],
 		  guint32 type, int input, gpointer native)
 {
   int start_pos, pos, index, length;
@@ -569,7 +578,7 @@ marshal_2c_array (lua_State *L, int code_index, int *code_pos, int *temps,
 
   /* Scan the type of array element and calculate element instance size. */
   marshal_scan_type (L, &element_type, code_index, code_pos,
-		     -(*temps + 1), &element_size);
+		     -(temps[0] + 1), &element_size);
 
   /* Create the array instance, put it into guard and store it into temps
      area. */
@@ -604,18 +613,15 @@ marshal_2c_array (lua_State *L, int code_index, int *code_pos, int *temps,
       data = ((GByteArray *) *guard)->data;
       break;
     }
-
-  /* Array data holder is stored into temporary area. */
-  (*temps)++;
 }
 
 /* --- Instructions code handlers. */
 typedef void
-(*marshal_code_fun)(lua_State *L, int code_index, int *code_pos, int *temps,
+(*marshal_code_fun)(lua_State *L, int code_index, int *code_pos, int temps[2],
 		    guint32 type, int input, gpointer native, int parent);
 
 static void
-marshal_2lua (lua_State *L, int code_index, int *code_pos, int *temps,
+marshal_2lua (lua_State *L, int code_index, int *code_pos, int temps[2],
 	      guint32 type, int input, gpointer native, int parent)
 {
   luaL_checkstack (L, 4, NULL);
@@ -713,20 +719,20 @@ static const marshal_code_fun marshal_code[] = {
   /* MARSHAL_CODE_TO_C */   marshal_2c
 };
 
-int
-lgi_marshal (lua_State *L, int code_index, int *code_pos,
+void
+lgi_marshal (lua_State *L, int code_index, int *code_pos, int temps[2],
 	     int inputs_base, gpointer native_base)
 {
-  int temps = 0;
   guint32 type;
   marshal_code_fun handler;
   gpointer native;
   gsize offset;
   int input;
 
-  luaL_checkstack (L, 1, NULL);
+  temps[0] = temps[1] = 0;
   lgi_makeabs (L, inputs_base);
   lgi_makeabs (L, code_index);
+  luaL_checkstack (L, 1, NULL);
 
   /* Iterate through the type stream. */
   for (;;)
@@ -750,14 +756,14 @@ lgi_marshal (lua_State *L, int code_index, int *code_pos,
 	    native = *(gpointer *) lua_touserdata (L, input);
 	}
       else
-	/* Input for this operand is the last output to be popped. */
-	input = lua_gettop (L) - temps;
+	/* Input for this operand is the last non-temp output. */
+	input = lua_gettop (L) - temps[0];
 
       /* Invoke proper code handler. */
       handler = marshal_code[(type & MARSHAL_CODE_MASK) >> MARSHAL_CODE_SHIFT];
       if (!handler)
-	return temps;
-      handler(L, code_index, code_pos, &temps, type, input, native, 0);
+	break;
+      handler(L, code_index, code_pos, temps, type, input, native, 0);
 
       /* If the input should be removed after processing, do it now. */
       if (type & MARSHAL_CODE_INPUT_POP)
