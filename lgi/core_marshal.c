@@ -80,11 +80,11 @@ marshal_2c (lua_State *L, int code_index, int *code_pos, int temps[2],
    optionally calculates size of the type instance. */
 static void
 marshal_scan_type (lua_State *L, guint32 *type, int code_index, int *code_pos,
-		   int param_index, gssize *size)
+		   gssize *size)
 {
   gssize element_size;
   guint32 element_type;
-  int element_param_index;
+  int length_index;
 
   /* Get the type opcode. */
   lua_rawgeti (L, code_index, (*code_pos)++);
@@ -125,30 +125,33 @@ marshal_scan_type (lua_State *L, guint32 *type, int code_index, int *code_pos,
     case MARSHAL_TYPE_BASE_ARRAY:
       /* Recurse into array type. */
       luaL_checkstack (L, 2, NULL);
-      element_param_index = param_index;
-      if (element_param_index
-	  && (*type & MARSHAL_TYPE_ARRAY_MASK) == MARSHAL_TYPE_ARRAY_C)
-	element_param_index--;
+      length_index = *code_pos;
+      if ((*type & MARSHAL_TYPE_ARRAY_MASK) == MARSHAL_TYPE_ARRAY_C)
+	(*code_pos)++;
       marshal_scan_type (L, &element_type, code_index, code_pos,
-			 element_param_index, &element_size);
+			 &element_size);
 
-      /* Calculate size for by-value arrays. */
+      /* Calculate size for by-value C arrays. */
       if (size && (*type & MARSHAL_TYPE_ARRAY_MASK) == MARSHAL_TYPE_ARRAY_C
 	  && (*type & MARSHAL_TYPE_IS_POINTER) == 0)
-	*size = element_size * lua_tointeger (L, param_index);
+	{
+	  lua_rawgeti (L, code_index, length_index);
+	  *size = element_size * lua_tointeger (L, -1);
+	  lua_pop (L, 1);
+	}
       break;
 
     case MARSHAL_TYPE_BASE_LIST:
       /* Recurse into list element type. */
       luaL_checkstack (L, 2, NULL);
-      marshal_scan_type (L, &element_type, code_index, code_pos, 0, NULL);
+      marshal_scan_type (L, &element_type, code_index, code_pos, NULL);
       break;
 
     case MARSHAL_TYPE_BASE_HASHTABLE:
       /* Recurse into hastable key/value types. */
       luaL_checkstack (L, 2, NULL);
-      marshal_scan_type (L, &element_type, code_index, code_pos, 0, NULL);
-      marshal_scan_type (L, &element_type, code_index, code_pos, 0, NULL);
+      marshal_scan_type (L, &element_type, code_index, code_pos, NULL);
+      marshal_scan_type (L, &element_type, code_index, code_pos, NULL);
       break;
 
     case MARSHAL_TYPE_BASE_DIRECT:
@@ -478,33 +481,43 @@ marshal_2lua_array (lua_State *L, int code_index, int *code_pos, int temps[2],
   const guint8 *data;
   guint32 element_type;
 
+  /* Get length and data-pointer for the native array. */
+  if ((type & MARSHAL_TYPE_ARRAY_MASK) == MARSHAL_TYPE_ARRAY_C)
+    {
+      /* Get length from type argument. */
+      lua_rawgeti (L, code_index, (*code_pos)++);
+      length = lua_tointeger (L, -1);
+      lua_pop (L, 1);
+      if (length == 0)
+	{
+	  /* Get length from last marshalled item, and remove that
+	     item. */
+	  length = lua_tointeger (L, -(temps[0] + 1));
+	  lua_remove (L, -(temps[0] + 1));
+	}
+      data = native;
+    }
+  else
+    {
+      /* Get length and data from native array.  Note that initial
+	 structure layout is binary identical for GArray, GPtrArray
+	 and GByteArray, so we can cheat here and cast everything just
+	 to GArray. */
+      length = ((GArray *) native)->len;
+      data = (const guint8 *) ((GArray *) native)->data;
+    }
+
   /* Remember code_pos, because we will iterate through it while
      marshalling elements. */
   start_pos = *code_pos;
 
   /* Get element size of the array. */
-  marshal_scan_type (L, &element_type, code_index, code_pos,
-		     -(temps[0] + 1), &element_size);
-
-  /* Get length (in elts) and base array pointer. */
-  if ((type & MARSHAL_TYPE_ARRAY_MASK) == MARSHAL_TYPE_ARRAY_C)
-    {
-      /* Get length from last marshalled item, and remove that item. */
-      length = lua_tointeger (L, -(temps[0] + 1));
-      lua_remove (L, -(temps[0] + 1));
-      data = native;
-    }
-  else
-    {
-      /* Get length from native array. */
-      length = ((GArray *) native)->len;
-      data = (const guint8 *) ((GArray *) native)->data;
-    }
+  marshal_scan_type (L, &element_type, code_index, code_pos, &element_size);
 
   if (element_size == 1
       && (element_type & MARSHAL_TYPE_BASE_MASK) == MARSHAL_TYPE_BASE_INT)
     {
-      /* Arrays of 8bit integers are translated into simple strings. */
+      /* Arrays of 8bit integers are translated into Lua strings. */
       lua_pushlstring (L, (const char *) data,
 		       length >= 0 ? length : strlen ((const char *) data));
       lua_insert (L, -(temps[0] + 1));
@@ -577,8 +590,7 @@ marshal_2c_array (lua_State *L, int code_index, int *code_pos, int temps[2],
   start_pos = *code_pos;
 
   /* Scan the type of array element and calculate element instance size. */
-  marshal_scan_type (L, &element_type, code_index, code_pos,
-		     -(temps[0] + 1), &element_size);
+  marshal_scan_type (L, &element_type, code_index, code_pos, &element_size);
 
   /* Create the array instance, put it into guard and store it into temps
      area. */
