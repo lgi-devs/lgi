@@ -77,12 +77,11 @@ marshal_2c (lua_State *L, int code_index, int *code_pos, int temps[2],
 	    guint32 type, int input, gpointer native, int parent);
 
 /* Recursively scans the type, finds end of its definition and
-   optionally calculates size of the type instance. */
-static void
-marshal_scan_type (lua_State *L, guint32 *type, int code_index, int *code_pos,
-		   gssize *size)
+   calculates size of the type instance. */
+static gssize
+marshal_scan_type (lua_State *L, guint32 *type, int code_index, int *code_pos)
 {
-  gssize element_size;
+  gssize element_size, size;
   guint32 element_type;
   int length_index;
 
@@ -92,8 +91,7 @@ marshal_scan_type (lua_State *L, guint32 *type, int code_index, int *code_pos,
   lua_pop (L, 1);
 
   /* Prepare default value for size. */
-  if (size)
-    *size = sizeof (gpointer);
+  size = sizeof (gpointer);
 
   /* Decide according the real type. */
   switch (*type & MARSHAL_TYPE_BASE_MASK)
@@ -101,23 +99,22 @@ marshal_scan_type (lua_State *L, guint32 *type, int code_index, int *code_pos,
     case MARSHAL_TYPE_BASE_INT:
     case MARSHAL_TYPE_BASE_FLOAT:
       /* Size is encoded in the subtype. */
-      if (size && (*type & MARSHAL_TYPE_IS_POINTER) == 0)
-	*size = 1 << ((*type & MARSHAL_TYPE_NUMBER_SIZE_MASK)
+      if ((*type & MARSHAL_TYPE_IS_POINTER) == 0)
+	size = 1 << ((*type & MARSHAL_TYPE_NUMBER_SIZE_MASK)
 		     >> MARSHAL_TYPE_NUMBER_SIZE_SHIFT);
       break;
 
     case MARSHAL_TYPE_BASE_BOOLEAN:
-      if (size)
-	*size = sizeof (gboolean);
+      size = sizeof (gboolean);
       break;
 
     case MARSHAL_TYPE_BASE_RECORD:
-      if (size && (*type & MARSHAL_TYPE_IS_POINTER) == 0)
+      if ((*type & MARSHAL_TYPE_IS_POINTER) == 0)
 	{
 	  /* Get real record size. */
 	  lua_rawgeti (L, code_index, (*code_pos)++);
 	  lua_getfield (L, -1, "_size");
-	  *size = lua_tonumber (L, -1);
+	  size = lua_tonumber (L, -1);
 	  lua_pop (L, 2);
 	}
       break;
@@ -128,15 +125,15 @@ marshal_scan_type (lua_State *L, guint32 *type, int code_index, int *code_pos,
       length_index = *code_pos;
       if ((*type & MARSHAL_TYPE_ARRAY_MASK) == MARSHAL_TYPE_ARRAY_C)
 	(*code_pos)++;
-      marshal_scan_type (L, &element_type, code_index, code_pos,
-			 &element_size);
+      element_size = marshal_scan_type (L, &element_type,
+					code_index, code_pos);
 
       /* Calculate size for by-value C arrays. */
-      if (size && (*type & MARSHAL_TYPE_ARRAY_MASK) == MARSHAL_TYPE_ARRAY_C
+      if ((*type & MARSHAL_TYPE_ARRAY_MASK) == MARSHAL_TYPE_ARRAY_C
 	  && (*type & MARSHAL_TYPE_IS_POINTER) == 0)
 	{
 	  lua_rawgeti (L, code_index, length_index);
-	  *size = element_size * lua_tointeger (L, -1);
+	  size = element_size * lua_tointeger (L, -1);
 	  lua_pop (L, 1);
 	}
       break;
@@ -144,14 +141,14 @@ marshal_scan_type (lua_State *L, guint32 *type, int code_index, int *code_pos,
     case MARSHAL_TYPE_BASE_LIST:
       /* Recurse into list element type. */
       luaL_checkstack (L, 2, NULL);
-      marshal_scan_type (L, &element_type, code_index, code_pos, NULL);
+      marshal_scan_type (L, &element_type, code_index, code_pos);
       break;
 
     case MARSHAL_TYPE_BASE_HASHTABLE:
       /* Recurse into hastable key/value types. */
       luaL_checkstack (L, 2, NULL);
-      marshal_scan_type (L, &element_type, code_index, code_pos, NULL);
-      marshal_scan_type (L, &element_type, code_index, code_pos, NULL);
+      marshal_scan_type (L, &element_type, code_index, code_pos);
+      marshal_scan_type (L, &element_type, code_index, code_pos);
       break;
 
     case MARSHAL_TYPE_BASE_DIRECT:
@@ -159,6 +156,8 @@ marshal_scan_type (lua_State *L, guint32 *type, int code_index, int *code_pos,
       (*code_pos)++;
       break;
     }
+
+  return size;
 }
 
 
@@ -512,7 +511,7 @@ marshal_2lua_array (lua_State *L, int code_index, int *code_pos, int temps[2],
   start_pos = *code_pos;
 
   /* Get element size of the array. */
-  marshal_scan_type (L, &element_type, code_index, code_pos, &element_size);
+  element_size = marshal_scan_type (L, &element_type, code_index, code_pos);
 
   if (element_size == 1
       && (element_type & MARSHAL_TYPE_BASE_MASK) == MARSHAL_TYPE_BASE_INT)
@@ -590,7 +589,7 @@ marshal_2c_array (lua_State *L, int code_index, int *code_pos, int temps[2],
   start_pos = *code_pos;
 
   /* Scan the type of array element and calculate element instance size. */
-  marshal_scan_type (L, &element_type, code_index, code_pos, &element_size);
+  element_size = marshal_scan_type (L, &element_type, code_index, code_pos);
 
   /* Create the array instance, put it into guard and store it into temps
      area. */
