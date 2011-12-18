@@ -400,7 +400,7 @@ core_registerlock (lua_State *L)
   return 0;
 }
 
-static const struct luaL_reg lgi_reg[] = {
+static const struct luaL_Reg lgi_reg[] = {
   { "log",  core_log },
   { "gtype", core_gtype },
   { "constant", core_constant },

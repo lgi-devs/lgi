@@ -641,7 +641,7 @@ callable_call (lua_State *L)
   return nret;
 }
 
-static const struct luaL_reg callable_reg[] = {
+static const struct luaL_Reg callable_reg[] = {
   { "__gc", callable_gc },
   { "__tostring", callable_tostring },
   { "__call", callable_call },
