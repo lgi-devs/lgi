@@ -120,7 +120,7 @@ function Object:_element(object, name)
    -- property of the specified name exists.
    local class = core.record.cast(core.object.query(object, 'class'),
 				  Object._class)
-   local property = Object._class.find_property(class, name:gsub('_', '%-'))
+   local property = Object._class.find_property(class, name:gsub('_', '-'))
    if property then return property, '_paramspec' end
 end
 

@@ -45,7 +45,7 @@ class.interface_mt.is_type_of = class.class_mt.is_type_of
 
 local function load_signal_name(name)
    name = name:match('^on_(.+)$')
-   return name and name:gsub('_', '%-')
+   return name and name:gsub('_', '-')
 end
 
 local function load_signal_name_reverse(name)
@@ -70,7 +70,7 @@ end
 local function load_properties(info)
    return component.get_category(
       info.properties, nil,
-      function(name) return string.gsub(name, '_', '%-') end,
+      function(name) return string.gsub(name, '_', '-') end,
       function(name) return string.gsub(name, '%-', '_') end)
 end
 
