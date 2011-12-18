@@ -193,7 +193,7 @@ end
 function readline.commit(line)
    -- Try to execute input line.
    line = line:gsub('^%s?(=)%s*', 'return ')
-   local chunk, answer = loadstring(line, '=stdin')
+   local chunk, answer = (loadstring or load)(line, '=stdin')
    if chunk then
       (function(ok, ...)
 	  if not ok then

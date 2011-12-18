@@ -11,15 +11,19 @@
 #include <lua.h>
 #include <lauxlib.h>
 
+/* Lua 5.2 compatibility stuff. */
+#if LUA_VERSION_NUM >= 502
+#define luaL_register(L, null, regs) luaL_setfuncs (L, regs, 0)
+#define lua_equal(L, p1, p2) lua_compare (L, p1, p2, LUA_OPEQ)
+#define lua_objlen(L, p) lua_rawlen (L, p)
+#define lua_setfenv(L, p) lua_setuservalue (L, p)
+#define lua_getfenv(L, p) lua_getuservalue (L, p)
+#endif
+
 #include <glib.h>
 #include <glib-object.h>
 #include <glib/gprintf.h>
 #include <girepository.h>
-
-/* Lua stack dump for debugging purposes. */
-#ifndef NDEBUG
-const char *lgi_sd (lua_State* L);
-#endif
 
 /* Makes sure that Lua stack offset is absolute one, not relative. */
 #define lgi_makeabs(L, x) do { if (x < 0) x += lua_gettop (L) + 1; } while (0)

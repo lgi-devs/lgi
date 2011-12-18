@@ -221,7 +221,7 @@ local function Console()
       append_output(text:gsub('\n*$', '\n', 1), 'command')
 
       -- Try to execute the command.
-      local chunk, answer = loadstring(text, '=stdin')
+      local chunk, answer = (loadstring or load)(text, '=stdin')
       local tag = 'error'
       if not chunk then
 	 answer = answer:gsub('\n*$', '\n', 1)

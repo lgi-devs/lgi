@@ -761,7 +761,7 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
       {
 	gboolean result;
 	if (!optional && lua_isnoneornil (L, narg))
-	  luaL_typerror (L, narg, lua_typename (L, LUA_TBOOLEAN));
+	  luaL_argerror (L, narg, "boolean expected");
 	result = lua_toboolean (L, narg) ? TRUE : FALSE;
 	if (parent == PARENT_FORCE_POINTER)
 	  arg->v_pointer = GINT_TO_POINTER (result);
