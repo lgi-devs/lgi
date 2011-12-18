@@ -17,6 +17,7 @@ CCSHARED = -fPIC
 endif
 
 PKGS = gio-2.0 cairo cairo-gobject gobject-introspection-1.0
+LUA = lua
 
 COPTFLAGS = -Wall -g
 CFLAGS = $(CCSHARED) $(COPTFLAGS) $(LUA_CFLAGS) $(shell pkg-config --cflags $(PKGS))
@@ -40,7 +41,7 @@ clean :
 	rm -f $(REGRESS) $(REGRESS_OBJS) Regress-1.0.gir Regress-1.0.typelib
 
 check : all
-	cd .. && LD_LIBRARY_PATH=tests GI_TYPELIB_PATH=tests lua tests/test.lua
+	cd .. && LD_LIBRARY_PATH=tests GI_TYPELIB_PATH=tests $(LUA) tests/test.lua
 
 $(REGRESS) : regress.o
 	$(CC) $(LDFLAGS) -o $@ regress.o $(LIBS)
