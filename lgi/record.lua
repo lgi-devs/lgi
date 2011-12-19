@@ -20,6 +20,18 @@ local component = require 'lgi.component'
 -- and provides customizations for structures and unions.
 local record = { mt = component.mt:clone { '_method', '_field' } }
 
+-- Checks whether given argument is type of this class.
+function record.mt:is_type_of(instance)
+   if type(instance) == 'userdata' then
+      local instance_type = core.record.query(instance, 'repo')
+      while instance_type do
+	 if instance_type == self then return true end
+	 instance_type = rawget(instance_type, '_parent')
+      end
+   end
+   return false
+end
+
 function record.mt:_element(instance, symbol)
    -- First of all, try normal inherited functionality.
    local element, category = component.mt._element(self, instance, symbol)
