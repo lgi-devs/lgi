@@ -240,7 +240,10 @@ lgi_record_2c (lua_State *L, int narg, gboolean optional, gboolean nothrow)
 
   /* Check for nil. */
   if (optional && lua_isnoneornil (L, narg))
-    return NULL;
+    {
+      lua_pop (L, 1);
+      return NULL;
+    }
 
   /* Get record and check its type. */
   lgi_makeabs (L, narg);
