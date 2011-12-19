@@ -205,6 +205,11 @@ local keyword_dictionary = {
 -- Retrieves (element, category) pair from given componenttable and
 -- instance for given symbol.
 function component.mt:_element(instance, symbol)
+   -- This generic version can work only with strings.  Refuse
+   -- everything other, hoping that some more specialized _element
+   -- implementation will handle it.
+   if type(symbol) ~= 'string' then return end
+
    -- Check keyword translation dictionary.  If the symbol can be
    -- found there, try to lookup translated symbol.
    symbol = keyword_dictionary[symbol] or symbol
