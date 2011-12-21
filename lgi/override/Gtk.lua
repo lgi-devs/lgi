@@ -207,5 +207,101 @@ end
 -- Map adding of tags in constructor array part to add() method.
 Gtk.TextTagTable._container_add = Gtk.TextTagTable.add
 
+-------------------------------- Gtk.TreeModel and relatives.
+Gtk.TreeModel._attribute = { }
+
+local tree_model_item_mt = {}
+function tree_model_item_mt:__index(column)
+   return self._model:get_value(self._iter, column - 1).value
+end
+function tree_model_item_mt:__newindex(column, val)
+   column = column - 1
+   local value = GObject.Value(self._model:get_column_type(column), val)
+   self._model:set_value(self._iter, column, value)
+end
+
+-- Map access of lines to iterators by directly indexing treemodel
+-- instance values with iterators.
+local tree_model_element = Gtk.TreeModel._element
+function Gtk.TreeModel:_element(model, key)
+   if Gtk.TreeIter:is_type_of(key) then return key, '_iter' end
+   return tree_model_element(self, model, key)
+end
+function Gtk.TreeModel:_access_iter(model, iter, ...)
+   if select('#', ...) > 0 then
+      model:set(iter, ...)
+   else
+      -- Return proxy table allowing getting/setting individual columns.
+      return setmetatable({ _model = model, _iter = iter }, tree_model_item_mt)
+   end
+end
+function Gtk.TreeModel:set(iter, values)
+   -- Set all values provided by the table
+   for column, value in pairs(values) do
+      column = column - 1
+      self:set_value(iter, column,
+		     GObject.Value(self:get_column_type(column), value))
+   end
+end
+
+-- Redirect 'set' method to our one inherited from TreeModel, it is
+-- the preferred one.  Rename the original to set_values().
+Gtk.ListStore._method.set_values = Gtk.ListStore.set
+Gtk.ListStore._method.set = nil
+
+-- Allow insert() and append() to handle also 'with_values' case.
+function Gtk.ListStore:insert(position, values)
+   local iter = Gtk.ListStore._method.insert(self, position)
+   if values then self:set(iter, values) end
+   return iter
+end
+function Gtk.ListStore:append(values)
+   local iter = Gtk.ListStore._method.append(self)
+   if values then self:set(iter, values) end
+   return iter
+end
+
+-- Similar treatment for treestore.
+Gtk.TreeStore._method.set_values = Gtk.TreeStore.set
+Gtk.TreeStore._method.set = nil
+function Gtk.TreeStore:insert(parent, position, values)
+   local iter = Gtk.TreeStore._method.insert(self, parent, position)
+   if values then self:set(iter, values) end
+   return iter
+end
+function Gtk.TreeStore:append(parent, values)
+   local iter = Gtk.TreeStore._method.append(self, parent)
+   if values then self:set(iter, values) end
+   return iter
+end
+
+-------------------------------- Gtk.TreeView and support.
+-- Array part in constructor specifies columns to add.
+Gtk.TreeView._container_add = Gtk.TreeView.append_column
+
+-- Sets attributes for specified cell.
+function Gtk.TreeViewColumn:set(cell, data)
+   if type(data) == 'table' then
+      for attr, column in pairs(data) do
+	 self:add_attribute(cell, attr, column - 1)
+      end
+   else
+      self:set_cell_data_func(cell, data)
+   end
+end
+
+-- Adds new cellrenderer with full definition into the column.
+function Gtk.TreeViewColumn:add(def)
+   if def.align == 'start' then
+      self:pack_start(def[1], def.expand)
+   else
+      self:pack_end(def[1], def.expand)
+   end
+   
+   -- Set attributes.
+   self:set(def[1], def[2])
+end
+Gtk.TreeViewColumn._container_add = Gtk.TreeViewColumn.add
+
 -- Initialize GTK.
 Gtk.init()
