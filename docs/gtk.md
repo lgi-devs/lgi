@@ -1,6 +1,6 @@
 # Gtk support
 
-LGI Gtk support is based on gobject-introspection support.  Some
+Lgi Gtk support is based on gobject-introspection support.  Some
 extensions are provided to support non-introspectable features and to
 provide easier and more Lua-like access to some important Gtk
 features.
@@ -32,7 +32,7 @@ and child `Gtk.Button`:
 ### Adding children to container
 
 Basic method for adding child widget into container is
-`Gtk.Container.add()` method.  This method is overloaded by LGI so
+`Gtk.Container.add()` method.  This method is overloaded by Lgi so
 that it accepts either widget, or table containing widget at index 1
 and the rest `name=value` pairs define child properties.  Therefore
 this method is full replacement of unintrospectable
@@ -150,3 +150,97 @@ Following example demonstrates both capabilities:
     }
 
     assert(tag_table.tag.plain == tag_table:lookup('plain'))
+
+## TreeView and related classes
+
+`Gtk.TreeView` and related classes like `Gtk.TreeModel` are one of the
+most complicated objects in the whole `Gtk`.  Lgi adds some overrides
+to simplify the work with them.
+
+### Gtk.TreeModel
+
+Lgi supports direct indexing of treemodel instances by iterators
+(i.e. `Gtk.TreeIter` instances).  To get value at specified column
+number, index the resulting value again with column number.  Note that
+although `Gtk` uses 0-based column numbers, Lgi remaps them to 1-based
+numbers, because working with 1-based arrays is much more natural for
+Lua.
+
+### Gtk.ListStore and Gtk.TreeStore
+
+Standard `Gtk.TreeModel` implementations, `Gtk.ListStore` and
+`Gtk.TreeStore` extend the concept of indexing model instance with
+iterators also to writing values.  Indexing resulting value with
+1-based column number allows writing individual values, while
+assigning the table containing column-keyed values allows assigning
+multiple values at once.  Following example illustrates all these
+techniques:
+
+    local PersonColumn = { NAME = 1, AGE = 2, EMPLOYEE = 3 }
+    local store = Gtk.ListStore.new {
+       [PersonColumn.NAME] = GObject.Type.STRING,
+       [PersonColumn.AGE] = GObject.Type.INT,
+       [PersonColumn.EMPLOYEE] = GObject.Type.BOOLEAN,
+    }
+    local person = store:append()
+    store[person] = {
+       [PersonColumn.NAME] = "John Doe",
+       [PersonColumn.AGE] = 45,
+       [PersonColumn.EMPLOYEE] = true,
+    }
+    assert(store[person][PersonColumn.AGE] == 45)
+    store[person][PersonColumn.AGE] = 42
+    assert(store[person][PersonColumn.AGE] == 42)
+
+Note that `append` and `insert` methods are overridden and accept
+additional parameter containing table with column/value pairs, so
+creation section of previous example can be simplified to:
+
+    local person = store:append {
+       [PersonColumn.NAME] = "John Doe",
+       [PersonColumn.AGE] = 45,
+       [PersonColumn.EMPLOYEE] = true,
+    }
+
+Note that while the example uses `Gtk.ListStore`, similar overrides
+are provided also for `Gtk.TreeStore`.
+
+### Gtk.TreeView and Gtk.TreeViewColumn
+
+Lgi provides `Gtk.TreeViewColumn:set(cell, data)` method, which allows
+assigning either a set of `cell` renderer attribute->model column
+pairs (in case that `data` argument is a table), or assigns custom
+data function for specified cell renderer (when `data` is a function).
+Note that column must already have assigned cell renderer.  See
+`gtk_tree_view_column_set_attributes()` and
+`gtk_tree_view_column_set_cell_data_func()` for precise documentation.
+
+The override `Gtk.TreeViewColumn:add(def)` composes both adding new
+cellrenderer and setting attributes or data function.  `def` argument
+is a table, containing cell renderer instance at index 1 and `data` at
+index 2.  Optionally, it can also contain `expand` attribute (set to
+`true` or `false`) and `align` (set either to `start` or `end`).  This
+method is basically combination of `gtk_tree_view_column_pack_start()`
+or `gtk_tree_view_column_pack_end()` and `set()` override method.
+
+Array part of `Gtk.TreeViewColumn` constructor call is mapped to call
+`Gtk.TreeViewColumn:add()` method, and array part of `Gtk.TreeView`
+constructor call is mapped to call `Gtk.TreeView:append_column()`, and
+this allows composing the whole initialized treeview in a declarative
+style like in the example below:
+
+    -- This example reuses 'store' model created in examples in
+    -- Gtk.TreeModel chapter.
+    local view = Gtk.TreeView {
+       model = store,
+       Gtk.TreeViewColumn {
+          title = "Name and age",
+          expand = true,
+          { Gtk.CellRendererText {}, { text = PersonColumn.NAME } },
+          { Gtk.CellRendererText {}, { text = PersonColumn.AGE } },
+       },
+       Gtk.TreeViewColumn {
+          title = "Employee",
+          { Gtk.CellRendererToggle {}, { active = PersonColumn.EMPLOYEE } }
+       },
+    }

@@ -10,6 +10,10 @@ license, see LICENSE file for full text.
 
 Home of the project is on [GitHub](http://github.com/pavouk/lgi).
 
+LGI is tested and compatible with standard Lua 5.1 and Lua 5.2 and
+recent LuaJIT 2 betas.  Compatibility with other Lua implementations
+is not tested yet.
+
 ## Installation:
 
 In order to be able to compile native part of lgi,
@@ -39,6 +43,14 @@ markdown processor if you want to read it in HTML.
 
 ### 0.4 (unreleased)
 
+- Changed handling of enums and bitflags, switched from marshaling
+  them as numbers to prefering strings for enums and tables (sets or
+  lists) for bitflags.  Numeric values still work for Lua->C
+  marshalling, but backward compatibility is broken in C->Lua enum and
+  bitflags marshalling.
+- Compatible with Lua 5.2 and LuaJIT
+- Added standardized way for overrides to handle constructor argument
+  table array part.
 - Existing Gtk overrides reworked and improved, there is now a way to
   describe and create widget hierarchies in Lua-friendly way.  See
   `docs/gtk.lua`, chapter about `Gtk.Container` for overview and

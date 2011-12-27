@@ -19,7 +19,7 @@ source = {
    tag = '%VERSION%'
 }
 
-dependencies = { 'lua 5.1' }
+dependencies = { 'lua >= 5.1' }
 
 build = {
    type = 'make',

@@ -641,7 +641,7 @@ callable_call (lua_State *L)
   return nret;
 }
 
-static const struct luaL_reg callable_reg[] = {
+static const struct luaL_Reg callable_reg[] = {
   { "__gc", callable_gc },
   { "__tostring", callable_tostring },
   { "__call", callable_call },
@@ -801,7 +801,11 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
     }
   else
     {
+#if LUA_VERSION_NUM >= 502
+      res = lua_resume (L, NULL, npos);
+#else
       res = lua_resume (L, npos);
+#endif
 
       if (res == LUA_YIELD)
 	/* For our purposes is YIELD the same as if the coro really

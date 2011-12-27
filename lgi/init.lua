@@ -19,12 +19,6 @@ local core = require 'lgi.core'
 -- Create lgi table, containing the module.
 local lgi = { _NAME = 'lgi', _VERSION = require 'lgi.version' }
 
--- Add simple flag-checking function, avoid compatibility hassle with
--- importing bitlib just because of this simple operation.
-function core.has_bit(value, flag)
-   return value % (2 * flag) >= flag
-end
-
 -- Forward 'yield' functionality into external interface.
 lgi.yield = core.yield
 

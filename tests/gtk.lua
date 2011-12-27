@@ -226,3 +226,56 @@ function gtk.text_tag_table_tag()
    check(t.tag.tag2 == t2)
    check(t.tag.notexist == nil)
 end
+
+function gtk.liststore()
+   local cols = { int = 1, string = 2 }
+   local store = Gtk.ListStore.new { GObject.Type.INT, GObject.Type.STRING }
+   local first = store:insert(0, { [cols.int] = 42, [cols.string] = 'hello' })
+   checkv(store:get_value(first, cols.int - 1).value, 42, 'number')
+   checkv(store[first][cols.int], 42, 'number')
+   checkv(store:get_value(first, cols.string - 1).value, 'hello', 'string')
+   checkv(store[first][cols.string], 'hello', 'string')
+   store[first] = { [cols.string] = 'changed' }
+   checkv(store[first][cols.string], 'changed', 'string')
+   checkv(store[first][cols.int], 42, 'number')
+   store[first][cols.int] = 16
+   checkv(store[first][cols.string], 'changed', 'string')
+   checkv(store[first][cols.int], 16, 'number')
+end
+
+function gtk.treestore()
+   local cols = { int = 1, string = 2 }
+   local store = Gtk.TreeStore.new { GObject.Type.INT, GObject.Type.STRING }
+   local first = store:insert(
+      nil, 0, { [cols.int] = 42, [cols.string] = 'hello' })
+   checkv(store:get_value(first, cols.int - 1).value, 42, 'number')
+   checkv(store[first][cols.int], 42, 'number')
+   checkv(store:get_value(first, cols.string - 1).value, 'hello', 'string')
+   checkv(store[first][cols.string], 'hello', 'string')
+   store[first] = { [cols.string] = 'changed' }
+   checkv(store[first][cols.string], 'changed', 'string')
+   checkv(store[first][cols.int], 42, 'number')
+   store[first][cols.int] = 16
+   checkv(store[first][cols.string], 'changed', 'string')
+   checkv(store[first][cols.int], 16, 'number')
+end
+
+function gtk.treeview()
+   local cols = { int = 1, string = 2 }
+   local store = Gtk.TreeStore.new { GObject.Type.INT, GObject.Type.STRING }
+   local view = Gtk.TreeView {
+      model = store,
+      Gtk.TreeViewColumn {
+	 { Gtk.CellRendererText {}, { text = cols.int } },
+	 { Gtk.CellRendererText {}, expand = true, pack = 'end',
+	   function(column, cell, model, iter)
+	      return model[iter][cols.string]:toupper()
+	   end },
+      }
+   }
+
+   -- Unfortunately, there is no sane way to test the real contents of
+   -- the treeview above, namely contents of the column, except
+   -- dislaying and inspecting the tree visually, which is
+   -- inappropriate for automated test.
+end

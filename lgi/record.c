@@ -240,18 +240,34 @@ lgi_record_2c (lua_State *L, int narg, gboolean optional, gboolean nothrow)
 
   /* Check for nil. */
   if (optional && lua_isnoneornil (L, narg))
-    return NULL;
+    {
+      lua_pop (L, 1);
+      return NULL;
+    }
 
   /* Get record and check its type. */
   lgi_makeabs (L, narg);
   luaL_checkstack (L, 4, "");
   record = record_check (L, narg);
-  if (!lua_isnil (L, -1))
+  if (record)
     {
-      /* Check, whether type fits. */
+      /* Check, whether type fits. Also take into account possible
+	 inheritance. */
       lua_getfenv (L, narg);
-      if (record && !lua_equal (L, -1, -2))
-	record = NULL;
+      for (;;)
+	{
+	  if (lua_equal (L, -1, -2))
+	    break;
+
+	  /* Try to get parent of the real type. */
+	  lua_getfield (L, -1, "_parent");
+	  lua_replace (L, -2);
+	  if (lua_isnil (L, -1))
+	    {
+	      record = NULL;
+	      break;
+	    }
+	}
 
       lua_pop (L, 1);
     }

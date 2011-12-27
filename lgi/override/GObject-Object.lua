@@ -121,7 +121,7 @@ function Object:_element(object, name)
    -- property of the specified name exists.
    local class = core.record.cast(core.object.query(object, 'class'),
 				  Object._class)
-   local property = Object._class.find_property(class, name:gsub('_', '%-'))
+   local property = Object._class.find_property(class, name:gsub('_', '-'))
    if property then return property, '_paramspec' end
 end
 
@@ -129,7 +129,7 @@ end
 local function marshal_property(obj, name, flags, gtype, marshaller, ...)
    -- Check access rights of the property.
    local mode = select('#', ...) > 0 and 'WRITABLE' or 'READABLE'
-   if not core.has_bit(flags, repo.GObject.ParamFlags[mode]) then
+   if not flags[mode] then
       error(("%s: `%s' not %s"):format(core.object.query(obj, 'repo')._name,
 				       name, mode:lower()))
    end
@@ -148,7 +148,8 @@ function Object:_access_property(object, property, ...)
    local typeinfo = property.typeinfo
    local gtype = Type.from_typeinfo(typeinfo)
    local marshaller = Value.find_marshaller(gtype, typeinfo, property.transfer)
-   return marshal_property(object, property.name, property.flags,
+   return marshal_property(object, property.name,
+			   repo.GObject.ParamFlags[property.flags],
 			   gtype, marshaller, ...)
 end
 

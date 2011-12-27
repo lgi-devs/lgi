@@ -110,6 +110,16 @@ function namespace.mt:__index(symbol)
 	 -- there.  It could by added to repo as byproduct of loading
 	 -- other symbol.
 	 if not cat[symbol] then cat[symbol] = val end
+      elseif info.is_gtype_struct then
+	 -- If we have XxxClass name, try to lookup class structure of
+	 -- the Xxx object.
+	 local class = (symbol:match('^(%w+)Class$')
+		     or symbol:match('^(%w+)Iface$')
+		  or symbol:match('^(%w+)Interface$'))
+	 if class then
+	    class = self[class]
+	    if class then val = class._class end
+	 end
       end
    end
    return val
