@@ -35,7 +35,7 @@ int lgi_type_get_name (lua_State *L, GIBaseInfo *info);
 /* Stores repo type table associated with specified gtype (or BaseInfo
    if gtype is invalid). to the stack, or nil if no such table can be
    found in the repo. */
-GType lgi_type_get_repotype (lua_State *L, GType gtype, GIBaseInfo *info);
+void lgi_type_get_repotype (lua_State *L, GType gtype, GIBaseInfo *info);
 
 /* Gets GType from Lua index narg.  Accepts number and when it is
    other type, invokes Lua helper to convert. */

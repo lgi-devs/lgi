@@ -109,7 +109,7 @@ lgi_type_get_name (lua_State *L, GIBaseInfo *info)
   return n;
 }
 
-GType
+void
 lgi_type_get_repotype (lua_State *L, GType gtype, GIBaseInfo *info)
 {
   luaL_checkstack (L, 4, "");
@@ -154,18 +154,11 @@ lgi_type_get_repotype (lua_State *L, GType gtype, GIBaseInfo *info)
 	  lua_getfield (L, -1, g_base_info_get_name (info));
 	  lua_replace (L, -4);
 	  lua_pop (L, 2);
-	  if (gtype == G_TYPE_INVALID && !lua_isnil (L, -1))
-	    {
-	      lua_getfield (L, -1, "_gtype");
-	      gtype = luaL_optnumber (L, -1, G_TYPE_INVALID);
-	      lua_pop (L, 1);
-	    }
 	}
       else
 	lua_pop (L, 1);
     }
   lua_replace (L, -2);
-  return gtype;
 }
 
 GType
