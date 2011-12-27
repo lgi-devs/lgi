@@ -61,6 +61,11 @@ mapping between GLib types and Lua types is established.
 * `gboolean` is mapped to Lua's `boolean` type, with `true` and
   `false` values
 * All numeric types are mapped to Lua's `number` type
+* Enumerations are primarily handled as strings with uppercased GType
+  nicks, optionally the direct numeric values are also accepted.
+* Bitflags are primarily handled as lists or sets of strings with
+  uppercased GType nicks, optionally the direct numeric values are
+  also accepted.
 * `gchar*` string is mapped to Lua as `string` type, UTF-8 encoded
 * C array types and `GArray` is mapped to Lua tables, using array part
   of the table.  Note that although in C the arrays are 0-based, when
@@ -440,11 +445,22 @@ Fields are accessed using `.` operator on structure instance, for example
 
 ## 5. Enums and bitflags, constants
 
-Enum instances are represented as plain numbers in LGI.  So in any
-place where enum or bitflags instance is needed, a number can be used
-directly instead.
+LGI primarily maps enumerations to strings containing uppercased nicks
+of enumeration constant names.  Optionally, a direct enumeration value
+is also accepted.  Similarly, bitflags are primarily handled as sets
+containing uppercased flag nicks, but also lists of these nicks or
+direct numeric value is accepted.  When a numeric value cannot be
+mapped cleanly to the known set of bitflags, the remaining number is
+stored in the first array slot of the returned set.
 
-### 5.1. Accessing values
+Note that this behavior changed in lgi 0.4; up to that alpha release,
+lgi handled enums and bitmaps exclusively as numbers only.  The change
+is compatible in Lua->C direction, where numbers still can be used,
+but incompatible in C->Lua direction, where lgi used to return
+numbers, while now it returns either string with enum value or table
+with flags.
+
+### 5.1. Accessing numeric values
 
 In order to retrieve real enum values from symbolic names, enum and
 bitflags are loaded into repository as tables mapping symbolic names
@@ -459,7 +475,8 @@ yields following output:
     };
 
 so constants can be referenced using `Gtk.WindowType.TOPLEVEL`
-construct.
+construct, or directly using string `'TOPLEVEL'` when a
+`Gtk.WindowType` is expected.
 
 ### 5.2. Backward mapping, getting names from numeric values
 
@@ -493,6 +510,40 @@ all symbolic names which make up the requested value:
       SORTED = 32;
       ODD = 2;
     };
+    
+This way, it is possible to check for presence of specified flag very
+easily:
+
+    if Gtk.RegionFlags[flags].ODD then
+       -- Code handling region-odd case
+    endif
+
+If the value cannot be cleanly decomposed to known flags, remaining
+bits are accumulated into number stored at index 1:
+
+> dump(Gtk.RegionFlags[51])
+
+    ["table: 0x242fb20"] = {  -- table: 0x242fb20
+      EVEN = 1;
+      SORTED = 32;
+      [1] = 16;
+      ODD = 2;
+    };
+
+To construct numeric value which can be passed to a function expecting
+an enum, it is possible to simply add requested flags.  However, there
+is a danger if some definition contains multiple flags , in which case
+numeric adding produces incorrect results.  Therefore, it is possible
+to use bitflags pseudoconstructor', which accepts table containing
+requested flags:
+
+> =Gtk.RegionFlags { 'FIRST', 'SORTED' }
+
+    36
+
+> =Gtk.RegionFlags { Gtk.RegionFlags.ODD, 16, 'EVEN' }
+
+    19
 
 ## 6. Threading and synchronization
 

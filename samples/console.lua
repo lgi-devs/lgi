@@ -283,11 +283,10 @@ local function Console()
    function entry:on_key_press_event(event)
       -- Lookup action to be activated for specified key combination.
       local action = keytable[event.keyval]
-      local mask = Gdk.ModifierType[event.state]
-      local wants_control = actions.multiline.active
-	 and Gdk.ModifierType.CONTROL_MASK or nil
-      if not action or mask.SHIFT_MASK
-	 or mask.CONTROL_MASK ~= wants_control then
+      local state = event.state
+      local without_control = not state.CONTROL_MASK 
+      if not action or state.SHIFT_MASK
+	 or actions.multiline.active == without_control then
 	 return false
       end
 

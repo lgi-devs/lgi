@@ -40,7 +40,6 @@ Clutter.threads_init()
 -- Automatically initialize clutter, avoid continuing if
 -- initialization fails.
 local status = Clutter.init()
-if status ~= Clutter.InitError.SUCCESS then
-   error(("Clutter initialization failed: %s"):format(
-	    Clutter.InitError(status)))
+if status ~= 'SUCCESS' then
+   error(("Clutter initialization failed: %s"):format(status))
 end

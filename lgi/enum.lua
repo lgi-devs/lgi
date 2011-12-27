@@ -13,6 +13,37 @@ local core = require 'lgi.core'
 local gi = core.gi
 local component = require 'lgi.component'
 
+-- Prepare needed bit operations.  Prefer bit32 C module if available,
+-- but if it is not, use poor-man Lua-only variants.
+local bor, has_bit
+local ok, bitlib = pcall(require, 'bit32')
+if ok then
+   -- Lua 5.2 style bit operations.
+   bor, has_bit = bitlib.bor, bitlib.btest
+else
+   ok, bitlib = pcall(require, 'bit')
+   if ok then
+      -- LuaBitOp package.
+      bor, has_bit = bitlib.bor, bitlib.band
+   else
+      -- Poor-man's Lua-only implementation, slow but out-of-the-box
+      -- for any kind of Lua.
+      function has_bit(value, bitmask)
+	 return value % (2 * bitmask) >= bitmask
+      end
+      local function bor(o1, o2)
+	 local res, bit = 0, 1
+	 while bit <= o1 or bit <= o2 do
+	    if has_bit(o1, bit) or has_bit(o2, bit) then
+	       res = res + bit
+	    end
+	    bit = bit * 2
+	 end
+	 return res
+      end
+   end
+end
+
 local enum = {
    enum_mt = component.mt:clone { '_method' },
    bitflags_mt = component.mt:clone { '_method' }
@@ -29,8 +60,9 @@ function enum.load(info, meta)
       local prefix = info.name:gsub('%u+[^%u]+', '%1_'):lower()
       local namespace = core.repo[info.namespace]
       enum_type._method = setmetatable(
-	 {}, 
-	 { __index = function(_, name) return namespace[prefix .. name] end })
+	 {}, { __index = function(_, name)
+			    return namespace[prefix .. name]
+			 end })
    end
 
    -- Load all enum values.
@@ -47,26 +79,55 @@ end
 
 -- Enum reverse mapping, value->name.
 function enum.enum_mt:_element(instance, value)
-   local element, category = component.mt._element(self, instance, value)
-   if element then return element, category end
-   for name, val in pairs(self) do
-      if val == value then return name end
+   if type(value) == 'number' then
+      for name, val in pairs(self) do
+	 if val == value then return name end
+      end
+      return value
+   else
+      return component.mt._element(self, instance, value)
    end
+end
+
+-- Constructs enum number from specified string.
+function enum.enum_mt:_new(param)
+   if type(param) == 'string' then param = self[param] end
+   return param
 end
 
 -- Resolving arbitrary number to the table containing symbolic names
 -- of contained bits.
 function enum.bitflags_mt:_element(instance, value)
-   local element, category = component.mt._element(self, instance, value)
-   if element then return element, category end
-   if type(value) ~= 'number' then return end
-   local result = {}
-   for name, flag in pairs(self) do
-      if type(flag) == 'number' and core.has_bit(value, flag) then
-	 result[name] = flag
+   if type(value) == 'number' then
+      local result, remainder = {}, value
+      for name, flag in pairs(self) do
+	 if type(flag) == 'number' and has_bit(value, flag) then
+	    result[name] = true
+	    remainder = remainder - flag
+	 end
       end
+      if remainder > 0 then result[1] = remainder end
+      return result
+   else
+      return component.mt._element(self, instance, value)
    end
-   return result
+end
+
+-- 'Constructs' number from specified flags (or accepts just number).
+function enum.bitflags_mt:_new(param)
+   if type(param) == 'string' then
+      return self[param]
+   elseif type(param) == 'number' then
+      return param
+   else
+      local num = 0
+      for key, value in pairs(param) do
+	 if type(key) == 'string' then value = key end
+	 if type(value) == 'string' then value = self[value] end
+	 num = bor(num, value)
+      end
+      return num
+   end
 end
 
 return enum

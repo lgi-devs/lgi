@@ -43,7 +43,14 @@ markdown processor if you want to read it in HTML.
 
 ### 0.4 (unreleased)
 
+- Changed handling of enums and bitflags, switched from marshaling
+  them as numbers to prefering strings for enums and tables (sets or
+  lists) for bitflags.  Numeric values still work for Lua->C
+  marshalling, but backward compatibility is broken in C->Lua enum and
+  bitflags marshalling.
 - Compatible with Lua 5.2 and LuaJIT
+- Added standardized way for overrides to handle constructor argument
+  table array part.
 - Existing Gtk overrides reworked and improved, there is now a way to
   describe and create widget hierarchies in Lua-friendly way.  See
   `docs/gtk.lua`, chapter about `Gtk.Container` for overview and

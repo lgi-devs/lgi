@@ -826,6 +826,16 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 	  {
 	  case GI_INFO_TYPE_ENUM:
 	  case GI_INFO_TYPE_FLAGS:
+	    /* If the argument is not numeric, convert to number
+	       first.  Use enum/flags 'constructor' to do this. */
+	    if (lua_type (L, narg) != LUA_TNUMBER)
+	      {
+		lgi_type_get_repotype (L, G_TYPE_INVALID, info);
+		lua_pushvalue (L, narg);
+		lua_call (L, 1, 1);
+		narg = -1;
+	      }
+	    
 	    /* Directly store underlying value. */
 	    marshal_2c_int (L, g_enum_info_get_storage_type (info), arg, narg,
 			    optional, FALSE);
@@ -1094,9 +1104,18 @@ lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
 	  {
 	  case GI_INFO_TYPE_ENUM:
 	  case GI_INFO_TYPE_FLAGS:
-	    /* Directly store underlying value. */
+	    /* Prepare repotable of enum/flags on the stack. */
+	    lgi_type_get_repotype (L, G_TYPE_INVALID, info);
+
+	    /* Unmarshal the numeric value. */
 	    marshal_2lua_int (L, g_enum_info_get_storage_type (info),
 			      arg, FALSE);
+
+	    /* Get symbolic value from the table. */
+	    lua_gettable (L, -2);
+
+	    /* Remove the table from the stack. */
+	    lua_remove (L, -2);
 	    break;
 
 	  case GI_INFO_TYPE_STRUCT:
