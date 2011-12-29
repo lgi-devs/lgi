@@ -80,7 +80,7 @@ for name, gtype in pairs(Type) do
    end
 end
 
--- Interface marshaller is the same as object marshallers.
+-- Interface marshaller is the same as object marshaller.
 value_marshallers[Type.INTERFACE] = value_marshallers[Type.OBJECT]
 
 -- Override 'boxed' marshaller, default one marshalls to gpointer
@@ -92,6 +92,27 @@ function(value, params, ...)
       Value.set_boxed(value, core.record.query((...), 'addr', gtype))
    else
       return core.record.new(core.repotype(gtype), Value.get_boxed(value))
+   end
+end
+
+-- Override marshallers for enums and bitmaps, marshal them as strings
+-- or sets of string flags.
+for name, gtype in pairs { ENUM = Type.ENUM, FLAGS = Type.FLAGS } do
+   local get = Value._method['get_' .. name:lower()]
+   local set = Value._method['set_' .. name:lower()]
+   value_marshallers[gtype] = function(value, params, ...)
+      local rtype
+      if select('#', ...) > 0 then
+	 local param = ...
+	 if type(param) ~= 'number' then
+	    rtype = core.repotype(core.record.field(value, value_field_gtype))
+	    param = rtype(param)
+	 end
+	 set(value, param)
+      else
+	 rtype = core.repotype(core.record.field(value, value_field_gtype))
+	 return rtype[get(value)]
+      end
    end
 end
 
