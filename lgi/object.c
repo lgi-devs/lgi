@@ -15,8 +15,7 @@
    cache of known objects. */
 static int cache;
 
-/* lightuserdata key to registry for metatable of objects. */
-static int object_mt;
+static const luaL_Reg object_mt_reg[];
 
 /* Checks that given narg is object type and returns pointer to type
    instance representing it. */
@@ -27,7 +26,7 @@ object_check (lua_State *L, int narg)
   luaL_checkstack (L, 3, "");
   if (!lua_getmetatable (L, narg))
     return NULL;
-  lua_pushlightuserdata (L, &object_mt);
+  lua_pushlightuserdata (L, (void *) object_mt_reg);
   lua_rawget (L, LUA_REGISTRYINDEX);
   if (!lua_equal (L, -1, -2))
     obj = NULL;
@@ -269,7 +268,7 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
 
   /* Create new userdata object. */
   *(gpointer *) lua_newuserdata (L, sizeof (obj)) = obj;
-  lua_pushlightuserdata (L, &object_mt);
+  lua_pushlightuserdata (L, (void *) object_mt_reg);
   lua_rawget (L, LUA_REGISTRYINDEX);
   lua_setmetatable (L, -2);
 
@@ -314,6 +313,36 @@ static const luaL_Reg object_mt_reg[] = {
   { "__newindex", object_access },
   { NULL, NULL }
 };
+
+static int
+object_guard_gc (lua_State *L)
+{
+  gpointer obj = lua_touserdata (L, 1);
+  if (obj != NULL)
+    object_unref (L, obj);
+  return 0;
+}
+
+/* Registration table. */
+static const luaL_Reg object_guard_reg[] = {
+  { "__gc", object_guard_gc },
+  { NULL, NULL }
+};
+void
+lgi_object_ref (lua_State *L, gpointer obj)
+{
+  luaL_checkstack (L, 2, NULL);
+  if (obj != NULL && object_refsink (L, obj))
+    {
+      /* Create guard which will inref the object. */
+      *(gpointer *) lua_newuserdata (L, sizeof (gpointer)) = obj;
+      lua_pushlightuserdata (L, (void *) object_guard_reg);
+      lua_gettable (L, LUA_REGISTRYINDEX);
+      lua_setmetatable (L, -2);
+    }
+  else
+    lua_pushnil (L);
+}
 
 static const char *const query_mode[] = {
   "gtype", "repo", "class", NULL
@@ -421,10 +450,16 @@ static const luaL_Reg object_api_reg[] = {
 void
 lgi_object_init (lua_State *L)
 {
-  /* Register metatable. */
-  lua_pushlightuserdata (L, &object_mt);
+  /* Register object metatable. */
+  lua_pushlightuserdata (L, (void *) object_mt_reg);
   lua_newtable (L);
   luaL_register (L, NULL, object_mt_reg);
+  lua_rawset (L, LUA_REGISTRYINDEX);
+
+  /* Register object guard metatable. */
+  lua_pushlightuserdata (L, (void *) object_guard_reg);
+  lua_newtable (L);
+  luaL_register (L, NULL, object_guard_reg);
   lua_rawset (L, LUA_REGISTRYINDEX);
 
   /* Initialize object cache. */

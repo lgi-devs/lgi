@@ -453,8 +453,8 @@ marshal_2lua_object (lua_State *L, int code_index, int *code_pos, int temps[2],
 }
 
 static void
-marshal_2c_object (lua_State *L, int code_index, int *code_pos, guint32 type,
-		   int input, gpointer native)
+marshal_2c_object (lua_State *L, int code_index, int *code_pos, int temps[2],
+		   guint32 type, int input, gpointer native)
 {
   GIArgument *arg = native;
   GType gtype;
@@ -468,6 +468,14 @@ marshal_2c_object (lua_State *L, int code_index, int *code_pos, guint32 type,
   /* Get record type and marshal record instance. */
   arg->v_pointer = lgi_object_2c (L, input, gtype,
 				  type & MARSHAL_TYPE_ALLOW_NIL, FALSE);
+  if (type & MARSHAL_TYPE_TRANSFER_OWNERSHIP)
+    {
+      /* Create guard in 'active only if marshalling fails' area. */
+      lgi_object_ref (L, arg->v_pointer);
+      lua_insert (L, -(temps[0] + 1));
+      temps[0]++;
+      temps[1]++;
+    }
 }
 
 /* -- Marshaling of assorted types of arrays. */
@@ -578,6 +586,7 @@ static void
 marshal_2c_array (lua_State *L, int code_index, int *code_pos, int temps[2],
 		  guint32 type, int input, gpointer native)
 {
+#if 0
   int start_pos, pos, index, length;
   gssize element_size;
   guint8 *data;
@@ -624,6 +633,7 @@ marshal_2c_array (lua_State *L, int code_index, int *code_pos, int temps[2],
       data = ((GByteArray *) *guard)->data;
       break;
     }
+#endif
 }
 
 /* --- Instructions code handlers. */
@@ -690,7 +700,7 @@ marshal_2c (lua_State *L, int code_index, int *code_pos, int *temps,
       marshal_2c_record (L, code_index, code_pos, type, input, native);
       break;
     case MARSHAL_TYPE_BASE_OBJECT:
-      marshal_2c_object (L, code_index, code_pos, type, input, native);
+      marshal_2c_object (L, code_index, code_pos, temps, type, input, native);
       break;
     case MARSHAL_TYPE_BASE_ARRAY:
       marshal_2c_array (L, code_index, code_pos, temps, type, input, native);

@@ -167,6 +167,11 @@ gpointer
 lgi_object_2c (lua_State *L, int narg, GType gtype, gboolean optional,
 	       gboolean nothrow);
 
+/* Adds reference to the object and creates guards which unreferences
+   it when not deactivated by assigning NULL to the guard contents. */
+void
+lgi_object_ref (lua_State *L, gpointer obj);
+
 #if !GLIB_CHECK_VERSION(2, 30, 0)
 /* Workaround for broken g_struct_info_get_size() for GValue, see
    https://bugzilla.gnome.org/show_bug.cgi?id=657040 */
