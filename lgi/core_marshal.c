@@ -730,8 +730,8 @@ static const marshal_code_fun marshal_code[] = {
   /* MARSHAL_CODE_TO_C */   marshal_2c
 };
 
-void
-lgi_marshal (lua_State *L, int code_index, int *code_pos, int temps[2],
+int
+lgi_marshal (lua_State *L, int code_index, int *code_pos,
 	     int inputs_base, gpointer native_base)
 {
   guint32 type;
@@ -739,8 +739,8 @@ lgi_marshal (lua_State *L, int code_index, int *code_pos, int temps[2],
   gpointer native;
   gsize offset;
   int input;
+  int temps[2] = { 0, 0 };
 
-  temps[0] = temps[1] = 0;
   lgi_makeabs (L, inputs_base);
   lgi_makeabs (L, code_index);
   luaL_checkstack (L, 1, NULL);
@@ -780,6 +780,16 @@ lgi_marshal (lua_State *L, int code_index, int *code_pos, int temps[2],
       if (type & MARSHAL_CODE_INPUT_POP)
 	lua_remove (L, input);
     }
+
+  /* Deactivate and remove on-hold entries from the stack. */
+  for (; temps[1] > 0; temps[1]--, temps[0]--)
+    {
+      gpointer *guard = lua_touserdata (L, -(temps[0] + 1));
+      *guard = NULL;
+      lua_remove (L, -(temps[0] + 1));
+    }
+
+  return temps[0];
 }
 
 static const struct luaL_Reg marshal_api_reg[] = {
