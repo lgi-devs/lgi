@@ -31,7 +31,7 @@ else
       function has_bit(value, bitmask)
 	 return value % (2 * bitmask) >= bitmask
       end
-      local function bor(o1, o2)
+      function bor(o1, o2)
 	 local res, bit = 0, 1
 	 while bit <= o1 or bit <= o2 do
 	    if has_bit(o1, bit) or has_bit(o2, bit) then
