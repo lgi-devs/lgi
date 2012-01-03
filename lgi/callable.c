@@ -245,7 +245,7 @@ lgi_callable_create (lua_State *L, GICallableInfo *info, gpointer addr)
   luaL_checkstack (L, 6, "");
   lua_pushlightuserdata (L, &callable_cache);
   lua_rawget (L, LUA_REGISTRYINDEX);
-  lua_pushinteger (L, g_base_info_get_type (info));
+  lua_pushnumber (L, g_base_info_get_type (info));
   lua_pushstring (L, ":");
   lua_concat (L, lgi_type_get_name(L, info) + 2);
   lua_pushvalue (L, -1);
@@ -591,7 +591,7 @@ callable_call (lua_State *L)
 	}
 
       lua_pushstring (L, err->message);
-      lua_pushinteger (L, err->code);
+      lua_pushnumber (L, err->code);
       g_error_free (err);
       return nret + 2;
     }
@@ -782,7 +782,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	    lua_createtable (L, nvals, 0);
 	    for (i = 0; i < nvals; ++i)
 	      {
-		lua_pushinteger (L, i + 1);
+		lua_pushnumber (L, i + 1);
 		lgi_type_get_repotype (L, G_TYPE_VALUE, NULL);
 		lgi_record_2lua (L, &vals[i], FALSE, 0);
 		lua_settable (L, -3);

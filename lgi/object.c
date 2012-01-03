@@ -398,7 +398,7 @@ object_new (lua_State *L)
   params = g_newa (GParameter, size);
   for (i = 0; i < size; ++i)
     {
-      lua_pushinteger (L, i + 1);
+      lua_pushnumber (L, i + 1);
       lua_gettable (L, 2);
       lgi_type_get_repotype (L, G_TYPE_INVALID, gparam_info);
       memcpy (&params[i], lgi_record_2c (L, -2, FALSE, FALSE),

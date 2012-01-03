@@ -296,7 +296,7 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 	  /* Iterate through Lua array and fill GArray accordingly. */
 	  for (index = 0; index < objlen; index++)
 	    {
-	      lua_pushinteger (L, index + 1);
+	      lua_pushnumber (L, index + 1);
 	      lua_gettable (L, narg);
 
 	      /* Marshal element retrieved from the table into target
@@ -458,7 +458,7 @@ marshal_2c_list (lua_State *L, GITypeInfo *ti, GITypeTag list_tag,
       /* Retrieve index-th element from the source table and marshall
 	 it as pointer to arg. */
       GIArgument eval;
-      lua_pushinteger (L, index--);
+      lua_pushnumber (L, index--);
       lua_gettable (L, narg);
       to_pop = lgi_marshal_2c (L, eti, NULL, exfer, &eval, -1, 0, NULL, NULL);
 
@@ -675,7 +675,7 @@ marshal_2lua_error (lua_State *L, GITransfer xfer, GError *err)
       lua_setfield (L, -2, "domain");
       lua_pushstring (L, err->message);
       lua_setfield (L, -2, "message");
-      lua_pushinteger (L, err->code);
+      lua_pushnumber (L, err->code);
       lua_setfield (L, -2, "code");
 
       /* If the ownership is transferred, free the original error. */
@@ -1283,7 +1283,7 @@ marshal_container_marshaller (lua_State *L)
 				     transfer);
 	    if (lua_type (L, 2) == LUA_TTABLE)
 	      {
-		lua_pushinteger (L, size);
+		lua_pushnumber (L, size);
 		lua_setfield (L, 2, "length");
 	      }
 	  }

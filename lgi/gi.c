@@ -97,7 +97,7 @@ infos_index (lua_State *L)
   gint n;
   if (lua_isnumber (L, 2))
     {
-      n = lua_tointeger (L, 2) - 1;
+      n = lua_tonumber (L, 2) - 1;
       luaL_argcheck (L, n >= 0 && n < infos->count, 2, "out of bounds");
       return lgi_gi_info_new (L, infos->item_get (infos->info, n));
     }
@@ -306,7 +306,7 @@ info_index (lua_State *L)
 	    }
 	  else if (strcmp (prop, "size") == 0)
 	    {
-	      lua_pushinteger (L, g_struct_info_get_size (*info));
+	      lua_pushnumber (L, g_struct_info_get_size (*info));
 	      return 1;
 	    }
 	  INFOS (struct, field)
@@ -316,7 +316,7 @@ info_index (lua_State *L)
 	{
 	  if (strcmp (prop, "size") == 0)
 	    {
-	      lua_pushinteger (L, g_struct_info_get_size (*info));
+	      lua_pushnumber (L, g_struct_info_get_size (*info));
 	      return 1;
 	    }
 	  INFOS (union, field)
@@ -457,7 +457,7 @@ info_index (lua_State *L)
     {
       if (strcmp (prop, "flags") == 0)
 	{
-	  lua_pushinteger (L, g_property_info_get_flags (*info));
+	  lua_pushnumber (L, g_property_info_get_flags (*info));
 	  return 1;
 	}
       else if (strcmp (prop, "transfer") == 0)
@@ -486,12 +486,12 @@ info_index (lua_State *L)
 	}
       else if (strcmp (prop, "size") == 0)
 	{
-	  lua_pushinteger (L, g_field_info_get_size (*info));
+	  lua_pushnumber (L, g_field_info_get_size (*info));
 	  return 1;
 	}
       else if (strcmp (prop, "offset") == 0)
 	{
-	  lua_pushinteger (L, g_field_info_get_offset (*info));
+	  lua_pushnumber (L, g_field_info_get_offset (*info));
 	  return 1;
 	}
     }
@@ -559,7 +559,7 @@ info_index (lua_State *L)
 	  int len = g_type_info_get_array_length (*info);
 	  if (len >= 0)
 	    {
-	      lua_pushinteger (L, len);
+	      lua_pushnumber (L, len);
 	      return 1;
 	    }
 	}
@@ -568,7 +568,7 @@ info_index (lua_State *L)
 	  int size = g_type_info_get_array_fixed_size (*info);
 	  if (size >= 0)
 	    {
-	      lua_pushinteger (L, size);
+	      lua_pushnumber (L, size);
 	      return 1;
 	    }
 	}
@@ -617,7 +617,7 @@ static int
 namespace_len (lua_State *L)
 {
   const gchar *ns = luaL_checkudata (L, 1, LGI_GI_NAMESPACE);
-  lua_pushinteger (L, g_irepository_get_n_infos (NULL, ns));
+  lua_pushnumber (L, g_irepository_get_n_infos (NULL, ns));
   return 1;
 }
 

@@ -227,7 +227,7 @@ lgi_guard_create (lua_State *L, GDestroyNotify destroy)
 static int
 core_gtype (lua_State *L)
 {
-  lua_pushinteger (L, lgi_type_get_gtype (L, 1));
+  lua_pushnumber (L, lgi_type_get_gtype (L, 1));
   return 1;
 }
 
