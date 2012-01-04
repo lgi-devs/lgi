@@ -25,12 +25,10 @@ Most, if not all distributions already do this properly.
 
 ### Supported platforms
 
-LGI is currently tested only on Linux, all sane Linux distributions
-should work fine.  There is no principal obstacle for supporting other
-platforms, as long as gobject-introspection library (and of course
-Lua) is ported and working there.  As of time of writing this
-document, port of gobject-introspection to Win32 is being in progress,
-and port of GNOME-3.2 to cygwin is announced to cca 11/2011.
+LGI is currently tested on Linux (all sane Linux distributions should work
+fine) and Cygwin.  There is no principal obstacle for supporting other
+platforms, as long as gobject-introspection library (and of course Lua) is
+ported and working there.
 
 ### Installing via LuaRocks
 
