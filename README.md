@@ -41,7 +41,7 @@ markdown processor if you want to read it in HTML.
 
 ## History
 
-### 0.4 (unreleased)
+### 0.4 (4-Jan-2012)
 
 - Changed handling of enums and bitflags, switched from marshaling
   them as numbers to prefering strings for enums and tables (sets or
@@ -55,7 +55,7 @@ markdown processor if you want to read it in HTML.
   describe and create widget hierarchies in Lua-friendly way.  See
   `docs/gtk.lua`, chapter about `Gtk.Container` for overview and
   samples.
-- Various portability fixes.
+- Various bugfixes and portability fixes.
 
 ### 0.3 (28-Nov-2011)
 
