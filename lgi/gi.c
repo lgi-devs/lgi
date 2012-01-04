@@ -95,7 +95,7 @@ infos_index (lua_State *L)
 {
   Infos* infos = luaL_checkudata (L, 1, LGI_GI_INFOS);
   gint n;
-  if (lua_isnumber (L, 2))
+  if (lua_type (L, 2) == LUA_TNUMBER)
     {
       n = lua_tonumber (L, 2) - 1;
       luaL_argcheck (L, n >= 0 && n < infos->count, 2, "out of bounds");
@@ -626,7 +626,7 @@ namespace_index (lua_State *L)
 {
   const gchar *ns = luaL_checkudata (L, 1, LGI_GI_NAMESPACE);
   const gchar *prop;
-  if (lua_isnumber (L, 2))
+  if (lua_type (L, 2) == LUA_TNUMBER)
     {
       GIBaseInfo *info = g_irepository_get_info (NULL, ns,
 						 lua_tointeger (L, 2) - 1);
@@ -730,7 +730,7 @@ gi_isinfo (lua_State *L)
 static int
 gi_index (lua_State *L)
 {
-  if (lua_isnumber (L, 2))
+  if (lua_type (L, 2) == LUA_TNUMBER)
     {
       GType gtype = luaL_checknumber (L, 2);
       GIBaseInfo *info = (gtype != G_TYPE_INVALID)
