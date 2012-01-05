@@ -57,10 +57,19 @@ local function RepoBrowser()
    end
 
    -- Create treeview widget with columns.
+   local sorted = Gtk.TreeModelSort { model = model }
+   sorted:set_sort_func(column.NAME, function(model, a, b)
+					a = model[a][column.NAME]
+					b = model[b][column.NAME]
+					if a == b then return 0
+					elseif a < b then return -1
+					else return 1 end
+				     end)
+   sorted:set_sort_column_id(column.NAME, Gtk.SortType.ASCENDING)
    self.view = Gtk.TreeView {
-      model = model,
+      model = sorted,
       Gtk.TreeViewColumn {
-	 title = "Name", resizable = true,
+	 title = "Name", resizable = true, sort_column_id = column.NAME,
 	 { Gtk.CellRendererText(), expand = true, { text = column.NAME } },
       },
       Gtk.TreeViewColumn {
