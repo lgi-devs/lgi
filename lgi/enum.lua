@@ -101,7 +101,8 @@ function enum.bitflags_mt:_element(instance, value)
    if type(value) == 'number' then
       local result, remainder = {}, value
       for name, flag in pairs(self) do
-	 if type(flag) == 'number' and has_bit(value, flag) then
+	 if type(flag) == 'number' and name:sub(1, 1) ~= '_' and
+	    has_bit(value, flag) then
 	    result[name] = true
 	    remainder = remainder - flag
 	 end
