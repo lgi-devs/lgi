@@ -33,7 +33,7 @@ buffer_index (lua_State *L)
   int index;
   unsigned char *buffer = luaL_checkudata (L, 1, LGI_BYTES_BUFFER);
   index = lua_tonumber (L, 2);
-  if (index > 0 && index <= lua_objlen (L, 1))
+  if (index > 0 && (size_t) index <= lua_objlen (L, 1))
     lua_pushnumber (L, buffer[index - 1]);
   else
     {
@@ -49,7 +49,8 @@ buffer_newindex (lua_State *L)
   int index;
   unsigned char *buffer = luaL_checkudata (L, 1, LGI_BYTES_BUFFER);
   index = luaL_checkint (L, 2);
-  luaL_argcheck (L, index > 0 && index <= lua_objlen (L, 1), 2, "bad index");
+  luaL_argcheck (L, index > 0 && (size_t) index <= lua_objlen (L, 1),
+                 2, "bad index");
   buffer[index - 1] = luaL_checkint (L, 3) & 0xff;
   return 0;
 }

@@ -728,6 +728,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   gint res = 0, npos, i, stacktop;
   gboolean call;
   Param *param;
+  (void)cif;
 
   /* Get access to proper Lua context. */
   lua_State *L = callback_prepare_call (&block->callback, closure->target_ref,

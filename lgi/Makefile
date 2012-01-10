@@ -24,7 +24,7 @@ endif
 
 OBJS = buffer.o callable.o core.o gi.o marshal.o object.o record.o
 
-COPTFLAGS = -Wall -O2 -g
+COPTFLAGS = -Wall -Wextra -O2 -g
 CFLAGS = $(CCSHARED) $(COPTFLAGS) $(LUA_CFLAGS) $(shell pkg-config --cflags $(GINAME))
 LIBS += $(shell pkg-config --libs $(GINAME))
 LDFLAGS = $(LIBFLAG)

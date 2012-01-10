@@ -38,6 +38,7 @@ static void
 marshal_2c_int (lua_State *L, GITypeTag tag, GIArgument *val, int narg,
 		gboolean optional, gboolean use_pointer)
 {
+  (void) optional;
   switch (tag)
     {
 #define HANDLE_INT(nameup, namelow, ptrconv, pct, val_min, val_max)     \
@@ -1429,6 +1430,7 @@ marshal_fundamental (lua_State *L)
 static void
 gclosure_destroy (gpointer user_data, GClosure *closure)
 {
+  (void) closure;
   lgi_closure_destroy (user_data);
 }
 
