@@ -428,6 +428,15 @@ function Gtk.Assistant._attribute.property:get()
    return setmetatable({ _assistant = self }, assistant_properties_mt)
 end
 
+-------------------------------- Gtk.Dialog
+Gtk.Dialog._attribute = { buttons = {} }
+
+function Gtk.Dialog._attribute.buttons:set(buttons)
+   for _, button in ipairs(buttons) do
+      self:add_button(button[1], button[2])
+   end
+end
+
 -------------------------------- Gtk.Menu
 if not Gtk.Menu.popup then
    Gtk.Menu._method.popup = Gtk.Menu.popup_for_device
