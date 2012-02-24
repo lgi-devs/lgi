@@ -124,6 +124,7 @@ function container_property_item_mt:__newindex(name, val)
 end
 local container_property_mt = {}
 function container_property_mt:__index(child)
+   if type(child) == 'string' then child = self._container.child[child] end
    return setmetatable({ _container = self._container, _child = child },
 		       container_property_item_mt)
 end
@@ -138,7 +139,7 @@ Gtk.Container._attribute.child = {}
 local container_child_mt = {}
 function container_child_mt:__index(id)
    local found = (Gtk.Buildable.get_name(self._container) == id
-	       and self._container)
+		  and self._container)
    if not found then
       for _, child in ipairs(self) do
 	 found = child.child[id]
