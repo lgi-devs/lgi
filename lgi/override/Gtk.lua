@@ -325,11 +325,54 @@ function Gtk.TreeViewColumn:add(def)
    else
       self:pack_end(def[1], def.expand)
    end
-   
+
    -- Set attributes.
    self:set(def[1], def[2])
 end
 Gtk.TreeViewColumn._container_add = Gtk.TreeViewColumn.add
+
+-------------------------------- Gtk.Action and relatives
+function Gtk.ActionGroup:add(action)
+   if type(action) == 'table' then
+      if action.accelerator then
+	 -- Add with an accelerator.
+	 self:add_action_with_accel(action[1], action.accelerator)
+	 return action[1]
+      end
+
+      -- Go through all actions in the table and add them.
+      local first_radio
+      for i = 1, #action do
+	 local added = self:add(action[i])
+	 if Gtk.RadioAction:is_type_of(added) then
+	    if not first_radio then
+	       first_radio = added
+	    else
+	       added:join_group(first_radio)
+	    end
+	 end
+      end
+      -- Install callback for on_activate.
+      if first_radio and action.on_change then
+	 local on_change = action.on_change
+	 function first_radio:on_changed(current) on_change(current) end
+      end
+   else
+      -- Add plain action.
+      self:add_action(action)
+      return action
+   end
+end
+Gtk.ActionGroup._container_add = Gtk.ActionGroup.add
+
+Gtk.ActionGroup._attribute = { action = {} }
+local action_group_mt = {}
+function action_group_mt:__index(name)
+   return self._group:get_action(name)
+end
+function Gtk.ActionGroup._attribute.action:get()
+   return setmetatable({ _group = self }, action_group_mt)
+end
 
 -- Initialize GTK.
 Gtk.init()

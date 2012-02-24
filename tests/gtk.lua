@@ -316,3 +316,39 @@ function gtk.treeview()
    -- dislaying and inspecting the tree visually, which is
    -- inappropriate for automated test.
 end
+
+function gtk.actiongroup_add()
+   -- Adding normal action and action with an accelerator.
+   local ag = Gtk.ActionGroup()
+   local a1, a2 = Gtk.Action { name = 'a1' }, Gtk.Action { name = 'a2' }
+   ag:add(a1)
+   check(#ag:list_actions() == 1)
+   check(ag:get_action('a1') == a1)
+   ag:add { a2, accelerator = '<control>A' }
+   check(#ag:list_actions() == 2)
+   check(ag:get_action('a2') == a2)
+
+   -- Adding a group of radio actions, this time inside the group ctor.
+   local chosen
+   a1 = Gtk.RadioAction { name = 'a1', value = 1 }
+   a2 = Gtk.RadioAction { name = 'a2', value = 2 }
+   ag = Gtk.ActionGroup {
+      { a1, { a2, accelerator = '<control>a' },
+	on_change = function(action) chosen = action end }
+   }
+   check(#ag:list_actions() == 2)
+   check(ag:get_action('a1') == a1)
+   check(ag:get_action('a2') == a2)
+   check(chosen == nil)
+   a1:activate()
+   check(chosen == a1)
+   a2:activate()
+   check(chosen == a2)
+end
+
+function gtk.actiongroup_index()
+   local a1, a2 = Gtk.Action { name = 'a1' }, Gtk.Action { name = 'a2' }
+   local ag = Gtk.ActionGroup { a1, a2 }
+   check(ag.action.a1 == a1)
+   check(ag.action.a2 == a2)
+end

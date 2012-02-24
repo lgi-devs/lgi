@@ -131,6 +131,47 @@ is possible to use `builder.objects.id`
 
 See `samples/gtkbuilder.lua` for typical `Gtk.Builder` usage.
 
+## Gtk.Action and Gtk.ActionGroup
+
+Lgi provides new method `Gtk.ActionGroup:add()` which generally replaces
+unintrospectable `gtk_action_group_add_actions()` family of functions.
+`Gtk.ActionGroup:add()` accepts single argument, which may be one of:
+
+- an instance of `Gtk.Action` - this is identical with calling
+  `Gtk.Action.add_action()`.
+- a table containing instance of `Gtk.Action` at index 1, and
+  optionally having attribute `accelerator`; this is a shorthand for
+  `Gtk.ActionGroup.add_action_with_accel()`
+- a table with array of `Gtk.RadioAction` instances, and optionally
+  `on_change` attribute containing function to be called when the radio
+  group state is changed.
+
+All actions or groups can be added by an array part of `Gtk.ActionGroup`
+constructor, as demonstrated by following example:
+
+    local group = Gtk.ActionGroup {
+       Gtk.Action { name = 'new', label = "_New" },
+       { Gtk.Action { name = 'open', label = "_Open" },
+         accelerator = '<control>O' },
+       {
+          Gtk.RadioAction { name = 'simple', label = "_Simple", value = 1 },
+          { Gtk.RadioAction { name = 'complex', label = "_Complex",
+            value = 2 }, accelerator = '<control>C' },
+          on_change = function(action)
+             print("Changed to: ", action.name)
+          end
+       },
+    }
+
+To access specific action from the group, a read-only attribute `action`
+is added to the group, which allows to be indexed by action name to
+retrieve.  So continuing the example above, we can implement 'new'
+action like this:
+
+    function group.action.new:on_activate()
+       print("Action 'New' invoked")
+    end
+
 ## Gtk.TextTagTable
 
 It is possible to populate new instance of the tag table with tags
