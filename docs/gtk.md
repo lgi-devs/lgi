@@ -166,6 +166,12 @@ although `Gtk` uses 0-based column numbers, Lgi remaps them to 1-based
 numbers, because working with 1-based arrays is much more natural for
 Lua.
 
+Another extension provided by Lgi is
+`Gtk.TreeModel:pairs([parent_iter])` method for Lua-native iteration of
+the model.  This method returns 3 values suitable to pass to generic
+`for`, so that standard Lua iteration protocol can be used.  See the
+example in the next chapter which uses this technique.
+
 ### Gtk.ListStore and Gtk.TreeStore
 
 Standard `Gtk.TreeModel` implementations, `Gtk.ListStore` and
@@ -191,6 +197,11 @@ techniques:
     assert(store[person][PersonColumn.AGE] == 45)
     store[person][PersonColumn.AGE] = 42
     assert(store[person][PersonColumn.AGE] == 42)
+
+    -- Print all persons in the store
+    for i, p in store:pairs() do
+       print(p[PersonColumn.NAME], p[PersonColumn.AGE])
+    end
 
 Note that `append` and `insert` methods are overridden and accept
 additional parameter containing table with column/value pairs, so

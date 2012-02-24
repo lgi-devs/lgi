@@ -225,7 +225,11 @@ end
 -- instance values with iterators.
 local tree_model_element = Gtk.TreeModel._element
 function Gtk.TreeModel:_element(model, key)
-   if Gtk.TreeIter:is_type_of(key) then return key, '_iter' end
+   if Gtk.TreeIter:is_type_of(key) then
+      return key, '_iter'
+   elseif Gtk.TreePath:is_type_of(key) then
+      return model:get_iter(key), '_iter'
+   end
    return tree_model_element(self, model, key)
 end
 function Gtk.TreeModel:_access_iter(model, iter, ...)
@@ -238,11 +242,29 @@ function Gtk.TreeModel:_access_iter(model, iter, ...)
 end
 function Gtk.TreeModel:set(iter, values)
    -- Set all values provided by the table
+   if Gtk.TreePath:is_type_of(iter) then iter = self:get_iter(iter) end
+   local cols, vals = {}, {}
    for column, value in pairs(values) do
       column = column - 1
-      self:set_value(iter, column,
-		     GObject.Value(self:get_column_type(column), value))
+      cols[#cols + 1] = column
+      vals[#vals + 1] = GObject.Value(self:get_column_type(column), value)
    end
+   self:set_values(iter, cols, vals)
+end
+
+-- Implement iteration protocol for model.
+function Gtk.TreeModel:next(iter)
+   if not iter or type(iter) == 'table' then
+      -- Start iteration.
+      iter = self:iter_children(iter and iter[1])
+   else
+      -- Continue to the next child.
+      if not self:iter_next(iter) then iter = nil end
+   end
+   return iter, iter and Gtk.TreeModel:_access_iter(self, iter)
+end
+function Gtk.TreeModel:pairs(parent)
+   return Gtk.TreeModel.next, self, parent and { parent }
 end
 
 -- Redirect 'set' method to our one inherited from TreeModel, it is
@@ -275,6 +297,11 @@ function Gtk.TreeStore:append(parent, values)
    if values then self:set(iter, values) end
    return iter
 end
+
+-- Add missing constants, defined as anonymous enums in C headers, which
+-- is not supported by GIR yet.
+Gtk.TreeSortable.DEFAULT_SORT_COLUMN_ID = -1
+Gtk.TreeSortable.UNSORTED_SORT_COLUMN_ID = -2
 
 -------------------------------- Gtk.TreeView and support.
 -- Array part in constructor specifies columns to add.

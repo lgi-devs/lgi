@@ -260,6 +260,43 @@ function gtk.treestore()
    checkv(store[first][cols.int], 16, 'number')
 end
 
+function gtk.treemodel_pairs()
+   local cols = { int = 1, string = 2 }
+   local store = Gtk.TreeStore.new { GObject.Type.INT, GObject.Type.STRING }
+   local first = store:append(
+      nil, { [cols.int] = 42, [cols.string] = 'hello' })
+   local sub1 = store:append(
+      first, { [cols.int] = 100, [cols.string] = 'sub1' })
+   local sub2 = store:append(
+      first, { [cols.int] = 101, [cols.string] = 'sub2' })
+
+   local count = 0
+   for i, item in store:pairs() do
+      count = count + 1
+      check(Gtk.TreeIter:is_type_of(i))
+      check(item[cols.string] == 'hello')
+   end
+   check(count == 1)
+
+   count = 0
+   for i, item in store:pairs(first) do
+      count = count + 1
+      check(Gtk.TreeIter:is_type_of(i))
+      if (count == 1) then
+	 check(item[cols.string] == 'sub1')
+      else
+	 check(item[cols.string] == 'sub2')
+      end
+   end
+   check(count == 2)
+
+   count = 0
+   for i, item in store:pairs(sub1) do
+      count = count + 1
+   end
+   check(count == 0)
+end
+
 function gtk.treeview()
    local cols = { int = 1, string = 2 }
    local store = Gtk.TreeStore.new { GObject.Type.INT, GObject.Type.STRING }
