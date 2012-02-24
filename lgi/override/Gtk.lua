@@ -374,5 +374,42 @@ function Gtk.ActionGroup._attribute.action:get()
    return setmetatable({ _group = self }, action_group_mt)
 end
 
+-------------------------------- Gtk.Assistant
+Gtk.Assistant._attribute = { property = {} }
+
+function Gtk.Assistant._method:add(child)
+   if type(child) == 'table' then
+      local widget = child[1]
+      self:append_page(widget)
+      for name, value in pairs(child) do
+	 if type(name) == 'string' then
+	    self['set_page_' .. name](self, widget, value)
+	 end
+      end
+   else
+      self:append_page(widget)
+   end
+end
+Gtk.Assistant._container_add = Gtk.Assistant.add
+
+local assistant_property_mt = {}
+function assistant_property_mt:__newindex(property_name, value)
+   self._assistant['set_page_' .. property_name](
+      self._assistant, self._page, value)
+end
+function assistant_property_mt:__index(property_name)
+   return self._assistant['get_page_' .. property_name](
+      self._assistant, self._page)
+end
+local assistant_properties_mt = {}
+function assistant_properties_mt:__index(page)
+   if type(page) == 'string' then page = self._assistant.child[page] end
+   return setmetatable({ _assistant = self._assistant, _page = page },
+		       assistant_property_mt)
+end
+function Gtk.Assistant._attribute.property:get()
+   return setmetatable({ _assistant = self }, assistant_properties_mt)
+end
+
 -- Initialize GTK.
 Gtk.init()
