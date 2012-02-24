@@ -428,5 +428,10 @@ function Gtk.Assistant._attribute.property:get()
    return setmetatable({ _assistant = self }, assistant_properties_mt)
 end
 
+-------------------------------- Gtk.Menu
+if not Gtk.Menu.popup then
+   Gtk.Menu._method.popup = Gtk.Menu.popup_for_device
+end
+
 -- Initialize GTK.
 Gtk.init()
