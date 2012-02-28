@@ -648,36 +648,11 @@ static const struct luaL_Reg callable_reg[] = {
   { NULL, NULL }
 };
 
-static int
-callback_create_target (lua_State *L, int target_arg)
-{
-  /* Store reference to target Lua function (or NOREF if it is thread
-     instead). */
-  if (lua_isthread (L, target_arg))
-    return LUA_NOREF;
-
-  lua_pushvalue (L, target_arg);
-  return luaL_ref (L, LUA_REGISTRYINDEX);
-}
-
-/* Initializes target substructure. */
-static void
-callback_create (lua_State *L, Callback *callback)
-{
-  /* Store reference to target Lua thread. */
-  callback->L = L;
-  lua_pushthread (L);
-  callback->thread_ref = luaL_ref (L, LUA_REGISTRYINDEX);
-
-  /* Retrieve and remember state lock. */
-  callback->state_lock = lgi_state_get_lock (L);
-}
-
 /* Prepares environment for the target to be called; sets up state
    (and returns it), enters state and stores target to be invoked to
    the state and sets *call to TRUE.  If the target thread should not
    be called but resumed instead, sets *call to FALSE and does not
-   push anything to the stack. */
+   store anything to the stack. */
 static lua_State *
 callback_prepare_call (Callback *callback, int target_ref, gboolean *call)
 {
@@ -699,22 +674,17 @@ callback_prepare_call (Callback *callback, int target_ref, gboolean *call)
 	     resume it.  Create new thread instead and switch closure
 	     to its context. */
 	  L = lua_newthread (L);
-	  luaL_unref (L, LUA_REGISTRYINDEX, callback->thread_ref);
-	  callback->thread_ref = luaL_ref (callback->L, LUA_REGISTRYINDEX);
+	  lua_rawseti (L, LUA_REGISTRYINDEX, callback->thread_ref);
 	}
       lua_pop (callback->L, 1);
       callback->L = L;
       lua_rawgeti (L, LUA_REGISTRYINDEX, target_ref);
     }
+  else
+    /* Cleanup the stack of the original thread. */
+    lua_pop (callback->L, 1);
 
   return L;
-}
-
-/* Frees everything allocated in Callback. */
-static inline void
-callback_destroy (Callback *callback)
-{
-  luaL_unref (callback->L, LUA_REGISTRYINDEX, callback->thread_ref);
 }
 
 /* Closure callback, called by libffi when C code wants to invoke Lua
@@ -918,7 +888,7 @@ lgi_closure_destroy (gpointer user_data)
 	  luaL_unref (L, LUA_REGISTRYINDEX, closure->target_ref);
 	}
       if (i < 0)
-	callback_destroy (&block->callback);
+	luaL_unref (L, LUA_REGISTRYINDEX, block->callback.thread_ref);
       ffi_closure_free (closure);
     }
 }
@@ -950,8 +920,13 @@ lgi_closure_allocate (lua_State *L, int count)
       block->ffi_closures[i]->block = block;
     }
 
-  /* Initialize callback member. */
-  callback_create (L, &block->callback);
+  /* Store reference to target Lua thread. */
+  block->callback.L = L;
+  lua_pushthread (L);
+  block->callback.thread_ref = luaL_ref (L, LUA_REGISTRYINDEX);
+
+  /* Retrieve and remember state lock. */
+  block->callback.state_lock = lgi_state_get_lock (L);
   return block;
 }
 
@@ -980,7 +955,18 @@ lgi_closure_create (lua_State *L, gpointer user_data,
   closure->created = 1;
   closure->autodestroy = autodestroy;
   closure->callable_ref = luaL_ref (L, LUA_REGISTRYINDEX);
-  closure->target_ref = callback_create_target (L, target);
+  if (!lua_isthread (L, target))
+    {
+      lua_pushvalue (L, target);
+      closure->target_ref = luaL_ref (L, LUA_REGISTRYINDEX);
+    }
+  else
+    {
+      /* Switch thread_ref to actual target thread. */
+      lua_pushvalue (L, target);
+      lua_rawseti (L, LUA_REGISTRYINDEX, block->callback.thread_ref);
+      closure->target_ref = LUA_NOREF;
+    }
 
   /* Create closure. */
   if (ffi_prep_closure_loc (&closure->ffi_closure, &callable->cif,

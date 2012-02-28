@@ -103,6 +103,7 @@ end
 local testpath = arg[0]:sub(1, arg[0]:find('[^%/\\]+$') - 1):gsub('[/\\]$', '')
 for _, sourcefile in ipairs {
    'gireg.lua',
+   'corocbk.lua',
    'gobject.lua',
    'variant.lua',
    'gtk.lua',
