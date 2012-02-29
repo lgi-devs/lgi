@@ -777,10 +777,14 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	   returned. */
 	res = 0;
       else if (res == LUA_ERRRUN && !callable->throws)
-	/* If closure is not allowed to return errors and coroutine
-	   finished with error, rethrow the error in the context of
-	   the original thread. */
-	lua_error (L);
+	{
+	  /* If closure is not allowed to return errors and coroutine
+	     finished with error, rethrow the error in the context of
+	     the original thread. */
+	  lua_settop (L, stacktop + 1);
+	  lua_xmove (L, block->callback.L, 1);
+	  lua_error (block->callback.L);
+	}
     }
   npos = stacktop + 1;
 
