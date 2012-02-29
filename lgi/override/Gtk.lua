@@ -437,6 +437,9 @@ function Gtk.Dialog._attribute.buttons:set(buttons)
    end
 end
 
+-------------------------------- Gtk.InfoBar
+Gtk.InfoBar._attribute = { buttons = Gtk.Dialog._attribute.buttons }
+
 -------------------------------- Gtk.Menu
 if not Gtk.Menu.popup then
    Gtk.Menu._method.popup = Gtk.Menu.popup_for_device
