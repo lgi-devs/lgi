@@ -648,45 +648,6 @@ static const struct luaL_Reg callable_reg[] = {
   { NULL, NULL }
 };
 
-/* Prepares environment for the target to be called; sets up state
-   (and returns it), enters state and stores target to be invoked to
-   the state and sets *call to TRUE.  If the target thread should not
-   be called but resumed instead, sets *call to FALSE and does not
-   store anything to the stack. */
-static lua_State *
-callback_prepare_call (Callback *callback, int target_ref, gboolean *call)
-{
-  /* Get access to proper Lua context. */
-  lua_State *L = callback->L;
-  lgi_state_enter (callback->state_lock);
-  lua_rawgeti (L, LUA_REGISTRYINDEX, callback->thread_ref);
-  L = lua_tothread (L, -1);
-  *call = (target_ref != LUA_NOREF);
-  if (*call)
-    {
-      /* We will call target method, prepare context/thread to do
-	 it. */
-      if (lua_status (L) != 0)
-	{
-	  /* Thread is not in usable state for us, it is suspended, we
-	     cannot afford to resume it, because it is possible that
-	     the routine we are about to call is actually going to
-	     resume it.  Create new thread instead and switch closure
-	     to its context. */
-	  L = lua_newthread (L);
-	  lua_rawseti (L, LUA_REGISTRYINDEX, callback->thread_ref);
-	}
-      lua_pop (callback->L, 1);
-      callback->L = L;
-      lua_rawgeti (L, LUA_REGISTRYINDEX, target_ref);
-    }
-  else
-    /* Cleanup the stack of the original thread. */
-    lua_pop (callback->L, 1);
-
-  return L;
-}
-
 /* Closure callback, called by libffi when C code wants to invoke Lua
    callback. */
 static void
@@ -701,18 +662,51 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   (void)cif;
 
   /* Get access to proper Lua context. */
-  lua_State *L = callback_prepare_call (&block->callback, closure->target_ref,
-					&call);
+  lua_State *L = block->callback.L;
+  lgi_state_enter (block->callback.state_lock);
+  lua_rawgeti (L, LUA_REGISTRYINDEX, block->callback.thread_ref);
+  L = lua_tothread (L, -1);
+  call = (closure->target_ref != LUA_NOREF);
+  if (call)
+    {
+      /* We will call target method, prepare context/thread to do
+	 it. */
+      if (lua_status (L) != 0)
+	{
+	  /* Thread is not in usable state for us, it is suspended, we
+	     cannot afford to resume it, because it is possible that
+	     the routine we are about to call is actually going to
+	     resume it.  Create new thread instead and switch closure
+	     to its context. */
+	  L = lua_newthread (L);
+	  lua_rawseti (L, LUA_REGISTRYINDEX, block->callback.thread_ref);
+	}
+      lua_pop (block->callback.L, 1);
+      block->callback.L = L;
+
+      /* Remember stacktop, this is the position on which we should
+	 expect return values (note that callback_prepare_call already
+	 might have pushed function to be executed to the stack). */
+      stacktop = lua_gettop (L);
+
+      /* Store function to be invoked to the stack. */
+      lua_rawgeti (L, LUA_REGISTRYINDEX, closure->target_ref);
+    }
+  else
+    {
+      /* Cleanup the stack of the original thread. */
+      lua_pop (block->callback.L, 1);
+      stacktop = lua_gettop (L);
+      if (lua_status (L) == 0)
+	/* Thread is not suspended yet, so it contains initial
+	   function at the top of the stack, so count with it. */
+	stacktop--;
+    }
 
   /* Get access to Callable structure. */
   lua_rawgeti (L, LUA_REGISTRYINDEX, closure->callable_ref);
   callable = lua_touserdata (L, -1);
   lua_pop (L, 1);
-
-  /* Remember stacktop, this is the position on which we should expect
-     return values (note that callback_prepare_call already might have
-     pushed function to be executed to the stack). */
-  stacktop = lua_gettop (L) - (call ? 1 : 0);
 
   /* Marshall 'self' argument, if it is present. */
   npos = 0;

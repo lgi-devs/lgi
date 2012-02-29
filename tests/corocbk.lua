@@ -17,12 +17,13 @@ local check = testsuite.check
 -- Basic GObject testing
 local corocbk = testsuite.group.new('corocbk')
 
-function corocbk.source_resume_yielded()
+function corocbk.resume_suspd()
    local GLib = lgi.GLib
    local main_loop = GLib.MainLoop()
    local coro = coroutine.create(
       function()
 	 coroutine.yield()
+	 coroutine.yield(true)
 	 main_loop:quit()
       end)
    coroutine.resume(coro)
@@ -30,11 +31,12 @@ function corocbk.source_resume_yielded()
    main_loop:run()
 end
 
-function corocbk.source_resume_initial()
+function corocbk.resume_init()
    local GLib = lgi.GLib
    local main_loop = GLib.MainLoop()
    local coro = coroutine.create(
       function()
+	 coroutine.yield(true)
 	 main_loop:quit()
       end)
    GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, coro)
