@@ -336,7 +336,7 @@ lgi_callable_create (lua_State *L, GICallableInfo *info, gpointer addr)
       /* Mark closure-related user_data fields and possibly destroy_notify
 	 fields as internal. */
       arg = g_arg_info_get_closure (&param->ai);
-      if (arg > 0 && arg < nargs)
+      if (arg >= 0 && arg < nargs)
 	{
 	  callable->params[arg].internal = TRUE;
 	  callable->params[arg].n_closures++;
