@@ -313,7 +313,7 @@ Gtk.TreeSortable.UNSORTED_SORT_COLUMN_ID = -2
 Gtk.TreeView._container_add = Gtk.TreeView.append_column
 
 -- Sets attributes for specified cell.
-function Gtk.TreeViewColumn:set(cell, data)
+function Gtk.CellLayout:set(cell, data)
    if type(data) == 'table' then
       for attr, column in pairs(data) do
 	 self:add_attribute(cell, attr, column - 1)
@@ -324,7 +324,7 @@ function Gtk.TreeViewColumn:set(cell, data)
 end
 
 -- Adds new cellrenderer with full definition into the column.
-function Gtk.TreeViewColumn:add(def)
+function Gtk.CellLayout:add(def)
    if def.align == 'start' then
       self:pack_start(def[1], def.expand)
    else
@@ -335,13 +335,6 @@ function Gtk.TreeViewColumn:add(def)
    self:set(def[1], def[2])
    if def.data_func then self:set_cell_data_func(def[1], def.data_func) end
 end
-Gtk.TreeViewColumn._container_add = Gtk.TreeViewColumn.add
-
--- CellView uses the same interface as TreeViewColumn.  Although they
--- are not binary-related on C level, thanks to Lua's duck-typing we can
--- just use the same definitions here.
-Gtk.CellLayout.set = Gtk.TreeViewColumn.set
-Gtk.CellLayout.add = Gtk.TreeViewColumn.add
 
 -- Unfortunately, CellView is interface often implemented by descendants
 -- of Gtk.Container, so we cannot reuse generic _container_add here,
@@ -352,6 +345,8 @@ Gtk.CellLayout._attribute = { cells = {} }
 function Gtk.CellLayout._attribute.cells:set(cells)
    for _, data in ipairs(cells) do Gtk.CellLayout.add(self, data) end
 end
+
+Gtk.TreeViewColumn._container_add = Gtk.TreeViewColumn.add
 
 -------------------------------- Gtk.Action and relatives
 function Gtk.ActionGroup:add(action)
