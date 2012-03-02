@@ -52,6 +52,11 @@ function Gtk.Widget._attribute.style:get()
    return setmetatable({ _widget = self }, widget_style_mt)
 end
 
+-- Get widget from Gdk.Window
+function Gdk.Window:get_widget()
+   return core.object.new(self:get_user_data(), false)
+end
+
 -------------------------------- Gtk.Buildable overrides.
 Gtk.Buildable._attribute = { id = {}, child = {} }
 
