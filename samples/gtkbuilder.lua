@@ -14,7 +14,8 @@ local window
 if gtk_builder_use_standard_api then
    -- Instantiate Gtk.Builder and load resources from ui file.
    local builder = Gtk.Builder()
-   assert(builder:add_from_file('samples/demo.ui'))
+   assert(builder:add_from_file('demo.ui')
+       or builder:add_from_file('samples/demo.ui'))
 
    -- Get top-level window from the builder.
    window = builder:get_object('window1')
@@ -32,7 +33,8 @@ if gtk_builder_use_standard_api then
 else
    -- Instantiate builder and load objects.
    local builder = Gtk.Builder()
-   assert(builder:add_from_file('samples/demo.ui'))
+   assert(builder:add_from_file('demo.ui')
+       or builder:add_from_file('samples/demo.ui'))
    local ui = builder.objects
 
    -- Get top-level window from the builder.
