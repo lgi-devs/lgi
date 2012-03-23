@@ -405,6 +405,22 @@ core_registerlock (lua_State *L)
   return 0;
 }
 
+static int
+core_band (lua_State *L)
+{
+  lua_pushnumber (L, (unsigned)luaL_checknumber (L, 1)
+		  & (unsigned)luaL_checknumber (L, 2));
+  return 1;
+}
+
+static int
+core_bor (lua_State *L)
+{
+  lua_pushnumber (L, (unsigned)luaL_checknumber (L, 1)
+		  | (unsigned)luaL_checknumber (L, 2));
+  return 1;
+}
+
 static const struct luaL_Reg lgi_reg[] = {
   { "log",  core_log },
   { "gtype", core_gtype },
@@ -412,6 +428,8 @@ static const struct luaL_Reg lgi_reg[] = {
   { "constant", core_constant },
   { "yield", core_yield },
   { "registerlock", core_registerlock },
+  { "band", core_band },
+  { "bor", core_bor },
   { NULL, NULL }
 };
 
