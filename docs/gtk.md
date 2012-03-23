@@ -125,8 +125,6 @@ A new `objects` attribute provides direct access to loaded objects by
 their identifier, so that instead of `builder:get_object('id')` it
 is possible to use `builder.objects.id`
 
-See `samples/gtkbuilder.lua` for typical `Gtk.Builder` usage.
-
 ## Gtk.Action and Gtk.ActionGroup
 
 Lgi provides new method `Gtk.ActionGroup:add()` which generally replaces
