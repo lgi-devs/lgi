@@ -41,7 +41,7 @@ clean :
 	rm -f $(REGRESS) $(REGRESS_OBJS) Regress-1.0.gir Regress-1.0.typelib
 
 check : all
-	cd .. && LD_LIBRARY_PATH=tests GI_TYPELIB_PATH=tests $(LUA) tests/test.lua
+	cd .. && LD_LIBRARY_PATH=tests:$$LD_LIBRARY_PATH GI_TYPELIB_PATH=tests:$$GI_TYPELIB_PATH $(LUA) tests/test.lua
 
 $(REGRESS) : regress.o
 	$(CC) $(LDFLAGS) -o $@ regress.o $(LIBS)
