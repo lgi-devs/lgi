@@ -592,7 +592,8 @@ marshal_2c_hash (lua_State *L, GITypeInfo *ti, GHashTable **table, int narg,
 	  /* Marshal key and value from the table. */
 	  for (i = 0; i < 2; i++)
 	    vals += lgi_marshal_2c (L, eti[i], NULL, exfer, &eval[i],
-				    key_pos + i, 0, NULL, NULL);
+				    key_pos + i, PARENT_FORCE_POINTER,
+				    NULL, NULL);
 
 	  /* Insert newly marshalled pointers into the table. */
 	  g_hash_table_insert (*table, eval[0].v_pointer, eval[1].v_pointer);
