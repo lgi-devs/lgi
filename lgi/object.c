@@ -11,12 +11,42 @@
 #include <string.h>
 #include "lgi.h"
 
-/* lightuserdata keys to registry, containing table representing weak
+/* lightuserdata key to registry, containing table representing weak
    cache of known objects. */
 static int cache;
 
 /* lightuserdata key to registry for metatable of objects. */
 static int object_mt;
+
+/* lightuserdata key to registry, containing 'env' table, which maps
+   lightuserdata(obj-addr) -> obj-env-table. */
+static int env;
+
+/* Keys in 'env' table containing quark used as object's qdata for env
+   and thread which is used from qdata destroy callback. */
+enum {
+  OBJECT_QDATA_ENV = 1,
+  OBJECT_QDATA_THREAD
+};
+
+/* Structure stored in GObject's qdata at OBJECT_QDATA_ENV. */
+typedef struct _ObjectData
+{
+  gpointer object;
+  gpointer state_lock;
+  lua_State *L;
+} ObjectData;
+
+/* lightuserdata key to registry, containing metatable for object env
+   guard. */
+static int env_mt;
+
+/* Structure containing object_env_guard userdata. */
+typedef struct _ObjectEnvGuard
+{
+  gpointer object;
+  GQuark id;
+} ObjectEnvGuard;
 
 /* Checks that given narg is object type and returns pointer to type
    instance representing it. */
@@ -408,12 +438,107 @@ object_field (lua_State *L)
   return lgi_marshal_field (L, object, getmode, 1, 2, 3);
 }
 
+static void
+object_data_destroy (gpointer user_data)
+{
+  ObjectData *data = user_data;
+  lua_State *L = data->L;
+  lgi_state_enter (data->state_lock);
+  luaL_checkstack (L, 4, NULL);
+
+  /* Release 'obj' entry from 'env' table. */
+  lua_pushlightuserdata (L, &env);
+  lua_rawget (L, LUA_REGISTRYINDEX);
+
+  /* Deactivate env_destroy, to avoid double destruction. */
+  lua_pushlightuserdata (L, data->object);
+  lua_rawget (L, -2);
+  if (!lua_isnil (L, -1))
+    *(gpointer **) lua_touserdata (L, -1) = NULL;
+  lua_pushlightuserdata (L, data->object);
+  lua_pushnil (L);
+  lua_rawset (L, -4);
+  lua_pop (L, 2);
+
+  /* Leave the context and destroy data structure. */
+  lgi_state_leave (data->state_lock);
+  g_free (data);
+}
+
+static int
+object_env_guard_gc (lua_State *L)
+{
+  ObjectEnvGuard *guard = lua_touserdata (L, -1);
+  g_free (g_object_steal_qdata (G_OBJECT (guard->object), guard->id));
+  return 0;
+}
+
+/* Object environment table accessor.  Lua-side prototype:
+   env = object.env(objectinstance) */
+static int
+object_env (lua_State *L)
+{
+  ObjectData *data;
+  gpointer obj = object_get (L, 1);
+  if (!G_IS_OBJECT (obj))
+    /* Only GObject instances can have environment. */
+    return 0;
+
+  /* Lookup 'env' table. */
+  lua_pushlightuserdata (L, &env);
+  lua_rawget (L, LUA_REGISTRYINDEX);
+  lua_pushlightuserdata (L, obj);
+  lua_rawget (L, -2);
+  if (!lua_isnil (L, -1))
+    /* Object's env table for the object is attached to the
+       controlling userdata in the 'env' table. */
+    lua_getfenv (L, -1);
+  else
+    {
+      ObjectEnvGuard *guard;
+
+      /* Create new table which will serve as an object env table. */
+      lua_newtable (L);
+
+      /* Create userdata guard, which disconnects env when the state
+	 dies.  Attach the actual env table as env table to the guard
+	 udata. */
+      guard = lua_newuserdata (L, sizeof (ObjectEnvGuard));
+      guard->object = obj;
+      lua_rawgeti (L, -4, OBJECT_QDATA_ENV);
+      guard->id = lua_tonumber (L, -1);
+      lua_pop (L, 1);
+      lua_pushvalue (L, -2);
+      lua_setfenv (L, -2);
+
+      /* Store it to the 'env' table. */
+      lua_pushlightuserdata (L, obj);
+      lua_pushvalue (L, -2);
+      lua_rawset (L, -6);
+
+      /* Create and fill new ObjectData structure, to attach it to
+	 object's qdata. */
+      data = g_new (ObjectData, 1);
+      data->object = obj;
+      lua_rawgeti (L, -4, OBJECT_QDATA_THREAD);
+      data->L = lua_tothread (L, -1);
+      data->state_lock = lgi_state_get_lock (data->L);
+
+      /* Attach ObjectData to the object. */
+      g_object_set_qdata_full (G_OBJECT (obj), guard->id,
+			       data, object_data_destroy);
+      lua_pop (L, 2);
+    }
+
+  return 1;
+}
+
 /* Creates new object.  Lua-side prototypes:
    res = object.new(luserdata-ptr, already_own)
    res = object.new(gtype, { GParameter }) */
 static int
 object_new (lua_State *L)
-{
+ {
   if (lua_islightuserdata (L, 1))
     /* Create object from the given pointer. */
     return lgi_object_2lua (L, lua_touserdata (L, 1), lua_toboolean (L, 2));
@@ -457,12 +582,15 @@ static const luaL_Reg object_api_reg[] = {
   { "query", object_query },
   { "field", object_field },
   { "new", object_new },
+  { "env", object_env },
   { NULL, NULL }
 };
 
 void
 lgi_object_init (lua_State *L)
 {
+  char *id;
+
   /* Register metatable. */
   lua_pushlightuserdata (L, &object_mt);
   lua_newtable (L);
@@ -471,6 +599,30 @@ lgi_object_init (lua_State *L)
 
   /* Initialize object cache. */
   lgi_cache_create (L, &cache, "v");
+
+  /* Create table for 'env' tables. */
+  lua_pushlightuserdata (L, &env);
+  lua_newtable (L);
+
+  /* Add OBJECT_QDATA_ENV quark to env table. */
+  id = g_strdup_printf ("lgi:%p", L);
+  lua_pushnumber (L, g_quark_from_string (id));
+  g_free (id);
+  lua_rawseti (L, -2, OBJECT_QDATA_ENV);
+
+  /* Add OBJECT_QDATA_THREAD to env table. */
+  lua_newthread (L);
+  lua_rawseti (L, -2, OBJECT_QDATA_THREAD);
+
+  /* Add 'env' table to the registry. */
+  lua_rawset (L, LUA_REGISTRYINDEX);
+
+  /* Register env_mt table. */
+  lua_pushlightuserdata (L, &env_mt);
+  lua_newtable (L);
+  lua_pushcfunction (L, object_env_guard_gc);
+  lua_setfield (L, -2, "__gc");
+  lua_rawset (L, LUA_REGISTRYINDEX);
 
   /* Create object API table and set it to the parent. */
   lua_newtable (L);
