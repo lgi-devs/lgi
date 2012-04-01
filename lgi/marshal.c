@@ -1411,9 +1411,11 @@ marshal_fundamental (lua_State *L)
       if (GI_IS_OBJECT_INFO (info) && g_object_info_get_fundamental (info))
 	{
 	  GIObjectInfoGetValueFunction get_value =
-	    g_object_info_get_get_value_function_pointer (info);
+	    lgi_object_get_function_ptr (info,
+					 g_object_info_get_get_value_function);
 	  GIObjectInfoSetValueFunction set_value =
-	    g_object_info_get_set_value_function_pointer (info);
+	    lgi_object_get_function_ptr (info,
+					 g_object_info_get_set_value_function);
 	  if (get_value && set_value)
 	    {
 	      lua_pushlightuserdata (L, get_value);

@@ -96,6 +96,38 @@ object_get (lua_State *L, int narg)
   return obj;
 }
 
+/* This is workaround method for broken
+   g_object_info_get_*_function_pointer() in GI 1.32.0. (see
+   https://bugzilla.gnome.org/show_bug.cgi?id=673282) */
+gpointer
+lgi_object_get_function_ptr (GIObjectInfo *info,
+			     const gchar *(*getter)(GIObjectInfo *))
+{
+  gpointer func = NULL;
+  g_base_info_ref (info);
+  while (info != NULL)
+    {
+      GIBaseInfo *parent;
+      const gchar *func_name;
+
+      /* Try to get the name and the symbol. */
+      func_name = getter (info);
+      if (func_name && g_typelib_symbol (g_base_info_get_typelib (info),
+					 func_name, &func))
+	{
+	  g_base_info_unref (info);
+	  break;
+	}
+
+      /* Iterate to the parent info. */
+      parent = g_object_info_get_parent (info);
+      g_base_info_unref (info);
+      info = parent;
+    }
+
+  return func;
+}
+
 /* Retrieves requested typetable function for the object. */
 static gpointer
 object_load_function (lua_State *L, GType gtype, const gchar *name)
@@ -128,7 +160,7 @@ object_refsink (lua_State *L, gpointer obj)
   if (info != NULL && g_object_info_get_fundamental (info))
     {
       GIObjectInfoRefFunction ref =
-	g_object_info_get_ref_function_pointer (info);
+	lgi_object_get_function_ptr (info, g_object_info_get_ref_function);
       g_base_info_unref (info);
       if (ref != NULL)
 	{
@@ -176,7 +208,7 @@ object_unref (lua_State *L, gpointer obj)
   if (info != NULL && g_object_info_get_fundamental (info))
     {
       GIObjectInfoUnrefFunction unref =
-	g_object_info_get_unref_function_pointer (info);
+	lgi_object_get_function_ptr (info, g_object_info_get_unref_function);
       g_base_info_unref (info);
       if (unref != NULL)
 	{
