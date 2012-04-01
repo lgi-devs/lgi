@@ -62,10 +62,10 @@ Gtk.Buildable._attribute = { id = {}, child = {} }
 
 -- Create custom 'id' property, mapped to buildable name.
 function Gtk.Buildable._attribute.id:set(id)
-   Gtk.Buildable.set_name(self, id)
+   core.object.env(self).id = id
 end
 function Gtk.Buildable._attribute.id:get()
-   return Gtk.Buildable.get_name(self)
+   return core.object.env(self).id
 end
 
 -- Custom 'child' property, which returns widget in the subhierarchy
@@ -143,8 +143,8 @@ end
 Gtk.Container._attribute.child = {}
 local container_child_mt = {}
 function container_child_mt:__index(id)
-   local found = (Gtk.Buildable.get_name(self._container) == id
-		  and self._container)
+   local found = (core.object.env(self._container).id == id
+	       and self._container)
    if not found then
       for _, child in ipairs(self) do
 	 found = child.child[id]
@@ -312,6 +312,22 @@ Gtk.TreeSortable.UNSORTED_SORT_COLUMN_ID = -2
 -- Array part in constructor specifies columns to add.
 Gtk.TreeView._container_add = Gtk.TreeView.append_column
 
+-- Allow looking up tree column as child of the tree.
+Gtk.TreeView._attribute = {
+   child = { set = Gtk.TreeView._parent._attribute.child.set }
+}
+local treeview_child_mt = {}
+function treeview_child_mt:__index(id)
+   if self._view.id == id then return self._view end
+   for _, column in ipairs(self._view:get_columns()) do
+      local child = column.child[id]
+      if child then return child end
+   end
+end
+function Gtk.TreeView._attribute.child:get()
+   return setmetatable({ _view = self }, treeview_child_mt)
+end
+
 -- Sets attributes for specified cell.
 function Gtk.CellLayout:set(cell, data)
    if type(data) == 'table' then
@@ -341,9 +357,22 @@ end
 -- because it is already occupied by implementing container's ctor.  So
 -- instead add attribute 'cells' which can be assigned the list of cell
 -- data definitions.
-Gtk.CellLayout._attribute = { cells = {} }
+Gtk.CellLayout._attribute = { cells = {}, child = {} }
 function Gtk.CellLayout._attribute.cells:set(cells)
    for _, data in ipairs(cells) do Gtk.CellLayout.add(self, data) end
+end
+
+-- Allow lookuing up rendereres by assigned id.
+Gtk.CellRenderer._attribute = { id = Gtk.Buildable._attribute.id }
+local celllayout_child_mt = {}
+function celllayout_child_mt:__index(id)
+   if id == self._layout.id then return self._layout end
+   for _, renderer in ipairs(self._layout:get_cells()) do
+      if renderer.id == id then return renderer end
+   end
+end
+function Gtk.CellLayout._attribute.child:get()
+   return setmetatable({ _layout = self }, celllayout_child_mt)
 end
 
 Gtk.TreeViewColumn._container_add = Gtk.TreeViewColumn.add

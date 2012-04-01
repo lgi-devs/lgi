@@ -107,10 +107,6 @@ Run `samples/console.lua`, paste example into entry view and enjoy.
 The `samples/console.lua` example itself shows more complex usage of
 this pattern.
 
-Note: the `id` property is implemented by piggybacking on
-`Gtk.Buildable.set_name` and `Gtk.Buildable.get_name` methods
-(essentially, reading and writing `id` just calls these methods).
-
 ## Gtk.Builder
 
 Although Lua's declarative style for creating widget hierarchies (as

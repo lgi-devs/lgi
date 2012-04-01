@@ -31,9 +31,6 @@ function gtk.buildable_id()
    checkv(w.id, nil, nil)
    w.id = 'label_id'
    checkv(w.id, 'label_id', 'string')
-   checkv(Gtk.Buildable.get_name(w), 'label_id', 'string')
-   Gtk.Buildable.set_name(w, 'new_id')
-   checkv(w.id, 'new_id', 'string')
 end
 
 function gtk.container_property()
@@ -300,21 +297,27 @@ end
 function gtk.treeview()
    local cols = { int = 1, string = 2 }
    local store = Gtk.TreeStore.new { GObject.Type.INT, GObject.Type.STRING }
-   local view = Gtk.TreeView {
-      model = store,
-      Gtk.TreeViewColumn {
-	 { Gtk.CellRendererText {}, { text = cols.int } },
-	 { Gtk.CellRendererText {}, expand = true, pack = 'end',
-	   function(column, cell, model, iter)
-	      return model[iter][cols.string]:toupper()
-	   end },
-      }
+   local renderer = Gtk.CellRendererText { id = 'renderer' }
+   local column = Gtk.TreeViewColumn {
+      id = 'column',
+      { renderer, { text = cols.int } },
+      { Gtk.CellRendererText {}, expand = true, pack = 'end',
+	function(column, cell, model, iter)
+	   return model[iter][cols.string]:toupper()
+	end },
    }
 
-   -- Unfortunately, there is no sane way to test the real contents of
-   -- the treeview above, namely contents of the column, except
-   -- dislaying and inspecting the tree visually, which is
-   -- inappropriate for automated test.
+   local view = Gtk.TreeView {
+      id = 'view',
+      model = store,
+      column
+   }
+   -- Check that column is accessible by its 'id' attribute.
+   check(view.child.view == view)
+   check(view.child.column == column)
+
+   -- Check that renderer is accessible by its 'id' attribute.
+   check(view.child.renderer == renderer)
 end
 
 function gtk.actiongroup_add()
