@@ -13,6 +13,11 @@ local window = Gtk.Dialog {
    },
 }
 
+local store = Gtk.ListStore.new { GObject.Type.STRING }
+for _, name in ipairs { "GNOME", "total", "totally" } do
+   store:append { name }
+end
+
 local content = Gtk.Box {
    orientation = 'VERTICAL',
    spacing = 5,
@@ -25,13 +30,7 @@ local content = Gtk.Box {
    Gtk.Entry {
       id = 'entry',
       completion = Gtk.EntryCompletion {
-	 model = (function()
-		     local store = Gtk.ListStore.new { GObject.Type.STRING }
-		     for _, name in ipairs { "GNOME", "total", "totally" } do
-			store:append { name }
-		     end
-		     return store
-		  end)(),
+	 model = store,
 	 text_column = 0,
       },
    },
@@ -42,7 +41,7 @@ window:show_all()
 return window
 end,
 
-"Entry/Entry Complettion",
+"Entry/Entry Completion",
 
 table.concat {
    "Gtk.EntryCompletion provides a mechanism for adding support for ",
