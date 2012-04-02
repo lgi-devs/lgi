@@ -245,16 +245,20 @@ function Gtk.TreeModel:_access_iter(model, iter, ...)
       return setmetatable({ _model = model, _iter = iter }, tree_model_item_mt)
    end
 end
-function Gtk.TreeModel:set(iter, values)
-   -- Set all values provided by the table
-   if Gtk.TreePath:is_type_of(iter) then iter = self:get_iter(iter) end
+
+local function treemodel_prepare_values(model, values)
    local cols, vals = {}, {}
    for column, value in pairs(values) do
       column = column - 1
       cols[#cols + 1] = column
-      vals[#vals + 1] = GObject.Value(self:get_column_type(column), value)
+      vals[#vals + 1] = GObject.Value(model:get_column_type(column), value)
    end
-   self:set_values(iter, cols, vals)
+   return cols, vals
+end
+function Gtk.TreeModel:set(iter, values)
+   -- Set all values provided by the table
+   if Gtk.TreePath:is_type_of(iter) then iter = self:get_iter(iter) end
+   self:set_values(iter, treemodel_prepare_values(self, values))
 end
 
 -- Implement iteration protocol for model.
@@ -279,13 +283,27 @@ Gtk.ListStore._method.set = nil
 
 -- Allow insert() and append() to handle also 'with_values' case.
 function Gtk.ListStore:insert(position, values)
-   local iter = Gtk.ListStore._method.insert(self, position)
-   if values then self:set(iter, values) end
+   local iter
+   if not values then
+      iter = Gtk.ListStore._method.insert(self, position)
+   else
+      iter = Gtk.ListStore._method.insert_with_valuesv(
+	 self, position, treemodel_prepare_values(self, values))
+   end
    return iter
 end
+if not Gtk.ListStore._method.insert_with_values then
+   Gtk.ListStore._method.insert_with_values =
+      Gtk.ListStore._method.insert_with_valuesv
+end
 function Gtk.ListStore:append(values)
-   local iter = Gtk.ListStore._method.append(self)
-   if values then self:set(iter, values) end
+   local iter
+   if not values then
+      iter = Gtk.ListStore._method.append(self)
+   else
+      iter = Gtk.ListStore._method.insert_with_values(
+	 self, -1, treemodel_prepare_values(self, values))
+   end
    return iter
 end
 
@@ -293,13 +311,23 @@ end
 Gtk.TreeStore._method.set_values = Gtk.TreeStore.set
 Gtk.TreeStore._method.set = nil
 function Gtk.TreeStore:insert(parent, position, values)
-   local iter = Gtk.TreeStore._method.insert(self, parent, position)
-   if values then self:set(iter, values) end
+   local iter
+   if not values then
+      iter = Gtk.TreeStore._method.insert(self, parent, position)
+   else
+      iter = Gtk.TreeStore._method.insert_with_values(
+	 self, parent, position, treemodel_prepare_values(self, values))
+   end
    return iter
 end
 function Gtk.TreeStore:append(parent, values)
-   local iter = Gtk.TreeStore._method.append(self, parent)
-   if values then self:set(iter, values) end
+   local iter
+   if not values then
+      iter = Gtk.TreeStore._method.append(self, parent)
+   else
+      iter = Gtk.TreeStore._method.insert_with_values(
+	 self, parent, -1, treemodel_prepare_values(self, values))
+   end
    return iter
 end
 
