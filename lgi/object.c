@@ -378,26 +378,33 @@ static const luaL_Reg object_mt_reg[] = {
 };
 
 static const char *const query_mode[] = {
-  "gtype", "repo", "class", NULL
- };
+  "addr", "gtype", "repo", "class", NULL
+};
 
 /* Queries for assorted instance properties. Lua-side prototype:
    res = object.query(objectinstance, mode [, iface-gtype])
    Supported mode strings are:
    'gtype': returns real gtype of this instance.
    'repo':  returns repotable for this instance.
-   'class': returns class struct record of this instance. */
+   'class': returns class struct record of this instance.
+   'addr':  returns lightuserdata with pointer to the object. */
 static int
 object_query (lua_State *L)
 {
   gpointer object = object_check (L, 1);
   if (object)
     {
+      GType gtype;
       int mode = luaL_checkoption (L, 2, query_mode[0], query_mode);
-      GType gtype = lgi_type_get_gtype (L, 3);
-      if (gtype == G_TYPE_INVALID)
-	gtype = G_TYPE_FROM_INSTANCE (object);
       if (mode == 0)
+        {
+          lua_pushlightuserdata (L, object);
+          return 1;
+        }
+      gtype = lgi_type_get_gtype (L, 3);
+      if (gtype == G_TYPE_INVALID)
+        gtype = G_TYPE_FROM_INSTANCE (object);
+      if (mode == 1)
 	{
 	  lua_pushnumber (L, gtype);
 	  return 1;
@@ -407,7 +414,7 @@ object_query (lua_State *L)
 	  /* Get repotype structure. */
 	  if (object_type (L, gtype) != G_TYPE_INVALID)
 	    {
-	      if (mode == 2)
+	      if (mode == 3)
 		{
 		  gpointer typestruct = !G_TYPE_IS_INTERFACE (gtype)
 		    ? G_TYPE_INSTANCE_GET_CLASS (object, gtype, GTypeClass)
