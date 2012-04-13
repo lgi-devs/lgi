@@ -359,7 +359,7 @@ record_len (lua_State *L)
   if (lua_isnil (L, -1))
     {
       lua_getfield (L, -2, "_name");
-      return luaL_error (L, "`%s': attempt to get length", 
+      return luaL_error (L, "`%s': attempt to get length",
 			 lua_tostring (L, -1));
     }
   lua_pushvalue (L, 1);
@@ -418,8 +418,8 @@ static const char* const query_modes[] = { "gtype", "repo", "addr", NULL };
    'gtype': returns real gtype of this instance, nil when it is not boxed.
    'repo':  returns repotable of this instance.
    'addr': returns address of the object.  If 3rd argument is either
-           gtype or info, checks, whether record conforms to the specs
-           and if not, throws an error.  */
+	   gtype or info, checks, whether record conforms to the specs
+	   and if not, throws an error.  */
 static int
 record_query (lua_State *L)
 {
@@ -450,8 +450,14 @@ record_query (lua_State *L)
       GIBaseInfo **info = lgi_udata_test (L, 3, LGI_GI_INFO);
       if (info == NULL)
 	gtype = lgi_type_get_gtype (L, 3);
-      lgi_type_get_repotype (L, gtype, info != NULL ? *info : NULL);
-      lua_pushlightuserdata (L, lgi_record_2c (L, 1, TRUE, FALSE));
+      if (info != NULL || gtype != G_TYPE_INVALID)
+	{
+	  lgi_type_get_repotype (L, gtype, info != NULL ? *info : NULL);
+	  lua_pushlightuserdata (L, lgi_record_2c (L, 1, TRUE, FALSE));
+	}
+      else
+	lua_pushlightuserdata (L, record_check (L, 1)->addr);
+
       return 1;
     }
 }
