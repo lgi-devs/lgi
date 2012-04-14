@@ -224,6 +224,14 @@ hierarchy in Lua-friendly way:
        }
     }
 
+There is also possibility to create instances of classes for which the
+introspection typelib data is not available, only GType is known.  Use
+`GObject.Object.new()` as illustrated in following sample:
+
+    local gtype = 'ForeignWidget'
+    local widget = GObject.Object.new(gtype)
+    local window = Gtk.Window { title = 'foreign', widget }
+
 ### 3.2. Calling methods
 
 Methods are functions grouped inside class (or interface)
@@ -601,13 +609,48 @@ usage follows:
 Note that format string is formatted using Lua's `string.format()`, so
 the rules for Lua formatting strings apply here.
 
-## 8. GObject basic constructs
+## 8. Interoperability with native code
+
+There might be some scenarios where it is important to either export
+objects or records created in Lua into C code or vice versa.  LGI
+allows transfers using Lua `lightuserdata` type.  To get native
+pointer to the LGI object, use `_native` attribute of the object.  To
+create LGI object from external pointer, it is possible to pass
+lightuserdata with object pointer to type constructor.  Following
+example illustrates both techniques:
+
+    -- Create Lua-side window object.
+    local window = Gtk.Window { title = 'Hello' }
+    
+    -- Get native pointer to this object.
+    local window_ptr = window._native
+    
+    // window_ptr can be now passed to C code, which can use it.
+    GtkWindow *window = lua_touserdata (L, x);
+    char *title;
+    g_object_get (window, "title", &title);
+    g_assert (g_str_equal (title, "Hello"));
+    g_free (title);
+    
+    // Create object on the C side and pass it to Lua
+    GtkButton *button = gtk_button_new_with_label ("Foreign");
+    lua_pushlightuserdata (L, button);
+    lua_call (L, ...);
+    
+    -- Retrieve button on the Lua side.
+    assert(type(button) == 'userdata')
+    window:add(Gtk.Button(button))
+
+Note that while the example demonstrates objects, the same mechanism
+works also for structures and unions.
+
+## 9. GObject basic constructs
 
 Although GObject library is already covered by gobject-introspection,
 most of the elements in it are basic object system building blocks and
 either need or greatly benefit from special handling by LGI.
 
-### 8.1. GObject.Type
+### 9.1. GObject.Type
 
 Contrary to C `GType` representation (which is unsigned number), LGI
 represents GType by its name, as a string.  GType-related constants
@@ -653,14 +696,14 @@ any loaded component which has its type assigned.  Some examples of
     print(GObject.Type.parent(Gtk.Window))
     -- prints "GtkBin"
 
-### 8.2. GObject.Value
+### 9.2. GObject.Value
 
 LGI does not implement any automatic `GValue` boxing or unboxing,
 because this would involve guessing `GType` from Lua value, which is
 generally unsafe.  Instead, an easy to use and convenient wrappers for
 accessing `GValue` type and contents are provided.
 
-#### 8.2.1. Creation
+#### 9.2.1. Creation
 
 To create new `GObject.Value` instances, use similar method as for
 creating new structures or classes, i.e. 'call' `GObject.Value` type.
@@ -677,7 +720,7 @@ examples for creating new values follow:
     local null_window = GObject.Value(Gtk.Window)
     local window = GObject.Value(Gtk.Window, Gtk.Window())
 
-#### 8.2.2. Boxing and unboxing GObject.Value instances
+#### 9.2.2. Boxing and unboxing GObject.Value instances
 
 `GObject.Value` adds two new virtual properties, called `gtype` and
 `value`.  `gtype` contains actual type of the value, while `value`
@@ -711,7 +754,7 @@ methods (e.g. `g_value_get_string()` is accessible as
 instance can be written as `value:get_string()`), `value` and `gtype`
 abstract properties are recommended to be used instead.
 
-### 8.3. GObject.Closure
+### 9.3. GObject.Closure
 
 Similar to GObject.Value, no automatic GClosure boxing is implemented.
 To create a new instance of `GClosure`, 'call' closure type and
