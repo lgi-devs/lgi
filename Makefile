@@ -5,7 +5,7 @@
 # License: MIT
 #
 
-VERSION = 0.4
+VERSION = 0.5
 MAKE ?= make
 
 ROCK = lgi-$(VERSION)-1.rockspec
