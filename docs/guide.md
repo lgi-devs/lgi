@@ -394,12 +394,12 @@ this construct:
     print(Gtk.Window:is_type_of(nil))       -- prints 'false'
 
 There is also possibility to query the type-table from instantiated
-object, using `type` property.
+object, using `_type` property.
 
     -- Checks, whether 'unknown' conforms to the type of the 'template'
     -- object.
     function same_type(template, unknown)
-       local type = template.type
+       local type = template._type
        return type:is_type_of(unknown)
     end
 

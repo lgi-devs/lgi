@@ -119,11 +119,11 @@ function InitiallyUnowned:_construct(...)
 end
 
 -- Reading 'class' yields real instance of the object class.
-Object._attribute = { class = {}, type = {} }
+Object._attribute = { class = {}, _type = {} }
 function Object._attribute.class:get()
    return core.object.query(self, 'class')
 end
-function Object._attribute.type:get()
+function Object._attribute._type:get()
    return core.object.query(self, 'repo')
 end
 
