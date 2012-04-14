@@ -1,7 +1,7 @@
 /*
  * Dynamic Lua binding to GObject using dynamic gobject-introspection.
  *
- * Copyright (c) 2010, 2011 Pavel Holejsovsky
+ * Copyright (c) 2010, 2011, 2012 Pavel Holejsovsky
  * Licensed under the MIT license:
  * http://www.opensource.org/licenses/mit-license.php
  *
@@ -51,6 +51,14 @@ const char *lgi_sd (lua_State *L)
   return msg;
 }
 #endif
+
+/* lightuserdata of this address is a key in LUA_REGISTRYINDEX table
+   to repo table. */
+static int repo;
+
+/* lightuserdata of this address is a key in LUA_REGISTRYINDEX table
+   to index table mapping lightuserdata-gtype -> repotable. */
+static int repo_index;
 
 void *
 lgi_udata_test (lua_State *L, int narg, const char *name)
@@ -114,8 +122,8 @@ lgi_type_get_repotype (lua_State *L, GType gtype, GIBaseInfo *info)
 {
   luaL_checkstack (L, 4, "");
 
-  /* Get repo table. */
-  lua_pushlightuserdata (L, &lgi_addr_repo);
+  /* Get repo-index table. */
+  lua_pushlightuserdata (L, &repo_index);
   lua_rawget (L, LUA_REGISTRYINDEX);
 
   /* Prepare gtype, if not given directly. */
@@ -126,7 +134,8 @@ lgi_type_get_repotype (lua_State *L, GType gtype, GIBaseInfo *info)
 	gtype = G_TYPE_INVALID;
     }
 
-  /* First of all, check direct indexing of repo by gtype, is fastest. */
+  /* First of all, check direct indexing of repo-index by gtype,
+     should be fastest. */
   if (gtype != G_TYPE_INVALID)
     {
       lua_pushnumber (L, gtype);
@@ -150,10 +159,12 @@ lgi_type_get_repotype (lua_State *L, GType gtype, GIBaseInfo *info)
 
       if (info)
 	{
-	  lua_getfield (L, -3, g_base_info_get_namespace (info));
+	  lua_pushlightuserdata (L, &repo);
+	  lua_rawget (L, LUA_REGISTRYINDEX);
+	  lua_getfield (L, -1, g_base_info_get_namespace (info));
 	  lua_getfield (L, -1, g_base_info_get_name (info));
-	  lua_replace (L, -4);
-	  lua_pop (L, 2);
+	  lua_replace (L, -5);
+	  lua_pop (L, 3);
 	}
       else
 	lua_pop (L, 1);
@@ -436,7 +447,15 @@ static const struct luaL_Reg lgi_reg[] = {
   { NULL, NULL }
 };
 
-int lgi_addr_repo;
+static void
+create_repo_table (lua_State *L, const char *name, void *key)
+{
+  lua_newtable (L);
+  lua_pushlightuserdata (L, key);
+  lua_pushvalue (L, -2);
+  lua_rawset (L, LUA_REGISTRYINDEX);
+  lua_setfield (L, -2, name);
+}
 
 int
 luaopen_lgi_corelgilua51 (lua_State* L)
@@ -481,12 +500,9 @@ luaopen_lgi_corelgilua51 (lua_State* L)
   lua_newtable (L);
   luaL_register (L, NULL, lgi_reg);
 
-  /* Create repo table. */
-  lua_newtable (L);
-  lua_pushlightuserdata (L, &lgi_addr_repo);
-  lua_pushvalue (L, -2);
-  lua_rawset (L, LUA_REGISTRYINDEX);
-  lua_setfield (L, -2, "repo");
+  /* Create repo and index table. */
+  create_repo_table (L, "index", &repo_index);
+  create_repo_table (L, "repo", &repo);
 
   /* Initialize modules. */
   lgi_buffer_init (L);
