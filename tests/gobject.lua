@@ -55,3 +55,18 @@ function gobject.initunk_new()
    o = nil
    collectgarbage()
 end
+
+function gobject.native()
+   local GObject = lgi.GObject
+   local o = GObject.Object()
+   local p = o._native
+   check(type(p) == 'userdata')
+   check(GObject.Object(p) == o)
+end
+
+function gobject.gtype_create()
+   local GObject = lgi.GObject
+   local Gio = lgi.Gio
+   local m = GObject.Object.new(Gio.ThemedIcon, { name = 'icon' })
+   check(Gio.ThemedIcon:is_type_of(m))
+end
