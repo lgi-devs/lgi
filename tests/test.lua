@@ -105,6 +105,7 @@ for _, sourcefile in ipairs {
    'gireg.lua',
    'marshal.lua',
    'corocbk.lua',
+   'record.lua',
    'gobject.lua',
    'variant.lua',
    'gtk.lua',

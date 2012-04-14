@@ -115,6 +115,9 @@ function class.class_mt:_element(instance, symbol)
    local element, category = component.mt._element(self, instance, symbol)
    if element then return element, category end
 
+   -- Special handling of '_native' attribute.
+   if symbol == '_native' then return symbol, '_internal' end
+
    -- Check parent and all implemented interfaces.
    local parent = rawget(self, '_parent')
    if parent then
@@ -128,6 +131,13 @@ function class.class_mt:_element(instance, symbol)
    end
 end
 
+-- Add accessor for 'internal' fields handling.
+function class.class_mt:_access_internal(instance, element, ...)
+   if select('#', ...) ~= 0 or element ~= '_native' then return end
+   return core.object.query(instance, 'addr')
+end
+
+-- Object constructor, does not accept any arguments.  Overriden later
 -- Implementation of field accessor.  Note that compound fields are
 -- not supported in classes (because they are not seen in the wild and
 -- I'm lazy).
