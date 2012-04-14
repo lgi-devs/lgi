@@ -175,23 +175,26 @@ lgi_type_get_gtype (lua_State *L, int narg)
     case LUA_TNUMBER:
       return lua_tonumber (L, narg);
 
+    case LUA_TLIGHTUSERDATA:
+      return (GType) lua_touserdata (L, narg);
+
     case LUA_TSTRING:
       return g_type_from_name (lua_tostring (L, narg));
 
     case LUA_TTABLE:
       {
-        GType gtype;
+	GType gtype;
 	lgi_makeabs (L, narg);
 	lua_pushstring (L, "_gtype");
-        lua_rawget (L, narg);
-        gtype = lgi_type_get_gtype (L, -1);
-        lua_pop (L, 1);
-        return gtype;
+	lua_rawget (L, narg);
+	gtype = lgi_type_get_gtype (L, -1);
+	lua_pop (L, 1);
+	return gtype;
       }
 
     default:
       return luaL_error (L, "GType expected, got %s",
-                         lua_typename (L, lua_type (L, narg)));
+			 lua_typename (L, lua_type (L, narg)));
     }
 }
 
@@ -223,11 +226,11 @@ lgi_guard_create (lua_State *L, GDestroyNotify destroy)
   return &guard->data;
 }
 
-/* Converts GType to number. */
+/* Converts any allowed GType kind to lightuserdata form. */
 static int
 core_gtype (lua_State *L)
 {
-  lua_pushnumber (L, lgi_type_get_gtype (L, 1));
+  lua_pushlightuserdata (L, (void *) lgi_type_get_gtype (L, 1));
   return 1;
 }
 

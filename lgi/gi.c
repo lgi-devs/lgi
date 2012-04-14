@@ -292,7 +292,7 @@ info_index (lua_State *L)
 	{
 	  GType gtype = g_registered_type_info_get_g_type (*info);
 	  if (gtype != G_TYPE_NONE)
-	    lua_pushnumber (L, gtype);
+	    lua_pushlightuserdata (L, (void *) gtype);
 	  else
 	    lua_pushnil (L);
 	  return 1;
@@ -730,9 +730,9 @@ gi_isinfo (lua_State *L)
 static int
 gi_index (lua_State *L)
 {
-  if (lua_type (L, 2) == LUA_TNUMBER)
+  if (lua_type (L, 2) == LUA_TLIGHTUSERDATA)
     {
-      GType gtype = luaL_checknumber (L, 2);
+      GType gtype = (GType) lua_touserdata (L, 2);
       GIBaseInfo *info = (gtype != G_TYPE_INVALID)
 	? g_irepository_find_by_gtype (NULL, gtype) : NULL;
       return lgi_gi_info_new (L, info);
@@ -816,8 +816,8 @@ lgi_field_info_get_offset (GIFieldInfo *info)
   if (parameter_value_info == NULL)
     {
       if (parameter_info == NULL)
-        parameter_info = g_irepository_find_by_name (NULL,
-                                                     "GObject", "Parameter");
+	parameter_info = g_irepository_find_by_name (NULL,
+						     "GObject", "Parameter");
       parameter_value_info = g_struct_info_get_field (parameter_info, 1);
     }
   if (parameter_value_info && g_base_info_equal (info, parameter_value_info))

@@ -297,7 +297,7 @@ record_gc (lua_State *L)
       GType gtype;
       lua_getfenv (L, 1);
       lua_getfield (L, -1, "_gtype");
-      gtype = lua_tonumber (L, -1);
+      gtype = (GType) lua_touserdata (L, -1);
       if (G_TYPE_IS_BOXED (gtype))
 	g_boxed_free (gtype, record->addr);
       else
