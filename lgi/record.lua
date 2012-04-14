@@ -109,7 +109,7 @@ function record.mt:_new(param, owns)
       info = assert(gi[ns][name])
    end
 
-   if type(param) == 'userdata' then
+   if type(param) == 'userdata' or type(param) == 'number' then
       -- Wrap existing pointer.
       struct = core.record.new(info, param, owns)
    else
