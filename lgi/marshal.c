@@ -512,7 +512,8 @@ marshal_2c_list (lua_State *L, GITypeInfo *ti, GITypeTag list_tag,
       GIArgument eval;
       lua_pushnumber (L, index--);
       lua_gettable (L, narg);
-      to_pop = lgi_marshal_2c (L, eti, NULL, exfer, &eval, -1, 0, NULL, NULL);
+      to_pop = lgi_marshal_2c (L, eti, NULL, exfer, &eval, -1,
+			       PARENT_FORCE_POINTER, NULL, NULL);
 
       /* Prepend new list element and reassign the guard. */
       if (list_tag == GI_TYPE_TAG_GSLIST)
@@ -555,7 +556,7 @@ marshal_2lua_list (lua_State *L, GITypeInfo *ti, GITypeTag list_tag,
       /* Store it into the table. */
       lgi_marshal_2lua (L, eti, (xfer == GI_TRANSFER_EVERYTHING) ?
 			GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING,
-			eval, 0, NULL, NULL);
+			eval, PARENT_FORCE_POINTER, NULL, NULL);
       lua_rawseti(L, -2, ++index);
     }
 
@@ -700,7 +701,7 @@ marshal_2lua_hash (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 	  /* Marshal key and value to the stack. */
 	  for (i = 0; i < 2; i++)
 	    lgi_marshal_2lua (L, eti[i], GI_TRANSFER_NOTHING, &eval[i],
-			      0, NULL, NULL);
+			      PARENT_FORCE_POINTER, NULL, NULL);
 
 	  /* Store these two elements to the table. */
 	  lua_settable (L, -3);
