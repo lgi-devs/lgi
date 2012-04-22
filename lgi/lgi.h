@@ -106,6 +106,11 @@ void lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 		       gpointer source, int parent,
 		       GICallableInfo *ci, void **args);
 
+/* Adjusts contents of GIArgument to fulfill ffi_call 'special
+   requirements'. */
+void lgi_marshal_return_2lua (GIArgument *retval, GITypeTag tag);
+void lgi_marshal_return_2c (GIArgument *retval, GITypeTag tag);
+
 /* Marshalls field to/from given memory (struct, union or
    object). Returns number of results pushed to the stack (0 or 1). */
 int lgi_marshal_field (lua_State *L, gpointer object, gboolean getmode,

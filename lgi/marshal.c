@@ -9,6 +9,7 @@
  */
 
 #include <string.h>
+#include <ffi.h>
 #include "lgi.h"
 
 /* Special value for 'parent' argument of marshal_2c/lua.  When parent
@@ -29,6 +30,56 @@ check_number (lua_State *L, int narg, lua_Number val_min, lua_Number val_max)
       luaL_argerror (L, narg, lua_tostring (L, -1));
     }
   return val;
+}
+
+static inline void
+marshal_return (GIArgument *retval, GITypeTag tag, gboolean tolua)
+{
+  union {
+    GIArgument arg;
+    ffi_arg u;
+    ffi_sarg s;
+  } *rs = (gpointer) retval;
+
+  switch (tag)
+    {
+#define HANDLE_INT(nameup, namelow, uniontype)				\
+      case GI_TYPE_TAG_ ## nameup:					\
+	if (sizeof (g ## namelow) < sizeof(rs->uniontype))		\
+	  {								\
+	    if (tolua)							\
+	      rs->arg.v_ ## namelow = (g ## namelow) rs->uniontype;	\
+	    else							\
+	      rs->uniontype = rs->arg.v_ ## namelow;			\
+	  }								\
+	break
+
+      HANDLE_INT (INT8, int8, s);
+      HANDLE_INT (INT16, int16, s);
+      HANDLE_INT (INT32, int32, s);
+      HANDLE_INT (INT64, int64, s);
+      HANDLE_INT (UINT8, uint8, u);
+      HANDLE_INT (UINT16, uint16, u);
+      HANDLE_INT (UINT32, uint32, u);
+      HANDLE_INT (UINT64, uint64, u);
+
+#undef HANDLE_INT
+
+    default:
+      break;
+    }
+}
+
+void
+lgi_marshal_return_2lua (GIArgument *retval, GITypeTag tag)
+{
+  marshal_return (retval, tag, TRUE);
+}
+
+void
+lgi_marshal_return_2c (GIArgument *retval, GITypeTag tag)
+{
+  marshal_return (retval, tag, FALSE);
 }
 
 /* Marshals integral types to C.  If requested, makes sure that the
@@ -719,7 +770,7 @@ marshal_2c_callable (lua_State *L, GICallableInfo *ci, GIArgInfo *ai,
 	    ((GIArgument *) args[arg])->v_pointer = lgi_closure_destroy;
 	}
     }
-  
+
   if (user_data == NULL)
     {
       /* Closure without user_data block.  Create new data block,
@@ -735,7 +786,7 @@ marshal_2c_callable (lua_State *L, GICallableInfo *ci, GIArgInfo *ai,
     }
 
   /* Create the closure. */
-  *callback = lgi_closure_create (L, user_data, ci, narg, 
+  *callback = lgi_closure_create (L, user_data, ci, narg,
 				  scope == GI_SCOPE_TYPE_ASYNC);
   return nret;
 }
@@ -837,7 +888,7 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 		lua_call (L, 1, 1);
 		narg = -1;
 	      }
-	    
+
 	    /* Directly store underlying value. */
 	    marshal_2c_int (L, g_enum_info_get_storage_type (info), arg, narg,
 			    optional, FALSE);
@@ -934,7 +985,7 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 		{
 		  /* Check memory buffer. */
 		  arg->v_pointer = lgi_udata_test (L, narg, LGI_BYTES_BUFFER);
-		  if (!arg->v_pointer) 
+		  if (!arg->v_pointer)
 		    {
 		      /* Check object. */
 		      arg->v_pointer = lgi_object_2c (L, narg, G_TYPE_INVALID,
@@ -1441,8 +1492,8 @@ gclosure_destroy (gpointer user_data, GClosure *closure)
    like this:
 
    void g_closure_set_marshal_with_data (GClosure        *closure,
-                                         GClosureMarshal  marshal,
-                                         gpointer         user_data,
+					 GClosureMarshal  marshal,
+					 gpointer         user_data,
 					 GDestroyNotify   destroy_notify);
 
    Such method would be introspectable.

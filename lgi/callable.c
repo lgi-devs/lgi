@@ -445,6 +445,7 @@ callable_call (lua_State *L)
   Param *param;
   int i, lua_argi, nret, caller_allocated = 0, nargs;
   GIArgument retval, *args;
+  GITypeTag retval_tag;
   void **ffi_args, **redirect_out;
   GError *err = NULL;
   gpointer state_lock = lgi_state_get_lock (L);
@@ -570,10 +571,12 @@ callable_call (lua_State *L)
 
   /* Handle return value. */
   nret = 0;
-  if ((g_type_info_get_tag (&callable->retval.ti) != GI_TYPE_TAG_VOID
+  retval_tag = g_type_info_get_tag (&callable->retval.ti);
+  if ((retval_tag != GI_TYPE_TAG_VOID
        || g_type_info_is_pointer (&callable->retval.ti))
       && !callable->ignore_retval)
     {
+      lgi_marshal_return_2lua (&retval, retval_tag);
       lgi_marshal_2lua (L, &callable->retval.ti, callable->retval.transfer,
 			&retval, 0, callable->info,
 			ffi_args + callable->has_self);
@@ -793,7 +796,9 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
     {
       /* Marshal return value from Lua. */
       int to_pop;
-      if (g_type_info_get_tag (&callable->retval.ti) != GI_TYPE_TAG_VOID)
+      GITypeTag tag = g_type_info_get_tag (&callable->retval.ti);
+      if (tag != GI_TYPE_TAG_VOID
+	  || g_type_info_is_pointer (&callable->retval.ti))
 	{
 	  if (callable->ignore_retval)
 	    /* Return value should be ignored on Lua side, so we have
@@ -802,6 +807,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	    *(gboolean *) ret = lua_isnoneornil (L, npos) ? FALSE : TRUE;
 	  else
 	    {
+	      lgi_marshal_return_2c ((GIArgument *) ret, tag);
 	      to_pop = lgi_marshal_2c (L, &callable->retval.ti, NULL,
 				       callable->retval.transfer, ret, npos,
 				       FALSE, callable->info,
