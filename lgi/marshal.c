@@ -843,8 +843,18 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
     case GI_TYPE_TAG_UTF8:
     case GI_TYPE_TAG_FILENAME:
       {
-	gchar *str = (gchar *)(optional && lua_isnoneornil (L, narg)
-			       ? NULL : luaL_checkstring (L, narg));
+	gchar *str = NULL;
+	int type = lua_type (L, narg);
+	if (type == LUA_TLIGHTUSERDATA)
+	  str = lua_touserdata (L, narg);
+	else if (!optional || (type != LUA_TNIL && type != LUA_TNONE))
+	{
+	  if (type == LUA_TUSERDATA)
+	    str = (gchar *) lgi_udata_test (L, narg, LGI_BYTES_BUFFER);
+	  if (str == NULL)
+	    str = (gchar *) luaL_checkstring (L, narg);
+	}
+
 	if (tag == GI_TYPE_TAG_FILENAME)
 	  {
 	    /* Convert from UTF-8 to filename encoding. */

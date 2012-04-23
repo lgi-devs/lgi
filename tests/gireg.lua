@@ -326,6 +326,7 @@ function gireg.utf8_const_in()
    local R = lgi.Regress
    local utf8_const = 'const \226\153\165 utf8'
    R.test_utf8_const_in(utf8_const)
+   R.test_utf8_const_in(bytes.new(utf8_const .. '\0'))
 end
 
 function gireg.utf8_out()
