@@ -126,7 +126,7 @@ end
 
 -- Cmdline runner.
 local failed = false
-if #arg == 0 then
+if select('#', ...) == 0 then
    -- Run everything.
    for _, group in ipairs(groups) do
       groups[group]:run()
@@ -134,7 +134,7 @@ if #arg == 0 then
    end
 else
    -- Run just those which pass the mask.
-   for _, mask in ipairs(arg) do
+   for _, mask in ipairs { ... } do
       local group, groupmask = mask:match('^(.-):(.+)$')
       if not group or not groups[group] then
 	 io.write(("No test group for mask `%s' found.\n"):format(mask))
@@ -144,4 +144,7 @@ else
       failed = failed or groups[group].results.failed > 0
    end
 end
-return not failed and 0 or 1
+
+if failed then
+   os.exit(1)
+end
