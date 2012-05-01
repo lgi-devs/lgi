@@ -111,7 +111,10 @@ lgi_record_2lua (lua_State *L, gpointer addr, gboolean own, int parent)
     }
 
   /* Convert 'parent' index to an absolute one. */
-  lgi_makeabs (L, parent);
+  if (parent == LGI_PARENT_IS_RETVAL || parent == LGI_PARENT_FORCE_POINTER)
+    parent = 0;
+  else
+    lgi_makeabs (L, parent);
 
   /* Prepare access to cache. */
   lua_pushlightuserdata (L, &record_cache);

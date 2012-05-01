@@ -86,6 +86,17 @@ gpointer lgi_state_get_lock (lua_State *L);
 void lgi_state_enter (gpointer left_state);
 void lgi_state_leave (gpointer state_lock);
 
+/* Special value for 'parent' argument of marshal_2c/lua.  When parent
+   is set to this value, marshalling takes place always into pointer
+   on the C side.  This isuseful when marshalling value from/to lists,
+   arrays and hashtables. */
+#define LGI_PARENT_FORCE_POINTER G_MAXINT
+
+/* Another special value for 'parent' argument, meaning that the value
+   should be handled as return value, according to ffi_call retval
+   requirements. */
+#define LGI_PARENT_IS_RETVAL (G_MAXINT - 1)
+
 /* Marshalls single value from Lua to GLib/C. Returns number of temporary
    entries pushed to Lua stack, which should be popped before function call
    returns. */
@@ -105,11 +116,6 @@ gboolean lgi_marshal_2c_caller_alloc (lua_State *L, GITypeInfo *ti,
 void lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 		       gpointer source, int parent,
 		       GICallableInfo *ci, void **args);
-
-/* Adjusts contents of GIArgument to fulfill ffi_call 'special
-   requirements'. */
-void lgi_marshal_return_2lua (GIArgument *retval, GITypeTag tag);
-void lgi_marshal_return_2c (GIArgument *retval, GITypeTag tag);
 
 /* Marshalls field to/from given memory (struct, union or
    object). Returns number of results pushed to the stack (0 or 1). */

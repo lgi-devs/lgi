@@ -12,12 +12,6 @@
 #include <ffi.h>
 #include "lgi.h"
 
-/* Special value for 'parent' argument of marshal_2c/lua.  When parent
-   is set to this value, marshalling takes place always into pointer
-   on the C side.  This isuseful when marshalling value from/to lists,
-   arrays and hashtables. */
-#define PARENT_FORCE_POINTER G_MAXINT
-
 /* Checks whether given argument contains number which fits given
    constraints. If yes, returns it, otherwise throws Lua error. */
 static lua_Number
@@ -32,90 +26,56 @@ check_number (lua_State *L, int narg, lua_Number val_min, lua_Number val_max)
   return val;
 }
 
-static inline void
-marshal_return (GIArgument *retval, GITypeTag tag, gboolean tolua)
-{
-  union {
-    GIArgument arg;
-    ffi_arg u;
-    ffi_sarg s;
-  } *rs = (gpointer) retval;
-
-  switch (tag)
-    {
-#define HANDLE_INT(nameup, namelow, uniontype)				\
-      case GI_TYPE_TAG_ ## nameup:					\
-	if (sizeof (g ## namelow) < sizeof(rs->uniontype))		\
-	  {								\
-	    if (tolua)							\
-	      rs->arg.v_ ## namelow = (g ## namelow) rs->uniontype;	\
-	    else							\
-	      rs->uniontype = rs->arg.v_ ## namelow;			\
-	  }								\
-	break
-
-      HANDLE_INT (INT8, int8, s);
-      HANDLE_INT (INT16, int16, s);
-      HANDLE_INT (INT32, int32, s);
-      HANDLE_INT (INT64, int64, s);
-      HANDLE_INT (UINT8, uint8, u);
-      HANDLE_INT (UINT16, uint16, u);
-      HANDLE_INT (UINT32, uint32, u);
-      HANDLE_INT (UINT64, uint64, u);
-
-#undef HANDLE_INT
-
-    default:
-      break;
-    }
-}
-
-void
-lgi_marshal_return_2lua (GIArgument *retval, GITypeTag tag)
-{
-  marshal_return (retval, tag, TRUE);
-}
-
-void
-lgi_marshal_return_2c (GIArgument *retval, GITypeTag tag)
-{
-  marshal_return (retval, tag, FALSE);
-}
+typedef union {
+  GIArgument arg;
+  ffi_arg u;
+  ffi_sarg s;
+} ReturnUnion;
 
 /* Marshals integral types to C.  If requested, makes sure that the
    value is actually marshalled into val->v_pointer no matter what the
    input type is. */
 static void
 marshal_2c_int (lua_State *L, GITypeTag tag, GIArgument *val, int narg,
-		gboolean optional, gboolean use_pointer)
+		gboolean optional, int parent)
 {
   (void) optional;
   switch (tag)
     {
-#define HANDLE_INT(nameup, namelow, ptrconv, pct, val_min, val_max)     \
+#define HANDLE_INT(nameup, namelow, ptrconv, pct, val_min, val_max, ut) \
       case GI_TYPE_TAG_ ## nameup:					\
 	val->v_ ## namelow = check_number (L, narg, val_min, val_max);	\
-	if (use_pointer)                                                \
+	if (parent == LGI_PARENT_FORCE_POINTER)				\
 	  val->v_pointer =						\
 	    G ## ptrconv ## _TO_POINTER ((pct) val->v_ ## namelow);     \
+	else if (parent == LGI_PARENT_IS_RETVAL)			\
+	  {								\
+	    ReturnUnion *ru = (ReturnUnion *) val;			\
+	    ru->ut = ru->arg.v_ ## namelow;				\
+	  }								\
 	break
 
-#define HANDLE_INT_NOPTR(nameup, namelow, val_min, val_max)             \
+#define HANDLE_INT_NOPTR(nameup, namelow, val_min, val_max, ut)		\
       case GI_TYPE_TAG_ ## nameup:					\
 	val->v_ ## namelow = check_number (L, narg, val_min, val_max);	\
-	g_assert (!use_pointer);                                        \
+	g_assert (parent != LGI_PARENT_FORCE_POINTER);			\
+	if (parent == LGI_PARENT_IS_RETVAL)				\
+	  {								\
+	    ReturnUnion *ru = (ReturnUnion *) val;			\
+	    ru->ut = ru->arg.v_ ## namelow;				\
+	  }								\
 	break
 
-      HANDLE_INT(INT8, int8, INT, gint, -0x80, 0x7f);
-      HANDLE_INT(UINT8, uint8, UINT, guint, 0, 0xff);
-      HANDLE_INT(INT16, int16, INT, gint, -0x8000, 0x7fff);
-      HANDLE_INT(UINT16, uint16, UINT, guint, 0, 0xffff);
-      HANDLE_INT(INT32, int32, INT, gint, -0x80000000LL, 0x7fffffffLL);
-      HANDLE_INT(UINT32, uint32, UINT, guint, 0, 0xffffffffUL);
-      HANDLE_INT(UNICHAR, uint32, UINT, guint, 0, 0x7fffffffLL);
+      HANDLE_INT(INT8, int8, INT, gint, -0x80, 0x7f, s);
+      HANDLE_INT(UINT8, uint8, UINT, guint, 0, 0xff, u);
+      HANDLE_INT(INT16, int16, INT, gint, -0x8000, 0x7fff, s);
+      HANDLE_INT(UINT16, uint16, UINT, guint, 0, 0xffff, u);
+      HANDLE_INT(INT32, int32, INT, gint, -0x80000000LL, 0x7fffffffLL, s);
+      HANDLE_INT(UINT32, uint32, UINT, guint, 0, 0xffffffffUL, u);
+      HANDLE_INT(UNICHAR, uint32, UINT, guint, 0, 0x7fffffffLL, u);
       HANDLE_INT_NOPTR(INT64, int64, ((lua_Number) -0x7f00000000000000LL) - 1,
-		       0x7fffffffffffffffLL);
-      HANDLE_INT_NOPTR(UINT64, uint64, 0, 0xffffffffffffffffULL);
+		       0x7fffffffffffffffLL, s);
+      HANDLE_INT_NOPTR(UINT64, uint64, 0, 0xffffffffffffffffULL, u);
 #undef HANDLE_INT
 #undef HANDLE_INT_NOPTR
 
@@ -138,26 +98,31 @@ marshal_2c_int (lua_State *L, GITypeTag tag, GIArgument *val, int narg,
 /* Marshals integral types from C to Lua. */
 static void
 marshal_2lua_int (lua_State *L, GITypeTag tag, GIArgument *val,
-		  gboolean use_pointer)
+		  int parent)
 {
   switch (tag)
     {
-#define HANDLE_INT(nameupper, namelower, ptrconv)	\
-      case GI_TYPE_TAG_ ## nameupper:			\
-	lua_pushnumber (L, use_pointer			\
-	  ?  GPOINTER_TO_ ## ptrconv (val->v_pointer)	\
-	  : val->v_ ## namelower);			\
+#define HANDLE_INT(nameupper, namelower, ptrconv, ut)			\
+      case GI_TYPE_TAG_ ## nameupper:					\
+	if (parent == LGI_PARENT_IS_RETVAL)				\
+	  {								\
+	    ReturnUnion *ru = (ReturnUnion *) val;			\
+	    ru->arg.v_ ## namelower = (g ## namelower) ru->ut;		\
+	  }								\
+	lua_pushnumber (L, parent == LGI_PARENT_FORCE_POINTER		\
+			?  GPOINTER_TO_ ## ptrconv (val->v_pointer)	\
+			: val->v_ ## namelower);			\
 	break;
 
-      HANDLE_INT(INT8, int8, INT);
-      HANDLE_INT(UINT8, uint8, UINT);
-      HANDLE_INT(INT16, int16, INT);
-      HANDLE_INT(UINT16, uint16, UINT);
-      HANDLE_INT(INT32, int32, INT);
-      HANDLE_INT(UINT32, uint32, UINT);
-      HANDLE_INT(UNICHAR, uint32, UINT);
-      HANDLE_INT(INT64, int64, INT);
-      HANDLE_INT(UINT64, uint64, UINT);
+      HANDLE_INT(INT8, int8, INT, s);
+      HANDLE_INT(UINT8, uint8, UINT, u);
+      HANDLE_INT(INT16, int16, INT, s);
+      HANDLE_INT(UINT16, uint16, UINT, u);
+      HANDLE_INT(INT32, int32, INT, s);
+      HANDLE_INT(UINT32, uint32, UINT, u);
+      HANDLE_INT(UNICHAR, uint32, UINT, u);
+      HANDLE_INT(INT64, int64, INT, s);
+      HANDLE_INT(UINT64, uint64, UINT, u);
 #undef HANDLE_INT
 
     case GI_TYPE_TAG_GTYPE:
@@ -387,6 +352,10 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
   gint index, eti_guard;
   char *data;
 
+  /* Avoid propagating return value marshaling flag to array elements. */
+  if (parent == LGI_PARENT_IS_RETVAL)
+    parent = 0;
+
   /* Get pointer to array data. */
   if (array == NULL)
     {
@@ -513,7 +482,7 @@ marshal_2c_list (lua_State *L, GITypeInfo *ti, GITypeTag list_tag,
       lua_pushnumber (L, index--);
       lua_gettable (L, narg);
       to_pop = lgi_marshal_2c (L, eti, NULL, exfer, &eval, -1,
-			       PARENT_FORCE_POINTER, NULL, NULL);
+			       LGI_PARENT_FORCE_POINTER, NULL, NULL);
 
       /* Prepend new list element and reassign the guard. */
       if (list_tag == GI_TYPE_TAG_GSLIST)
@@ -556,7 +525,7 @@ marshal_2lua_list (lua_State *L, GITypeInfo *ti, GITypeTag list_tag,
       /* Store it into the table. */
       lgi_marshal_2lua (L, eti, (xfer == GI_TRANSFER_EVERYTHING) ?
 			GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING,
-			eval, PARENT_FORCE_POINTER, NULL, NULL);
+			eval, LGI_PARENT_FORCE_POINTER, NULL, NULL);
       lua_rawseti(L, -2, ++index);
     }
 
@@ -644,7 +613,7 @@ marshal_2c_hash (lua_State *L, GITypeInfo *ti, GHashTable **table, int narg,
 	  /* Marshal key and value from the table. */
 	  for (i = 0; i < 2; i++)
 	    vals += lgi_marshal_2c (L, eti[i], NULL, exfer, &eval[i],
-				    key_pos + i, PARENT_FORCE_POINTER,
+				    key_pos + i, LGI_PARENT_FORCE_POINTER,
 				    NULL, NULL);
 
 	  /* Insert newly marshalled pointers into the table. */
@@ -701,7 +670,7 @@ marshal_2lua_hash (lua_State *L, GITypeInfo *ti, GITransfer xfer,
 	  /* Marshal key and value to the stack. */
 	  for (i = 0; i < 2; i++)
 	    lgi_marshal_2lua (L, eti[i], GI_TRANSFER_NOTHING, &eval[i],
-			      PARENT_FORCE_POINTER, NULL, NULL);
+			      LGI_PARENT_FORCE_POINTER, NULL, NULL);
 
 	  /* Store these two elements to the table. */
 	  lua_settable (L, -3);
@@ -815,8 +784,13 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
       {
 	gboolean result;
 	result = lua_toboolean (L, narg) ? TRUE : FALSE;
-	if (parent == PARENT_FORCE_POINTER)
+	if (parent == LGI_PARENT_FORCE_POINTER)
 	  arg->v_pointer = GINT_TO_POINTER (result);
+	else if (parent == LGI_PARENT_IS_RETVAL)
+	  {
+	    ReturnUnion *ru = (ReturnUnion *) arg;
+	    ru->s = result;
+	  }
 	else
 	  arg->v_boolean = result;
 	break;
@@ -830,7 +804,7 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 	  ? 0 : luaL_checknumber (L, narg);
 
 	/* Marshalling float/double into pointer target is not possible. */
-	g_return_val_if_fail (parent != PARENT_FORCE_POINTER, 0);
+	g_return_val_if_fail (parent != LGI_PARENT_FORCE_POINTER, 0);
 
 	/* Store read value into chosen target. */
 	if (tag == GI_TYPE_TAG_FLOAT)
@@ -872,7 +846,7 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 	  }
 	else if (transfer == GI_TRANSFER_EVERYTHING)
 	  str = g_strdup (str);
-	if (parent == PARENT_FORCE_POINTER)
+	if (parent == LGI_PARENT_FORCE_POINTER)
 	  arg->v_pointer = str;
 	else
 	  arg->v_string = str;
@@ -902,7 +876,7 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 
 	    /* Directly store underlying value. */
 	    marshal_2c_int (L, g_enum_info_get_storage_type (info), arg, narg,
-			    optional, FALSE);
+			    optional, parent);
 	    break;
 
 	  case GI_INFO_TYPE_STRUCT:
@@ -1014,8 +988,7 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
       break;
 
     default:
-      marshal_2c_int (L, tag, arg, narg, optional,
-		      parent == PARENT_FORCE_POINTER);
+      marshal_2c_int (L, tag, arg, narg, optional, parent);
     }
 
   return nret;
@@ -1129,12 +1102,17 @@ lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
       break;
 
     case GI_TYPE_TAG_BOOLEAN:
+      if (parent == LGI_PARENT_IS_RETVAL)
+	{
+	  ReturnUnion *ru = (ReturnUnion *) arg;
+	  ru->arg.v_boolean = ru->s;
+	}
       lua_pushboolean (L, arg->v_boolean);
       break;
 
     case GI_TYPE_TAG_FLOAT:
     case GI_TYPE_TAG_DOUBLE:
-      g_return_if_fail (parent != PARENT_FORCE_POINTER);
+      g_return_if_fail (parent != LGI_PARENT_FORCE_POINTER);
       lua_pushnumber (L, (tag == GI_TYPE_TAG_FLOAT)
 		      ? arg->v_float : arg->v_double);
       break;
@@ -1142,7 +1120,7 @@ lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
     case GI_TYPE_TAG_UTF8:
     case GI_TYPE_TAG_FILENAME:
       {
-	gchar *str = (parent == PARENT_FORCE_POINTER)
+	gchar *str = (parent == LGI_PARENT_FORCE_POINTER)
 	  ? arg->v_pointer : arg->v_string;
 	if (tag == GI_TYPE_TAG_FILENAME && str != NULL)
 	  {
@@ -1173,7 +1151,7 @@ lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
 
 	    /* Unmarshal the numeric value. */
 	    marshal_2lua_int (L, g_enum_info_get_storage_type (info),
-			      arg, FALSE);
+			      arg, parent);
 
 	    /* Get symbolic value from the table. */
 	    lua_gettable (L, -2);
@@ -1229,7 +1207,7 @@ lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
       break;
 
     default:
-      marshal_2lua_int (L, tag, arg, parent == PARENT_FORCE_POINTER);
+      marshal_2lua_int (L, tag, arg, parent);
     }
 }
 

@@ -576,9 +576,8 @@ callable_call (lua_State *L)
        || g_type_info_is_pointer (&callable->retval.ti))
       && !callable->ignore_retval)
     {
-      lgi_marshal_return_2lua (&retval, retval_tag);
       lgi_marshal_2lua (L, &callable->retval.ti, callable->retval.transfer,
-			&retval, 0, callable->info,
+			&retval, LGI_PARENT_IS_RETVAL, callable->info,
 			ffi_args + callable->has_self);
       nret++;
       lua_insert (L, -caller_allocated - 1);
@@ -807,10 +806,9 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	    *(gboolean *) ret = lua_isnoneornil (L, npos) ? FALSE : TRUE;
 	  else
 	    {
-	      lgi_marshal_return_2c ((GIArgument *) ret, tag);
 	      to_pop = lgi_marshal_2c (L, &callable->retval.ti, NULL,
 				       callable->retval.transfer, ret, npos,
-				       FALSE, callable->info,
+				       LGI_PARENT_IS_RETVAL, callable->info,
 				       args + callable->has_self);
 	      if (to_pop != 0)
 		{
