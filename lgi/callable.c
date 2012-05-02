@@ -582,6 +582,16 @@ callable_call (lua_State *L)
       nret++;
       lua_insert (L, -caller_allocated - 1);
     }
+  else if (callable->ignore_retval)
+    {
+      /* Make sure that returned boolean is converted according to
+	 ffi_call rules. */
+      union {
+	GIArgument arg;
+	ffi_sarg s;
+      } *ru = (gpointer) &retval;
+      ru->arg.v_boolean = (gboolean) ru->s;
+    }
 
   /* Check, whether function threw. */
   if (err != NULL)
@@ -803,7 +813,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	    /* Return value should be ignored on Lua side, so we have
 	       to synthesize the return value for C side.  We should
 	       return FALSE if next output argument is nil. */
-	    *(gboolean *) ret = lua_isnoneornil (L, npos) ? FALSE : TRUE;
+	    *(ffi_sarg *) ret = lua_isnoneornil (L, npos) ? FALSE : TRUE;
 	  else
 	    {
 	      to_pop = lgi_marshal_2c (L, &callable->retval.ti, NULL,
