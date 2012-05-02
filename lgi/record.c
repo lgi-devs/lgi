@@ -38,12 +38,18 @@ typedef struct _Record
   /* Address of the record memory data. */
   gpointer addr;
 
-  /* Store mode of the record. TODO: Might be possible to stuff it
-     into 2 lowest bits of addr, although it is a bit hacky. */
+  /* Store mode of the record. */
   RecordStore store;
 
-  /* If the record is allocated 'on the stack', its data is here. */
-  gchar data[1];
+  /* If the record is allocated 'on the stack', its data is
+     here. Anonymous union makes sure that data is properly aligned to
+     hold (hopefully) any structure. */
+  union {
+    gchar data[1];
+    double align_double;
+    long align_long;
+    gpointer align_ptr;
+  };
 } Record;
 
 /* lightuserdata key to LUA_REGISTRYINDEX containing metatable for
