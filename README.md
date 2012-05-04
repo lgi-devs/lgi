@@ -41,6 +41,10 @@ markdown processor if you want to read it in HTML.
 
 ## History
 
+### 0.5.1 (3-May-2012)
+- Fix a few problems on more exotic architectures (s390x, mips, ia64).
+- Allow passing `byte.buffer` when UTF8 string is requested.
+
 ### 0.5 (15-Apr-2012)
 
 - Port gtk3-demo to Lua code.  Try running 'lua samples/gtk-demo/main.lua'
