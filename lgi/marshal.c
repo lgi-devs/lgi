@@ -48,7 +48,8 @@ marshal_2c_int (lua_State *L, GITypeTag tag, GIArgument *val, int narg,
 	if (parent == LGI_PARENT_FORCE_POINTER)				\
 	  val->v_pointer =						\
 	    G ## ptrconv ## _TO_POINTER ((pct) val->v_ ## namelow);     \
-	else if (parent == LGI_PARENT_IS_RETVAL)			\
+	else if (sizeof (g ## namelow) <= sizeof (long)			\
+		 && parent == LGI_PARENT_IS_RETVAL)			\
 	  {								\
 	    ReturnUnion *ru = (ReturnUnion *) val;			\
 	    ru->ut = ru->arg.v_ ## namelow;				\
@@ -59,7 +60,8 @@ marshal_2c_int (lua_State *L, GITypeTag tag, GIArgument *val, int narg,
       case GI_TYPE_TAG_ ## nameup:					\
 	val->v_ ## namelow = check_number (L, narg, val_min, val_max);	\
 	g_assert (parent != LGI_PARENT_FORCE_POINTER);			\
-	if (parent == LGI_PARENT_IS_RETVAL)				\
+	if (sizeof (g ## namelow) <= sizeof (long)			\
+		 && parent == LGI_PARENT_IS_RETVAL)			\
 	  {								\
 	    ReturnUnion *ru = (ReturnUnion *) val;			\
 	    ru->ut = ru->arg.v_ ## namelow;				\
@@ -104,7 +106,8 @@ marshal_2lua_int (lua_State *L, GITypeTag tag, GIArgument *val,
     {
 #define HANDLE_INT(nameupper, namelower, ptrconv, ut)			\
       case GI_TYPE_TAG_ ## nameupper:					\
-	if (parent == LGI_PARENT_IS_RETVAL)				\
+	if (sizeof (g ## namelower) <= sizeof (long)			\
+	    && parent == LGI_PARENT_IS_RETVAL)				\
 	  {								\
 	    ReturnUnion *ru = (ReturnUnion *) val;			\
 	    ru->arg.v_ ## namelower = (g ## namelower) ru->ut;		\
