@@ -42,8 +42,11 @@ function testsuite.group:run(id)
       end
       local ok, msg
       local func = self[self[num]]
-      if self.debug then func() ok = true else
-	 ok, msg = pcall(func)
+      if self.debug then
+	 func()
+	 ok = true
+      else
+	 ok, msg = xpcall(func, debug.traceback)
       end
       collectgarbage()
       if not ok then
