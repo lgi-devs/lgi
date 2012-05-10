@@ -16,7 +16,7 @@ LIBFLAG = -shared
 CCSHARED = -fPIC
 endif
 
-PKGS = gio-2.0 cairo cairo-gobject gobject-introspection-1.0
+PKGS = gio-2.0 cairo cairo-gobject gobject-introspection-1.0 gmodule-2.0 libffi
 LUA = lua
 
 COPTFLAGS = -Wall -g
@@ -53,6 +53,7 @@ regress.o : $(GIDATADIR)/regress.c $(GIDATADIR)/regress.h $(DEPCHECK)
 
 # Build .gir and .typelib
 Regress-1.0.gir : $(REGRESS)
+	LDFLAGS="" CFLAGS=""						\
 	g-ir-scanner --warn-all --no-libtool --quiet --output=$@	\
 	  --namespace=Regress --nsversion=1.0				\
 	  --include=cairo-1.0 --include=Gio-2.0				\

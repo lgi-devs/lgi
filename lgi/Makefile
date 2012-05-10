@@ -10,6 +10,7 @@ LUA_LIBDIR = $(PREFIX)/lib/lua/5.1
 LUA_SHAREDIR = $(PREFIX)/share/lua/5.1
 
 GINAME = gobject-introspection-1.0
+PKGS = $(GINAME) gmodule-2.0 libffi
 VERSION_FILE = version.lua
 
 ifneq ($(filter CYGWIN%, $(shell uname -s)),)
@@ -25,8 +26,8 @@ endif
 OBJS = buffer.o callable.o core.o gi.o marshal.o object.o record.o
 
 COPTFLAGS = -Wall -Wextra -O2 -g
-CFLAGS = $(CCSHARED) $(COPTFLAGS) $(LUA_CFLAGS) $(shell pkg-config --cflags $(GINAME))
-LIBS += $(shell pkg-config --libs $(GINAME))
+CFLAGS = $(CCSHARED) $(COPTFLAGS) $(LUA_CFLAGS) $(shell pkg-config --cflags $(PKGS))
+LIBS += $(shell pkg-config --libs $(PKGS))
 LDFLAGS = $(LIBFLAG)
 DEPCHECK = .depcheck
 
