@@ -24,6 +24,7 @@
 #include <glib-object.h>
 #include <glib/gprintf.h>
 #include <girepository.h>
+#include <gmodule.h>
 
 /* Makes sure that Lua stack offset is absolute one, not relative. */
 #define lgi_makeabs(L, x) do { if (x < 0) x += lua_gettop (L) + 1; } while (0)

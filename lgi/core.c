@@ -9,7 +9,6 @@
  */
 
 #include <string.h>
-#include <locale.h>
 #include "lgi.h"
 
 #ifndef NDEBUG
@@ -435,6 +434,63 @@ core_bor (lua_State *L)
   return 1;
 }
 
+#define UD_MODULE "lgi.core.module"
+
+static int
+module_gc (lua_State *L)
+{
+  GModule **module = luaL_checkudata (L, 1, UD_MODULE);
+  g_module_close (*module);
+  return 0;
+}
+
+static int
+module_index (lua_State *L)
+{
+  GModule **module = luaL_checkudata (L, 1, UD_MODULE);
+  gpointer address;
+  if (g_module_symbol (*module, luaL_checkstring (L, 2), &address))
+    {
+      lua_pushlightuserdata (L, address);
+      return 1;
+    }
+
+  lua_pushnil (L);
+  lua_pushstring (L, g_module_error ());
+  return 2;
+}
+
+static const struct luaL_Reg module_reg[] = {
+  { "__gc", module_gc },
+  { "__index", module_index },
+  { NULL, NULL }
+};
+
+static int
+core_module (lua_State *L)
+{
+  /* Build module path. */
+  gchar *path = g_module_build_path (luaL_optstring (L, 2, NULL),
+                                     luaL_checkstring (L, 1));
+
+  /* Try to load the module. */
+  GModule *module = g_module_open (path, 0);
+  if (module == NULL)
+    {
+      lua_pushnil (L);
+      goto end;
+    }
+
+  /* Embed the module in the userdata for the module. */
+  *(GModule **) lua_newuserdata (L, sizeof (module)) = module;
+  luaL_getmetatable (L, UD_MODULE);
+  lua_setmetatable (L, -2);
+
+ end:
+  lua_pushstring (L, path);
+  return 2;
+}
+
 static const struct luaL_Reg lgi_reg[] = {
   { "log",  core_log },
   { "gtype", core_gtype },
@@ -444,6 +500,7 @@ static const struct luaL_Reg lgi_reg[] = {
   { "registerlock", core_registerlock },
   { "band", core_band },
   { "bor", core_bor },
+  { "module", core_module },
   { NULL, NULL }
 };
 
@@ -477,6 +534,11 @@ luaopen_lgi_corelgilua51 (lua_State* L)
   luaL_newmetatable (L, UD_GUARD);
   lua_pushcfunction (L, guard_gc);
   lua_setfield (L, -2, "__gc");
+  lua_pop (L, 1);
+
+  /* Register 'module' metatable. */
+  luaL_newmetatable (L, UD_MODULE);
+  luaL_register (L, NULL, module_reg);
   lua_pop (L, 1);
 
   /* Register 'call-mutex' metatable. */
