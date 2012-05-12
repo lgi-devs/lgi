@@ -880,6 +880,10 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 	    /* Directly store underlying value. */
 	    marshal_2c_int (L, g_enum_info_get_storage_type (info), arg, narg,
 			    optional, parent);
+
+	    /* Remove the temporary value, to keep stack balanced. */
+	    if (narg == -1)
+	      lua_pop (L, 1);
 	    break;
 
 	  case GI_INFO_TYPE_STRUCT:
