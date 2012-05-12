@@ -305,16 +305,40 @@ record_gc (lua_State *L)
       /* Free the owned record. */
       GType gtype;
       lua_getfenv (L, 1);
-      lua_getfield (L, -1, "_gtype");
-      gtype = (GType) lua_touserdata (L, -1);
-      if (G_TYPE_IS_BOXED (gtype))
-	g_boxed_free (gtype, record->addr);
-      else
+      for (;;)
 	{
-	  /* Use custom _free function. */
-	  void (*free_func)(gpointer) = lgi_gi_load_function (L, -2, "_free");
-	  g_assert (free_func);
-	  free_func (record->addr);
+	  lua_getfield (L, -1, "_gtype");
+	  gtype = (GType) lua_touserdata (L, -1);
+	  lua_pop (L, 1);
+	  if (G_TYPE_IS_BOXED (gtype))
+	    {
+	      g_boxed_free (gtype, record->addr);
+	      break;
+	    }
+	  else
+	    {
+	      /* Use custom _free function. */
+	      void (*free_func)(gpointer) =
+		lgi_gi_load_function (L, -1, "_free");
+	      if (free_func)
+		{
+		  free_func (record->addr);
+		  break;
+		}
+	    }
+
+	  /* Try to get parent of the type. */
+	  lua_getfield (L, -1, "_parent");
+	  lua_replace (L, -2);
+	  if (lua_isnil (L, -1))
+	    {
+	      lua_getfenv (L, 1);
+	      lua_getfield (L, -1, "_name");
+	      g_warning ("unable to record_gc %s, leaking it",
+			 lua_tostring (L, -1));
+	      lua_pop (L, 2);
+	      break;
+	    }
 	}
     }
   else if (record->store == RECORD_STORE_NESTED)
