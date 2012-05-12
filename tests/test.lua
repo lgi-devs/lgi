@@ -112,6 +112,7 @@ for _, sourcefile in ipairs {
    'gobject.lua',
    'variant.lua',
    'gtk.lua',
+   'cairo.lua',
 } do
    dofile(testpath .. '/' .. sourcefile)
 end

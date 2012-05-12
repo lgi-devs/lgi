@@ -15,6 +15,7 @@ local core = require 'lgi.core'
 local Gtk = lgi.Gtk
 local Gdk = lgi.Gdk
 local GObject = lgi.GObject
+local cairo = lgi.cairo
 
 -- Initialize GTK.
 Gtk.init()
@@ -555,3 +556,6 @@ end
 Gtk._constant = Gtk._constant or {}
 Gtk._constant.PRINT_OUTPUT_FILE_FORMAT = 'output-file-format'
 Gtk._constant.PRINT_OUTPUT_URI = 'output-uri'
+
+-- Gtk-cairo integration helpers.
+cairo.Context._method.should_draw_window = Gtk.cairo_should_draw_window
