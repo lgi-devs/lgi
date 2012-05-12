@@ -18,10 +18,12 @@ local component = require 'lgi.component'
 
 -- Implementation of record_mt, which is inherited from component
 -- and provides customizations for structures and unions.
-local record = { mt = component.mt:clone { '_method', '_field' } }
+local record = {
+   struct_mt = component.mt:clone('struct', { '_method', '_field' }),
+}
 
 -- Checks whether given argument is type of this class.
-function record.mt:is_type_of(instance)
+function record.struct_mt:is_type_of(instance)
    if type(instance) == 'userdata' then
       local instance_type = core.record.query(instance, 'repo')
       while instance_type do
@@ -32,7 +34,7 @@ function record.mt:is_type_of(instance)
    return false
 end
 
-function record.mt:_element(instance, symbol)
+function record.struct_mt:_element(instance, symbol)
    -- First of all, try normal inherited functionality.
    local element, category = component.mt._element(self, instance, symbol)
    if element then return element, category end
@@ -59,7 +61,7 @@ function record.mt:_element(instance, symbol)
 end
 
 -- Add accessor for handling fields.
-function record.mt:_access_field(instance, element, ...)
+function record.struct_mt:_access_field(instance, element, ...)
    assert(gi.isinfo(element) and element.is_field)
    -- Check the type of the field.
    local ii = element.typeinfo.interface
@@ -80,13 +82,13 @@ function record.mt:_access_field(instance, element, ...)
 end
 
 -- Add accessor for 'internal' fields handling.
-function record.mt:_access_internal(instance, element, ...)
+function record.struct_mt:_access_internal(instance, element, ...)
    if select('#', ...) ~= 0 or element ~= '_native' then return end
    return core.record.query(instance, 'addr')
 end
 
 -- Add accessor for accessing inherited elements.
-function record.mt:_access_inherited(instance, element, ...)
+function record.struct_mt:_access_inherited(instance, element, ...)
    -- Cast instance to inherited type.
    instance = core.record.cast(instance, element.type)
 
@@ -96,7 +98,7 @@ function record.mt:_access_inherited(instance, element, ...)
 end
 
 -- Create structure instance and initialize it with given fields.
-function record.mt:_new(param, owns)
+function record.struct_mt:_new(param, owns)
    -- Find baseinfo of requested record.
    local info, struct
    if self._gtype then
@@ -126,7 +128,8 @@ end
 
 -- Loads structure information into table representing the structure
 function record.load(info)
-   local record = component.create(info, record.mt)
+   local record = component.create(
+      info, info.is_struct and record.struct_mt or record.union_mt)
    record._size = info.size
    record._method = component.get_category(info.methods, core.callable.new)
    record._field = component.get_category(info.fields)
@@ -148,5 +151,9 @@ function record.load(info)
    end
    return record
 end
+
+-- Union metatable is the same as struct one, but has different name
+-- to differentiate unions.
+record.union_mt = record.struct_mt:clone('union')
 
 return record
