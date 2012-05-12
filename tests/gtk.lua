@@ -11,14 +11,14 @@
 local io = require 'io'
 local os = require 'os'
 local lgi = require 'lgi'
-local GObject = lgi.GObject
-local Gtk = lgi.Gtk
 
 local check = testsuite.check
 local checkv = testsuite.checkv
 local gtk = testsuite.group.new('gtk')
 
 function gtk.widget_style()
+   local Gtk = lgi.Gtk
+   local GObject = lgi.GObject
    local w = Gtk.ProgressBar()
    local v = GObject.Value(GObject.Type.INT)
    w:style_get_property('xspacing', v)
@@ -27,6 +27,7 @@ function gtk.widget_style()
 end
 
 function gtk.buildable_id()
+   local Gtk = lgi.Gtk
    local w = Gtk.Label()
    checkv(w.id, nil, nil)
    w.id = 'label_id'
@@ -34,6 +35,8 @@ function gtk.buildable_id()
 end
 
 function gtk.container_property()
+   local Gtk = lgi.Gtk
+   local GObject = lgi.GObject
    local c, w, v = Gtk.Grid(), Gtk.Label()
    c:add(w)
 
@@ -48,6 +51,7 @@ function gtk.container_property()
 end
 
 function gtk.container_add_method()
+   local Gtk = lgi.Gtk
    local c, w
    c, w = Gtk.Grid(), Gtk.Label()
    c:add(w)
@@ -67,6 +71,7 @@ function gtk.container_add_method()
 end
 
 function gtk.container_add_child()
+   local Gtk = lgi.Gtk
    local c, w
    c, w = Gtk.Grid(), Gtk.Label()
    c.child = w
@@ -80,6 +85,7 @@ function gtk.container_add_child()
 end
 
 function gtk.container_add_ctor()
+   local Gtk = lgi.Gtk
    local l1, l2 = Gtk.Label(), Gtk.Label()
    local c = Gtk.Grid { { l1, width = 2 }, { l2, height = 3 } }
    check(l1.parent == c)
@@ -89,6 +95,7 @@ function gtk.container_add_ctor()
 end
 
 function gtk.container_child_find()
+   local Gtk = lgi.Gtk
    local l1, l2 = Gtk.Label { id = 'id_l1' }, Gtk.Label { id = 'id_l2' }
    local c = Gtk.Grid {
       { l1, width = 2 },
@@ -159,6 +166,7 @@ local uidef = [[
 ]]
 
 function gtk.builder_add_from_string()
+   local Gtk = lgi.Gtk
    local b = Gtk.Builder()
    local res, e1, e2 = b:add_from_string('syntax error')
    check(not res and type(e1) == 'string')
@@ -168,6 +176,7 @@ function gtk.builder_add_from_string()
 end
 
 function gtk.builder_add_objects_from_string()
+   local Gtk = lgi.Gtk
    local b = Gtk.Builder()
    check(b:add_objects_from_string(uidef, -1, { 'statusbar1', 'label1' }))
    check(b:get_object('statusbar1') and b:get_object('label1'))
@@ -175,6 +184,7 @@ function gtk.builder_add_objects_from_string()
 end
 
 function gtk.builder_add_from_file()
+   local Gtk = lgi.Gtk
    local tempname = os.tmpname()
    local tempfile = io.open(tempname, 'w+')
    tempfile:write(uidef)
@@ -189,6 +199,7 @@ function gtk.builder_add_from_file()
 end
 
 function gtk.builder_add_objects_from_file()
+   local Gtk = lgi.Gtk
    local tempname = os.tmpname()
    local tempfile = io.open(tempname, 'w+')
    tempfile:write(uidef)
@@ -201,6 +212,7 @@ function gtk.builder_add_objects_from_file()
 end
 
 function gtk.builder_objects()
+   local Gtk = lgi.Gtk
    local builder = Gtk.Builder()
    check(builder:add_from_string(uidef))
    check(builder.objects.window1 == builder:get_object('window1'))
@@ -209,6 +221,7 @@ function gtk.builder_objects()
 end
 
 function gtk.text_tag_table_ctor()
+   local Gtk = lgi.Gtk
    local t1, t2 = Gtk.TextTag { name = 'tag1' }, Gtk.TextTag { name = 'tag2' }
    local t = Gtk.TextTagTable { t1, t2 }
    check(t:lookup('tag1') == t1)
@@ -217,6 +230,7 @@ function gtk.text_tag_table_ctor()
 end
 
 function gtk.text_tag_table_tag()
+   local Gtk = lgi.Gtk
    local t1, t2 = Gtk.TextTag { name = 'tag1' }, Gtk.TextTag { name = 'tag2' }
    local t = Gtk.TextTagTable { t1, t2 }
    check(t.tag.tag1 == t1)
@@ -225,6 +239,8 @@ function gtk.text_tag_table_tag()
 end
 
 function gtk.liststore()
+   local Gtk = lgi.Gtk
+   local GObject = lgi.GObject
    local cols = { int = 1, string = 2 }
    local store = Gtk.ListStore.new { GObject.Type.INT, GObject.Type.STRING }
    local first = store:insert(0, { [cols.int] = 42, [cols.string] = 'hello' })
@@ -241,6 +257,8 @@ function gtk.liststore()
 end
 
 function gtk.treestore()
+   local Gtk = lgi.Gtk
+   local GObject = lgi.GObject
    local cols = { int = 1, string = 2 }
    local store = Gtk.TreeStore.new { GObject.Type.INT, GObject.Type.STRING }
    local first = store:insert(
@@ -258,6 +276,8 @@ function gtk.treestore()
 end
 
 function gtk.treemodel_pairs()
+   local Gtk = lgi.Gtk
+   local GObject = lgi.GObject
    local cols = { int = 1, string = 2 }
    local store = Gtk.TreeStore.new { GObject.Type.INT, GObject.Type.STRING }
    local first = store:append(
@@ -295,6 +315,8 @@ function gtk.treemodel_pairs()
 end
 
 function gtk.treeview()
+   local Gtk = lgi.Gtk
+   local GObject = lgi.GObject
    local cols = { int = 1, string = 2 }
    local store = Gtk.TreeStore.new { GObject.Type.INT, GObject.Type.STRING }
    local renderer = Gtk.CellRendererText { id = 'renderer' }
@@ -321,6 +343,7 @@ function gtk.treeview()
 end
 
 function gtk.actiongroup_add()
+   local Gtk = lgi.Gtk
    -- Adding normal action and action with an accelerator.
    local ag = Gtk.ActionGroup()
    local a1, a2 = Gtk.Action { name = 'a1' }, Gtk.Action { name = 'a2' }
@@ -350,6 +373,7 @@ function gtk.actiongroup_add()
 end
 
 function gtk.actiongroup_index()
+   local Gtk = lgi.Gtk
    local a1, a2 = Gtk.Action { name = 'a1' }, Gtk.Action { name = 'a2' }
    local ag = Gtk.ActionGroup { a1, a2 }
    check(ag.action.a1 == a1)

@@ -10,7 +10,6 @@
 
 local coroutine = require 'coroutine'
 local lgi = require 'lgi'
-local GLib = lgi.GLib
 
 local check, checkv = testsuite.check, testsuite.checkv
 

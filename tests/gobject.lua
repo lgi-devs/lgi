@@ -9,9 +9,6 @@
 --]]--------------------------------------------------------------------------
 
 local lgi = require 'lgi'
-local GLib = lgi.GLib
-local GObject = lgi.GObject
-local Gtk = lgi.Gtk
 local core = require 'lgi.core'
 
 local check = testsuite.check
@@ -20,6 +17,7 @@ local check = testsuite.check
 local gobject = testsuite.group.new('gobject')
 
 function gobject.env_base()
+   local GObject = lgi.GObject
    local obj = GObject.Object()
    check(type(core.object.env(obj)) == 'table')
    check(core.object.env(obj) == core.object.env(obj))
@@ -27,6 +25,7 @@ function gobject.env_base()
 end
 
 function gobject.env_persist()
+   local Gtk = lgi.Gtk
    local window = Gtk.Window()
    local label = Gtk.Label()
    local env = core.object.env(label)

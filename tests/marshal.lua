@@ -9,7 +9,6 @@
 --]]--------------------------------------------------------------------------
 
 local lgi = require 'lgi'
-local GLib = lgi.GLib
 
 local check = testsuite.check
 
