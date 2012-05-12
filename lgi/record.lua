@@ -111,10 +111,10 @@ function record.mt:_new(param, owns)
 
    if type(param) == 'userdata' or type(param) == 'number' then
       -- Wrap existing pointer.
-      struct = core.record.new(info, param, owns)
+      struct = core.record.new(self, param, owns)
    else
       -- Create the structure instance.
-      struct = core.record.new(info)
+      struct = core.record.new(self)
 
       -- Set values of fields.
       for name, value in pairs(param or {}) do

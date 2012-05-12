@@ -64,7 +64,7 @@ static int record_cache;
 static int parent_cache;
 
 gpointer
-lgi_record_new (lua_State *L, GIBaseInfo *ri, int count)
+lgi_record_new (lua_State *L, int count)
 {
   Record *record;
   size_t size;
@@ -72,9 +72,9 @@ lgi_record_new (lua_State *L, GIBaseInfo *ri, int count)
   luaL_checkstack (L, 4, "");
 
   /* Calculate size of the record to allocate. */
-  size = G_STRUCT_OFFSET (Record, data)
-    + ((g_base_info_get_type (ri) == GI_INFO_TYPE_UNION)
-       ? g_union_info_get_size (ri) : g_struct_info_get_size (ri)) * count;
+  lua_getfield (L, -1, "_size");
+  size = G_STRUCT_OFFSET (Record, data) + lua_tonumber (L, -1) * count;
+  lua_pop (L, 1);
 
   /* Allocate new userdata for record object, attach proper
      metatable. */
@@ -87,8 +87,11 @@ lgi_record_new (lua_State *L, GIBaseInfo *ri, int count)
   record->store = RECORD_STORE_EMBEDDED;
 
   /* Get ref_repo table, attach it as an environment. */
-  lgi_type_get_repotype (L, G_TYPE_INVALID, ri);
+  lua_pushvalue (L, -2);
   lua_setfenv (L, -2);
+
+  /* Remove refrepo table from the stack. */
+  lua_remove (L, -2);
 
   /* Store newly created record into the cache. */
   lua_pushlightuserdata (L, &record_cache);
@@ -412,7 +415,8 @@ static const struct luaL_Reg record_meta_reg[] = {
    unless 'addr' argument (lightuserdata or integer) is specified, in
    which case wraps specified address as record.  Lua prototype:
 
-   recordinstance = core.record.new(structinfo|unioninfo[, addr[, own]])
+   recordinstance = core.record.new(repotable[, nil[, count]])
+   recordinstance = core.record.new(repotable[, addr[, own]])
 
    own (default false) means whether Lua takes record ownership
    (i.e. if it tries to deallocate the record when created Lua proxy
@@ -420,26 +424,23 @@ static const struct luaL_Reg record_meta_reg[] = {
 static int
 record_new (lua_State *L)
 {
-  int ltype;
-  GIBaseInfo **info = luaL_checkudata (L, 1, LGI_GI_INFO);
-  GIInfoType type = g_base_info_get_type (*info);
-  luaL_argcheck (L, type == GI_INFO_TYPE_STRUCT || type == GI_INFO_TYPE_UNION,
-		 1, "record expected");
-  ltype = lua_type (L, 2);
-  if (ltype == LUA_TNONE || ltype == LUA_TNIL || ltype == LUA_TNUMBER)
-    /* Create new record instance. */
-    lgi_record_new (L, *info, luaL_optinteger (L, 2, 1));
+  if (lua_isnoneornil (L, 2))
+    {
+      /* Create new record instance. */
+      lua_pushvalue (L, 1);
+      lgi_record_new (L, luaL_optinteger (L, 3, 1));
+    }
   else
     {
       /* Wrap record at existing address. */
       gpointer addr = (lua_type (L, 2) == LUA_TLIGHTUSERDATA)
 	? addr = lua_touserdata (L, 2)
 	: (gpointer) luaL_checkinteger (L, 2);
-      gboolean owned = lua_toboolean (L, 3);
-      lgi_type_get_repotype (L, G_TYPE_INVALID, *info);
-      g_assert (!lua_isnil (L, -1));
-      lgi_record_2lua (L, addr, owned, 0);
+      gboolean own = lua_toboolean (L, 3);
+      lua_pushvalue (L, 1);
+      lgi_record_2lua (L, addr, own, 0);
     }
+
   return 1;
 }
 
@@ -450,10 +451,10 @@ static const char* const query_modes[] = { "gtype", "repo", "addr", NULL };
    Supported 'mode' strings are:
 
    'gtype': returns real gtype of this instance, nil when it is not boxed.
-   'repo':  returns repotable of this instance.
+   'repo': returns repotable of this instance.
    'addr': returns address of the object.  If 3rd argument is either
-	   gtype or info, checks, whether record conforms to the specs
-	   and if not, throws an error.  */
+	   repotable, checks, whether record conforms to the specs and
+	   if not, throws an error.  */
 static int
 record_query (lua_State *L)
 {
@@ -480,17 +481,13 @@ record_query (lua_State *L)
     }
   else
     {
-      GType gtype = G_TYPE_INVALID;
-      GIBaseInfo **info = lgi_udata_test (L, 3, LGI_GI_INFO);
-      if (info == NULL)
-	gtype = lgi_type_get_gtype (L, 3);
-      if (info != NULL || gtype != G_TYPE_INVALID)
+      if (lua_isnoneornil (L, 3))
+	lua_pushlightuserdata (L, record_check (L, 1)->addr);
+      else
 	{
-	  lgi_type_get_repotype (L, gtype, info != NULL ? *info : NULL);
+	  lua_pushvalue (L, 3);
 	  lua_pushlightuserdata (L, lgi_record_2c (L, 1, TRUE, FALSE));
 	}
-      else
-	lua_pushlightuserdata (L, record_check (L, 1)->addr);
 
       return 1;
     }
