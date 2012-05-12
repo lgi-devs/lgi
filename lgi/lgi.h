@@ -147,7 +147,7 @@ gpointer lgi_closure_create (lua_State* L, gpointer user_data,
 void lgi_closure_destroy (gpointer user_data);
 
 /* Allocates and creates new record instance. */
-gpointer lgi_record_new (lua_State *L, GIBaseInfo *ri);
+gpointer lgi_record_new (lua_State *L, GIBaseInfo *ri, int count);
 
 /* Creates Lua-side part of given record. Assumes that repotype table
    is on the stack, replaces it with newly created proxy. If parent

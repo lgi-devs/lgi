@@ -22,8 +22,7 @@ typedef enum _RecordStore
 
     /* Record is placed inside some other (parent) record.  In order
        to keep parent record alive, parent record is stored in
-       LUA_REGISTRYINDEX table, keyed by lightuserdata of address of
-       this Record object. */
+       parent_cache table. */
     RECORD_STORE_NESTED,
 
     /* Record is allocated by its GLib means and must be freed (by
@@ -65,7 +64,7 @@ static int record_cache;
 static int parent_cache;
 
 gpointer
-lgi_record_new (lua_State *L, GIBaseInfo *ri)
+lgi_record_new (lua_State *L, GIBaseInfo *ri, int count)
 {
   Record *record;
   size_t size;
@@ -75,7 +74,7 @@ lgi_record_new (lua_State *L, GIBaseInfo *ri)
   /* Calculate size of the record to allocate. */
   size = G_STRUCT_OFFSET (Record, data)
     + ((g_base_info_get_type (ri) == GI_INFO_TYPE_UNION)
-       ? g_union_info_get_size (ri) : g_struct_info_get_size (ri));
+       ? g_union_info_get_size (ri) : g_struct_info_get_size (ri)) * count;
 
   /* Allocate new userdata for record object, attach proper
      metatable. */
@@ -421,13 +420,15 @@ static const struct luaL_Reg record_meta_reg[] = {
 static int
 record_new (lua_State *L)
 {
+  int ltype;
   GIBaseInfo **info = luaL_checkudata (L, 1, LGI_GI_INFO);
   GIInfoType type = g_base_info_get_type (*info);
   luaL_argcheck (L, type == GI_INFO_TYPE_STRUCT || type == GI_INFO_TYPE_UNION,
 		 1, "record expected");
-  if (lua_isnoneornil (L, 2))
+  ltype = lua_type (L, 2);
+  if (ltype == LUA_TNONE || ltype == LUA_TNIL || ltype == LUA_TNUMBER)
     /* Create new record instance. */
-    lgi_record_new (L, *info);
+    lgi_record_new (L, *info, luaL_optinteger (L, 2, 1));
   else
     {
       /* Wrap record at existing address. */
@@ -525,11 +526,48 @@ record_cast (lua_State *L)
   return 1;
 }
 
+/* Assumes that given record is the first of the array of records and
+   fetches record with specified index.  Negative indices are allowed,
+   but no boundschecking is made.
+   res = core.record.fromarray(recordinstance, index) */
+static int
+record_fromarray (lua_State *L)
+{
+  Record *record = record_get (L, 1);
+  int index = luaL_checkinteger (L, 2);
+  int parent = 0;
+  gboolean own = FALSE;
+  int size;
+
+  /* Find out the size of this record. */
+  lua_getfenv (L, 1);
+  lua_getfield (L, -1, "_size");
+  size = lua_tonumber (L, -1);
+
+  if (record->store == RECORD_STORE_EMBEDDED)
+    /* Parent is actually our embedded record. */
+    parent = 1;
+  else if (record->store == RECORD_STORE_NESTED)
+    {
+      /* Share parent with the original record. */
+      lua_pushlightuserdata (L, &parent_cache);
+      lua_rawget (L, LUA_REGISTRYINDEX);
+      lua_pushvalue (L, 1);
+      lua_rawget (L, -2);
+      parent = -2;
+    }
+
+  lua_getfenv (L, 1);
+  lgi_record_2lua (L, ((guint8 *) record->addr) + size * index, own, parent);
+  return 1;
+}
+
 static const struct luaL_Reg record_api_reg[] = {
   { "new", record_new },
   { "query", record_query },
   { "field", record_field },
   { "cast", record_cast },
+  { "fromarray", record_fromarray },
   { NULL, NULL }
 };
 

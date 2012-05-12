@@ -127,6 +127,7 @@ end
 -- Loads structure information into table representing the structure
 function record.load(info)
    local record = component.create(info, record.mt)
+   record._size = info.size
    record._method = component.get_category(info.methods, core.callable.new)
    record._field = component.get_category(info.fields)
 
