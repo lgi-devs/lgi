@@ -16,6 +16,14 @@ property from Gtk.Window instance:
     local window = Gtk.Window()
     print(window.style.resize_grip_height)
 
+### Gtk.Widget width and height properties
+
+lgi adds new `width` and `height` properties to Gtk.Widget.  Reading them
+yields allocated size (`Gtk.Widget.get_allocated_size()`), writing them sets
+new size request (`Gtk.Widget.set_size_request()`).  These usages typically
+means what an application needs - actual allocated size to draw on when
+reading, and request for specific size when writing them.
+
 ### Child properties
 
 Child properties are properties of the relation between a container

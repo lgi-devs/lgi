@@ -206,7 +206,7 @@ local function change_display()
    local toplevel
    local device = Gtk.get_current_event_device()
    local grab_status = device:grab(
-      popup:get_window(), 'APPLICATION', false,
+      popup.window, 'APPLICATION', false,
       'BUTTON_RELEASE_MASK', cursor, Gdk.CURRENT_TIME)
    if grab_status == 'SUCCESS' then
       -- Process events until user clicks.
