@@ -551,3 +551,7 @@ if Gtk.get_major_version == 3 and Gtk.get_minor_version() < 4 then
    }
 end
 
+-------------------------------- Gtk.PrintSettings
+Gtk._constant = Gtk._constant or {}
+Gtk._constant.PRINT_OUTPUT_FILE_FORMAT = 'output-file-format'
+Gtk._constant.PRINT_OUTPUT_URI = 'output-uri'
