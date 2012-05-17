@@ -559,12 +559,49 @@ record_fromarray (lua_State *L)
   return 1;
 }
 
+/* Changes ownership mode or repotable of the record.
+   record.set(recordinstance, true|false)
+   - 'own' if true, changing ownership to owned, otherwise to
+     unowned.
+
+   record.set(recordinstance, repotable)
+   - 'repotable' record repotable to which this instance should be
+     reassigned. */
+static int
+record_set (lua_State *L)
+{
+  Record *record = record_get (L, 1);
+  if (lua_type (L, 2) == LUA_TTABLE)
+    {
+      /* Assign new typeinfo to the record instance. */
+      lua_pushvalue (L, 2);
+      lua_setfenv (L, 1);
+    }
+  else
+    {
+      /* Change ownership type of the record. */
+      if (lua_toboolean (L, 2))
+        {
+          if (record->store == RECORD_STORE_EXTERNAL)
+            record->store = RECORD_STORE_ALLOCATED;
+        }
+      else
+        {
+          if (record->store == RECORD_STORE_ALLOCATED)
+            record->store = RECORD_STORE_EXTERNAL;
+        }
+    }
+
+  return 0;
+}
+
 static const struct luaL_Reg record_api_reg[] = {
   { "new", record_new },
   { "query", record_query },
   { "field", record_field },
   { "cast", record_cast },
   { "fromarray", record_fromarray },
+  { "set", record_set },
   { NULL, NULL }
 };
 
