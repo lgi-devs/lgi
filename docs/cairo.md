@@ -80,6 +80,24 @@ checking the type of the surface:
 	print('unsupported type of the surface')
     end
 
+### cairo.Context path iteration
+
+cairo library offers iteration over the drawing path returned via
+`cairo.Context.copy_path()` method.  Resulting path can be iterated
+using `pairs()` method of `cairo.Path` class.  `pairs()` method
+returns iterator suitable to be used in Lua 'generic for' construct.
+Iterator returns type of the path element, optionally followed by 0, 1
+or 3 points.  Following example shows how to iterate the path.
+
+    local path = cr:copy_path()
+    for kind, points in path:pairs() do
+       io.write(kind .. ':')
+          for pt in ipairs(points) do
+             io.write((' { %g, %g }'):format(pt.x, pt.y))
+	  end
+       end
+    end
+
 ## Impact of cairo on other libraries
 
 In addition to cairo itself, there is a bunch of cairo-specific
