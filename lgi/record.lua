@@ -62,19 +62,29 @@ end
 
 -- Add accessor for handling fields.
 function record.struct_mt:_access_field(instance, element, ...)
-   assert(gi.isinfo(element) and element.is_field)
-   -- Check the type of the field.
-   local ii = element.typeinfo.interface
-   if ii and (ii.type == 'struct' or ii.type == 'union') then
-      -- Nested structure, handle assignment to it specially.  Get
-      -- access to underlying nested structure.
-      local subrecord = core.record.field(instance, element)
+   -- Check whether we are marshalling subrecord
+   local subrecord
+   if select('#', ...) > 0 then
+      if gi.isinfo(element) and element.is_field then
+	 local ii = element.typeinfo.interface
+	 if ii and (ii.type == 'struct' or ii.type == 'union') then
+	    subrecord = true
+	 end
+      else
+	 if type(element) == 'table' and (element[2] == 1
+					  or element[2] == 2) then
+	    subrecord = true
+	 end
+      end
+   end
 
-      -- Reading it is simple, we are done.
-      if select('#', ...) == 0 then return subrecord end
-
-      -- Writing means assigning all fields from the source table.
-      for name, value in pairs(...) do subrecord[name] = value end
+   if subrecord then
+      -- Write to nested structure, handle assignment to it by
+      -- assigning separate fields.
+      subrecord = core.record.field(instance, element)
+      for name, value in pairs(...) do
+	 subrecord[name] = value
+      end
    else
       -- In other cases, just access the instance using given info.
       return core.record.field(instance, element, ...)

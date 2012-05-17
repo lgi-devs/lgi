@@ -1225,41 +1225,131 @@ int
 lgi_marshal_field (lua_State *L, gpointer object, gboolean getmode,
 		   int parent_arg, int field_arg, int val_arg)
 {
-  GIFieldInfo *fi;
-  GIFieldInfoFlags flags;
   GITypeInfo *ti;
-  char *val;
+  int to_remove, nret;
 
-  /* Get field information. */
-  fi = *(GIFieldInfo **) luaL_checkudata (L, field_arg, LGI_GI_INFO);
-
-  /* Check, whether field is readable/writable. */
-  flags = g_field_info_get_flags (fi);
-  if ((flags & (getmode ? GI_FIELD_IS_READABLE : GI_FIELD_IS_WRITABLE)) == 0)
+  /* Check the type of the field information. */
+  if (lgi_udata_test (L, field_arg, LGI_GI_INFO))
     {
-      /* Prepare proper error message. */
-      lua_concat (L, lgi_type_get_name (L, g_base_info_get_container (fi)));
-      luaL_error (L, "%s: field `%s' is not %s", lua_tostring (L, -1),
-		  g_base_info_get_name (fi), getmode ? "readable" : "writable");
-    }
+      GIFieldInfo **fi = lua_touserdata (L, field_arg);
+      GIFieldInfoFlags flags;
 
-  /* Map GIArgument to proper memory location, get typeinfo of the
-     field and perform actual marshalling. */
-  val = (char *) object + g_field_info_get_offset (fi);
-  ti = g_field_info_get_type (fi);
-  lgi_gi_info_new (L, ti);
-  if (getmode)
-    {
-      lgi_marshal_2lua (L, ti, GI_TRANSFER_NOTHING, val, parent_arg,
-			NULL, NULL);
-      return 1;
+      /* Check, whether field is readable/writable. */
+      flags = g_field_info_get_flags (*fi);
+      if ((flags & (getmode ? GI_FIELD_IS_READABLE
+		    : GI_FIELD_IS_WRITABLE)) == 0)
+	{
+	  /* Prepare proper error message. */
+	  lua_concat (L, lgi_type_get_name (L,
+					    g_base_info_get_container (*fi)));
+	  luaL_error (L, "%s: field `%s' is not %s", lua_tostring (L, -1),
+		      g_base_info_get_name (*fi),
+		      getmode ? "readable" : "writable");
+	}
+
+      /* Map GIArgument to proper memory location, get typeinfo of the
+	 field and perform actual marshalling. */
+      object = (char *) object + g_field_info_get_offset (*fi);
+      ti = g_field_info_get_type (*fi);
+      lgi_gi_info_new (L, ti);
+      to_remove = lua_gettop (L);
     }
   else
     {
-      lgi_marshal_2c (L, ti, NULL, GI_TRANSFER_NOTHING, val, val_arg,
-		      0, NULL, NULL);
-      return 0;
+      /* Consult field table, get kind of field and offset. */
+      int kind;
+      lgi_makeabs (L, field_arg);
+      luaL_checktype (L, field_arg, LUA_TTABLE);
+      lua_rawgeti (L, field_arg, 1);
+      object = (char *) object + lua_tointeger (L, -1);
+      lua_rawgeti (L, field_arg, 2);
+      kind = lua_tonumber (L, -1);
+      lua_pop (L, 2);
+
+      /* Load type information from the table and decide how to handle
+      it according to 'kind' */
+      lua_rawgeti (L, field_arg, 3);
+      switch (kind)
+	{
+	case 0:
+	  /* field[3] contains typeinfo, load it and fall through. */
+            ti = *(GITypeInfo **) luaL_checkudata (L, -1, LGI_GI_INFO);
+	  to_remove = lua_gettop (L);
+	  break;
+
+	case 1:
+	case 2:
+	  {
+	    GIArgument *arg = (GIArgument *) object;
+	    if (getmode)
+	      {
+		if (kind == 1)
+		  object = arg->v_pointer;
+		lgi_record_2lua (L, object, FALSE, parent_arg);
+		return 1;
+	      }
+	    else
+	      {
+		g_assert (kind == 1);
+		arg->v_pointer = lgi_record_2c (L, val_arg, FALSE, FALSE);
+		return 0;
+	      }
+	    break;
+	  }
+
+	case 3:
+	  {
+	    /* Get the typeinfo for marshalling the numeric enum value. */
+	    lua_rawgeti (L, field_arg, 4);
+	    ti = *(GITypeInfo **) luaL_checkudata (L, -1, LGI_GI_INFO);
+	    if (getmode)
+	      {
+		/* Use typeinfo to unmarshal numeric value. */
+		lgi_marshal_2lua (L, ti, GI_TRANSFER_NOTHING, object, 0,
+				  NULL, NULL);
+
+		/* Replace numeric field with symbolic value. */
+		lua_gettable (L, field_arg);
+		lua_replace (L, -3);
+		lua_pop (L, 1);
+		return 1;
+	      }
+	    else
+	      {
+		/* Convert enum symbol to numeric value. */
+		if (lua_type (L, val_arg != LUA_TNUMBER))
+		  {
+		    lua_pushvalue (L, field_arg);
+		    lua_pushvalue (L, val_arg);
+		    lua_call (L, 1, 1);
+		    lua_replace (L, val_arg);
+		  }
+
+		/* Use typeinfo to marshal the numeric value. */
+		lgi_marshal_2c (L, ti, NULL, GI_TRANSFER_NOTHING, object,
+				val_arg, 0, NULL, NULL);
+		lua_pop (L, 2);
+		return 0;
+	      }
+	  }
+	}
     }
+
+  if (getmode)
+    {
+      lgi_marshal_2lua (L, ti, GI_TRANSFER_NOTHING, object, parent_arg,
+			NULL, NULL);
+      nret = 1;
+    }
+  else
+    {
+      lgi_marshal_2c (L, ti, NULL, GI_TRANSFER_NOTHING, object, val_arg,
+		      0, NULL, NULL);
+      nret = 0;
+    }
+
+  lua_remove (L, to_remove);
+  return nret;
 }
 
 int
@@ -1515,10 +1605,54 @@ core_closure_set_marshal (lua_State *L)
   return 0;
 }
 
+/* Calculates size and alignment of specified type.
+   size, align = marshal.typeinfo(tiinfo) */
+static int
+marshal_typeinfo (lua_State *L)
+{
+  GIBaseInfo **info = luaL_checkudata (L, 1, LGI_GI_INFO);
+  switch (g_type_info_get_tag (*info))
+    {
+#define HANDLE_INT(upper, type)						\
+      case GI_TYPE_TAG_ ## upper:					\
+	{								\
+	  struct Test { char offender; type examined; };		\
+	  lua_pushnumber (L, sizeof (type));				\
+	  lua_pushnumber (L, G_STRUCT_OFFSET (struct Test, examined));	\
+	}								\
+	break
+
+      HANDLE_INT (VOID, gpointer);
+      HANDLE_INT (BOOLEAN, gboolean);
+      HANDLE_INT (INT8, gint8);
+      HANDLE_INT (UINT8, guint8);
+      HANDLE_INT (INT16, gint16);
+      HANDLE_INT (UINT16, guint16);
+      HANDLE_INT (INT32, gint32);
+      HANDLE_INT (UINT32, guint32);
+      HANDLE_INT (INT64, gint64);
+      HANDLE_INT (UINT64, guint64);
+      HANDLE_INT (FLOAT, gfloat);
+      HANDLE_INT (DOUBLE, gdouble);
+      HANDLE_INT (GTYPE, GType);
+      HANDLE_INT (UTF8, const gchar *);
+      HANDLE_INT (FILENAME, const gchar *);
+      HANDLE_INT (UNICHAR, gunichar);
+
+#undef HANDLE_INT
+
+    default:
+      return luaL_argerror (L, 1, "bad typeinfo");
+    }
+
+  return 2;
+}
+
 static const struct luaL_Reg marshal_api_reg[] = {
   { "container", marshal_container },
   { "fundamental", marshal_fundamental },
   { "closure_set_marshal", core_closure_set_marshal },
+  { "typeinfo", marshal_typeinfo },
   { NULL, NULL }
 };
 
