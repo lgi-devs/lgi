@@ -90,9 +90,6 @@ lgi_record_new (lua_State *L, int count)
   lua_pushvalue (L, -2);
   lua_setfenv (L, -2);
 
-  /* Remove refrepo table from the stack. */
-  lua_remove (L, -2);
-
   /* Store newly created record into the cache. */
   lua_pushlightuserdata (L, &record_cache);
   lua_rawget (L, LUA_REGISTRYINDEX);
@@ -100,6 +97,20 @@ lgi_record_new (lua_State *L, int count)
   lua_pushvalue (L, -3);
   lua_rawset (L, -3);
   lua_pop (L, 1);
+
+  /* Invoke '_attach' method if present on the typetable. */
+  lua_getfield (L, -2, "_attach");
+  if (!lua_isnil (L, -1))
+    {
+      lua_pushvalue (L, -3);
+      lua_pushvalue (L, -3);
+      lua_call (L, 2, 0);
+    }
+  else
+    lua_pop (L, 1);
+
+  /* Remove refrepo table from the stack. */
+  lua_remove (L, -2);
   return record->addr;
 }
 
@@ -196,6 +207,17 @@ lgi_record_2lua (lua_State *L, gpointer addr, gboolean own, int parent)
       lua_pushvalue (L, -2);
       lua_rawset (L, -5);
     }
+
+  /* Invoke '_attach' method if present on the typetable. */
+  lua_getfield (L, -4, "_attach");
+  if (!lua_isnil (L, -1))
+    {
+      lua_pushvalue (L, -5);
+      lua_pushvalue (L, -3);
+      lua_call (L, 2, 0);
+    }
+  else
+    lua_pop (L, 1);
 
   /* Clean up the stack; remove cache table from under our result, and
      remove also typetable which was present when we were called. */
