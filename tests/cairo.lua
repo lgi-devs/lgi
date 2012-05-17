@@ -107,7 +107,7 @@ function cairo.path()
 	 checkv(pts[3].y, 6, 'number')
       elseif i == 3 then
 	 checkv(t, 'MOVE_TO', 'string')
-	 check(pts == nil)
+	 check(type(pts) == 'table' and #pts == 0)
       elseif i == 4 then
 	 checkv(t, 'LINE_TO', 'string')
 	 check(type(pts) == 'table' and #pts == 1)

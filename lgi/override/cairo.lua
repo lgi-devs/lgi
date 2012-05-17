@@ -719,9 +719,9 @@ function cairo.Path:pairs()
       local type, length = path_data.header.type, path_data.header.length
 
       -- Create 'points' table.
-      local points
+      local points = {}
       if type ~= 'CLOSE_PATH' then
-	 points = { core.record.fromarray(self.data, index + 1).point }
+	 points[1] = core.record.fromarray(self.data, index + 1).point
 	 if type == 'CURVE_TO' then
 	    points[2] = core.record.fromarray(self.data, index + 2).point
 	    points[3] = core.record.fromarray(self.data, index + 3).point
