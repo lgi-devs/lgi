@@ -771,7 +771,7 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 		int parent, GICallableInfo *ci, void **args)
 {
   int nret = 0;
-  gboolean optional = (ai != NULL && (g_arg_info_is_optional (ai) ||
+  gboolean optional = (ai == NULL || (g_arg_info_is_optional (ai) ||
 				      g_arg_info_may_be_null (ai)));
   GITypeTag tag = g_type_info_get_tag (ti);
   GIArgument *arg = target;
