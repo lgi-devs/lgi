@@ -138,7 +138,7 @@ lgi_type_get_repotype (lua_State *L, GType gtype, GIBaseInfo *info)
      should be fastest. */
   if (gtype != G_TYPE_INVALID)
     {
-      lua_pushnumber (L, gtype);
+      lua_pushlightuserdata (L, (gpointer) gtype);
       lua_rawget (L, -2);
     }
   else
@@ -241,7 +241,7 @@ lgi_guard_create (lua_State *L, GDestroyNotify destroy)
 static int
 core_gtype (lua_State *L)
 {
-  lua_pushlightuserdata (L, (void *) lgi_type_get_gtype (L, 1));
+  lua_pushlightuserdata (L, (gpointer) lgi_type_get_gtype (L, 1));
   return 1;
 }
 
