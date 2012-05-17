@@ -26,9 +26,7 @@ local function set_cell_color(layout, cell, model, iter)
 	 math.floor(rgba.green * 255) * (256 * 256) +
 	 math.floor(rgba.blue * 255) * 256
    end
-   cell.pixbuf = GdkPixbuf.Pixbuf.new(
-      GdkPixbuf.Colorspace.RGB or GdkPixbuf.Colorspace.COLORSPACE_RGB,
-      false, 8, 24, 24)
+   cell.pixbuf = GdkPixbuf.Pixbuf.new('RGB', false, 8, 24, 24)
    cell.pixbuf:fill(pixel)
 end
 

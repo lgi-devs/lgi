@@ -45,7 +45,7 @@ local model = Gtk.TreeStore.new {
    [DemoListColumn.TITLE] = GObject.Type.STRING,
    [DemoListColumn.INFO] = GObject.Type.STRING,
    [DemoListColumn.SOURCE] = GObject.Type.STRING,
-   [DemoListColumn.STYLE] = GObject.Type.INT,
+   [DemoListColumn.STYLE] = Pango.Style,
    [DemoListColumn.WINDOW] = Gtk.Window,
 }
 
@@ -84,7 +84,7 @@ while true do
 		      [DemoListColumn.TITLE] = title:match('([^/]+)$'),
 		      [DemoListColumn.INFO] = '\n' .. info,
 		      [DemoListColumn.SOURCE] = source,
-		      [DemoListColumn.STYLE] = Pango.Style.NORMAL,
+		      [DemoListColumn.STYLE] = 'NORMAL',
 		   })
    end
 end
@@ -216,13 +216,13 @@ function window.child.tree:on_row_activated(path)
       if child_window then
 	 -- Signalize that the window is active.
 	 row[DemoListColumn.WINDOW] = child_window
-	 row[DemoListColumn.STYLE] = Pango.Style.ITALIC
+	 row[DemoListColumn.STYLE] = 'ITALIC'
 
 	 -- Register destroy signal which will remove the window from
 	 -- the store and make style back to normal.
 	 function child_window:on_destroy()
 	    local row = model[path]
-	    row[DemoListColumn.STYLE] = Pango.Style.NORMAL
+	    row[DemoListColumn.STYLE] = 'NORMAL'
 	    row[DemoListColumn.WINDOW] = nil
 	 end
       end
