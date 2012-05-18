@@ -4,3 +4,4 @@
 *.stackdump
 .depcheck
 *.rockspec
+cairodemo-*.png
