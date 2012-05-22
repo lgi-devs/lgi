@@ -41,7 +41,11 @@ markdown processor if you want to read it in HTML.
 
 ## History
 
-### 0.5.1 (3-May-2012)
+### 0.6 (22-May-2012)
+- Add cairo bindings, cairo sample and finish some gtk-demo parts
+  which were requiring cairo
+
+### 0.5.1 (not officially released)
 - Fix a few problems on more exotic architectures (s390x, mips, ia64).
 - Allow passing `byte.buffer` when UTF8 string is requested.
 
