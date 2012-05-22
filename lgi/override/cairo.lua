@@ -8,8 +8,8 @@
 --
 ------------------------------------------------------------------------------
 
-local assert, pairs, ipairs, setmetatable, table
-   = assert, pairs, ipairs, setmetatable, table
+local assert, pairs, ipairs, setmetatable, table, rawget
+   = assert, pairs, ipairs, setmetatable, table, rawget
 local lgi = require 'lgi'
 local cairo = lgi.cairo
 
@@ -55,7 +55,7 @@ end
 cairo._struct = cairo._struct or {}
 for _, struct in pairs {
    'Context', 'Device', 'Surface', 'Rectangle', 'ScaledFont', 'FontFace',
-   'FontOptions', 'Region', 'RectangleInt', 'Path', 'PathData', 'TextExtents',
+   'FontOptions', 'Region', 'RectangleInt', 'Path', 'TextExtents',
    'FontExtents', 'Matrix', 'ImageSurface', 'PdfSurface', 'PsSurface',
    'RecordingSurface', 'SvgSurface', 'ToyFontFace', 'RectangleList',
 } do
@@ -72,7 +72,8 @@ ffi.load_fields(path_data_header, { { 'type', cairo.PathDataType },
 				    { 'length', ti.int } })
 local path_data_point = component.create(nil, record.struct_mt)
 ffi.load_fields(path_data_point, { { 'x', ti.double }, { 'y', ti.double } })
-cairo.PathData = component.create(nil, record.union_mt, 'cairo.PathData')
+cairo._union = rawget(cairo, '_union') or {}
+cairo._union.PathData = component.create(nil, record.union_mt, 'cairo.PathData')
 
 -- Populate methods into records.
 for _, info in ipairs {
