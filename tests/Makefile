@@ -57,6 +57,8 @@ Regress-1.0.gir : $(REGRESS)
 	g-ir-scanner --warn-all --no-libtool --quiet --output=$@	\
 	  --namespace=Regress --nsversion=1.0				\
 	  --include=cairo-1.0 --include=Gio-2.0				\
+	  --library-path=/usr/lib --library-path=/usr/X11R6/lib		\
+	  --library-path=/usr/local/lib					\
 	  $(GIDATADIR)/regress.c $(GIDATADIR)/regress.h			\
 	 -lregress
 
