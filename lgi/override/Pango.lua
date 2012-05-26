@@ -58,6 +58,10 @@ local pango_layout_set_text = Pango.Layout.set_text
 function Pango.Layout._method:set_text(text, len)
    pango_layout_set_text(self, text, len or -1)
 end
+local pango_layout_set_markup = Pango.Layout.set_markup
+function Pango.Layout._method:set_markup(text, len)
+   pango_layout_set_markup(self, text, len or -1)
+end
 
 -- Add attributes simulating logically missing properties in Pango classes.
 for compound, attrs in pairs {
