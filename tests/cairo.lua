@@ -134,3 +134,32 @@ function cairo.surface_type()
    check(cairo.Surface:is_type_of(s2))
    check(not cairo.RecordingSurface:is_type_of(s2))
 end
+
+function cairo.context_transform()
+   local cairo = lgi.cairo
+   local surface = cairo.ImageSurface('ARGB32', 100, 100)
+   local cr = cairo.Context(surface)
+
+   function compare(a, b)
+      check(math.abs(a-b) < 0.1)
+   end
+
+   cr:rotate(-math.pi / 2)
+   cr:translate(100, 200)
+
+   local x, y = cr:user_to_device(10, 20)
+   compare(x, 220)
+   compare(y, -110)
+
+   local x, y = cr:device_to_user(220, -110)
+   compare(x, 10)
+   compare(y, 20)
+
+   local x, y = cr:user_to_device_distance(10, 20)
+   compare(x, 20)
+   compare(y, -10)
+
+   local x, y = cr:device_to_user_distance(20, -10)
+   compare(x, 10)
+   compare(y, 20)
+end
