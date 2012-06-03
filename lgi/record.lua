@@ -109,22 +109,16 @@ end
 
 -- Create structure instance and initialize it with given fields.
 function record.struct_mt:_new(param, owns)
-   -- Find baseinfo of requested record.
-   local info, struct
-   if self._gtype then
-      -- Try to lookup info by gtype.
-      info = gi[self._gtype]
-   end
-   if not info then
-      -- GType is not available, so lookup info by name.
-      local ns, name = self._name:match('^(.-)%.(.+)$')
-      info = assert(gi[ns][name])
-   end
-
+   local struct
    if type(param) == 'userdata' or type(param) == 'number' then
       -- Wrap existing pointer.
       struct = core.record.new(self, param, owns)
    else
+      -- Check that we are allowed to create the record.
+      if not self._size then
+	 error(("%s: not directly instantiable"):format(self._name), 2)
+      end
+
       -- Create the structure instance.
       struct = core.record.new(self)
 
