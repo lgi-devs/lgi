@@ -69,7 +69,8 @@ for compound, attrs in pairs {
       'attributes', 'font_description', 'width', 'height', 'wrap', 'context',
       'is_wrapped', 'ellipsize', 'is_ellipsized', 'indent', 'spacing',
       'justify', 'auto_dir', 'alignment', 'tabs', 'single_paragraph_mode',
-      'baseline', 'line_count', 'lines', 'log_attrs', 'text',
+      'baseline', 'line_count', 'lines', 'log_attrs', 'character_count',
+      'text', 'markup',
    },
    [Pango.Context] = {
       'base_dir', 'base_gravity', 'font_description', 'font_map', 'gravity',
