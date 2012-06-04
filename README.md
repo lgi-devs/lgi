@@ -14,6 +14,9 @@ LGI is tested and compatible with standard Lua 5.1 and Lua 5.2 and
 recent LuaJIT 2 betas.  Compatibility with other Lua implementations
 is not tested yet.
 
+If you need to use pre-gobject-introspection GTK (ancient GTK+ 2.x
+releases), use [Lua-Gnome](http://sourceforge.net/projects/lua-gnome/).
+
 ## Installation:
 
 In order to be able to compile native part of lgi,
