@@ -1,81 +1,96 @@
 #! /usr/bin/env lua
 
 --
--- Sample GStreamer application, port of public Vala GStreamer Video
+-- Sample GStreamer application, based on public Vala GStreamer Video
 -- Example (http://live.gnome.org/Vala/GStreamerSample)
 --
 
 local lgi  = require 'lgi'
 local GLib = lgi.GLib
 local Gtk  = lgi.Gtk
-local Gst  = lgi.require('Gst', '0.10')
+local GdkX11 = lgi.GdkX11
+local Gst  = lgi.Gst
 
----------------
--- GTK Stuff --
----------------
+local app = Gtk.Application { application_id = 'org.lgi.samples.gstvideo' }
 
-local vbox = Gtk.VBox.new(true, 0)
-local drawing_area = Gtk.DrawingArea()
+local window = Gtk.Window {
+   application = app,
+   title = "LGI Based Video Player",
+   Gtk.Box {
+      orientation = 'VERTICAL',
+      Gtk.DrawingArea {
+	 id = 'video',
+	 expand = true,
+	 width = 300,
+	 height = 150,
+      },
+      Gtk.ButtonBox {
+	 orientation = 'HORIZONTAL',
+	 Gtk.Button {
+	    id = 'play',
+	    use_stock = true,
+	    label = Gtk.STOCK_MEDIA_PLAY,
+	 },
+	 Gtk.Button {
+	    id = 'stop',
+	    use_stock = true,
+	    sensitive = false,
+	    label = Gtk.STOCK_MEDIA_STOP,
+	 },
+	 Gtk.Button {
+	    id = 'quit',
+	    use_stock = true,
+	    label = Gtk.STOCK_QUIT,
+	 },
+      },
+   }
+}
 
-drawing_area:set_size_request(300, 150)
-vbox:pack_start(drawing_area, true, true, 0)
-
-local play_button = Gtk.Button.new_from_stock(Gtk.STOCK_MEDIA_PLAY)
-local stop_button = Gtk.Button.new_from_stock(Gtk.STOCK_MEDIA_STOP)
-local quit_button = Gtk.Button.new_from_stock(Gtk.STOCK_QUIT)
-
-quit_button.on_clicked = Gtk.main_quit
-
-local button_box = Gtk.HButtonBox.new()
-
-button_box:add(play_button)
-button_box:add(stop_button)
-button_box:add(quit_button)
-vbox:pack_start(button_box, false, true, 0)
-local window = Gtk.Window.new(Gtk.WindowType.TOPLEVEL)
-
-window:set_title('LGI Based Video Player')
-window:add(vbox)
-
----------------
--- Gst Stuff --
----------------
+function window.child.quit:on_clicked()
+   window:destroy()
+end
 
 local pipeline	 = Gst.Pipeline.new('mypipeline')
 local src	 = Gst.ElementFactory.make('autovideosrc', 'videosrc')
 local colorspace = Gst.ElementFactory.make('ffmpegcolorspace', 'colorspace')
 local scale	 = Gst.ElementFactory.make('videoscale', 'scale')
 local rate	 = Gst.ElementFactory.make('videorate', 'rate')
-local sink	 = Gst.ElementFactory.make('autovideosink', 'sink')
+local sink	 = Gst.ElementFactory.make('xvimagesink', 'sink')
 
 pipeline:add_many(src, colorspace, scale, rate, sink)
+src:link_many(colorspace, scale, rate, sink)
 
-src:link(colorspace)
-colorspace:link(scale)
-scale:link(rate)
-rate:link(sink)
-
-function play_button:on_clicked()
-   pipeline:set_state(Gst.State.PLAYING)
+function window.child.play:on_clicked()
+   pipeline.state = 'PLAYING'
 end
 
-
-function stop_button:on_clicked()
-   pipeline:set_state(Gst.State.PAUSED)
+function window.child.stop:on_clicked()
+   pipeline.state = 'PAUSED'
 end
-
 
 local function bus_callback(bus, message)
-   if message.type == Gst.MessageType.ERROR then
+   if message.type.ERROR then
       print('Error:', message:parse_error().message)
       Gtk.main_quit()
-   elseif message.type == Gst.MessageType.EOS then
+   end
+   if message.type.EOS then
       print 'end of stream'
-   elseif message.type == Gst.MessageType.STATE_CHANGED then
+   end
+   if message.type.STATE_CHANGED then
       local old, new, pending = message:parse_state_changed()
-      print(string.format('state changed: %s->%s:%s',
-			  Gst.State[old], Gst.State[new], Gst.State[pending]))
-   elseif message.type == Gst.MessageType.TAG then
+      print(string.format('state changed: %s->%s:%s', old, new, pending))
+
+      -- Set up sensitive state on buttons according to current state.
+      -- Note that this is forwarded to mainloop, because bus callback
+      -- can be called in some side thread and Gtk might not like to
+      -- be controlled from other than main thread on some platforms.
+      GLib.idle_add(GLib.PRIORITY_DEFAULT, function()
+	 window.child.play.sensitive = (new ~= 'PLAYING')
+	 window.child.stop.sensitive = (new == 'PLAYING')
+	 return GLib.SOURCE_REMOVE
+      end)
+   end
+   if message.type.TAG then
       message:parse_tag():foreach(
 	 function(list, tag)
 	    print(('tag: %s = %s'):format(tag, tostring(list:get(tag))))
@@ -84,9 +99,18 @@ local function bus_callback(bus, message)
    return true
 end
 
+function window.child.video:on_realize()
+   -- Retarget video output to the drawingarea.
+   sink:set_window_handle(self.window:get_xid())
+end
+
 pipeline.bus:add_watch(bus_callback)
-window:show_all()
-Gtk.main()
+
+function app:on_activate()
+   window:show_all()
+end
+
+app:run { arg[0], ... }
 
 -- Must always set the pipeline to NULL before disposing it
-pipeline:set_state(Gst.State.NULL)
+pipeline.state = 'NULL'
