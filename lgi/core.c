@@ -471,7 +471,7 @@ core_module (lua_State *L)
 {
   /* Build module path. */
   gchar *path = g_module_build_path (luaL_optstring (L, 2, NULL),
-                                     luaL_checkstring (L, 1));
+				     luaL_checkstring (L, 1));
 
   /* Try to load the module. */
   GModule *module = g_module_open (path, 0);
@@ -514,10 +514,54 @@ create_repo_table (lua_State *L, const char *name, void *key)
   lua_setfield (L, -2, name);
 }
 
+static void
+set_resident (lua_State *L)
+{
+  /* This hack tries to enumerate the whole registry table and find
+     'LOADLIB: path' library.  When it detects itself, it just removes
+     pointer to the loaded library, disallowing Lua to close it, thus
+     leaving it resident even when the state is closed. */
+  lua_pushnil (L);
+  while (lua_next (L, LUA_REGISTRYINDEX))
+    {
+      if (lua_type (L, -2) == LUA_TSTRING)
+	{
+	  const char *str = lua_tostring (L, -2);
+	  if (g_str_has_prefix (str, "LOADLIB: ") &&
+	      strstr (str, "corelgilua5"))
+	    {
+	      /* NULL the pointer to the loaded library. */
+	      if (lua_type (L, -1) == LUA_TUSERDATA)
+		{
+		  gpointer *lib = lua_touserdata (L, -1);
+		  *lib = NULL;
+		}
+
+	      /* Clean the stack and return. */
+	      lua_pop (L, 2);
+	      return;
+	    }
+	}
+
+      lua_pop (L, 1);
+    }
+
+  g_warning ("failed to self-resident corelgilua5, not found in registry");
+}
+
 int
 luaopen_lgi_corelgilua51 (lua_State* L)
 {
   LgiStateMutex *mutex;
+
+  /* Try to make itself resident.  This is needed because this dynamic
+     module is 'statically' linked with glib/gobject, and these
+     libraries are not designed to be unloaded.  Once they are
+     unloaded, they cannot be safely loaded again into the same
+     process.  To avoid problems when repeately opening and closing
+     lua_States and loading lgi into them, we try to make the whole
+     'core' module resident. */
+  set_resident (L);
 
   /* Early GLib initializations. Make sure that following fundamental
      G_TYPEs are already initialized. */
