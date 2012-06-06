@@ -701,7 +701,7 @@ callable_param_2c (lua_State *L, Param *param, int narg, GIArgument *arg,
       if (param->ti)
 	nret = lgi_marshal_2c (L, param->ti,
 			       callable->info ? &param->ai : NULL,
-			       GI_TRANSFER_NOTHING, arg, narg, 0,
+			       param->transfer, arg, narg, 0,
 			       callable->info, args + callable->has_self);
       else
 	{
@@ -801,7 +801,7 @@ callable_call (lua_State *L)
 	{
 	  args[0].v_pointer =
 	    lgi_object_2c (L, 2, g_registered_type_info_get_g_type (parent),
-			   FALSE, FALSE);
+			   FALSE, FALSE, FALSE);
 	  nret++;
 	}
       else

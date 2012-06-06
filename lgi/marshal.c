@@ -918,7 +918,8 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 	      arg->v_pointer =
 		lgi_object_2c (L, narg,
 			       g_registered_type_info_get_g_type (info),
-			       optional, FALSE);
+			       optional, FALSE,
+			       transfer != GI_TRANSFER_NOTHING);
 	      break;
 	    }
 
@@ -981,7 +982,7 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 		    {
 		      /* Check object. */
 		      arg->v_pointer = lgi_object_2c (L, narg, G_TYPE_INVALID,
-						      FALSE, TRUE);
+						      FALSE, TRUE, FALSE);
 		      if (!arg->v_pointer)
 			{
 			  /* Check any kind of record. */
@@ -1529,7 +1530,7 @@ marshal_fundamental_marshaller (lua_State *L)
       /* Set fundamental to value. */
       GIObjectInfoSetValueFunction set_value =
 	lua_touserdata (L, lua_upvalueindex (2));
-      obj = lgi_object_2c (L, 3, G_TYPE_INVALID, FALSE, FALSE);
+      obj = lgi_object_2c (L, 3, G_TYPE_INVALID, FALSE, FALSE, FALSE);
       set_value (value, obj);
       return 0;
     }

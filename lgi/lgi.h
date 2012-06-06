@@ -173,7 +173,7 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own);
    requested type. */
 gpointer
 lgi_object_2c (lua_State *L, int narg, GType gtype, gboolean optional,
-	       gboolean nothrow);
+	       gboolean nothrow, gboolean transfer);
 
 #if !GLIB_CHECK_VERSION(2, 30, 0)
 /* Workaround for broken g_struct_info_get_size() for GValue, see

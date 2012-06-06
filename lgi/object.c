@@ -282,7 +282,7 @@ object_tostring (lua_State *L)
 
 gpointer
 lgi_object_2c (lua_State *L, int narg, GType gtype, gboolean optional,
-	       gboolean nothrow)
+	       gboolean nothrow, gboolean transfer)
 {
   gpointer obj;
 
@@ -296,6 +296,9 @@ lgi_object_2c (lua_State *L, int narg, GType gtype, gboolean optional,
       && (!obj || (gtype != G_TYPE_INVALID
 		   && !g_type_is_a (G_TYPE_FROM_INSTANCE (obj), gtype))))
     object_type_error (L, narg, gtype);
+
+  if (transfer)
+    object_refsink (L, obj);
 
   return obj;
 }
