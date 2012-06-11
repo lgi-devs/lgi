@@ -14,7 +14,7 @@ LGI is tested and compatible with standard Lua 5.1 and Lua 5.2 and
 recent LuaJIT 2 betas.  Compatibility with other Lua implementations
 is not tested yet.
 
-If you need to use pre-gobject-introspection GTK (ancient GTK+ 2.x
+If you need to support pre-gobject-introspection GTK (ancient GTK+ 2.x
 releases), use [Lua-Gnome](http://sourceforge.net/projects/lua-gnome/).
 
 ## Installation:
@@ -43,6 +43,15 @@ doc/ directory in markdown format.  Process it with your favorite
 markdown processor if you want to read it in HTML.
 
 ## History
+
+### 0.6.2 (25-Jun-2012)
+ - Avoid unexpected dependency on cairo-devel, cairo-runtime is now
+   enough
+ - Make set_resident() more robust and fix stack leak for lua5.2 case,
+   avoid useless warning when set_resident() fails (to accomodate for
+   static linking case).
+ - Fix small memory leak (mutex) which occured once per opened
+   lua_State using lgi.
 
 ### 0.6.1 (19-Jun-2012)
  - objects and structs: actually implement '_type' property as documented
