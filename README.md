@@ -44,6 +44,19 @@ markdown processor if you want to read it in HTML.
 
 ## History
 
+### 0.6.1 (unreleased yet)
+ - tests: Fix regression tests for less common platforms
+ - Pango: Add a few missing overrides
+ - cairo: Fix Context:user_to_device() family of methods.
+ - GStreamer: Add support for transfer!=none for input objects.  This
+   is needed to avoid leaks caused by strange usage of transfer
+   annotations of gstreamer-0.10
+ - GStreamer: Add more missing overrides
+ - GStreamer: Fix and improve samples
+ - Various fixes for usecase when lua context with loaded lgi is
+   closed and opened again
+ - Gtk: Add missing Gtk.Builder:connect_signals() override
+
 ### 0.6 (22-May-2012)
 - Add cairo bindings, cairo sample and finish some gtk-demo parts
   which were requiring cairo
