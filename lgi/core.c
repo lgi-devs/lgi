@@ -547,10 +547,18 @@ set_resident (lua_State *L)
     {
       /* Remove the very last item in they array part, which is handle
 	 to our loaded module used by _CLIBS.gctm to clean modules
-	 upon state cleanup. */
-      lua_pushnil (L);
-      lua_rawseti (L, -2, lua_objlen (L, -2));
-      lua_pop (L, 1);
+	 upon state cleanup. But before removing it, check, that it is
+	 really the handle of our module.  Our module filename is
+	 passed as arg 2. */
+      lua_pushvalue (L, 2);
+      lua_gettable (L, -2);
+      lua_rawgeti (L, -2, lua_objlen (L, -2));
+      if (lua_equal (L, -1, -2))
+	{
+	  lua_pushnil (L);
+	  lua_rawseti (L, -4, lua_objlen (L, -4));
+	}
+      lua_pop (L, 3);
       return;
     }
   else
@@ -586,8 +594,6 @@ set_resident (lua_State *L)
 	  lua_pop (L, 1);
 	}
     }
-
-  g_warning ("failed to self-resident corelgilua5, not found in registry");
 }
 
 int
