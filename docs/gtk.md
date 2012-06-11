@@ -133,6 +133,15 @@ A new `objects` attribute provides direct access to loaded objects by
 their identifier, so that instead of `builder:get_object('id')` it
 is possible to use `builder.objects.id`
 
+`Gtk.Builder.connect_signals(handlers)` tries to connect all signals
+to handlers which are defined in `handlers` table.  Functions from
+`handlers` table are invoked with target object on which is signal
+defined as first argument, but it is possible to define `object`
+attribute, in this case the object instance specified in `object`
+attribute is used.  `after` attribute is honored, but `swapped` is
+completely ignored, as its semantics for lgi is unclear and not very
+useful.
+
 ## Gtk.Action and Gtk.ActionGroup
 
 Lgi provides new method `Gtk.ActionGroup:add()` which generally replaces
