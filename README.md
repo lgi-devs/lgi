@@ -44,7 +44,7 @@ markdown processor if you want to read it in HTML.
 
 ## History
 
-### 0.6.1 (unreleased yet)
+### 0.6.1 (19-Jun-2012)
  - objects and structs: actually implement '_type' property as documented
  - tests: Fix regression tests for less common platforms
  - Pango: Add a few missing overrides
