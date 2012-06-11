@@ -378,31 +378,33 @@ package_lock_leave (void)
   g_static_rec_mutex_unlock (&package_mutex);
 }
 
+static gpointer package_lock_register[8] = { NULL };
+
 static int
 core_registerlock (lua_State *L)
 {
-  const gchar *name;
   void (*set_lock_functions)(GCallback, GCallback);
-  GError *err = NULL;
   LgiStateMutex *mutex;
   GStaticRecMutex *wait_on;
+  unsigned i;
 
   /* Get registration function. */
-  GITypelib *typelib = g_irepository_require (NULL, luaL_checkstring (L, 1),
-					      NULL, 0, &err);
-  if (!typelib)
-  {
-    lua_pushstring (L, err->message);
-    g_error_free (err);
-    return lua_error (L);
-  }
+  luaL_checktype (L, 1, LUA_TLIGHTUSERDATA);
+  set_lock_functions = lua_touserdata (L, 1);
+  luaL_argcheck (L, set_lock_functions != NULL, 1, "NULL function");
 
-  name = luaL_checkstring (L, 2);
-  if (!g_typelib_symbol (typelib, name, (gpointer*) &set_lock_functions))
-    return luaL_error (L, "`%s' not found", name);
-
-  /* Register our package lock functions. */
-  set_lock_functions (package_lock_enter, package_lock_leave);
+  /* Check, whether this package was already registered. */
+  for (i = 0; i < G_N_ELEMENTS (package_lock_register) &&
+	 package_lock_register[i] != set_lock_functions; i++)
+    {
+      if (package_lock_register[i] == NULL)
+	{
+	  /* Register our package lock functions. */
+	  package_lock_register[i] = set_lock_functions;
+	  set_lock_functions (package_lock_enter, package_lock_leave);
+	  break;
+	}
+    }
 
   /* Switch our statelock to actually use packagelock. */
   lua_pushlightuserdata (L, &call_mutex);
