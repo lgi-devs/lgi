@@ -42,16 +42,33 @@ function area:on_draw(cr)
 end
 
 function window.child.change:on_clicked()
-   local dialog = Gtk.ColorChooserDialog {
-      title = "Changing color",
-      transient_for = window,
-      rgba = self.style_context:get_background_color('NORMAL')
-   }
-   function dialog:on_response(response_id)
-      if response_id == Gtk.ResponseType.OK then
-	 area:override_background_color(0, self.rgba)
+   local dialog
+   if Gtk.ColorChooserDialog then
+      dialog = Gtk.ColorChooserDialog {
+	 title = "Changing color",
+	 transient_for = window,
+	 rgba = self.style_context:get_background_color('NORMAL')
+      }
+      function dialog:on_response(response_id)
+	 if response_id == Gtk.ResponseType.OK then
+	    area:override_background_color(0, self.rgba)
+	 end
+	 dialog:hide()
       end
-      dialog:hide()
+   else
+      dialog = Gtk.ColorSelectionDialog {
+	 title = "Changing color",
+	 transient_for = window,
+      }
+      dialog.color_selection.current_rgba =
+	 self.style_context:get_background_color('NORMAL')
+      function dialog:on_response(response_id)
+	 if response_id == Gtk.ResponseType.OK then
+	    area:override_background_color(
+	       0, self.color_selection.current_rgba)
+	 end
+	 dialog:hide()
+      end
    end
    dialog:show_all()
 end
