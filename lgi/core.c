@@ -602,6 +602,9 @@ luaopen_lgi_corelgilua51 (lua_State* L)
   mutex->mutex = &mutex->state_mutex;
   g_static_rec_mutex_init (&mutex->state_mutex);
   g_static_rec_mutex_lock (&mutex->state_mutex);
+  lua_pushlightuserdata (L, &call_mutex_mt);
+  lua_rawget (L, LUA_REGISTRYINDEX);
+  lua_setmetatable (L, -2);
   lua_rawset (L, LUA_REGISTRYINDEX);
 
   /* Register 'lgi.core' interface. */
