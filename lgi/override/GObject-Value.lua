@@ -41,7 +41,7 @@ Value._field = nil
 
 -- Register _uninit function, to avoid memory leaks from values which
 -- are inline-allocated by core.record.new.
-Value._uninit = gi.GObject.resolve.g_value_unset
+Value._uninit = core.record.unset_value
 
 -- 'type' property controls gtype of the property.
 Value._attribute = { gtype = {} }

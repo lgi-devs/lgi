@@ -639,6 +639,15 @@ static const struct luaL_Reg record_api_reg[] = {
   { NULL, NULL }
 };
 
+/* Workaround for g_value_unset(), which complains when invoked on
+   uninitialized GValue instance. */
+static void
+record_value_unset (GValue *value)
+{
+  if (G_IS_VALUE (value))
+    g_value_unset (value);
+}
+
 void
 lgi_record_init (lua_State *L)
 {
@@ -655,5 +664,7 @@ lgi_record_init (lua_State *L)
   /* Create 'record' API table in main core API table. */
   lua_newtable (L);
   luaL_register (L, NULL, record_api_reg);
+  lua_pushlightuserdata (L, record_value_unset);
+  lua_setfield (L, -2, "value_unset");
   lua_setfield (L, -2, "record");
 }
