@@ -572,7 +572,7 @@ end
 -- Workaround for bug in GTK+; text_column accessors don't do an extra
 -- needed work which is done properly in
 -- gtk_entry_completion_{set/get}_text_column
-if Gtk.get_major_version == 3 and Gtk.get_minor_version() < 4 then
+if Gtk.get_major_version() == 3 and Gtk.get_minor_version() < 4 then
    Gtk.EntryCompletion._attribute = {
       text_column = { get = Gtk.EntryCompletion.get_text_column,
 		      set = Gtk.EntryCompletion.set_text_column }
