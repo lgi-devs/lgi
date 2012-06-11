@@ -324,7 +324,18 @@ static int
 record_gc (lua_State *L)
 {
   Record *record = record_get (L, 1);
-  if (record->store == RECORD_STORE_ALLOCATED)
+
+  if (record->store == RECORD_STORE_EMBEDDED
+      || record->store == RECORD_STORE_NESTED)
+    {
+      /* Check whether record has registered '_uninit' function, and
+	 invoke it if yes. */
+      lua_getfenv (L, 1);
+      void (*uninit)(gpointer) = lgi_gi_load_function (L, -1, "_uninit");
+      if (uninit != NULL)
+	uninit (record->addr);
+    }
+  else if (record->store == RECORD_STORE_ALLOCATED)
     {
       /* Free the owned record. */
       GType gtype;
@@ -365,7 +376,8 @@ record_gc (lua_State *L)
 	    }
 	}
     }
-  else if (record->store == RECORD_STORE_NESTED)
+
+  if (record->store == RECORD_STORE_NESTED)
     {
       /* Free the reference to the parent. */
       lua_pushlightuserdata (L, record);
@@ -603,15 +615,15 @@ record_set (lua_State *L)
     {
       /* Change ownership type of the record. */
       if (lua_toboolean (L, 2))
-        {
-          if (record->store == RECORD_STORE_EXTERNAL)
-            record->store = RECORD_STORE_ALLOCATED;
-        }
+	{
+	  if (record->store == RECORD_STORE_EXTERNAL)
+	    record->store = RECORD_STORE_ALLOCATED;
+	}
       else
-        {
-          if (record->store == RECORD_STORE_ALLOCATED)
-            record->store = RECORD_STORE_EXTERNAL;
-        }
+	{
+	  if (record->store == RECORD_STORE_ALLOCATED)
+	    record->store = RECORD_STORE_EXTERNAL;
+	}
     }
 
   return 0;

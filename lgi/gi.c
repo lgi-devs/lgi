@@ -53,7 +53,7 @@ lgi_gi_load_function (lua_State *L, int typetable, const char *name)
       g_typelib_symbol (g_base_info_get_typelib (*info),
                         g_function_info_get_symbol (*info), &symbol);
   else if (lua_islightuserdata (L, -1))
-      symbol = lua_touserdata (L, -1);
+    symbol = lua_touserdata (L, -1);
   lua_pop (L, 1);
   return symbol;
 }
