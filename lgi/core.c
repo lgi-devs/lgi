@@ -519,33 +519,49 @@ create_repo_table (lua_State *L, const char *name, void *key)
 static void
 set_resident (lua_State *L)
 {
-  /* This hack tries to enumerate the whole registry table and find
-     'LOADLIB: path' library.  When it detects itself, it just removes
-     pointer to the loaded library, disallowing Lua to close it, thus
-     leaving it resident even when the state is closed. */
-  lua_pushnil (L);
-  while (lua_next (L, LUA_REGISTRYINDEX))
+  /* Get '_CLIBS' table from the registry (Lua5.2). */
+  lua_getfield (L, LUA_REGISTRYINDEX, "_CLIBS");
+  if (!lua_isnil (L, -1))
     {
-      if (lua_type (L, -2) == LUA_TSTRING)
+      /* Remove the very last item in they array part, which is handle
+	 to our loaded module used by _CLIBS.gctm to clean modules
+	 upon state cleanup. */
+      lua_pushnil (L);
+      lua_rawseti (L, -2, lua_objlen (L, -2));
+      return;
+    }
+  else
+    {
+      /* This hack tries to enumerate the whole registry table and
+	 find 'LOADLIB: path' library.  When it detects itself, it
+	 just removes pointer to the loaded library, disallowing Lua
+	 to close it, thus leaving it resident even when the state is
+	 closed. */
+
+      /* Note: 'nil' is on the stack from lua_getfield() call above. */
+      while (lua_next (L, LUA_REGISTRYINDEX))
 	{
-	  const char *str = lua_tostring (L, -2);
-	  if (g_str_has_prefix (str, "LOADLIB: ") &&
-	      strstr (str, "corelgilua5"))
+	  if (lua_type (L, -2) == LUA_TSTRING)
 	    {
-	      /* NULL the pointer to the loaded library. */
-	      if (lua_type (L, -1) == LUA_TUSERDATA)
+	      const char *str = lua_tostring (L, -2);
+	      if (g_str_has_prefix (str, "LOADLIB: ") &&
+		  strstr (str, "corelgilua5"))
 		{
-		  gpointer *lib = lua_touserdata (L, -1);
-		  *lib = NULL;
+		  /* NULL the pointer to the loaded library. */
+		  if (lua_type (L, -1) == LUA_TUSERDATA)
+		    {
+		      gpointer *lib = lua_touserdata (L, -1);
+		      *lib = NULL;
+		    }
+
+		  /* Clean the stack and return. */
+		  lua_pop (L, 2);
+		  return;
 		}
-
-	      /* Clean the stack and return. */
-	      lua_pop (L, 2);
-	      return;
 	    }
-	}
 
-      lua_pop (L, 1);
+	  lua_pop (L, 1);
+	}
     }
 
   g_warning ("failed to self-resident corelgilua5, not found in registry");
