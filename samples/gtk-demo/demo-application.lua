@@ -32,7 +32,7 @@ local function activate_action(action)
       transient_for = window, destroy_with_parent = true,
       message_type = 'INFO', buttons = 'CLOSE',
       text = ("You activated action: '%s' of type '%s'"):format(
-	 action.name, GObject.Type.name(action.type)),
+	 action.name, GObject.Type.name(action._type)),
       on_response = Gtk.Widget.destroy
    }
    dialog:show()
@@ -44,7 +44,7 @@ local function change_radio_action(action)
    if action.active then
       message_label.label = (("You activated radio action: '%s' of type '%s'."
 			      .."\nCurrent value: %d"):format(
-			      action.name, GObject.Type.name(action.type),
+			      action.name, GObject.Type.name(action._type),
 			      action.value))
       window.child.infobar.message_type = action.value
       window.child.infobar:show()

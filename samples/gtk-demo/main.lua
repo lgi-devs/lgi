@@ -25,6 +25,8 @@
 --
 ------------------------------------------------------------------------------
 
+local loadstring = loadstring or load
+
 local lgi = require 'lgi'
 local GObject = lgi.GObject
 local Gio = lgi.Gio
