@@ -45,6 +45,7 @@ markdown processor if you want to read it in HTML.
 ## History
 
 ### 0.6.1 (unreleased yet)
+ - objects and structs: actually implement '_type' property as documented
  - tests: Fix regression tests for less common platforms
  - Pango: Add a few missing overrides
  - cairo: Fix Context:user_to_device() family of methods.
