@@ -490,6 +490,7 @@ core_module (lua_State *L)
 
  end:
   lua_pushstring (L, path);
+  g_free (path);
   return 2;
 }
 
