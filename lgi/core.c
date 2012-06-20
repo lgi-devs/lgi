@@ -529,6 +529,7 @@ set_resident (lua_State *L)
 	 upon state cleanup. */
       lua_pushnil (L);
       lua_rawseti (L, -2, lua_objlen (L, -2));
+      lua_pop (L, 1);
       return;
     }
   else
