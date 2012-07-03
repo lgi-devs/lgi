@@ -1,0 +1,2 @@
+tar: origin/master:. base=lgi-@version@ name=lgi
+copy: *.rockspec
