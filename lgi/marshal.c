@@ -1310,7 +1310,7 @@ lgi_marshal_field (lua_State *L, gpointer object, gboolean getmode,
 				  NULL, NULL);
 
 		/* Replace numeric field with symbolic value. */
-		lua_gettable (L, field_arg);
+		lua_gettable (L, -3);
 		lua_replace (L, -3);
 		lua_pop (L, 1);
 		return 1;
@@ -1320,7 +1320,7 @@ lgi_marshal_field (lua_State *L, gpointer object, gboolean getmode,
 		/* Convert enum symbol to numeric value. */
 		if (lua_type (L, val_arg != LUA_TNUMBER))
 		  {
-		    lua_pushvalue (L, field_arg);
+		    lua_pushvalue (L, -1);
 		    lua_pushvalue (L, val_arg);
 		    lua_call (L, 1, 1);
 		    lua_replace (L, val_arg);
