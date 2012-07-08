@@ -97,7 +97,7 @@ function cairo.path()
 	 checkv(pts[1].x, 10, 'number')
 	 checkv(pts[1].y, 11, 'number')
       elseif i == 2 then
-	 checkv(t, 'MOVE_TO', 'string')
+	 checkv(t, 'CURVE_TO', 'string')
 	 check(type(pts) == 'table' and #pts == 3)
 	 checkv(pts[1].x, 1, 'number')
 	 checkv(pts[1].y, 2, 'number')
@@ -106,9 +106,14 @@ function cairo.path()
 	 checkv(pts[3].x, 5, 'number')
 	 checkv(pts[3].y, 6, 'number')
       elseif i == 3 then
-	 checkv(t, 'MOVE_TO', 'string')
+	 checkv(t, 'CLOSE_PATH', 'string')
 	 check(type(pts) == 'table' and #pts == 0)
       elseif i == 4 then
+	 checkv(t, 'MOVE_TO', 'string')
+	 check(type(pts) == 'table' and #pts == 1)
+	 checkv(pts[1].x, 10, 'number')
+	 checkv(pts[1].y, 11, 'number')
+      elseif i == 5 then
 	 checkv(t, 'LINE_TO', 'string')
 	 check(type(pts) == 'table' and #pts == 1)
 	 checkv(pts[1].x, 21, 'number')
@@ -118,7 +123,7 @@ function cairo.path()
       end
       i = i + 1
    end
-   check(i == 4)
+   check(i == 6)
 end
 
 function cairo.surface_type()
