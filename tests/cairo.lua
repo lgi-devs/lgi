@@ -118,6 +118,7 @@ function cairo.path()
       end
       i = i + 1
    end
+   check(i == 4)
 end
 
 function cairo.surface_type()
