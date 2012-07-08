@@ -1268,13 +1268,13 @@ lgi_marshal_field (lua_State *L, gpointer object, gboolean getmode,
       lua_pop (L, 2);
 
       /* Load type information from the table and decide how to handle
-      it according to 'kind' */
+	 it according to 'kind' */
       lua_rawgeti (L, field_arg, 3);
       switch (kind)
 	{
 	case 0:
 	  /* field[3] contains typeinfo, load it and fall through. */
-            ti = *(GITypeInfo **) luaL_checkudata (L, -1, LGI_GI_INFO);
+	  ti = *(GITypeInfo **) luaL_checkudata (L, -1, LGI_GI_INFO);
 	  to_remove = lua_gettop (L);
 	  break;
 
