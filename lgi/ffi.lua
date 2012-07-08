@@ -138,7 +138,7 @@ function ffi.load_fields(rec, defs)
 	       field[2] = 2
 	       size = def[2]._size
 	    end
-	 elseif repotype == 'enum' or 'repotype' == 'flags' then
+	 elseif repotype == 'enum' or repotype == 'flags' then
 	    field[2] = 3
 	    field[4] = def.type or ffi.types.int
 	    size, alignment = core.marshal.typeinfo(field[4])
