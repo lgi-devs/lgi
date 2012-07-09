@@ -169,3 +169,91 @@ function cairo.context_transform()
    compare(x, 10)
    compare(y, 20)
 end
+
+function cairo.mesh()
+   local cairo = lgi.cairo
+   local mesh = cairo.Pattern.create_mesh()
+   local pattern = cairo.Pattern.create_radial(1, 2, 3, 4, 5, 6)
+
+   check(cairo.Pattern:is_type_of(mesh))
+   check(cairo.MeshPattern:is_type_of(mesh))
+
+   check(cairo.Pattern:is_type_of(pattern))
+   check(not cairo.MeshPattern:is_type_of(pattern))
+
+   local function check_status(status)
+       checkv(status, 'SUCCESS', 'string')
+   end
+
+   -- Taken from cairo's pattern-getters test and slightly adapted to use all
+   -- functions of the mesh pattern API
+   local status, count = mesh:get_patch_count()
+   check_status(status)
+   checkv(count, 0, 'number')
+
+   mesh:begin_patch()
+   mesh:move_to(0, 0)
+   mesh:line_to(0, 3)
+   mesh:line_to(3, 3)
+   mesh:line_to(3, 0)
+   mesh:set_corner_color_rgba(0, 1, 1, 1, 1)
+   mesh:end_patch()
+
+   local status, count = mesh:get_patch_count()
+   check_status(status)
+   checkv(count, 1, 'number')
+
+   for k, v in pairs({ { 1, 1 }, { 1, 2 }, { 2, 2 }, { 2, 1 } }) do
+       local status, x, y = mesh:get_control_point(0, k - 1)
+       check_status(status)
+       checkv(x, v[1], 'number')
+       checkv(y, v[2], 'number')
+   end
+
+   mesh:begin_patch()
+   mesh:move_to(0, 0)
+   mesh:line_to(1, 0)
+   mesh:curve_to(1, 1, 1, 2, 0, 1)
+   mesh:set_corner_color_rgb(0, 1, 1, 1)
+   mesh:set_control_point(2, 0.5, 0.5)
+   mesh:end_patch()
+
+   local status, count = mesh:get_patch_count()
+   check_status(status)
+   checkv(count, 2, 'number')
+
+   for k, v in pairs({ 1, 0, 0, 1 }) do
+       local status, r, g, b, a = mesh:get_corner_color_rgba(1, k - 1)
+       check_status(status)
+       checkv(r, v, 'number')
+       checkv(g, v, 'number')
+       checkv(b, v, 'number')
+       checkv(a, v, 'number')
+   end
+
+   local i = 0
+   local expected = {
+      { { 0, 1 }, { 0, 2 }, { 0, 3 } },
+      { { 1, 3 }, { 2, 3 }, { 3, 3 } },
+      { { 3, 2 }, { 3, 1 }, { 3, 0 } },
+      { { 2, 0 }, { 1, 0 }, { 0, 0 } },
+   }
+   for t, pts in mesh:get_path(0):pairs() do
+      if i == 0 then
+	 checkv(t, 'MOVE_TO', 'string')
+	 check(type(pts) == 'table' and #pts == 1)
+	 checkv(pts[1].x, 0, 'number')
+	 checkv(pts[1].y, 0, 'number')
+      else
+	 -- Mesh patterns turn everything into curves. :-(
+	 checkv(t, 'CURVE_TO', 'string')
+	 check(type(pts) == 'table' and #pts == 3)
+	 for k, v in pairs(expected[i]) do
+	    checkv(pts[k].x, v[1], 'number')
+	    checkv(pts[k].y, v[2], 'number')
+	 end
+      end
+      i = i + 1
+   end
+   check(i == #expected + 1)
+end

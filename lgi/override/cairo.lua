@@ -65,6 +65,11 @@ for _, struct in pairs {
    cairo._struct[struct] = obj
 end
 
+-- Turn MeshPattern into an alias for Pattern
+local gtype = ffi.load_gtype(module_gobject, 'cairo_gobject_pattern_get_type')
+local obj = component.create(gtype, record.struct_mt, 'cairo.MeshPattern')
+cairo._struct['MeshPattern'] = obj
+
 local path_data_header = component.create(nil, record.struct_mt)
 ffi.load_fields(path_data_header, { { 'type', cairo.PathDataType },
 				    { 'length', ti.int } })
@@ -315,6 +320,7 @@ for _, info in ipairs {
 				{ ti.double, dir = 'out' },
 				{ ti.double, dir = 'out' },
 				{ ti.double, dir = 'out' } },
+	 create_mesh = { static = true, ret = { cairo.Pattern, xfer = true } },
 	 status = { ret = cairo.Status },
 	 set_extend = { cairo.Extend },
 	 get_extend = { ret = cairo.Extend },
@@ -325,6 +331,25 @@ for _, info in ipairs {
 	 get_type = { ret = cairo.PatternType },
       },
       properties = { 'status', 'extend', 'filter', 'type' },
+   },
+
+   {  'MeshPattern', parent = cairo.Pattern,
+      methods = {
+     begin_patch = {},
+     end_patch = {},
+     move_to = { ti.double, ti.double },
+     line_to = { ti.double, ti.double },
+     curve_to = { ti.double, ti.double, ti.double, ti.double, ti.double, ti.double },
+     set_control_point = { ti.int, ti.double, ti.double },
+     set_corner_color_rgb = { ti.int, ti.double, ti.double, ti.double },
+     set_corner_color_rgba = { ti.int, ti.double, ti.double, ti.double, ti.double },
+     get_patch_count = { ret = cairo.Status, { ti.int, dir = 'out' } },
+     get_path = { ret = { cairo.Path, xfer = true }, ti.int },
+     get_control_point = { ret = cairo.Status, ti.int, ti.int,
+			{ ti.double, dir = 'out' }, { ti.double, dir = 'out' }, { ti.double, dir = 'out' } },
+     get_corner_color_rgba = { ret = cairo.Status, ti.int, ti.int,
+			{ ti.double, dir = 'out' }, { ti.double, dir = 'out' }, { ti.double, dir = 'out' }, { ti.double, dir = 'out' } }
+     },
    },
 
    {  'Device',
@@ -664,6 +689,19 @@ function cairo.Surface:_attach(surface)
    local repotype = surface_type_map[type]
    if repotype then
       core.record.set(surface, repotype)
+   end
+end
+
+-- Also choose correct 'subclass' for patterns.
+local pattern_type_map = {
+   MESH = cairo.MeshPattern
+   -- XXX: Should something be done for other pattern types, too?
+}
+function cairo.Pattern:_attach(pattern)
+   local type = cairo.Pattern._method.get_type(pattern)
+   local repotype = pattern_type_map[type]
+   if repotype then
+      core.record.set(pattern, repotype)
    end
 end
 
