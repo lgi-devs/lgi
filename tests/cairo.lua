@@ -141,40 +141,57 @@ function cairo.surface_type()
    check(not cairo.RecordingSurface:is_type_of(s2))
 end
 
-function cairo.context_transform()
+function cairo.pattern_type()
    local cairo = lgi.cairo
+   local pattern
+
+   pattern = cairo.Pattern.create_rgb(1, 1, 1)
+   check(cairo.SolidPattern:is_type_of(pattern))
+   check(cairo.Pattern:is_type_of(pattern))
+   pattern = cairo.SolidPattern(1, 1, 1)
+   check(cairo.SolidPattern:is_type_of(pattern))
+   pattern = cairo.SolidPattern(1, 1, 1, 1)
+   check(cairo.SolidPattern:is_type_of(pattern))
+
    local surface = cairo.ImageSurface('ARGB32', 100, 100)
-   local cr = cairo.Context(surface)
+   pattern = cairo.Pattern.create_for_surface(surface)
+   check(select(2, pattern:get_surface()) == surface)
+   check(cairo.SurfacePattern:is_type_of(pattern))
+   check(cairo.Pattern:is_type_of(pattern))
+   pattern = cairo.SurfacePattern(surface)
+   check(cairo.SurfacePattern:is_type_of(pattern))
 
-   function compare(a, b)
-      check(math.abs(a-b) < 0.1)
+   pattern = cairo.Pattern.create_linear(0, 0, 10, 10)
+   check(cairo.LinearPattern:is_type_of(pattern))
+   check(cairo.GradientPattern:is_type_of(pattern))
+   check(cairo.Pattern:is_type_of(pattern))
+   pattern = cairo.LinearPattern(0, 0, 10, 10)
+   check(cairo.LinearPattern:is_type_of(pattern))
+
+   pattern = cairo.Pattern.create_radial(0, 0, 5, 10, 10, 5)
+   check(cairo.RadialPattern:is_type_of(pattern))
+   check(cairo.GradientPattern:is_type_of(pattern))
+   check(cairo.Pattern:is_type_of(pattern))
+   pattern = cairo.RadialPattern(0, 0, 5, 10, 10, 5)
+   check(cairo.RadialPattern:is_type_of(pattern))
+
+   if cairo.version >= cairo.version_encode(1, 12, 0) then
+      pattern = cairo.Pattern.create_mesh()
+      check(cairo.MeshPattern:is_type_of(pattern))
+      check(cairo.GradientPattern:is_type_of(pattern))
+      check(cairo.Pattern:is_type_of(pattern))
+      pattern = cairo.MeshPattern()
+      check(cairo.MeshPattern:is_type_of(pattern))
    end
-
-   cr:rotate(-math.pi / 2)
-   cr:translate(100, 200)
-
-   local x, y = cr:user_to_device(10, 20)
-   compare(x, 220)
-   compare(y, -110)
-
-   local x, y = cr:device_to_user(220, -110)
-   compare(x, 10)
-   compare(y, 20)
-
-   local x, y = cr:user_to_device_distance(10, 20)
-   compare(x, 20)
-   compare(y, -10)
-
-   local x, y = cr:device_to_user_distance(20, -10)
-   compare(x, 10)
-   compare(y, 20)
 end
 
-function cairo.mesh()
+function cairo.pattern_mesh()
    local cairo = lgi.cairo
 
    -- Mesh patterns are introduced in cairo 1.12
-   if cairo.version < cairo.version_encode(1, 12, 0) then return end
+   if cairo.version < cairo.version_encode(1, 12, 0) then
+      return
+   end
 
    local mesh = cairo.Pattern.create_mesh()
    local pattern = cairo.Pattern.create_radial(1, 2, 3, 4, 5, 6)
@@ -260,4 +277,33 @@ function cairo.mesh()
       i = i + 1
    end
    check(i == #expected + 1)
+end
+
+function cairo.context_transform()
+   local cairo = lgi.cairo
+   local surface = cairo.ImageSurface('ARGB32', 100, 100)
+   local cr = cairo.Context(surface)
+
+   function compare(a, b)
+      check(math.abs(a-b) < 0.1)
+   end
+
+   cr:rotate(-math.pi / 2)
+   cr:translate(100, 200)
+
+   local x, y = cr:user_to_device(10, 20)
+   compare(x, 220)
+   compare(y, -110)
+
+   local x, y = cr:device_to_user(220, -110)
+   compare(x, 10)
+   compare(y, 20)
+
+   local x, y = cr:user_to_device_distance(10, 20)
+   compare(x, 20)
+   compare(y, -10)
+
+   local x, y = cr:device_to_user_distance(20, -10)
+   compare(x, 10)
+   compare(y, 20)
 end
