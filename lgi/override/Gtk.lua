@@ -20,6 +20,7 @@ local cairo = lgi.cairo
 local log = lgi.log.domain('lgi.Gtk')
 
 -- Initialize GTK.
+Gtk.disable_setlocale()
 Gtk.init()
 
 -- Gtk.Allocation is just an alias to Gdk.Rectangle.
