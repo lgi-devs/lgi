@@ -27,6 +27,22 @@ create new context on specified surface, it is possible to use either
 `local cr = cairo.Context.create(surface)` or `local cr =
 cairo.Context(surface)`.
 
+### Version checking
+
+`cairo.version` and `cairo.version_string` fields contain current
+runtime cairo library version, as returned by their C counterparts
+`cairo_version()` and `cairo_version_string()`.  Original
+`CAIRO_VERSION_ENCODE` macro is reimplemented as
+`cairo.version_encode(major, minor, micro)`.  For example, following
+section shows how to guard code which should be run only when cairo
+version is at least 1.12:
+
+    if cairo.version >= cairo.version_encode(1, 12, 0) then
+       -- Cairo 1.12-specific code
+    else
+       -- Fallback to older cairo version code
+    end
+
 ### Synthetic properties
 
 There are many getter and setter functions for assorted cairo objects.

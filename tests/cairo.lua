@@ -172,6 +172,10 @@ end
 
 function cairo.mesh()
    local cairo = lgi.cairo
+
+   -- Mesh patterns are introduced in cairo 1.12
+   if cairo.version < cairo.version_encode(1, 12, 0) then return end
+
    local mesh = cairo.Pattern.create_mesh()
    local pattern = cairo.Pattern.create_radial(1, 2, 3, 4, 5, 6)
 

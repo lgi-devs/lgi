@@ -23,6 +23,15 @@ local ti = ffi.types
 cairo._module = core.module('cairo', 2)
 local module_gobject = core.gi.cairo.resolve
 
+-- Versioning support.
+function cairo.version_encode(major, minor, micro)
+   return 10000 * major + 100 * minor + micro
+end
+cairo.version = core.callable.new {
+   addr = cairo._module.cairo_version, ret = ti.int } ()
+cairo.version_string = core.callable.new {
+   addr = cairo._module.cairo_version_string, ret = ti.utf8 } ()
+
 -- Load some constants.
 cairo._constant = {
    MIME_TYPE_JP2 = 'image/jp2',
@@ -65,10 +74,13 @@ for _, struct in pairs {
    cairo._struct[struct] = obj
 end
 
--- Turn MeshPattern into an alias for Pattern
-local gtype = ffi.load_gtype(module_gobject, 'cairo_gobject_pattern_get_type')
-local obj = component.create(gtype, record.struct_mt, 'cairo.MeshPattern')
-cairo._struct['MeshPattern'] = obj
+if cairo.version >= cairo.version_encode(1, 12, 0) then
+   -- Turn MeshPattern into an alias for Pattern
+   local gtype = ffi.load_gtype(module_gobject,
+				'cairo_gobject_pattern_get_type')
+   local obj = component.create(gtype, record.struct_mt, 'cairo.MeshPattern')
+   cairo._struct['MeshPattern'] = obj
+end
 
 local path_data_header = component.create(nil, record.struct_mt)
 ffi.load_fields(path_data_header, { { 'type', cairo.PathDataType },
@@ -320,7 +332,8 @@ for _, info in ipairs {
 				{ ti.double, dir = 'out' },
 				{ ti.double, dir = 'out' },
 				{ ti.double, dir = 'out' } },
-	 create_mesh = { static = true, ret = { cairo.Pattern, xfer = true } },
+	 create_mesh = { since = cairo.version_encode(1, 12, 0),
+			 static = true, ret = { cairo.Pattern, xfer = true } },
 	 status = { ret = cairo.Status },
 	 set_extend = { cairo.Extend },
 	 get_extend = { ret = cairo.Extend },
@@ -334,6 +347,7 @@ for _, info in ipairs {
    },
 
    {  'MeshPattern', parent = cairo.Pattern,
+      since = cairo.version_encode(1, 12, 0),
       methods = {
      begin_patch = {},
      end_patch = {},
@@ -570,49 +584,54 @@ for _, info in ipairs {
       properties = { 'status', 'extents', },
    },
 } do
-   local name = info[1]
-   local obj = assert(cairo[name])
-   obj._parent = info.parent
-   if info.methods then
-      -- Go through description of the methods and create functions
-      -- from them.
-      obj._method = {}
-      local prefix = 'cairo_'
-      if name ~= 'Context' then
-	 prefix = prefix .. name:gsub('([%l%d])([%u])', '%1_%2'):lower() .. '_'
-      end
-      local self_arg = { obj }
-      for method_name, method_info in pairs(info.methods) do
-	 method_info.name = 'cairo.' .. name .. '.' .. method_name
-	 method_info.addr = cairo._module[
-	    prefix .. (method_info.cname or method_name)]
-	 if not method_info.static then
-	    table.insert(method_info, 1, self_arg)
+   if cairo.version >= (info.since or 0) then
+      local name = info[1]
+      local obj = assert(cairo[name])
+      obj._parent = info.parent
+      if info.methods then
+	 -- Go through description of the methods and create functions
+	 -- from them.
+	 obj._method = {}
+	 local prefix = 'cairo_'
+	 if name ~= 'Context' then
+	    prefix = prefix ..
+	       name:gsub('([%l%d])([%u])', '%1_%2'):lower() .. '_'
 	 end
-	 method_info.ret = method_info.ret or ti.void
-	 obj._method[method_name] = core.callable.new(method_info)
+	 local self_arg = { obj }
+	 for method_name, method_info in pairs(info.methods) do
+	    if cairo.version >= (method_info.since or 0) then
+	       method_info.name = 'cairo.' .. name .. '.' .. method_name
+	       method_info.addr = cairo._module[
+		  prefix .. (method_info.cname or method_name)]
+	       if not method_info.static then
+		  table.insert(method_info, 1, self_arg)
+	       end
+	       method_info.ret = method_info.ret or ti.void
+	       obj._method[method_name] = core.callable.new(method_info)
+	    end
+	 end
       end
-   end
-   if info.values then
-      -- Fill in addition enum/bitflag values.
-      for n, v in pairs(info.values) do
-	 obj[n] = v
+      if info.values then
+	 -- Fill in addition enum/bitflag values.
+	 for n, v in pairs(info.values) do
+	    obj[n] = v
+	 end
       end
-   end
-   if info.properties then
-      -- Aggregate getters/setters into pseudoproperties implemented
-      -- as attributes.
-      obj._attribute = {}
-      for _, attr in pairs(info.properties) do
-	 obj._attribute[attr] = {
-	    get = obj._method['get_' .. attr] or obj._method[attr],
-	    set = obj._method['set_' .. attr],
-	 }
+      if info.properties then
+	 -- Aggregate getters/setters into pseudoproperties
+	 -- implemented as attributes.
+	 obj._attribute = {}
+	 for _, attr in pairs(info.properties) do
+	    obj._attribute[attr] = {
+	       get = obj._method['get_' .. attr] or obj._method[attr],
+	       set = obj._method['set_' .. attr],
+	    }
+	 end
       end
-   end
-   if info.fields then
-      -- Load record fields definition
-      ffi.load_fields(obj, info.fields)
+      if info.fields then
+	 -- Load record fields definition
+	 ffi.load_fields(obj, info.fields)
+      end
    end
 end
 
