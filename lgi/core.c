@@ -51,6 +51,48 @@ const char *lgi_sd (lua_State *L)
 }
 #endif
 
+#if LUA_VERSION_NUM < 502
+void lua_rawsetp (lua_State *L, int index, void *p)
+{
+  index = lua_absindex (L, index);
+  lua_pushlightuserdata (L, p);
+  lua_insert (L, -2);
+  lua_rawset (L, index);
+}
+
+void lua_rawgetp (lua_State *L, int index, void *p)
+{
+  index = lua_absindex (L, index);
+  lua_pushlightuserdata (L, p);
+  lua_rawget (L, index);
+}
+#endif
+
+void *luaL_testudatap (lua_State *L, int arg, void *p)
+{
+  void *ptr = lua_touserdata (L, arg);
+  if (ptr != NULL)
+    {
+      if (lua_getmetatable (L, arg))
+	{
+	  lua_rawgetp (L, LUA_REGISTRYINDEX, p);
+	  if (!lua_rawequal (L, -1, -2))
+	    ptr = NULL;
+	  lua_pop (L, 2);
+	  return ptr;
+	}
+    }
+  return NULL;
+}
+
+void *luaL_checkudatap (lua_State *L, int arg, void *p)
+{
+  void *ptr = luaL_testudatap (L, arg, p);
+  if (ptr == NULL)
+    luaL_argerror (L, arg, "expected specific userdata");
+  return ptr;
+}
+
 /* lightuserdata of this address is a key in LUA_REGISTRYINDEX table
    to repo table. */
 static int repo;

@@ -18,7 +18,19 @@
 #define lua_objlen(L, p) lua_rawlen (L, p)
 #define lua_setfenv(L, p) lua_setuservalue (L, p)
 #define lua_getfenv(L, p) lua_getuservalue (L, p)
+#else
+#define lua_absindex(L, i)						\
+  ((i > 0 || i <= LUA_REGISTRYINDEX) ? i : lua_gettop (L) + i + 1)
+#define lua_getuservalue(L, p) lua_getfenv (L, p)
+#define lua_setuservalue(L, p) lua_setfenv (L, p)
+#define luaL_setfuncs(L, regs) luaL_register (L, NULL, regs)
+#define luaL_len(L, p) lua_objlen (L, p)
+#define luaL_testudata(L, p, n) lgi_udata_test (L, p, n)
+void lua_rawsetp (lua_State *L, int index, void *p);
+void lua_rawgetp (lua_State *L, int index, void *p);
 #endif
+void *luaL_testudatap (lua_State *L, int arg, void *p);
+void *luaL_checkudatap (lua_State *L, int arg, void *p);
 
 #include <glib.h>
 #include <glib-object.h>
