@@ -103,7 +103,7 @@ call_new (lua_State *L)
   luaL_checktype (L, 2, LUA_TTABLE);
 
   /* Allocate CallInfo userdata structure. */
-  n_args = luaL_len (L, 1) / 3;
+  n_args = luaL_len (L, 1);
 
   call_info = lua_newuserdata (L, G_STRUCT_OFFSET (CallInfo, dirs)
 			       + n_args * (sizeof (ffi_type *)
@@ -119,15 +119,16 @@ call_new (lua_State *L)
   /* Fill ffi_type and dir array from defs table. */
   for (i = 0; i < n_args; i++)
     {
-      lua_rawgeti (L, 1, (i * 3) + 1);
+      lua_rawgeti (L, 1, i + 1);
+      lua_rawgeti (L, -1, 1);
       type[i] = ffi_types[luaL_checkoption (L, -1, NULL, ffi_names)];
-      lua_rawgeti (L, 1, (i * 3) + 2);
-      dir[i].in = luaL_checknumber (L, -1);
-      lua_rawgeti (L, 1, (i * 3) + 3);
-      dir[i].out = luaL_checknumber (L, -1);
-      if (i != 0 && dir[i].out != 0)
+      lua_rawgeti (L, -2, 2);
+      dir[i].in = lua_tonumber (L, -1);
+      lua_rawgeti (L, -3, 3);
+      dir[i].out = lua_tonumber (L, -1);
+      if (i != 1 && dir[i].out != 0)
 	call_info->n_redirs++;
-      lua_pop (L, 3);
+      lua_pop (L, 4);
     }
 
   /* Initialize libffi cif. */
