@@ -172,7 +172,7 @@ for _, info in ipairs {
 	 get_target = { ret = cairo.Surface},
 	 push_group = {},
 	 push_group_with_content = { cairo.Content },
-	 pop_group = {},
+	 pop_group = { ret = { cairo.Pattern, xfer = true } },
 	 pop_group_to_source = {},
 	 get_group_target = { ret = cairo.Surface },
 	 set_source_rgb = { ti.double, ti.double, ti.double },
@@ -203,7 +203,7 @@ for _, info in ipairs {
 			  { ti.double, dir = 'out' },
 			  { ti.double, dir = 'out' },
 			  { ti.double, dir = 'out' } },
-	 in_clip = { ret = ti.boolean },
+	 in_clip = { ret = ti.boolean, ti.double, ti.double },
 	 reset_clip = {},
 	 copy_clip_rectangle_list = {
 	    ret = { cairo.RectangleList, xfer = true } },
@@ -213,7 +213,7 @@ for _, info in ipairs {
 			  { ti.double, dir = 'out' },
 			  { ti.double, dir = 'out' },
 			  { ti.double, dir = 'out' } },
-	 in_fill = { ti.double, ti.double },
+	 in_fill = { ret = ti.boolean, ti.double, ti.double },
 	 mask = { cairo.Pattern },
 	 mask_surface = { cairo.Pattern, ti.double, ti.double },
 	 paint = {},
@@ -224,7 +224,7 @@ for _, info in ipairs {
 			    { ti.double, dir = 'out' },
 			    { ti.double, dir = 'out' },
 			    { ti.double, dir = 'out' } },
-	 in_stroke = { ti.double, ti.double },
+	 in_stroke = { ret = ti.boolean, ti.double, ti.double },
 	 copy_page = {},
 	 show_page = {},
 
@@ -358,7 +358,7 @@ for _, info in ipairs {
 	 create = { cname = 'cairo_pattern_create_linear', static = true,
 		    ret = { cairo.Pattern, xfer = true },
 		    ti.double, ti.double, ti.double, ti.double },
-	 get_linear_points = { ret = cairo.Status, ti.int,
+	 get_linear_points = { ret = cairo.Status,
 			       { ti.double, dir = 'out' },
 			       { ti.double, dir = 'out' },
 			       { ti.double, dir = 'out' },
@@ -373,7 +373,7 @@ for _, info in ipairs {
 		    ret = { cairo.Pattern, xfer = true },
 		    ti.double, ti.double, ti.double, ti.double,
 		    ti.double, ti.double },
-	 get_radial_circles = { ret = cairo.Status, ti.int,
+	 get_radial_circles = { ret = cairo.Status,
 				{ ti.double, dir = 'out' },
 				{ ti.double, dir = 'out' },
 				{ ti.double, dir = 'out' },
@@ -386,8 +386,7 @@ for _, info in ipairs {
    {  'MeshPattern', parent = cairo.Pattern,
       since = cairo.version_encode(1, 12, 0),
       methods = {
-	 create = { since = cairo.version_encode(1, 12, 0),
-		    cname = 'cairo_pattern_create_mesh', static = true,
+	 create = { cname = 'cairo_pattern_create_mesh', static = true,
 		    ret = { cairo.Pattern, xfer = true } },
 	 begin_patch = {},
 	 end_patch = {},
@@ -427,7 +426,7 @@ for _, info in ipairs {
 
    {  'Format',
       methods = {
-	 stride_for_width = { ret = ti.int, cairo.Format },
+	 stride_for_width = { ret = ti.int, ti.int },
       },
    },
 
@@ -522,7 +521,7 @@ for _, info in ipairs {
    {  'RecordingSurface', parent = cairo.Surface,
       methods = {
 	 create = { static = true, ret = { cairo.Surface, xfer = true },
-		    cairo.Content },
+		    cairo.Content, cairo.Rectangle },
 	 ink_extents = {
 	    { ti.double, dir = 'out' }, { ti.double, dir = 'out' },
 	    { ti.double, dir = 'out' }, { ti.double, dir = 'out' } },
@@ -555,7 +554,7 @@ for _, info in ipairs {
    {  'ToyFontFace', parent = cairo.FontFace,
       methods = {
 	 create = { static = true, ret = { cairo.ToyFontFace, xfer = true },
-		    cairo.FontSlant, cairo.FontWeight },
+		    ti.utf8, cairo.FontSlant, cairo.FontWeight },
 	 get_family = { ret = ti.utf8 },
 	 get_slant = { ret = cairo.Slant },
 	 get_weight = { ret = cairo.Weight },
