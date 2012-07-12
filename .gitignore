@@ -2,6 +2,6 @@
 *.so
 *.dll
 *.stackdump
-.depcheck
+.depcheck*
 *.rockspec
 cairodemo-*.png

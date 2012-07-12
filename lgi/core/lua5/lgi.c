@@ -5,7 +5,7 @@
  * Licensed under the MIT license:
  * http://www.opensource.org/licenses/mit-license.php
  *
- * Enrty point and utility functions.
+ * Entry point and utility functions.
  */
 
 #include <string.h>
@@ -434,8 +434,16 @@ set_resident (lua_State *L)
     }
 }
 
+#if LUA_VERSION_NUM == 501
+#define luaopen_lgi_core_lua5_lgilua5 luaopen_lgi_core_lua5_lgilua51
+#elif LUA_VERSION_NUM == 502
+#define luaopen_lgi_core_lua5_lgilua5 luaopen_lgi_core_lua5_lgilua52
+#else
+#error unexpected Lua version detected
+#endif
+
 int
-luaopen_lgi_core_lua5_lgilua51 (lua_State* L)
+luaopen_lgi_core_lua5_lgilua5 (lua_State* L)
 {
   LgiStateMutex *mutex;
 

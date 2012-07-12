@@ -16,6 +16,7 @@ all : $(VERSION_FILE)
 
 clean :
 	rm -f $(VERSION_FILE)
+	$(MAKE) -C core/lua5 clean
 
 $(VERSION_FILE) : Makefile ../Makefile
 	echo "return '$(VERSION)'" > $@
