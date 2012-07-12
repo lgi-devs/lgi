@@ -707,6 +707,7 @@ luaopen_lgi_corelgilua51 (lua_State* L)
   lgi_gi_init (L);
   lgi_marshal_init (L);
   lgi_aggr_init (L);
+  lgi_ctype_init (L);
   lgi_record_init (L);
   lgi_object_init (L);
   lgi_compound_init (L);
