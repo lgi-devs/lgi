@@ -66,6 +66,7 @@ lgi_cache_create (lua_State *L, gpointer key, const char *mode);
 /* Initialization of modules. */
 void lgi_marshal_init (lua_State *L);
 void lgi_record_init (lua_State *L);
+void lgi_aggr_init (lua_State *L);
 void lgi_object_init (lua_State *L);
 void lgi_callable_init (lua_State *L);
 void lgi_gi_init (lua_State *L);
@@ -186,6 +187,46 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own);
 gpointer
 lgi_object_2c (lua_State *L, int narg, GType gtype, gboolean optional,
 	       gboolean nothrow, gboolean transfer);
+
+/* Common datatype for aggregate (arrays and compounds). */
+typedef struct _LgiAggregate
+{
+  /* Address of the aggregate in memory. */
+  gpointer addr;
+
+  /* Flag indicating whether aggregate is owned by this Lua proxy. */
+  guint owned : 1;
+
+  /* Flag indicating whether data for this aggregate are stored
+     'inline'. */
+  guint is_inline : 1;
+
+  /* Index of the typeinfo index of the child element (used for
+     arrays). */
+  guint nti : 6;
+
+  /* Number of items (used for arrays). */
+  guint n_items : 24;
+} LgiAggregate;
+
+/* Returns aggregate's data area. Optionally checks whether it
+   conforms to specified mt pointer in registry, returns NULL if
+   not. */
+LgiAggregate *
+lgi_aggr_get (lua_State *L, int narg, gpointer mt);
+
+/* Tries to pick up aggregate from aggregate cache, puts it on the
+   stack and returns pointer to it.  If not found, returns NULL and
+   stores nothing to the stack. */
+LgiAggregate *
+lgi_aggr_find (lua_State *L, gpointer addr, int parent);
+
+/* Creates new aggregate, stores it into parent/cache tables.  If addr
+   is NULL, creates 'inline' aggregate with 'size' reserved data area.
+   Assigns metatable identified by mt pointer in registry. */
+LgiAggregate *
+lgi_aggr_create (lua_State *L, gpointer mt,
+		 gpointer addr, int size, int parent);
 
 #if !GLIB_CHECK_VERSION(2, 30, 0)
 /* Workaround for broken g_struct_info_get_size() for GValue, see
