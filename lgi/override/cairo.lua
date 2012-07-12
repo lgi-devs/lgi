@@ -525,6 +525,8 @@ for _, info in ipairs {
 	 ink_extents = {
 	    { ti.double, dir = 'out' }, { ti.double, dir = 'out' },
 	    { ti.double, dir = 'out' }, { ti.double, dir = 'out' } },
+	 get_extents = { since = cairo.version_encode(1, 12, 0),
+			 ret = ti.boolean, cairo.Rectangle },
       },
    },
 
@@ -716,18 +718,21 @@ for _, info in pairs {
    { cairo.ScaledFont, 'ctm', cairo.Matrix },
    { cairo.ScaledFont, 'scale_matrix', cairo.Matrix },
    { cairo.ScaledFont, 'font_options', cairo.FontOptions },
+   { cairo.RecordingSurface, 'extents', cairo.Rectangle },
 } do
    local getter_name = 'get_' ..info[2]
-   local raw_getter = assert(info[1]._method[getter_name])
-   info[1]._method[getter_name] = function(self)
-      local ret = info[3]()
-      raw_getter(self, ret)
-      return ret
+   local raw_getter = info[1]._method[getter_name]
+   if raw_getter then
+      info[1]._method[getter_name] = function(self)
+         local ret = info[3]()
+	 local res = raw_getter(self, ret)
+	 return (res == nil or res) and ret or nil
+      end
+      info[1]._attribute[info[2]] = {
+	 get = info[1][getter_name],
+	 set = info[1]['set_' .. info[2]],
+      }
    end
-   info[1]._attribute[info[2]] = {
-      get = info[1][getter_name],
-      set = info[1]['set_' .. info[2]],
-   }
 end
 
 -- Choose correct 'subclass' of surface on attaching to surface instances.
