@@ -67,6 +67,7 @@ lgi_cache_create (lua_State *L, gpointer key, const char *mode);
 void lgi_marshal_init (lua_State *L);
 void lgi_record_init (lua_State *L);
 void lgi_aggr_init (lua_State *L);
+void lgi_compound_init (lua_State *L);
 void lgi_object_init (lua_State *L);
 void lgi_callable_init (lua_State *L);
 void lgi_gi_init (lua_State *L);
@@ -227,6 +228,29 @@ lgi_aggr_find (lua_State *L, gpointer addr, int parent);
 LgiAggregate *
 lgi_aggr_create (lua_State *L, gpointer mt,
 		 gpointer addr, int size, int parent);
+/* Changes ownership information of the compound to specified value.
+   'action' 1(TRUE) means that ownership is added to compound,
+   0(FALSE) means that no change should occur, and -1 means that
+   ownership should be removed.  If it results in non-owned, attempts
+   to re-own the compound using '_ref' control function. */
+gboolean
+lgi_compound_own (lua_State *L, int narg, int action);
+
+/* Gets Lua compound object for given record/union/object.  'addr' is
+   address of the object or NULL if new object should be allocated.
+   'owned' says whether addr already has ownership to keep with proxy,
+   and is actually the same triple-state as 'action' for
+   lgi_compound_own() is.  'parent' is optional index of object to
+   keep alive while the record is alive. */
+void
+lgi_compound_2lua (lua_State *L, int ntypetable, gpointer addr, int owned,
+		   int parent);
+
+/* Returns C pointer to record from Lua proxy.  Returns NULL if narg
+   is not compound, optionally conforming to specified ntype
+   typetable. */
+gpointer
+lgi_compound_2c (lua_State *L, int narg, int ntype);
 
 #if !GLIB_CHECK_VERSION(2, 30, 0)
 /* Workaround for broken g_struct_info_get_size() for GValue, see
