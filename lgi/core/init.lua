@@ -11,4 +11,7 @@
 -- This module decides what kind of core routines should be loaded.
 -- Currently only one implementation exists, standard-Lua C-side
 -- implementation, LuaJIT-FFI-based one is planned.
-return require 'lgi.core.lua5.lua5'
+local core = require 'lgi.core.lua5.lua5'
+core.compiler = require 'lgi.core.lua5.compiler'
+
+return core
