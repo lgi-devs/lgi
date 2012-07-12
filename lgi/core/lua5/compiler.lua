@@ -264,20 +264,24 @@ function compile_type(context, index, source, direction)
 
    -- If we have output argument, ffidef is actually 'pointer', except
    -- when it is 'return'.
-   local dir = params.dir or 'in'
-   if #context.def == 0 then
-      -- Set up ffidef slots for return value arguments.
-      context.def[1] = { ffitype, false, ffitype ~= 'void' }
-   elseif index ~= 0 then
-      -- Set up ffidef slots for C function argument.
-      if dir == 'out' or dir == 'inout' then ffitype = 'pointer' end
-      local def = context.def[index] or {}
-      context.def[index] = def
+   if index ~= 0 then
+      local def = assert(context.def[index])
       def[1] = ffitype
-      def[2] = (dir == 'in' or dir == 'inout')
-      def[3] = (dir == 'out' or dir == 'inout' or dir == 'out-caller-alloc')
+      local dir = params.dir or 'in'
+      if index == 1 then
+	 -- Set up def slots for return value.
+	 def[2] = false
+	 def[3] = ffitype ~= 'void'
+      else
+	 -- Set up ffidef slots for C function argument.
+	 if dir == 'out' or dir == 'inout' then ffitype = 'pointer' end
+	 def[2] = (dir == 'in' or dir == 'inout')
+	 def[3] = (dir == 'out' or dir == 'inout' or dir == 'out-caller-alloc')
+      end
+      if not def.code_prepare and not def[2] then
+	 def.code_prepare = 'local ' .. def.name .. '\n'
+      end
    end
-   if index ~= 0 then context.def[index].name = 'v' .. index end
 end
 
 compiler.gate = {}
@@ -289,7 +293,19 @@ function compiler.gate.c(source, target)
       ti = {},
       def = {},
       guard = 0,
+      name = {},
    }
+
+   -- Create 'names' index for the arguments and prepare 'def' data
+   -- structure to work with.
+   context.name.ret = 1
+   context.def[1] = { name = 'ret' }
+   for i, def in ipairs(source) do
+      local name = def.name or ('v' .. i)
+      assert(not context.name[name], "duplicate arg name")
+      context.def[i + 1] = { name = name }
+      context.name[name] = i + 1
+   end
 
    -- Process all type arguments, starting with return value.
    compile_type(context, 1, source.ret or 'void')
@@ -338,13 +354,9 @@ function compiler.gate.c(source, target)
    end
    src[#src + 1] = '\n'
 
-   -- Generate vars adjustments.
+   -- Generate code_prepare snippets
    for i, def in ipairs(context.def) do
-      if not def[2] and def[3] then
-	 src[#src + 1] = 'local '
-	 src[#src + 1] = def.name
-	 src[#src + 1] = '\n'
-      end
+      src[#src + 1] = def.code_prepare
    end
 
    -- Render the call outputs.
@@ -371,7 +383,7 @@ function compiler.gate.c(source, target)
    end
    if #vars ~= 0 then
       src[#src + 1] = 'return '
-      src[#src + 1] = table.concat(vars, ' ,')
+      src[#src + 1] = table.concat(vars, ', ')
       src[#src + 1] = '\n'
    end
 
