@@ -399,6 +399,9 @@ function compiler.gate.c(source, target)
    return closure
 end
 
+function compiler.gate.lua(source, target)
+end
+
 function compiler.field(def)
 end
 
