@@ -47,18 +47,7 @@ function record.struct_mt:_element(instance, symbol)
    -- If the record has parent struct, try it there.
    local parent = rawget(self, '_parent')
    if parent then
-      element, category = parent:_element(instance, symbol)
-      if element then
-	 -- If category shows that returned element is already from
-	 -- inherited, leave it so, otherwise wrap returned element
-	 -- into _inherited category.
-	 if category ~= '_inherited' then
-	    element = { element = element, category = category,
-			symbol = symbol, type = parent }
-	    category = '_inherited'
-	 end
-	 return element, category
-      end
+      return parent:_element(instance, symbol)
    end
 end
 
@@ -101,16 +90,6 @@ function record.struct_mt:_access_internal(instance, element, ...)
    elseif element == '_type' then
       return core.record.query(instance, 'repo')
    end
-end
-
--- Add accessor for accessing inherited elements.
-function record.struct_mt:_access_inherited(instance, element, ...)
-   -- Cast instance to inherited type.
-   instance = core.record.cast(instance, element.type)
-
-   -- Forward to normal _access_element implementation.
-   return self:_access_element(instance, element.category, element.symbol,
-			       element.element, ...)
 end
 
 -- Create structure instance and initialize it with given fields.
