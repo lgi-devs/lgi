@@ -34,7 +34,7 @@ enum {
   CTYPE_BASE_CALLABLE = 0x0d,
 
   CTYPE_VARIANT       = 0x30,
-  CTYPE_VARIANT_SHIFT = 8,
+  CTYPE_VARIANT_SHIFT = 4,
   CTYPE_TRANSFER      = 0x40,
   CTYPE_OPTIONAL      = 0x80,
   CTYPE_POINTER       = 0x100,
@@ -1585,6 +1585,11 @@ lgi_ctype_init (lua_State *L)
   lua_pushcfunction (L, ctype_guard_gc);
   lua_setfield (L, -2, "__gc");
   lua_rawsetp (L, LUA_REGISTRYINDEX, &guard_mt);
+
+  /* Register guard api. */
+  lua_newtable (L);
+  luaL_setfuncs (L, guard_api_reg, 0);
+  lua_setfield (L, -2, "guard");
 
   /* Register carray metatable. */
   lua_newtable (L);
