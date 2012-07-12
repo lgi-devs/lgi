@@ -69,6 +69,7 @@ void lgi_ctype_init (lua_State *L);
 void lgi_record_init (lua_State *L);
 void lgi_aggr_init (lua_State *L);
 void lgi_compound_init (lua_State *L);
+void lgi_call_init (lua_State *L);
 void lgi_object_init (lua_State *L);
 void lgi_callable_init (lua_State *L);
 void lgi_gi_init (lua_State *L);

@@ -23,7 +23,7 @@ LIBFLAG = -shared
 CCSHARED = -fPIC
 endif
 
-OBJS = buffer.o callable.o core.o gi.o marshal.o object.o record.o aggr.o compound.o ctype.o
+OBJS = buffer.o callable.o core.o gi.o marshal.o object.o record.o aggr.o compound.o ctype.o call.o
 
 COPTFLAGS = -Wall -Wextra -O2 -g
 CFLAGS = $(CCSHARED) $(COPTFLAGS) $(LUA_CFLAGS) $(shell pkg-config --cflags $(PKGS))
@@ -58,6 +58,7 @@ record.o : record.c lgi.h $(DEPCHECK)
 aggr.o : aggr.c lgi.h $(DEPCHECK)
 compound.o : compound.c lgi.h $(DEPCHECK)
 ctype.o : ctype.c lgi.h $(DEPCHECK)
+call.o : call.c lgi.h $(DEPCHECK)
 
 OVERRIDES = $(wildcard override/*.lua)
 CORESOURCES = $(wildcard *.lua)
