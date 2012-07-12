@@ -178,7 +178,7 @@ function cairo.pattern_type()
    if cairo.version >= cairo.version_encode(1, 12, 0) then
       pattern = cairo.Pattern.create_mesh()
       check(cairo.MeshPattern:is_type_of(pattern))
-      check(cairo.GradientPattern:is_type_of(pattern))
+      check(not cairo.GradientPattern:is_type_of(pattern))
       check(cairo.Pattern:is_type_of(pattern))
       pattern = cairo.MeshPattern()
       check(cairo.MeshPattern:is_type_of(pattern))
