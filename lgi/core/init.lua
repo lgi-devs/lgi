@@ -14,4 +14,6 @@
 local core = require 'lgi.core.lua5.lua5'
 core.compiler = require 'lgi.core.lua5.compiler'
 
+core.repo = {}
+
 return core
