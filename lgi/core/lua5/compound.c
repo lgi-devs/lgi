@@ -400,13 +400,13 @@ lgi_compound_init (lua_State *L)
 
   /* Create 'compound' API table in main core API table. */
   lua_newtable (L);
-  luaL_register (L, NULL, compound_api_reg);
+  luaL_setfuncs (L, compound_api_reg);
 
   /* Create metatable implementing __newindex to be able to store
      important indices set by Lua-side. */
   lua_newtable (L);
   lua_pushcfunction (L, compound_api_newindex);
-  lua_setfield (L, -1, "__newindex");
+  lua_setfield (L, -2, "__newindex");
   lua_setmetatable (L, -2);
 
   /* Store compound API table. */
