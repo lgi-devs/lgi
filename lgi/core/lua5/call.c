@@ -398,7 +398,7 @@ lgi_call_init (lua_State *L)
 {
   /* Register call_info metatable. */
   lua_newtable (L);
-  luaL_setfuncs (L, closure_mt_reg);
+  luaL_setfuncs (L, closure_mt_reg, 0);
   lua_rawsetp (L, LUA_REGISTRYINDEX, &closure_mt);
 
   /* Create call_info index table. */
@@ -406,6 +406,6 @@ lgi_call_init (lua_State *L)
 
   /* Create public api for callable module. */
   lua_newtable (L);
-  luaL_setfuncs (L, call_api_reg);
+  luaL_setfuncs (L, call_api_reg, 0);
   lua_setfield (L, -2, "call");
 }

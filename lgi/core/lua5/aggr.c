@@ -114,7 +114,7 @@ lgi_aggr_get (lua_State *L, int narg, gpointer mt)
       else
 	{
 	  lua_rawgetp (L, LUA_REGISTRYINDEX, mt);
-	  if (G_UNLIKELY (!lua_equal (L, -1, -2)))
+	  if (G_UNLIKELY (!lua_rawequal (L, -1, -2)))
 	    aggr = NULL;
 	}
 

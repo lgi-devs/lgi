@@ -15,7 +15,7 @@ static int
 buffer_len (lua_State *L)
 {
   luaL_checkudata (L, 1, LGI_BYTES_BUFFER);
-  lua_pushnumber (L, lua_objlen (L, 1));
+  lua_pushnumber (L, lua_rawlen (L, 1));
   return 1;
 }
 
@@ -23,7 +23,7 @@ static int
 buffer_tostring (lua_State *L)
 {
   gpointer data = luaL_checkudata (L, 1, LGI_BYTES_BUFFER);
-  lua_pushlstring (L, data, lua_objlen (L, 1));
+  lua_pushlstring (L, data, lua_rawlen (L, 1));
   return 1;
 }
 
@@ -33,7 +33,7 @@ buffer_index (lua_State *L)
   int index;
   unsigned char *buffer = luaL_checkudata (L, 1, LGI_BYTES_BUFFER);
   index = lua_tonumber (L, 2);
-  if (index > 0 && (size_t) index <= lua_objlen (L, 1))
+  if (index > 0 && (size_t) index <= lua_rawlen (L, 1))
     lua_pushnumber (L, buffer[index - 1]);
   else
     {
@@ -49,7 +49,7 @@ buffer_newindex (lua_State *L)
   int index;
   unsigned char *buffer = luaL_checkudata (L, 1, LGI_BYTES_BUFFER);
   index = luaL_checkint (L, 2);
-  luaL_argcheck (L, index > 0 && (size_t) index <= lua_objlen (L, 1),
+  luaL_argcheck (L, index > 0 && (size_t) index <= lua_rawlen (L, 1),
                  2, "bad index");
   buffer[index - 1] = luaL_checkint (L, 3) & 0xff;
   return 0;
@@ -94,11 +94,11 @@ lgi_buffer_init (lua_State *L)
 {
   /* Register metatables. */
   luaL_newmetatable (L, LGI_BYTES_BUFFER);
-  luaL_register (L, NULL, buffer_mt_reg);
+  luaL_setfuncs (L, buffer_mt_reg, 0);
   lua_pop (L, 1);
 
   /* Register global API. */
   lua_newtable (L);
-  luaL_register (L, NULL, buffer_reg);
+  luaL_setfuncs (L, buffer_reg, 0);
   lua_setfield (L, -2, "bytes");
 }

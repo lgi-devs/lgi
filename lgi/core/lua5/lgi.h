@@ -17,8 +17,9 @@
   ((i > 0 || i <= LUA_REGISTRYINDEX) ? i : lua_gettop (L) + i + 1)
 #define lua_getuservalue(L, p) lua_getfenv (L, p)
 #define lua_setuservalue(L, p) lua_setfenv (L, p)
-#define luaL_setfuncs(L, regs) luaL_register (L, NULL, regs)
+#define luaL_setfuncs(L, regs, nup) luaL_register (L, NULL, regs)
 #define luaL_len(L, p) lua_objlen (L, p)
+#define lua_rawlen(L, p) lua_objlen (L, p)
 void *luaL_testudata (lua_State *L, int arg, const char *name);
 void lua_rawsetp (lua_State *L, int index, void *p);
 void lua_rawgetp (lua_State *L, int index, void *p);

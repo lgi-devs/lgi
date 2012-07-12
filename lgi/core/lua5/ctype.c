@@ -1075,15 +1075,15 @@ ctype_2c_list (lua_State *L, LgiCTypeGuard *guard, guint ctype,
   /* Allow empty list to be expressed also as nil, because in C there
      is no difference between NULL and an empty list. */
   if (lua_isnoneornil (L, narg))
-    *list = NULL;
-  else
     {
-      if (lua_type (L, narg) != LUA_TTABLE)
-	return FALSE;
-
-      i = luaL_len (L, narg);
+      *list = NULL;
+      return TRUE;
     }
 
+  if (lua_type (L, narg) != LUA_TTABLE)
+    return FALSE;
+
+  i = luaL_len (L, narg);
   while (i > 0)
     {
       gpointer element;
@@ -1588,17 +1588,17 @@ lgi_ctype_init (lua_State *L)
 
   /* Register carray metatable. */
   lua_newtable (L);
-  luaL_setfuncs (L, carray_mt_reg);
+  luaL_setfuncs (L, carray_mt_reg, 0);
   lua_rawsetp (L, LUA_REGISTRYINDEX, &carray_mt);
 
   /* Create 'carray' API table in main core API table. */
   lua_newtable (L);
-  luaL_setfuncs (L, carray_api_reg);
+  luaL_setfuncs (L, carray_api_reg, 0);
   lua_setfield (L, -2, "carray");
 
   /* Create 'ctype' API table in main core API table. */
   lua_newtable (L);
-  luaL_setfuncs (L, ctype_api_reg);
+  luaL_setfuncs (L, ctype_api_reg, 0);
   lua_newtable (L);
   lua_setfield (L, -1, "context");
   lua_pushvalue (L, -1);

@@ -336,7 +336,7 @@ compound_set (lua_State *L)
   if (lua_istable (L, 2))
     {
       lua_pushvalue (L, 2);
-      lua_setfenv (L, 1);
+      lua_setuservalue (L, 1);
     }
   else
     lgi_compound_own (L, 1, lua_toboolean (L, 2) ? 1 : -1);
@@ -400,7 +400,7 @@ lgi_compound_init (lua_State *L)
 
   /* Create 'compound' API table in main core API table. */
   lua_newtable (L);
-  luaL_setfuncs (L, compound_api_reg);
+  luaL_setfuncs (L, compound_api_reg, 0);
 
   /* Create metatable implementing __newindex to be able to store
      important indices set by Lua-side. */
