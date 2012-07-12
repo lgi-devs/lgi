@@ -161,6 +161,27 @@ for _, info in ipairs {
       },
    },
 
+   {  'FontExtents',
+      fields = {
+	 { 'ascent', ti.double },
+	 { 'descent', ti.double },
+	 { 'height', ti.double },
+	 { 'max_x_advance', ti.double },
+	 { 'max_y_advance', ti.double },
+      },
+   },
+
+   {  'TextExtents',
+      fields = {
+	 { 'x_bearing', ti.double },
+	 { 'y_bearing', ti.double },
+	 { 'width', ti.double },
+	 { 'height', ti.double },
+	 { 'x_advance', ti.double },
+	 { 'y_advance', ti.double },
+      },
+   },
+
    {  'Context',
       cprefix = '',
       methods = {
@@ -706,32 +727,51 @@ function cairo.FontOptions._method:_new(props)
    return font_options
 end
 
--- Fix all 'get_xxx' methods using caller-alloc attribute, which is
--- not supported by ffi.  Emulate it 'by-hand'.
+-- Fix all methods using caller-alloc attribute, which is not
+-- supported by ffi.  Emulate it 'by-hand', creating Lua wrapper for
+-- them.
 for _, info in pairs {
    { cairo.Context, 'matrix', cairo.Matrix },
    { cairo.Context, 'font_matrix', cairo.Matrix },
    { cairo.Context, 'font_options', cairo.FontOptions },
+   { cairo.Context, 'font_extents', cairo.FontExtents },
+   { cairo.Context, 'text_extents', cairo.TextExtents, args = 1 },
    { cairo.Pattern, 'matrix', cairo.Matrix },
    { cairo.Surface, 'font_options', cairo.FontOptions },
    { cairo.ScaledFont, 'font_matrix', cairo.Matrix },
    { cairo.ScaledFont, 'ctm', cairo.Matrix },
    { cairo.ScaledFont, 'scale_matrix', cairo.Matrix },
    { cairo.ScaledFont, 'font_options', cairo.FontOptions },
+   { cairo.ScaledFont, 'extents', cairo.FontExtents },
+   { cairo.ScaledFont, 'text_extents', cairo.TextExtents, args = 1 },
    { cairo.RecordingSurface, 'extents', cairo.Rectangle },
+   { cairo.Region, 'extents', cairo.RectangleInt },
+   { cairo.Region, 'get_rectangle', cairo.RectangleInt, args = 1 },
 } do
    local getter_name = 'get_' ..info[2]
    local raw_getter = info[1]._method[getter_name]
+   if not raw_getter then
+      getter_name = info[2]
+      raw_getter = info[1]._method[getter_name]
+   end
    if raw_getter then
-      info[1]._method[getter_name] = function(self)
-         local ret = info[3]()
-	 local res = raw_getter(self, ret)
-	 return (res == nil or res) and ret or nil
+      if info.args == 1 then
+	 info[1]._method[getter_name] = function(self, arg1)
+	    local ret = info[3]()
+	    local res = raw_getter(self, arg1, ret)
+	    return (res == nil or res) and ret or nil
+	 end
+      else
+	 info[1]._method[getter_name] = function(self)
+	    local ret = info[3]()
+	    local res = raw_getter(self, ret)
+	    return (res == nil or res) and ret or nil
+	 end
+	 info[1]._attribute[info[2]] = {
+	    get = info[1][getter_name],
+	    set = info[1]['set_' .. info[2]],
+	 }
       end
-      info[1]._attribute[info[2]] = {
-	 get = info[1][getter_name],
-	 set = info[1]['set_' .. info[2]],
-      }
    end
 end
 
