@@ -66,6 +66,22 @@ void lua_rawgetp (lua_State *L, int index, void *p)
   lua_pushlightuserdata (L, p);
   lua_rawget (L, index);
 }
+
+void *
+luaL_testudata (lua_State *L, int narg, const char *name)
+{
+  void *udata = NULL;
+  luaL_checkstack (L, 2, NULL);
+  narg = lua_absindex (L, narg);
+  if (lua_getmetatable (L, narg))
+    {
+      luaL_getmetatable (L, name);
+      if (lua_equal (L, -1, -2))
+	udata = lua_touserdata (L, narg);
+      lua_pop (L, 2);
+    }
+  return udata;
+}
 #endif
 
 void *luaL_testudatap (lua_State *L, int arg, void *p)
@@ -93,30 +109,6 @@ void *luaL_checkudatap (lua_State *L, int arg, void *p)
   return ptr;
 }
 
-/* lightuserdata of this address is a key in LUA_REGISTRYINDEX table
-   to repo table. */
-static int repo;
-
-/* lightuserdata of this address is a key in LUA_REGISTRYINDEX table
-   to index table mapping lightuserdata-gtype -> repotable. */
-static int repo_index;
-
-void *
-lgi_udata_test (lua_State *L, int narg, const char *name)
-{
-  void *udata = NULL;
-  luaL_checkstack (L, 2, "");
-  lgi_makeabs (L, narg);
-  if (lua_getmetatable (L, narg))
-    {
-      luaL_getmetatable (L, name);
-      if (lua_equal (L, -1, -2))
-	udata = lua_touserdata (L, narg);
-      lua_pop (L, 2);
-    }
-  return udata;
-}
-
 void
 lgi_cache_create (lua_State *L, gpointer key, const char *mode)
 {
@@ -130,186 +122,6 @@ lgi_cache_create (lua_State *L, gpointer key, const char *mode)
       lua_setmetatable (L, -2);
     }
   lua_rawset (L, LUA_REGISTRYINDEX);
-}
-
-int
-lgi_type_get_name (lua_State *L, GIBaseInfo *info)
-{
-  GSList *list = NULL, *i;
-  int n = 1;
-  lua_pushstring (L, g_base_info_get_namespace (info));
-
-  /* Add names on the whole path, but in reverse order. */
-  for (; info != NULL; info = g_base_info_get_container (info))
-    if (!GI_IS_TYPE_INFO (info))
-      list = g_slist_prepend (list, info);
-
-  for (i = list; i != NULL; i = g_slist_next (i))
-    {
-      if (g_base_info_get_type (i->data) != GI_INFO_TYPE_TYPE)
-	{
-	  lua_pushstring (L, ".");
-	  lua_pushstring (L, g_base_info_get_name (i->data));
-	  n += 2;
-	}
-    }
-
-  g_slist_free (list);
-  return n;
-}
-
-void
-lgi_type_get_repotype (lua_State *L, GType gtype, GIBaseInfo *info)
-{
-  luaL_checkstack (L, 4, "");
-
-  /* Get repo-index table. */
-  lua_pushlightuserdata (L, &repo_index);
-  lua_rawget (L, LUA_REGISTRYINDEX);
-
-  /* Prepare gtype, if not given directly. */
-  if (gtype == G_TYPE_INVALID && info && GI_IS_REGISTERED_TYPE_INFO (info))
-    {
-      gtype = g_registered_type_info_get_g_type (info);
-      if (gtype == G_TYPE_NONE)
-	gtype = G_TYPE_INVALID;
-    }
-
-  /* First of all, check direct indexing of repo-index by gtype,
-     should be fastest. */
-  if (gtype != G_TYPE_INVALID)
-    {
-      lua_pushlightuserdata (L, (gpointer) gtype);
-      lua_rawget (L, -2);
-    }
-  else
-    lua_pushnil (L);
-
-  if (lua_isnil (L, -1))
-    {
-      /* Not indexed yet.  Try to lookup by name - this works when
-	 lazy-loaded repo tables are not loaded yet. */
-      if (!info)
-	{
-	  info = g_irepository_find_by_gtype (NULL, gtype);
-	  lgi_gi_info_new (L, info);
-	}
-      else
-	/* Keep stack balanced as in the previous 'if' branch. */
-	lua_pushnil (L);
-
-      if (info)
-	{
-	  lua_pushlightuserdata (L, &repo);
-	  lua_rawget (L, LUA_REGISTRYINDEX);
-	  lua_getfield (L, -1, g_base_info_get_namespace (info));
-	  lua_getfield (L, -1, g_base_info_get_name (info));
-	  lua_replace (L, -5);
-	  lua_pop (L, 3);
-	}
-      else
-	lua_pop (L, 1);
-    }
-  lua_replace (L, -2);
-}
-
-GType
-lgi_type_get_gtype (lua_State *L, int narg)
-{
-  /* Handle simple cases natively, forward to Lua implementation for
-     the rest. */
-  switch (lua_type (L, narg))
-    {
-    case LUA_TNIL:
-    case LUA_TNONE:
-      return G_TYPE_INVALID;
-
-    case LUA_TNUMBER:
-      return lua_tonumber (L, narg);
-
-    case LUA_TLIGHTUSERDATA:
-      return (GType) lua_touserdata (L, narg);
-
-    case LUA_TSTRING:
-      return g_type_from_name (lua_tostring (L, narg));
-
-    case LUA_TTABLE:
-      {
-	GType gtype;
-	lgi_makeabs (L, narg);
-	lua_pushstring (L, "_gtype");
-	lua_rawget (L, narg);
-	gtype = lgi_type_get_gtype (L, -1);
-	lua_pop (L, 1);
-	return gtype;
-      }
-
-    default:
-      return luaL_error (L, "GType expected, got %s",
-			 lua_typename (L, lua_type (L, narg)));
-    }
-}
-
-typedef struct _Guard
-{
-  gpointer data;
-  GDestroyNotify destroy;
-} Guard;
-#define UD_GUARD "lgi.guard"
-
-static int
-guard_gc (lua_State *L)
-{
-  Guard *guard = lua_touserdata (L, 1);
-  if (guard->data != NULL)
-    guard->destroy (guard->data);
-  return 0;
-}
-
-gpointer *
-lgi_guard_create (lua_State *L, GDestroyNotify destroy)
-{
-  Guard *guard = lua_newuserdata (L, sizeof (Guard));
-  g_assert (destroy != NULL);
-  luaL_getmetatable (L, UD_GUARD);
-  lua_setmetatable (L, -2);
-  guard->data = NULL;
-  guard->destroy = destroy;
-  return &guard->data;
-}
-
-/* Converts any allowed GType kind to lightuserdata form. */
-static int
-core_gtype (lua_State *L)
-{
-  lua_pushlightuserdata (L, (gpointer) lgi_type_get_gtype (L, 1));
-  return 1;
-}
-
-/* Converts either GType or gi.info into repotype table. */
-static int
-core_repotype (lua_State *L)
-{
-  GType gtype = G_TYPE_INVALID;
-  GIBaseInfo **info = lgi_udata_test (L, 1, LGI_GI_INFO);
-  if (!info)
-    gtype = lgi_type_get_gtype (L, 1);
-  lgi_type_get_repotype (L, gtype, info ? *info : NULL);
-  return 1;
-}
-
-/* Instantiate constant from given gi_info. */
-static int
-core_constant (lua_State *L)
-{
-  /* Get typeinfo of the constant. */
-  GIArgument val;
-  GIConstantInfo *ci = *(GIConstantInfo **) luaL_checkudata (L, 1, LGI_GI_INFO);
-  GITypeInfo *ti = g_constant_info_get_type (ci);
-  lgi_gi_info_new (L, ti);
-  g_constant_info_get_value (ci, &val);
-  lgi_marshal_2lua (L, ti, GI_TRANSFER_NOTHING, &val, 0, NULL, NULL);
-  return 1;
 }
 
 typedef struct _LgiStateMutex
@@ -333,9 +145,6 @@ call_mutex_gc (lua_State* L)
   g_static_rec_mutex_free (&mutex->state_mutex);
   return 0;
 }
-
-/* MT for CallMutex. */
-static int call_mutex_mt;
 
 /* lightuserdata of address of this member is key to LUA_REGISTRYINDEX
    where CallMutex instance for this state resides. */
@@ -559,9 +368,6 @@ core_module (lua_State *L)
 
 static const struct luaL_Reg lgi_reg[] = {
   { "log",  core_log },
-  { "gtype", core_gtype },
-  { "repotype", core_repotype },
-  { "constant", core_constant },
   { "yield", core_yield },
   { "registerlock", core_registerlock },
   { "band", core_band },
@@ -569,16 +375,6 @@ static const struct luaL_Reg lgi_reg[] = {
   { "module", core_module },
   { NULL, NULL }
 };
-
-static void
-create_repo_table (lua_State *L, const char *name, void *key)
-{
-  lua_newtable (L);
-  lua_pushlightuserdata (L, key);
-  lua_pushvalue (L, -2);
-  lua_rawset (L, LUA_REGISTRYINDEX);
-  lua_setfield (L, -2, name);
-}
 
 static void
 set_resident (lua_State *L)
@@ -618,7 +414,7 @@ set_resident (lua_State *L)
 	    {
 	      const char *str = lua_tostring (L, -2);
 	      if (g_str_has_prefix (str, "LOADLIB: ") &&
-		  strstr (str, "corelgilua5"))
+		  strstr (str, "lgilua5"))
 		{
 		  /* NULL the pointer to the loaded library. */
 		  if (lua_type (L, -1) == LUA_TUSERDATA)
@@ -663,56 +459,34 @@ luaopen_lgi_corelgilua51 (lua_State* L)
   unused = G_TYPE_STRV;
   unused = unused;
 
-  /* Register 'guard' metatable. */
-  luaL_newmetatable (L, UD_GUARD);
-  lua_pushcfunction (L, guard_gc);
-  lua_setfield (L, -2, "__gc");
-  lua_pop (L, 1);
-
   /* Register 'module' metatable. */
   luaL_newmetatable (L, UD_MODULE);
-  luaL_register (L, NULL, module_reg);
+  luaL_setfuncs (L, module_reg);
   lua_pop (L, 1);
-
-  /* Register 'call-mutex' metatable. */
-  lua_pushlightuserdata (L, &call_mutex_mt);
-  lua_newtable (L);
-  lua_pushcfunction (L, call_mutex_gc);
-  lua_setfield (L, -2, "__gc");
-  lua_rawset (L, LUA_REGISTRYINDEX);
 
   /* Create call mutex guard, keep it locked initially (it is unlocked
      only when we are calling out to GObject-C code) and store it into
      the registry. */
-  lua_pushlightuserdata (L, &call_mutex);
   mutex = lua_newuserdata (L, sizeof (*mutex));
   mutex->mutex = &mutex->state_mutex;
   g_static_rec_mutex_init (&mutex->state_mutex);
   g_static_rec_mutex_lock (&mutex->state_mutex);
-  lua_pushlightuserdata (L, &call_mutex_mt);
-  lua_rawget (L, LUA_REGISTRYINDEX);
+  lua_newtable (L);
+  lua_pushcfunction (L, call_mutex_gc);
+  lua_setfield (L, -2, "__gc");
   lua_setmetatable (L, -2);
-  lua_rawset (L, LUA_REGISTRYINDEX);
+  lua_rawsetp (L, LUA_REGISTRYINDEX, &call_mutex);
 
   /* Register 'lgi.core' interface. */
   lua_newtable (L);
-  luaL_register (L, NULL, lgi_reg);
-
-  /* Create repo and index table. */
-  create_repo_table (L, "index", &repo_index);
-  create_repo_table (L, "repo", &repo);
+  luaL_setfuncs (L, lgi_reg);
 
   /* Initialize modules. */
   lgi_buffer_init (L);
-  lgi_gi_init (L);
-  lgi_marshal_init (L);
   lgi_aggr_init (L);
   lgi_ctype_init (L);
-  lgi_record_init (L);
-  lgi_object_init (L);
   lgi_compound_init (L);
   lgi_call_init (L);
-  lgi_callable_init (L);
 
   /* Return registration table. */
   return 1;

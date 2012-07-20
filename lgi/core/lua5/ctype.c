@@ -1238,7 +1238,7 @@ lgi_ctype_2c (lua_State *L, LgiCTypeGuard *guard, int nti, int *ntipos,
 	    val->v_pointer = (gpointer) lua_tostring (L, narg);
 	  else if (ltype == LUA_TUSERDATA)
 	    {
-	      val->v_pointer = lgi_udata_test (L, narg, LGI_BYTES_BUFFER);
+	      val->v_pointer = luaL_testudata (L, narg, LGI_BYTES_BUFFER);
 	      if (val->v_pointer == NULL)
 		{
 		  val->v_pointer = lgi_compound_2c (L, narg, 0);
