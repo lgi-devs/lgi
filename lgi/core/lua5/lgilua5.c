@@ -435,7 +435,7 @@ set_resident (lua_State *L)
 }
 
 int
-luaopen_lgi_corelgilua51 (lua_State* L)
+luaopen_lgi_core_lua5_lgilua51 (lua_State* L)
 {
   LgiStateMutex *mutex;
 

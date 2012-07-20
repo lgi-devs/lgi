@@ -1,12 +1,12 @@
 /*
  * Dynamic Lua binding to GObject using dynamic gobject-introspection.
  *
- * Copyright (c) 2010,2011,2012 Pavel Holejsovsky
+ * Copyright (c) 2010-2012 Pavel Holejsovsky
  * Licensed under the MIT license:
  * http://www.opensource.org/licenses/mit-license.php
  */
 
-#define G_LOG_DOMAIN "Lgi"
+#define G_LOG_DOMAIN "lgi"
 
 #include <lua.h>
 #include <lauxlib.h>

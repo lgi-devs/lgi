@@ -2,14 +2,13 @@
 --
 --  LGI Lua-side core.
 --
---  Copyright (c) 2010, 2011 Pavel Holejsovsky
+--  Copyright (c) 2010-2012 Pavel Holejsovsky
 --  Licensed under the MIT license:
 --  http://www.opensource.org/licenses/mit-license.php
 --
 ------------------------------------------------------------------------------
 
-local assert, require, pcall, setmetatable, pairs
-   = assert, require, pcall, setmetatable, pairs
+local require, setmetatable = require, setmetatable
 local package = require 'package'
 
 -- Require core lgi utilities, used during bootstrap.
@@ -36,31 +35,14 @@ lgi.log = require 'lgi.log'
 local log = lgi.log.domain('lgi')
 
 -- Repository, table with all loaded namespaces.  Its metatable takes care of
--- loading on-demand.  Created by C-side bootstrap.
-local repo = core.repo
-
-local namespace = require 'lgi.namespace'
-lgi.require = namespace.require
+-- loading on-demand.
+local repo = {}
+lgi.require = function(name, version) end
 
 -- Install metatable into repo table, so that on-demand loading works.
 setmetatable(repo, { __index = function(_, name)
 				  return lgi.require(name)
 			       end })
-
--- Create lazy-loading components for base gobject entities.
-assert(core.gi.require ('GLib', '2.0'))
-assert(core.gi.require ('GObject', '2.0'))
-repo.GObject._precondition = {}
-for _, name in pairs { 'Type', 'Value', 'Closure', 'Object' } do
-   repo.GObject._precondition[name] = 'GObject-' .. name
-end
-repo.GObject._precondition.InitiallyUnowned = 'GObject-Object'
-
--- Create lazy-loading components for variant stuff.
-repo.GLib._precondition = {}
-for _, name in pairs { 'Variant', 'VariantType', 'VariantBuilder' } do
-   repo.GLib._precondition[name] = 'GLib-Variant'
-end
 
 -- Access to module proxies the whole repo, so that lgi.'namespace'
 -- notation works.

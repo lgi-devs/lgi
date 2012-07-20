@@ -22,7 +22,7 @@ LIBFLAG = -shared
 CCSHARED = -fPIC
 endif
 
-OBJS = buffer.o core.o aggr.o compound.o ctype.o call.o
+OBJS = lgilua5.o buffer.o aggr.o compound.o ctype.o call.o
 
 COPTFLAGS = -Wall -Wextra -O2 -g
 CFLAGS = $(CCSHARED) $(COPTFLAGS) $(LUA_CFLAGS) $(shell pkg-config --cflags $(PKGS))
@@ -45,8 +45,8 @@ clean :
 $(CORE) : $(OBJS)
 	$(CC) $(LDFLAGS) -o $@ $(OBJS) $(LIBS)
 
+lgilua5.o : lgilua5.c lgi.h $(DEPCHECK)
 buffer.o : buffer.c lgi.h $(DEPCHECK)
-core.o : core.c lgi.h $(DEPCHECK)
 aggr.o : aggr.c lgi.h $(DEPCHECK)
 compound.o : compound.c lgi.h $(DEPCHECK)
 ctype.o : ctype.c lgi.h $(DEPCHECK)
