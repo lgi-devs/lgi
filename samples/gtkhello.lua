@@ -7,7 +7,7 @@
 --
 
 local lgi = require 'lgi'
-local Gtk = lgi.Gtk
+local Gtk = lgi.require('Gtk')
 
 -- Create top level window with some properties and connect its 'destroy'
 -- signal to the event loop termination.
@@ -15,9 +15,12 @@ local window = Gtk.Window {
    title = 'window',
    default_width = 400,
    default_height = 300,
-   has_resize_grip = true,
    on_destroy = Gtk.main_quit
 }
+
+if tonumber(Gtk._version) >= 3 then
+   window.has_resize_grip = true
+end
 
 -- Create some more widgets for the window.
 local status_bar = Gtk.Statusbar()
