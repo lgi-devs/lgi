@@ -1,7 +1,7 @@
 #! /usr/bin/env lua
 
 local help = [[
-Usage: python list-system-services.lua [--session|--system]
+Usage: lua list-system-services.lua [--session|--system]
 List services on the system bus (default) or the session bus.
 ]]
 
@@ -34,13 +34,13 @@ Original copyright follows:
 ]]
 
 local lgi = require 'lgi'
-local gio = lgi.require 'Gio'
+local Gio = lgi.require 'Gio'
 
 -- main(argv):
    local argv = {...}
 
    local factory = function()
-      return gio.bus_get_sync(gio.BusType.SYSTEM)
+      return Gio.bus_get_sync(Gio.BusType.SYSTEM)
    end
 
    if #argv > 1 then
@@ -50,7 +50,7 @@ local gio = lgi.require 'Gio'
       if #argv == 1 then
          if argv[1] == '--session' then
             factory = function()
-               return gio.bus_get_sync(gio.BusType.SESSION)
+               return Gio.bus_get_sync(Gio.BusType.SESSION)
             end
          else
             if argv[1] ~= '--system' then
@@ -87,7 +87,7 @@ local gio = lgi.require 'Gio'
       'ListNames',
       nil,
       nil,
-      gio.DBusConnectionFlags.NONE,
+      Gio.DBusConnectionFlags.NONE,
       -1)
    -- We know that ListNames returns '(as)'
    local services = var[1].value
