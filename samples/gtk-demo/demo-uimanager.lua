@@ -17,6 +17,7 @@ local COLOR = { RED = 1, GREEN = 2, BLUE = 3 }
 local SHAPE = { SQUARE = 1, RECTANGLE = 2, OVAL = 3 }
 
 local actions = Gtk.ActionGroup {
+   name = 'Actions',
    Gtk.Action { name = 'FileMenu', label = "_File" },
    Gtk.Action { name = 'PreferencesMenu', label = "_Preferences" },
    Gtk.Action { name = 'ColorMenu', label = "_Color" },
@@ -139,6 +140,7 @@ local window = Gtk.Window {
       Gtk.Box {
 	 orientation = 'VERTICAL',
 	 spacing = 10,
+	 border_width = 10,
 	 Gtk.Button {
 	    id = 'close',
 	    label = "close",
