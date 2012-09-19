@@ -1243,9 +1243,10 @@ lgi_marshal_field (lua_State *L, gpointer object, gboolean getmode,
 	  /* Prepare proper error message. */
 	  lua_concat (L, lgi_type_get_name (L,
 					    g_base_info_get_container (*fi)));
-	  luaL_error (L, "%s: field `%s' is not %s", lua_tostring (L, -1),
-		      g_base_info_get_name (*fi),
-		      getmode ? "readable" : "writable");
+	  return luaL_error (L, "%s: field `%s' is not %s",
+			     lua_tostring (L, -1),
+			     g_base_info_get_name (*fi),
+			     getmode ? "readable" : "writable");
 	}
 
       /* Map GIArgument to proper memory location, get typeinfo of the
@@ -1333,6 +1334,9 @@ lgi_marshal_field (lua_State *L, gpointer object, gboolean getmode,
 		return 0;
 	      }
 	  }
+
+	default:
+	  return luaL_error (L, "field has bad kind %d", kind);
 	}
     }
 
