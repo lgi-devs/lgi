@@ -487,12 +487,18 @@ core_module (lua_State *L)
 {
   char *name;
 
-  /* If the version is present, combine it with basename. */
+  /* If the version is present, combine it with basename.
+     Except on OpenBSD, where libraries are versioned like libfoo.so.0.0
+     and we will always load the shared object with the highest version
+     number.
+   */
+#ifndef __OpenBSD__
   if (!lua_isnoneornil (L, 2))
     name = g_strdup_printf (MODULE_NAME_FORMAT_VERSION,
 			    luaL_checkstring (L, 1),
 			    (int) luaL_checkinteger (L, 2));
   else
+#endif
     name = g_strdup_printf (MODULE_NAME_FORMAT_PLAIN,
 			    luaL_checkstring (L, 1));
 
