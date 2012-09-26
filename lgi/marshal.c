@@ -1406,7 +1406,7 @@ marshal_container_marshaller (lua_State *L)
   /* Get info and transfer from upvalue. */
   ti = lua_touserdata (L, lua_upvalueindex (1));
   tag = g_type_info_get_tag (*ti);
-  transfer = lua_tonumber (L, lua_upvalueindex (2));
+  transfer = lua_tointeger (L, lua_upvalueindex (2));
 
   switch (tag)
     {
