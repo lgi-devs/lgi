@@ -1243,18 +1243,24 @@ lgi_marshal_field (lua_State *L, gpointer object, gboolean getmode,
       GIFieldInfo **fi = lua_touserdata (L, field_arg);
       GIFieldInfoFlags flags;
 
-      /* Check, whether field is readable/writable. */
-      flags = g_field_info_get_flags (*fi);
-      if ((flags & (getmode ? GI_FIELD_IS_READABLE
-		    : GI_FIELD_IS_WRITABLE)) == 0)
+      /* Check, whether field is readable/writable.  Turn off this
+	 check for class structures, because we need to read/write
+	 their virtual function pointers. */
+      if (!g_struct_info_is_gtype_struct (g_base_info_get_container (*fi)))
 	{
-	  /* Prepare proper error message. */
-	  lua_concat (L, lgi_type_get_name (L,
-					    g_base_info_get_container (*fi)));
-	  return luaL_error (L, "%s: field `%s' is not %s",
-			     lua_tostring (L, -1),
-			     g_base_info_get_name (*fi),
-			     getmode ? "readable" : "writable");
+	  flags = g_field_info_get_flags (*fi);
+	  if ((flags & (getmode ? GI_FIELD_IS_READABLE
+			: GI_FIELD_IS_WRITABLE)) == 0)
+	    {
+	      /* Prepare proper error message. */
+	      lua_concat (L,
+			  lgi_type_get_name (L,
+					     g_base_info_get_container (*fi)));
+	      return luaL_error (L, "%s: field `%s' is not %s",
+				 lua_tostring (L, -1),
+				 g_base_info_get_name (*fi),
+				 getmode ? "readable" : "writable");
+	    }
 	}
 
       /* Map GIArgument to proper memory location, get typeinfo of the
