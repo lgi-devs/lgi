@@ -10,10 +10,17 @@ EXT = .dll
 PFX = cyg
 LIBFLAG = -shared
 else
+ifeq ($(shell uname -s),Darwin)
+EXT = .so
+PFX = lib
+LIBFLAG = -bundle -undefined dynamic_lookup
+CCSHARED = -fno-common
+else
 EXT = .so
 PFX = lib
 LIBFLAG = -shared
 CCSHARED = -fPIC
+endif
 endif
 
 PKGS = gio-2.0 cairo cairo-gobject gobject-introspection-1.0 gmodule-2.0 libffi
