@@ -230,12 +230,10 @@ function class.load_class(namespace, info)
 end
 
 -- Support for derived classes.
-class.derived_mt = class.class_mt:clone('derived', {})
-
 local GObject = gi.require('GObject')
 local register_static = core.callable.new(GObject.type_register_static)
 local type_query = core.callable.new(GObject.type_query)
-function class.class_mt:_derive(typename)
+function class.class_mt:derive(typename)
    -- Prepare repotable for newly registered class.
    local new_class = setmetatable({ _parent = self, _guards = {} },
 				  class.derived_mt)
@@ -249,8 +247,8 @@ function class.class_mt:_derive(typename)
    }
 
    -- Register new type with GType system.
-   rawset(new_class, '_gtype', register_static(
-	     self._gtype, new_class._name, type_info, {}))
+   local gtype = register_static(self._gtype, new_class._name, type_info, {})
+   rawset(new_class, '_gtype', core.gtype(gtype))
    if not new_class._gtype then
       error(("failed to derive `%s' from `%s'"):format(typename, self._name))
    end
@@ -259,6 +257,9 @@ function class.class_mt:_derive(typename)
    core.index[new_class._gtype] = new_class
    return new_class
 end
+
+class.derived_mt = class.class_mt:clone('derived', {})
+
 
 -- Overload __newindex to catch assignment to virtual - this causes
 -- installation of new virtual method

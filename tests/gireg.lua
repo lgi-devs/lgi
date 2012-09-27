@@ -1153,7 +1153,7 @@ end
 function gireg.obj_virtual_methods()
    local R = lgi.Regress
    local o = R.TestObj()
-   check(o:virtual_matrix('unused') == 42)
+   check(o:do_matrix('unused') == 42)
 end
 
 function gireg.obj_prop_int()

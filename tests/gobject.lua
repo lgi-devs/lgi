@@ -69,3 +69,24 @@ function gobject.gtype_create()
    local m = GObject.Object.new(Gio.ThemedIcon, { name = 'icon' })
    check(Gio.ThemedIcon:is_type_of(m))
 end
+
+function gobject.subclass1()
+   local GObject = lgi.GObject
+   local Derived = GObject.Object:derive('Derived1')
+   local der = Derived()
+   check(Derived:is_type_of(der))
+   check(not Derived:is_type_of(GObject.Object()))
+end
+
+function gobject.subclass2()
+   local GObject = lgi.GObject
+   local Derived = GObject.Object:derive('Derived2')
+   local Subderived = Derived:derive('Subderived2')
+   local der = Derived()
+   check(Derived:is_type_of(der))
+   check(not Subderived:is_type_of(der))
+   local sub = Subderived()
+   check(Subderived:is_type_of(sub))
+   check(Derived:is_type_of(sub))
+   check(GObject.Object:is_type_of(sub))
+end
