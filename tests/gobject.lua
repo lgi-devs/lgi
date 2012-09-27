@@ -70,7 +70,7 @@ function gobject.gtype_create()
    check(Gio.ThemedIcon:is_type_of(m))
 end
 
-function gobject.subclass1()
+function gobject.subclass_derive1()
    local GObject = lgi.GObject
    local Derived = GObject.Object:derive('Derived1')
    local der = Derived()
@@ -78,7 +78,7 @@ function gobject.subclass1()
    check(not Derived:is_type_of(GObject.Object()))
 end
 
-function gobject.subclass2()
+function gobject.subclass_derive2()
    local GObject = lgi.GObject
    local Derived = GObject.Object:derive('Derived2')
    local Subderived = Derived:derive('Subderived2')
@@ -89,4 +89,42 @@ function gobject.subclass2()
    check(Subderived:is_type_of(sub))
    check(Derived:is_type_of(sub))
    check(GObject.Object:is_type_of(sub))
+end
+
+function gobject.subclass_override1()
+   local GObject = lgi.GObject
+   local Derived = GObject.Object:derive('Derived3')
+   local state = 0
+   local obj
+   function Derived:do_constructed()
+      obj = self
+      state = state + 1
+   end
+   function Derived:do_dispose()
+      state = state + 2
+   end
+   check(state == 0)
+   local der = Derived()
+   check(der == obj)
+   check(state == 1)
+   der = nil
+   obj = nil
+   collectgarbage()
+   check(state == 3)
+end
+
+function gobject.subclass_override2()
+   local GObject = lgi.GObject
+   local state = 0
+   local Derived = GObject.Object:derive('Derived4')
+   function Derived:do_constructed() state = state + 1 end
+   function Derived:do_dispose() state = state + 2 end
+   local Subderived = Derived:derive('Subderived4')
+   function Subderived:do_constructed() state = state + 4 end
+   check(state == 0)
+   local sub = Subderived()
+   check(state == 4)
+   sub = nil
+   collectgarbage()
+   check(state == 6)
 end

@@ -260,12 +260,11 @@ end
 
 class.derived_mt = class.class_mt:clone('derived', {})
 
-
 -- Overload __newindex to catch assignment to virtual - this causes
 -- installation of new virtual method
 local type_class_ref = core.callable.new(GObject.TypeClass.methods.ref)
 local type_class_unref = core.callable.new(GObject.TypeClass.methods.unref)
-function class.derived_mt:__newindex(name, value)
+function class.derived_mt:__newindex(name, target)
    -- Use _element method to get category to write to.
    local _element = (rawget(self, '_element')
 		  or rawget(getmetatable(self), '_element'))
@@ -281,7 +280,7 @@ function class.derived_mt:__newindex(name, value)
 
       -- Prepare callback to target.
       local guard, vfunc = core.marshal.callback(
-	 field.typeinfo.interface, value)
+	 field.typeinfo.interface, target)
 
       -- Assign new address of the target and store guard to class
       -- definition table.
