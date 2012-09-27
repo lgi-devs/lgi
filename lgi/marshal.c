@@ -1,7 +1,7 @@
 /*
  * Dynamic Lua binding to GObject using dynamic gobject-introspection.
  *
- * Copyright (c) 2010, 2011 Pavel Holejsovsky
+ * Copyright (c) 2010-2012 Pavel Holejsovsky
  * Licensed under the MIT license:
  * http://www.opensource.org/licenses/mit-license.php
  *
@@ -717,7 +717,7 @@ marshal_2c_callable (lua_State *L, GICallableInfo *ci, GIArgInfo *ai,
 		     GICallableInfo *argci, void **args)
 {
   int nret = 0;
-  GIScopeType scope = g_arg_info_get_scope (ai);
+  GIScopeType scope;
   gpointer user_data = NULL;
 
   /* Check 'nil' in optional case.  In this case, return NULL as
@@ -725,6 +725,13 @@ marshal_2c_callable (lua_State *L, GICallableInfo *ci, GIArgInfo *ai,
   if (optional && lua_isnoneornil (L, narg))
     {
       *callback = NULL;
+      return 0;
+    }
+
+  /* Check lightuserdata case; simply use that data if provided. */
+  if (lua_islightuserdata (L, narg))
+    {
+      *callback = lua_touserdata (L, narg);
       return 0;
     }
 
@@ -744,6 +751,7 @@ marshal_2c_callable (lua_State *L, GICallableInfo *ci, GIArgInfo *ai,
 	}
     }
 
+  scope = g_arg_info_get_scope (ai);
   if (user_data == NULL)
     {
       /* Closure without user_data block.  Create new data block,
@@ -1575,6 +1583,22 @@ marshal_fundamental (lua_State *L)
   return 1;
 }
 
+/* Creates callback for Lua target callable from C side.
+   guard, addr = marshal.callback(ciinfo, target) */
+static int
+marshal_callback (lua_State *L)
+{
+  gpointer user_data, addr;
+  GICallableInfo **ci;
+
+  ci = lgi_udata_test (L, 1, LGI_GI_INFO);
+  user_data = lgi_closure_allocate (L, 1);
+  *lgi_guard_create (L, lgi_closure_destroy) = user_data;
+  addr = lgi_closure_create (L, user_data, *ci, 2, FALSE);
+  lua_pushlightuserdata (L, addr);
+  return 2;
+}
+
 static void
 gclosure_destroy (gpointer user_data, GClosure *closure)
 {
@@ -1593,7 +1617,7 @@ gclosure_destroy (gpointer user_data, GClosure *closure)
    Such method would be introspectable.
 */
 static int
-core_closure_set_marshal (lua_State *L)
+marshal_closure_set_marshal (lua_State *L)
 {
   GClosure *closure;
   gpointer user_data;
@@ -1656,7 +1680,8 @@ marshal_typeinfo (lua_State *L)
 static const struct luaL_Reg marshal_api_reg[] = {
   { "container", marshal_container },
   { "fundamental", marshal_fundamental },
-  { "closure_set_marshal", core_closure_set_marshal },
+  { "callback", marshal_callback },
+  { "closure_set_marshal", marshal_closure_set_marshal },
   { "typeinfo", marshal_typeinfo },
   { NULL, NULL }
 };
