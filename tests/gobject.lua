@@ -72,7 +72,7 @@ end
 
 function gobject.subclass_derive1()
    local GObject = lgi.GObject
-   local Derived = GObject.Object:derive('Derived1')
+   local Derived = GObject.Object:derive()
    local der = Derived()
    check(Derived:is_type_of(der))
    check(not Derived:is_type_of(GObject.Object()))
@@ -80,8 +80,8 @@ end
 
 function gobject.subclass_derive2()
    local GObject = lgi.GObject
-   local Derived = GObject.Object:derive('Derived2')
-   local Subderived = Derived:derive('Subderived2')
+   local Derived = GObject.Object:derive()
+   local Subderived = Derived:derive('sub.derive/d')
    local der = Derived()
    check(Derived:is_type_of(der))
    check(not Subderived:is_type_of(der))
@@ -93,7 +93,7 @@ end
 
 function gobject.subclass_override1()
    local GObject = lgi.GObject
-   local Derived = GObject.Object:derive('Derived3')
+   local Derived = GObject.Object:derive()
    local state = 0
    local obj
    function Derived:do_constructed()
@@ -116,10 +116,10 @@ end
 function gobject.subclass_override2()
    local GObject = lgi.GObject
    local state = 0
-   local Derived = GObject.Object:derive('Derived4')
+   local Derived = GObject.Object:derive()
    function Derived:do_constructed() state = state + 1 end
    function Derived:do_dispose() state = state + 2 end
-   local Subderived = Derived:derive('Subderived4')
+   local Subderived = Derived:derive()
    function Subderived:do_constructed() state = state + 4 end
    check(state == 0)
    local sub = Subderived()

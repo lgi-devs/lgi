@@ -8,11 +8,12 @@
 --
 ------------------------------------------------------------------------------
 
-local type, rawget, rawset, pairs, select, getmetatable, setmetatable,
-error, assert
-   = type, rawget, rawset, pairs, select, getmetatable, setmetatable,
-   error, assert
+local type, tostring, rawget, rawset, pairs, select,
+getmetatable, setmetatable, error, assert
+   = type, tostring, rawget, rawset, pairs, select,
+   getmetatable, setmetatable, error, assert
 local string = require 'string'
+local math = require 'math'
 
 local core = require 'lgi.core'
 local gi = core.gi
@@ -231,12 +232,22 @@ end
 
 -- Support for derived classes.
 local GObject = gi.require('GObject')
+
+local derived_name_base = 'lgi' .. tostring(math.random(100000)) .. 'gen'
+local derived_name_counter = 0
+
 local register_static = core.callable.new(GObject.type_register_static)
 local type_query = core.callable.new(GObject.type_query)
 function class.class_mt:derive(typename)
    -- Prepare repotable for newly registered class.
    local new_class = setmetatable({ _parent = self, _guards = {} },
 				  class.derived_mt)
+
+   -- Generate typename, if not provided
+   if not typename then
+      derived_name_counter = derived_name_counter + 1
+      typename = derived_name_base .. tostring(derived_name_counter)
+   end
    rawset(new_class, '_name', typename)
 
    -- Prepare GTypeInfo with the registration.
@@ -247,7 +258,8 @@ function class.class_mt:derive(typename)
    }
 
    -- Register new type with GType system.
-   local gtype = register_static(self._gtype, new_class._name, type_info, {})
+   local gtype = register_static(self._gtype, typename:gsub('[^%w]', '_'),
+				 type_info, {})
    rawset(new_class, '_gtype', core.gtype(gtype))
    if not new_class._gtype then
       error(("failed to derive `%s' from `%s'"):format(typename, self._name))
