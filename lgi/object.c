@@ -271,7 +271,8 @@ object_tostring (lua_State *L)
 {
   gpointer obj = object_get (L, 1);
   GType gtype = G_TYPE_FROM_INSTANCE (obj);
-  if (object_type (L, gtype) != G_TYPE_INVALID)
+  lua_getfenv (L, 1);
+  if (!lua_isnil (L, -1))
     lua_getfield (L, -1, "_name");
   else
     lua_pushliteral (L, "<??\?>");
@@ -337,6 +338,9 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
   lua_pushlightuserdata (L, &object_mt);
   lua_rawget (L, LUA_REGISTRYINDEX);
   lua_setmetatable (L, -2);
+  object_type (L, G_TYPE_FROM_INSTANCE (obj));
+  lua_setfenv (L, -2);
+
 
   /* Store newly created userdata proxy into cache. */
   lua_pushlightuserdata (L, obj);
@@ -364,10 +368,8 @@ object_access (lua_State *L)
   /* Check that 1st arg is an object and invoke one of the forms:
      result = type:_access(objectinstance, name)
      type:_access(objectinstance, name, val) */
-  gpointer object = object_get (L, 1);
-  GType gtype = G_TYPE_FROM_INSTANCE (object);
-  if (object_type (L, gtype) == G_TYPE_INVALID)
-    object_type_error (L, 1, gtype);
+  object_get (L, 1);
+  lua_getfenv (L, 1);
   return lgi_marshal_access (L, getmode, 1, 2, 3);
 }
 
@@ -400,13 +402,13 @@ object_query (lua_State *L)
       GType gtype;
       int mode = luaL_checkoption (L, 2, query_mode[0], query_mode);
       if (mode == 0)
-        {
-          lua_pushlightuserdata (L, object);
-          return 1;
-        }
+	{
+	  lua_pushlightuserdata (L, object);
+	  return 1;
+	}
       gtype = lgi_type_get_gtype (L, 3);
       if (gtype == G_TYPE_INVALID)
-        gtype = G_TYPE_FROM_INSTANCE (object);
+	gtype = G_TYPE_FROM_INSTANCE (object);
       if (mode == 1)
 	{
 	  lua_pushnumber (L, gtype);
@@ -415,18 +417,16 @@ object_query (lua_State *L)
       else
 	{
 	  /* Get repotype structure. */
-	  if (object_type (L, gtype) != G_TYPE_INVALID)
+	  lua_getfenv (L, 1);
+	  if (mode == 3)
 	    {
-	      if (mode == 3)
-		{
-		  gpointer typestruct = !G_TYPE_IS_INTERFACE (gtype)
-		    ? G_TYPE_INSTANCE_GET_CLASS (object, gtype, GTypeClass)
-		    : G_TYPE_INSTANCE_GET_INTERFACE (object, gtype, GTypeClass);
-		  lua_getfield (L, -1, "_class");
-		  lgi_record_2lua (L, typestruct, FALSE, 0);
-		}
-	      return 1;
+	      gpointer typestruct = !G_TYPE_IS_INTERFACE (gtype)
+		? G_TYPE_INSTANCE_GET_CLASS (object, gtype, GTypeClass)
+		: G_TYPE_INSTANCE_GET_INTERFACE (object, gtype, GTypeClass);
+	      lua_getfield (L, -1, "_class");
+	      lgi_record_2lua (L, typestruct, FALSE, 0);
 	    }
+	  return 1;
 	}
     }
   return 0;
