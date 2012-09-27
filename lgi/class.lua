@@ -8,8 +8,8 @@
 --
 ------------------------------------------------------------------------------
 
-local type, rawget, pairs, select, getmetatable, error
-   = type, rawget, pairs, select, getmetatable, error
+local type, rawget, pairs, select, getmetatable, error, assert
+   = type, rawget, pairs, select, getmetatable, error, assert
 local string = require 'string'
 
 local core = require 'lgi.core'
@@ -225,6 +225,37 @@ function class.load_class(namespace, info)
    class._implements = implements
    class._new = find_constructor(info)
    return class
+end
+
+-- Support for derived classes.
+class.derived_mt = class.class_mt:clone('derived', {})
+
+local GObject = gi.require('GObject')
+local register_static = core.callable.new(GObject.type_register_static)
+local type_query = core.callable.new(GObject.type_query)
+function class.class_mt:_derive(typename)
+   -- Prepare repotable for newly registered class.
+   local new_class = setmetatable({ _parent = self, _guards = {} },
+				  class.derived_mt)
+   rawset(new_class, '_name', typename)
+
+   -- Prepare GTypeInfo with the registration.
+   local parent_info = type_query(self._gtype)
+   local type_info = core.repo.GObject.TypeInfo {
+      class_size = parent_info.class_size,
+      instance_size = parent_info.instance_size,
+   }
+
+   -- Register new type with GType system.
+   rawset(new_class, '_gtype', register_static(
+	     self._gtype, new_class._name, type_info, {}))
+   if not new_class._gtype then
+      error(("failed to derive `%s' from `%s'"):format(typename, self._name))
+   end
+
+   -- Add newly registered type into the lgi type index.
+   core.index[new_class._gtype] = new_class
+   return new_class
 end
 
 return class
