@@ -240,8 +240,12 @@ local register_static = core.callable.new(GObject.type_register_static)
 local type_query = core.callable.new(GObject.type_query)
 function class.class_mt:derive(typename)
    -- Prepare repotable for newly registered class.
-   local new_class = setmetatable({ _parent = self, _guards = {} },
-				  class.derived_mt)
+   local new_class = setmetatable(
+      {
+	 _parent = self, _guards = {},
+	 _element = class.derived_mt._element,
+      },
+      class.derived_mt)
 
    -- Generate typename, if not provided
    if not typename then
@@ -271,6 +275,24 @@ function class.class_mt:derive(typename)
 end
 
 class.derived_mt = class.class_mt:clone('derived', {})
+
+-- Support for 'priv' pseudomember, holding table with user
+-- implementation data.
+function class.derived_mt:_element(instance, symbol)
+   -- Check default implementation.
+   local element, category = class.class_mt._element(self, instance, symbol)
+   if element then return element, category end
+
+   -- Special handling of 'priv' attribute.
+   if symbol == 'priv' then return symbol, '_priv' end
+end
+
+function class.derived_mt:_access_priv(instance, name, ...)
+   if select('#', ...) > 0 then
+      error(("%s: cannot assign `%s'"):format(self._name), name, 5)
+   end
+   return core.object.env(instance)
+end
 
 -- Overload __newindex to catch assignment to virtual - this causes
 -- installation of new virtual method
