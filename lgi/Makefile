@@ -18,9 +18,15 @@ CORE = corelgilua51.dll
 LIBFLAG = -shared
 LIBS += -llua
 else
+ifeq ($(shell uname -s),Darwin)
+CORE = corelgilua51.so
+LIBFLAG = -bundle -undefined dynamic_lookup
+CCSHARED = -fno-common
+else
 CORE = corelgilua51.so
 LIBFLAG = -shared
 CCSHARED = -fPIC
+endif
 endif
 
 OBJS = buffer.o callable.o core.o gi.o marshal.o object.o record.o

@@ -142,7 +142,7 @@ function Object:_element(object, name)
    local interfaces = Type.interfaces(core.object.query(object, 'gtype'))
    for i = 1, #interfaces do
       local info = gi[core.gtype(interfaces[i])]
-      local iface = repo[info.namespace][info.name]
+      local iface = info and repo[info.namespace][info.name]
       if iface then element, category = iface:_element(object, name) end
       if element then return element, category end
    end
