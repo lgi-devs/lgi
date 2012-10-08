@@ -8,8 +8,10 @@
 --
 ------------------------------------------------------------------------------
 
-local type, rawget, pairs, select, getmetatable, error, assert
-   = type, rawget, pairs, select, getmetatable, error, assert
+local type, rawget, rawset, pairs, select, getmetatable, setmetatable,
+error, assert
+   = type, rawget, rawset, pairs, select, getmetatable, setmetatable,
+   error, assert
 local string = require 'string'
 
 local core = require 'lgi.core'
@@ -53,11 +55,11 @@ local function load_signal_name_reverse(name)
 end
 
 local function load_vfunc_name(name)
-   return name:match('^virtual_(.+)$')
+   return name:match('^do_(.+)$')
 end
 
 local function load_vfunc_name_reverse(name)
-   return 'virtual_' .. name
+   return 'do_' .. name
 end
 
 local function load_method(mi)
@@ -153,8 +155,7 @@ end
 
 -- Implementation of virtual method accessor.  Virtuals are
 -- implemented by accessing callback pointer in the class struct of
--- the class.  Note that currently we support only reading of them,
--- writing would mean overriding, which is not supported yet.
+-- the class.
 function class.class_mt:_access_virtual(instance, vfunc, ...)
    if select('#', ...) > 0 then
       error(("%s: cannot override virtual `%s' "):format(
@@ -213,7 +214,8 @@ function class.load_class(namespace, info)
       class._virtual = component.get_category(
 	 info.vfuncs, nil, load_vfunc_name, load_vfunc_name_reverse)
       class._class = record.load(type_struct)
-      if parent then class._class._parent = parent._class end
+      class._class._parent =
+	 parent and parent._class or core.repo.GObject.TypeClass
    end
 
    -- Populate inheritation information (_implements and _parent fields).
@@ -235,8 +237,9 @@ local register_static = core.callable.new(GObject.type_register_static)
 local type_query = core.callable.new(GObject.type_query)
 function class.class_mt:_derive(typename)
    -- Prepare repotable for newly registered class.
-   local new_class = setmetatable({ _parent = self }, class.derived_mt)
-   new_class._name = typename
+   local new_class = setmetatable({ _parent = self, _guards = {} },
+				  class.derived_mt)
+   rawset(new_class, '_name', typename)
 
    -- Prepare GTypeInfo with the registration.
    local parent_info = type_query(self._gtype)
@@ -246,13 +249,50 @@ function class.class_mt:_derive(typename)
    }
 
    -- Register new type with GType system.
-   new_class._gtype = register_static(
-      self._gtype, new_class._name, type_info, {})
-   assert(new_class._gtype, "bad typename for derived type")
+   rawset(new_class, '_gtype', register_static(
+	     self._gtype, new_class._name, type_info, {}))
+   if not new_class._gtype then
+      error(("failed to derive `%s' from `%s'"):format(typename, self._name))
+   end
 
    -- Add newly registered type into the lgi type index.
    core.index[new_class._gtype] = new_class
    return new_class
+end
+
+-- Overload __newindex to catch assignment to virtual - this causes
+-- installation of new virtual method
+local type_class_ref = core.callable.new(GObject.TypeClass.methods.ref)
+local type_class_unref = core.callable.new(GObject.TypeClass.methods.unref)
+function class.derived_mt:__newindex(name, value)
+   -- Use _element method to get category to write to.
+   local _element = (rawget(self, '_element')
+		  or rawget(getmetatable(self), '_element'))
+   local value, category = _element(self, nil, name)
+
+   -- Overriding virtual method.
+   if category == '_virtual' then
+      -- Get typestruct of this class.
+      local typeclass = core.record.cast(
+	 type_class_ref(self._gtype), self._class)
+      name = load_vfunc_name(name)
+      local field = self._class[name]
+
+      -- Prepare callback to target.
+      local guard, vfunc = core.marshal.callback(
+	 field.typeinfo.interface, value)
+
+      -- Assign new address of the target and store guard to class
+      -- definition table.
+      core.record.field(typeclass, self._class[name], vfunc)
+      self._guards[name] = guard
+
+      -- Finally don't forget to release class back.
+      type_class_unref(typeclass)
+   else
+      -- Do not allow assigning to anything else.
+      error(("`%s': `%s' not assignable"):format(self._name, name))
+   end
 end
 
 return class

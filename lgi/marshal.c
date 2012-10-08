@@ -717,7 +717,7 @@ marshal_2c_callable (lua_State *L, GICallableInfo *ci, GIArgInfo *ai,
 		     GICallableInfo *argci, void **args)
 {
   int nret = 0;
-  GIScopeType scope = g_arg_info_get_scope (ai);
+  GIScopeType scope;
   gpointer user_data = NULL;
 
   /* Check 'nil' in optional case.  In this case, return NULL as
@@ -725,6 +725,13 @@ marshal_2c_callable (lua_State *L, GICallableInfo *ci, GIArgInfo *ai,
   if (optional && lua_isnoneornil (L, narg))
     {
       *callback = NULL;
+      return 0;
+    }
+
+  /* Check lightuserdata case; simply use that data if provided. */
+  if (lua_islightuserdata (L, narg))
+    {
+      *callback = lua_touserdata (L, narg);
       return 0;
     }
 
@@ -744,6 +751,7 @@ marshal_2c_callable (lua_State *L, GICallableInfo *ci, GIArgInfo *ai,
 	}
     }
 
+  scope = g_arg_info_get_scope (ai);
   if (user_data == NULL)
     {
       /* Closure without user_data block.  Create new data block,
@@ -1235,18 +1243,24 @@ lgi_marshal_field (lua_State *L, gpointer object, gboolean getmode,
       GIFieldInfo **fi = lua_touserdata (L, field_arg);
       GIFieldInfoFlags flags;
 
-      /* Check, whether field is readable/writable. */
-      flags = g_field_info_get_flags (*fi);
-      if ((flags & (getmode ? GI_FIELD_IS_READABLE
-		    : GI_FIELD_IS_WRITABLE)) == 0)
+      /* Check, whether field is readable/writable.  Turn off this
+	 check for class structures, because we need to read/write
+	 their virtual function pointers. */
+      if (!g_struct_info_is_gtype_struct (g_base_info_get_container (*fi)))
 	{
-	  /* Prepare proper error message. */
-	  lua_concat (L, lgi_type_get_name (L,
-					    g_base_info_get_container (*fi)));
-	  return luaL_error (L, "%s: field `%s' is not %s",
-			     lua_tostring (L, -1),
-			     g_base_info_get_name (*fi),
-			     getmode ? "readable" : "writable");
+	  flags = g_field_info_get_flags (*fi);
+	  if ((flags & (getmode ? GI_FIELD_IS_READABLE
+			: GI_FIELD_IS_WRITABLE)) == 0)
+	    {
+	      /* Prepare proper error message. */
+	      lua_concat (L,
+			  lgi_type_get_name (L,
+					     g_base_info_get_container (*fi)));
+	      return luaL_error (L, "%s: field `%s' is not %s",
+				 lua_tostring (L, -1),
+				 g_base_info_get_name (*fi),
+				 getmode ? "readable" : "writable");
+	    }
 	}
 
       /* Map GIArgument to proper memory location, get typeinfo of the
@@ -1581,12 +1595,12 @@ static int
 marshal_callback (lua_State *L)
 {
   gpointer user_data, addr;
-  GICallableInfo *ci;
+  GICallableInfo **ci;
 
   ci = lgi_udata_test (L, 1, LGI_GI_INFO);
   user_data = lgi_closure_allocate (L, 1);
   *lgi_guard_create (L, lgi_closure_destroy) = user_data;
-  addr = lgi_closure_create (L, user_data, ci, 2, FALSE);
+  addr = lgi_closure_create (L, user_data, *ci, 2, FALSE);
   lua_pushlightuserdata (L, addr);
   return 2;
 }
