@@ -104,7 +104,7 @@ function window.child.video:on_realize()
    sink:set_window_handle(self.window:get_xid())
 end
 
-pipeline.bus:add_watch(bus_callback)
+pipeline.bus:add_watch(GLib.PRIORITY_DEFAULT, bus_callback)
 
 function app:on_activate()
    window:show_all()

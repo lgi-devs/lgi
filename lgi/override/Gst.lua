@@ -45,8 +45,10 @@ function Gst.Element._method:link_many(...)
 end
 
 -- Gst.Bin adjustments
-function Gst.Bus._method:add_watch(callback)
-   return self:add_watch_full(GLib.PRIORITY_DEFAULT, callback)
+if not Gst.Bus._method.add_watch then
+   function Gst.Bus._method:add_watch(priority, callback)
+      return self:add_watch_full(GLib.PRIORITY_DEFAULT, callback)
+   end
 end
 
 function Gst.Bin._method:add_many(...)
@@ -64,7 +66,7 @@ function Gst.TagList:get(tag)
 end
 
 -- Load additional Gst modules.
-local GstInterfaces = lgi.require('GstInterfaces', Gst._version)
+--local GstInterfaces = lgi.require('GstInterfaces', Gst._version)
 
 -- Initialize gstreamer.
 Gst.init()
