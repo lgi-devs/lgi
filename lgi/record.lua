@@ -34,6 +34,18 @@ function record.struct_mt:is_type_of(instance)
    return false
 end
 
+-- Resolver for records, recursively resolves also all parents.
+function record.struct_mt:_resolve(recursive)
+   -- Resolve itself using inherited implementation.
+   component.mt._resolve(self)
+
+   -- Go to parent and resolve it too.
+   if recursive and self._parent then
+      self._parent:_resolve(recursive)
+   end
+   return self
+end
+
 function record.struct_mt:_element(instance, symbol)
    -- First of all, try normal inherited functionality.
    local element, category = component.mt._element(self, instance, symbol)
