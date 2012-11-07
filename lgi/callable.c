@@ -279,6 +279,7 @@ callable_allocate (lua_State *L, int nargs, ffi_type ***ffi_args)
   int argi;
 
   /* Create userdata structure. */
+  luaL_checkstack (L, 2, NULL);
   Callable *callable = lua_newuserdata (L, sizeof (Callable) +
 					sizeof (ffi_type) * (nargs + 2) +
 					sizeof (Param) * nargs);
@@ -313,23 +314,6 @@ lgi_callable_create (lua_State *L, GICallableInfo *info, gpointer addr)
   ffi_type **ffi_arg, **ffi_args;
   ffi_type *ffi_retval;
   gint nargs, argi, arg;
-
-  /* Check cache, whether this callable object is already present in
-     the cache. */
-  luaL_checkstack (L, 6, "");
-  lua_pushlightuserdata (L, &callable_cache);
-  lua_rawget (L, LUA_REGISTRYINDEX);
-  lua_pushnumber (L, g_base_info_get_type (info));
-  lua_pushstring (L, ":");
-  lua_concat (L, lgi_type_get_name(L, info) + 2);
-  lua_pushvalue (L, -1);
-  lua_gettable (L, -3);
-  if (!lua_isnil (L, -1))
-    {
-      lua_replace (L, -3);
-      lua_pop (L, 1);
-      return 1;
-    }
 
   /* Allocate Callable userdata. */
   nargs = g_callable_info_get_n_args (info);
@@ -436,14 +420,6 @@ lgi_callable_create (lua_State *L, GICallableInfo *info, gpointer addr)
 			 lua_tostring (L, -1));
     }
 
-  /* Store callable object to the cache. */
-  lua_pushvalue (L, -3);
-  lua_pushvalue (L, -2);
-  lua_settable (L, -6);
-
-  /* Final stack cleanup. */
-  lua_replace (L, -4);
-  lua_pop (L, 2);
   return 1;
 }
 
