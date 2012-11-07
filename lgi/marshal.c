@@ -1192,7 +1192,10 @@ lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GITransfer transfer,
 	    break;
 
 	  case GI_INFO_TYPE_CALLBACK:
-	    lgi_callable_create (L, info, arg->v_pointer);
+	    if (arg->v_pointer)
+	      lgi_callable_create (L, info, arg->v_pointer);
+	    else
+	      lua_pushnil (L);
 	    break;
 
 	  default:
