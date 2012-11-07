@@ -19,6 +19,9 @@ local core = require 'lgi.core'
 local gi = core.gi
 local component = require 'lgi.component'
 local record = require 'lgi.record'
+local ffi = require 'lgi.ffi'
+local ti = ffi.types
+local GObject = gi.require 'GObject'
 
 -- Implementation of class and interface component loading.
 local class = {
@@ -113,15 +116,14 @@ end
 
 -- _element implementation for objects, checks parent and implemented
 -- interfaces if element cannot be found in current typetable.
+local internals = { _native = true, _type = true, _class = true, _super = true }
 function class.class_mt:_element(instance, symbol)
+   -- Special handling of internal symbols.
+   if internals[symbol] then return symbol, symbol end
+
    -- Check default implementation.
    local element, category = component.mt._element(self, instance, symbol)
    if element then return element, category end
-
-   -- Special handling of '_native' attribute.
-   if symbol == '_native' then return symbol, '_internal'
-   elseif symbol == '_type' then return symbol, '_internal'
-   end
 
    -- Check parent and all implemented interfaces.
    local parent = rawget(self, '_parent')
@@ -136,17 +138,6 @@ function class.class_mt:_element(instance, symbol)
    end
 end
 
--- Add accessor for 'internal' fields handling.
-function class.class_mt:_access_internal(instance, element, ...)
-   if select('#', ...) ~= 0 then return end
-   if element == '_native' then
-      return core.object.query(instance, 'addr')
-   elseif element == '_type' then
-      return core.object.query(instance, 'repo')
-   end
-end
-
--- Object constructor, does not accept any arguments.  Overriden later
 -- Implementation of field accessor.  Note that compound fields are
 -- not supported in classes (because they are not seen in the wild and
 -- I'm lazy).
@@ -154,21 +145,44 @@ function class.class_mt:_access_field(instance, field, ...)
    return core.object.field(instance, field, ...)
 end
 
--- Implementation of virtual method accessor.  Virtuals are
--- implemented by accessing callback pointer in the class struct of
--- the class.
+-- Add accessor '_native' handling.
+function class.class_mt:_access_native(instance)
+   return core.object.query(instance, 'addr')
+end
+
+-- Add accessor '_type' handling.
+function class.class_mt:_access_type(instance)
+   return core.object.query(instance, 'repo')
+end
+
+-- Add accessor '_super' handling.
+function class.class_mt:_access_super(instance)
+   -- Create new instance casted to parent type.
+   if self._parent then
+      return core.object.cast(instance, self._parent)
+   end
+end
+
+local type_class_peek = core.callable.new {
+   addr = GObject.resolve.g_type_class_peek,
+   ret = ti.ptr, ti.GType
+}
+-- Add accessor '_class' handling.
+function class.class_mt:_access_class(instance)
+   -- Get address of class instance and wrap it with proper type.
+   return core.record.new(self._class, type_class_peek(self._gtype))
+end
+
+-- Implementation of virtual method accessor.
 function class.class_mt:_access_virtual(instance, vfunc, ...)
    if select('#', ...) > 0 then
       error(("%s: cannot override virtual `%s' "):format(
 	       self._name, vfunc.name), 5)
    end
-   -- Get typestruct of this class.
-   local typestruct = core.object.query(instance, 'class',
-					vfunc.container.gtype)
-
-   -- Resolve the field of the typestruct with the virtual name.  This
-   -- returns callback to the virtual, which can be directly called.
-   return core.record.field(typestruct, self._class[vfunc.name])
+   -- Get the class and field representing the virtual function slot
+   -- and return the field (callback) of the virtual.
+   return core.record.field(self:_access_class(instance),
+			    self._class[vfunc.name])
 end
 
 function class.load_interface(namespace, info)
@@ -230,9 +244,6 @@ function class.load_class(namespace, info)
    return class
 end
 
--- Support for derived classes.
-local GObject = gi.require('GObject')
-
 local derived_name_base = 'lgi' .. tostring(math.random(100000)) .. 'gen'
 local derived_name_counter = 0
 
@@ -242,10 +253,26 @@ function class.class_mt:derive(typename)
    -- Prepare repotable for newly registered class.
    local new_class = setmetatable(
       {
-	 _parent = self, _guards = {},
+	 _parent = self, _override = {}, _guard = {},
 	 _element = class.derived_mt._element,
+	 _class = self._class
       },
       class.derived_mt)
+
+   -- Create class-initialization closure, which assigns pointers to
+   -- all known overriden virtual methods.
+   local function class_init(class_addr)
+      -- Create instance of real class.
+      local class = core.record.new(new_class._class, class_addr)
+
+      -- Iterate through all overrides and assign to the virtual callbacks.
+      for name, addr in pairs(new_class._override) do
+	 class[name] = addr
+      end
+   end
+   local class_init_guard, class_init_addr = core.marshal.callback(
+      GObject.ClassInitFunc, class_init)
+   new_class._guard._class_init = class_init_guard
 
    -- Generate typename, if not provided
    if not typename then
@@ -259,6 +286,7 @@ function class.class_mt:derive(typename)
    local type_info = core.repo.GObject.TypeInfo {
       class_size = parent_info.class_size,
       instance_size = parent_info.instance_size,
+      class_init = class_init_addr,
    }
 
    -- Register new type with GType system.
@@ -296,33 +324,25 @@ end
 
 -- Overload __newindex to catch assignment to virtual - this causes
 -- installation of new virtual method
-local type_class_ref = core.callable.new(GObject.TypeClass.methods.ref)
-local type_class_unref = core.callable.new(GObject.TypeClass.methods.unref)
 function class.derived_mt:__newindex(name, target)
    -- Use _element method to get category to write to.
    local _element = (rawget(self, '_element')
 		  or rawget(getmetatable(self), '_element'))
    local value, category = _element(self, nil, name)
 
-   -- Overriding virtual method.
-   if category == '_virtual' then
-      -- Get typestruct of this class.
-      local typeclass = core.record.cast(
-	 type_class_ref(self._gtype), self._class)
+   if not value then
+      -- Simply assign to type.  This most probably means adding new
+      -- member function to the class (or some static member).
+      rawset(self, name, target)
+   elseif category == '_virtual' then
+      -- Overriding virtual method.  Prepare callback to the target
+      -- and store it to the _override type helper subtable.
       name = load_vfunc_name(name)
       local field = self._class[name]
-
-      -- Prepare callback to target.
       local guard, vfunc = core.marshal.callback(
 	 field.typeinfo.interface, target)
-
-      -- Assign new address of the target and store guard to class
-      -- definition table.
-      core.record.field(typeclass, self._class[name], vfunc)
-      self._guards[name] = guard
-
-      -- Finally don't forget to release class back.
-      type_class_unref(typeclass)
+      self._override[name] = vfunc
+      self._guard[name] = guard
    else
       -- Do not allow assigning to anything else.
       error(("`%s': `%s' not assignable"):format(self._name, name))
