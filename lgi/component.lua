@@ -172,7 +172,7 @@ function component.mt:_access(instance, symbol, ...)
    -- Invoke _element, which converts symbol to element and category.
    local element, category = self:_element(instance, symbol)
    if not element then
-      error(("%s: no `%s'"):format(self._name, symbol), 3)
+      error(("%s: no `%s'"):format(self._name, tostring(symbol)), 3)
    end
    return self:_access_element(instance, category, symbol, element, ...)
 end
