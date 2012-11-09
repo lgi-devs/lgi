@@ -8,8 +8,8 @@
 --
 ------------------------------------------------------------------------------
 
-local assert, pairs, ipairs, setmetatable, table, rawget
-   = assert, pairs, ipairs, setmetatable, table, rawget
+local assert, pairs, ipairs, setmetatable, table, rawget, type
+   = assert, pairs, ipairs, setmetatable, table, rawget, type
 local lgi = require 'lgi'
 local cairo = lgi.cairo
 
