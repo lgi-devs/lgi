@@ -586,34 +586,12 @@ object_new (lua_State *L)
     }
 }
 
-/* Creates new proxy of specified type for given object.
-   casted = object.cast(instance, repotype) */
-static int
-object_cast (lua_State *L)
-{
-  gpointer object = object_check (L, 1);
-  luaL_checktype (L, 2, LUA_TTABLE);
-  if (!object)
-    return 0;
-
-  /* Create new userdata object. */
-  object_refsink (L, object);
-  *(gpointer *) lua_newuserdata (L, sizeof (object)) = object;
-  lua_pushlightuserdata (L, &object_mt);
-  lua_rawget (L, LUA_REGISTRYINDEX);
-  lua_setmetatable (L, -2);
-  lua_pushvalue (L, 2);
-  lua_setfenv (L, -2);
-  return 1;
-}
-
 /* Object API table. */
 static const luaL_Reg object_api_reg[] = {
   { "query", object_query },
   { "field", object_field },
   { "new", object_new },
   { "env", object_env },
-  { "cast", object_cast },
   { NULL, NULL }
 };
 
