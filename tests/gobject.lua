@@ -117,18 +117,25 @@ function gobject.subclass_override2()
    local GObject = lgi.GObject
    local state = 0
    local Derived = GObject.Object:derive()
-   function Derived:do_constructed() self.priv.id = 1 state = state + 1 end
-   function Derived:do_dispose() state = state + 2 end
+   function Derived:do_constructed()
+      self.priv.id = 1
+      state = state + 1
+   end
+   function Derived:do_dispose()
+      state = state + 2
+      GObject.Object.do_dispose(self)
+   end
    local Subderived = Derived:derive()
    function Subderived:do_constructed()
-      self.priv.id = 2
+      Derived.do_constructed(self)
+      self.priv.id = self.priv.id + 2
       state = state + 4
    end
    check(state == 0)
    local sub = Subderived()
-   check(state == 4)
-   check(sub.priv.id == 2)
+   check(state == 5)
+   check(sub.priv.id == 3)
    sub = nil
    collectgarbage()
-   check(state == 6)
+   check(state == 7)
 end

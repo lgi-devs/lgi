@@ -33,6 +33,16 @@ local class = {
 		     '_method', '_constant' }),
 }
 
+local type_class_peek = core.callable.new {
+   addr = GObject.resolve.g_type_class_peek,
+   ret = ti.ptr, ti.GType
+}
+
+local type_class = component.create(nil, record.struct_mt)
+ffi.load_fields(type_class, { { 'g_type', ti.GType } })
+local type_instance = component.create(nil, record.struct_mt)
+ffi.load_fields(type_instance, { { 'g_class', type_class, ptr = true } })
+
 -- Checks whether given argument is type of this class.
 function class.class_mt:is_type_of(instance)
    if type(instance) == 'userdata' then
@@ -116,7 +126,7 @@ end
 
 -- _element implementation for objects, checks parent and implemented
 -- interfaces if element cannot be found in current typetable.
-local internals = { _native = true, _type = true, _class = true, _super = true }
+local internals = { _native = true, _type = true, _class = true }
 function class.class_mt:_element(instance, symbol)
    -- Special handling of internal symbols.
    if internals[symbol] then return symbol, symbol end
@@ -155,34 +165,29 @@ function class.class_mt:_access_type(instance)
    return core.object.query(instance, 'repo')
 end
 
--- Add accessor '_super' handling.
-function class.class_mt:_access_super(instance)
-   -- Create new instance casted to parent type.
-   if self._parent then
-      return core.object.cast(instance, self._parent)
-   end
-end
-
-local type_class_peek = core.callable.new {
-   addr = GObject.resolve.g_type_class_peek,
-   ret = ti.ptr, ti.GType
-}
 -- Add accessor '_class' handling.
 function class.class_mt:_access_class(instance)
-   -- Get address of class instance and wrap it with proper type.
-   return core.record.new(self._class, type_class_peek(self._gtype))
+   -- Get dynamic gtype of the instance.
+   local ti = core.record.new(type_instance,
+			      core.object.query(instance, 'addr'))
+
+   -- Wrap it with proper class type.
+   return core.record.new(self._class, type_class_peek(ti.g_class.g_type))
 end
 
--- Implementation of virtual method accessor.
-function class.class_mt:_access_virtual(instance, vfunc, ...)
-   if select('#', ...) > 0 then
-      error(("%s: cannot override virtual `%s' "):format(
-	       self._name, vfunc.name), 5)
-   end
-   -- Get the class and field representing the virtual function slot
-   -- and return the field (callback) of the virtual.
-   return core.record.field(self:_access_class(instance),
-			    self._class[vfunc.name])
+-- Add accessor '_virtual' handling.
+function class.class_mt:_access_virtual(instance, vfi)
+   -- Retrieve proper method from the class.
+   local class = instance._class
+   return instance._class[vfi.name]
+end
+
+-- Add __index for _virtual handling.  Convert vfi baseinfo into real
+-- callable pointer according to the target type.
+function class.class_mt:_index_virtual(vfi)
+   -- Get proper class.  TODO: We might actually need g_type_class_ref here...
+   local class = core.record.new(self._class, type_class_peek(self._gtype))
+   return class and class[vfi.name]
 end
 
 function class.load_interface(namespace, info)
