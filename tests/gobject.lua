@@ -125,6 +125,10 @@ function gobject.subclass_override2()
       state = state + 2
       GObject.Object.do_dispose(self)
    end
+   function Derived:custom_method()
+      state = state + 8
+      self.priv.id = self.priv.id + 4
+   end
    local Subderived = Derived:derive()
    function Subderived:do_constructed()
       Derived.do_constructed(self)
@@ -135,7 +139,10 @@ function gobject.subclass_override2()
    local sub = Subderived()
    check(state == 5)
    check(sub.priv.id == 3)
+   sub:custom_method()
+   check(state == 13)
+   check(sub.priv.id == 7)
    sub = nil
    collectgarbage()
-   check(state == 7)
+   check(state == 15)
 end
