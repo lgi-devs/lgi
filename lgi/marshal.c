@@ -1303,7 +1303,10 @@ lgi_marshal_field (lua_State *L, gpointer object, gboolean getmode,
 	    if (getmode)
 	      {
 		if (kind == 1)
-		  object = arg->v_pointer;
+		  {
+		    object = arg->v_pointer;
+		    parent_arg = 0;
+		  }
 		lgi_record_2lua (L, object, FALSE, parent_arg);
 		return 1;
 	      }
