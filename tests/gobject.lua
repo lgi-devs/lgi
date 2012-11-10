@@ -146,3 +146,25 @@ function gobject.subclass_override2()
    collectgarbage()
    check(state == 15)
 end
+
+function gobject.subclass_derive3()
+   local GObject = lgi.GObject
+   local history = {}
+   local Derived = GObject.Object:derive()
+   function Derived:_init()
+      history[#history + 1] = 'init'
+   end
+   function Derived:do_constructed()
+      history[#history + 1] = 'constructed'
+   end
+   function Derived:do_dispose()
+      history[#history + 1] = 'dispose'
+   end
+   local obj = Derived()
+   obj = nil
+   collectgarbage()
+   check(#history == 3)
+   check(history[1] == 'init')
+   check(history[2] == 'constructed')
+   check(history[3] == 'dispose')
+end

@@ -279,6 +279,23 @@ function class.class_mt:derive(typename)
       GObject.ClassInitFunc, class_init)
    new_class._guard._class_init = class_init_guard
 
+   -- Create instance initialization function.  Note that we do not
+   -- pass directly user's method, because user will probably set it
+   -- later after the type is already created, but we need to pass its
+   -- address right now during type initialization.  Therefore, a stub
+   -- which looks up the init method of the type dynamically is used
+   -- instead.
+   local function instance_init(instance)
+      local _init = rawget(new_class, '_init')
+      if _init then
+	 -- Convert instance to real type and call init with it.
+	 _init(core.object.new(core.record.query(instance, 'addr')))
+      end
+   end
+   local instance_init_guard, instance_init_addr = core.marshal.callback(
+      GObject.InstanceInitFunc, instance_init)
+   new_class._guard._instance_init = instance_init_guard
+
    -- Generate typename, if not provided
    if not typename then
       derived_name_counter = derived_name_counter + 1
@@ -290,8 +307,9 @@ function class.class_mt:derive(typename)
    local parent_info = type_query(self._gtype)
    local type_info = core.repo.GObject.TypeInfo {
       class_size = parent_info.class_size,
-      instance_size = parent_info.instance_size,
       class_init = class_init_addr,
+      instance_size = parent_info.instance_size,
+      instance_init = instance_init_addr,
    }
 
    -- Register new type with GType system.
