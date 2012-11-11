@@ -8,8 +8,8 @@
 --
 ------------------------------------------------------------------------------
 
-local select, type, pairs, ipairs, unpack, setmetatable, error, next
-   = select, type, pairs, ipairs, unpack, setmetatable, error, next
+local select, type, pairs, ipairs, unpack, setmetatable, error, next, rawget
+   = select, type, pairs, ipairs, unpack, setmetatable, error, next, rawget
 local lgi = require 'lgi'
 local core = require 'lgi.core'
 local Gtk = lgi.Gtk
@@ -40,7 +40,7 @@ for _, name in pairs { 'allocation', 'direction', 'settings', 'realized',
 		       'mapped', 'display', 'screen', 'window', 'root_window',
 		       'has_window', 'style_context' } do
    if not Gtk.Widget._property[name] then
-      local attr = { get = Gtk.Widget['get_' ..name],
+      local attr = { get = Gtk.Widget['get_' .. name],
 		     set = Gtk.Widget['set_' .. name] }
       if next(attr) then
 	 Gtk.Widget._attribute[name] = attr
@@ -67,11 +67,11 @@ if core.gi.Gtk.Widget.methods.intersect.args[2].direction == 'in' then
 end
 
 function Gtk.Widget._attribute.events:get()
-   return Gdk.EventMask(self:get_events())
+   return Gdk.EventMask[self:get_events()]
 end
 
 function Gtk.Widget._attribute.events:set(events)
-   self:set_events(Gdk.EventMask[events])
+   self:set_events(Gdk.EventMask(events))
 end
 
 -- Accessing style properties is preferrably done by accessing 'style'
@@ -93,10 +93,18 @@ function Gtk.Widget._attribute.style:get()
    return setmetatable({ _widget = self }, widget_style_mt)
 end
 
--- Get widget from Gdk.Window
+-- Get/Set widget from Gdk.Window
 function Gdk.Window:get_widget()
    return core.object.new(self:get_user_data(), false)
 end
+function Gdk.Window:set_widget(widget)
+   self:set_user_data(widget)
+end
+Gdk.Window._attribute = rawget(Gdk.Window, '_attribute') or {}
+Gdk.Window._attribute.widget = {
+   set = Gdk.Window.set_widget,
+   get = Gdk.Window.get_widget,
+}
 
 -------------------------------- Gtk.Buildable overrides.
 Gtk.Buildable._attribute = { id = {}, child = {} }
