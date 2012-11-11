@@ -126,7 +126,7 @@ end
 
 -- _element implementation for objects, checks parent and implemented
 -- interfaces if element cannot be found in current typetable.
-local internals = { _native = true, _type = true, _class = true }
+local internals = { _native = true, _type = true, _class = true, _gtype = true }
 function class.class_mt:_element(instance, symbol)
    -- Special handling of internal symbols.
    if internals[symbol] then return symbol, symbol end
@@ -165,20 +165,23 @@ function class.class_mt:_access_type(instance)
    return core.object.query(instance, 'repo')
 end
 
--- Add accessor '_class' handling.
-function class.class_mt:_access_class(instance)
-   -- Get dynamic gtype of the instance.
+-- Add accessor '_gtype' handling.
+function class.class_mt:_access_gtype(instance)
+   -- Cast address of the instance to TypeInstance to get to type info.
    local ti = core.record.new(type_instance,
 			      core.object.query(instance, 'addr'))
+   return ti.g_class.g_type
+end
 
-   -- Wrap it with proper class type.
-   return core.record.new(self._class, type_class_peek(ti.g_class.g_type))
+-- Add accessor '_class' handling.
+function class.class_mt:_access_class(instance)
+   local gtype = class.class_mt._access_gtype(self, instance)
+   return core.record.new(self._class, type_class_peek(gtype))
 end
 
 -- Add accessor '_virtual' handling.
 function class.class_mt:_access_virtual(instance, vfi)
    -- Retrieve proper method from the class.
-   local class = instance._class
    return instance._class[vfi.name]
 end
 
@@ -330,12 +333,12 @@ class.derived_mt = class.class_mt:clone('derived', {})
 -- Support for 'priv' pseudomember, holding table with user
 -- implementation data.
 function class.derived_mt:_element(instance, symbol)
+   -- Special handling of 'priv' attribute.
+   if symbol == 'priv' then return symbol, '_priv' end
+
    -- Check default implementation.
    local element, category = class.class_mt._element(self, instance, symbol)
    if element then return element, category end
-
-   -- Special handling of 'priv' attribute.
-   if symbol == 'priv' then return symbol, '_priv' end
 end
 
 function class.derived_mt:_access_priv(instance, name, ...)

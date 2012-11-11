@@ -80,7 +80,7 @@ end
 local widget_style_mt = {}
 function widget_style_mt:__index(name)
    name = name:gsub('_', '-')
-   local pspec = self._widget.class:find_style_property(name)
+   local pspec = self._widget._class:find_style_property(name)
    if not pspec then
       error(("%s: no style property `%s'"):format(
 	       self._widget.type._name, name:gsub('%-', '_')), 2)
@@ -149,7 +149,7 @@ Gtk.Container._attribute.property = {}
 local container_property_item_mt = {}
 function container_property_item_mt:__index(name)
    name = name:gsub('_', '-')
-   local pspec = self._container.class:find_child_property(name)
+   local pspec = self._container._class:find_child_property(name)
    if not pspec then
       error(("%s: no child property `%s'"):format(
 	       self._container.type._name, name:gsub('%-', '_')), 2)
@@ -160,7 +160,7 @@ function container_property_item_mt:__index(name)
 end
 function container_property_item_mt:__newindex(name, val)
    name = name:gsub('_', '-')
-   local pspec = self._container.class:find_child_property(name)
+   local pspec = self._container._class:find_child_property(name)
    if not pspec then
       error(("%s: no child property `%s'"):format(
 	       self._container.type._name, name:gsub('%-', '_')), 2)
