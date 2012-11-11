@@ -277,6 +277,12 @@ function class.class_mt:derive(typename)
       for name, addr in pairs(new_class._override) do
 	 class[name] = addr
       end
+
+      -- If type specified _class_init method, invoke it.
+      local _class_init = rawget(new_class, '_class_init')
+      if _class_init then
+	 _class_init(new_class)
+      end
    end
    local class_init_guard, class_init_addr = core.marshal.callback(
       GObject.ClassInitFunc, class_init)

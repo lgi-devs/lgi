@@ -151,6 +151,11 @@ function gobject.subclass_derive3()
    local GObject = lgi.GObject
    local history = {}
    local Derived = GObject.InitiallyUnowned:derive()
+   function Derived:_class_init()
+      history[#history + 1] = 'class_init'
+      check(self == Derived)
+      collectgarbage()
+   end
    function Derived:_init()
       history[#history + 1] = 'init'
       collectgarbage()
@@ -165,10 +170,10 @@ function gobject.subclass_derive3()
 --      Derived._parent.do_dispose(self)
 --   end
    local obj = Derived()
+   check(history[1] == 'class_init')
+   check(history[2] == 'init')
+   check(history[3] == 'constructed')
    obj = nil
    collectgarbage()
-   check(#history == 2)
-   check(history[1] == 'init')
-   check(history[2] == 'constructed')
---   check(history[3] == 'dispose')
+--   check(history[4] == 'dispose')
 end
