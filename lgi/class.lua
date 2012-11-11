@@ -292,7 +292,8 @@ function class.class_mt:derive(typename)
       local _init = rawget(new_class, '_init')
       if _init then
 	 -- Convert instance to real type and call init with it.
-	 _init(core.object.new(core.record.query(instance, 'addr')))
+	 _init(core.object.new(core.record.query(instance, 'addr'),
+	       false, true))
       end
    end
    local instance_init_guard, instance_init_addr = core.marshal.callback(
