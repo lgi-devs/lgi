@@ -43,6 +43,11 @@ typedef struct _Param
      sizes etc. */
   guint internal : 1;
 
+  /* Flag indicating that this is internal user_data value for the
+     callback.  This parameter is supplied automatically, not
+     explicitely from Lua. */
+  guint internal_user_data : 1;
+
   /* Set to nonzero if this argument is user_data for closure which is
      marked as (scope call). */
   guint call_scoped_user_data : 1;
@@ -68,6 +73,9 @@ typedef struct _Callable
 
   /* Address of the function. */
   gpointer address;
+
+  /* Optional, associated 'user_data' context field. */
+  gpointer user_data;
 
   /* Flags with function characteristics. */
   guint has_self : 1;
@@ -267,6 +275,7 @@ callable_param_init (Param *param)
 {
   param->ti = NULL;
   param->internal = FALSE;
+  param->internal_user_data = FALSE;
   param->n_closures = 0;
   param->call_scoped_user_data = FALSE;
   param->kind = PARAM_KIND_TI;
@@ -291,6 +300,7 @@ callable_allocate (lua_State *L, int nargs, ffi_type ***ffi_args)
   *ffi_args = (ffi_type **) &callable[1];
   callable->params = (Param *) &(*ffi_args)[nargs + 2];
   callable->nargs = nargs;
+  callable->user_data = NULL;
   callable->info = NULL;
   callable->has_self = 0;
   callable->throws = 0;
@@ -375,6 +385,8 @@ lgi_callable_create (lua_State *L, GICallableInfo *info, gpointer addr)
       if (arg >= 0 && arg < nargs)
 	{
 	  callable->params[arg].internal = TRUE;
+	  if (arg == argi)
+	    callable->params[arg].internal_user_data = TRUE;
 	  callable->params[arg].n_closures++;
 	  if (g_arg_info_get_scope (&param->ai) == GI_SCOPE_TYPE_CALL)
 	    callable->params[arg].call_scoped_user_data = TRUE;
@@ -708,7 +720,8 @@ callable_param_2lua (lua_State *L, Param *param, GIArgument *arg,
   if (param->kind != PARAM_KIND_RECORD)
     {
       if (param->ti)
-	lgi_marshal_2lua (L, param->ti, param->dir, param->transfer,
+	lgi_marshal_2lua (L, param->ti, callable->info ? &param->ai : NULL,
+			  param->dir, param->transfer,
 			  arg, parent, callable->info,
 			  args + callable->has_self);
       else
@@ -844,6 +857,9 @@ callable_call (lua_State *L)
 	    caller_allocated++;
 	  }
       }
+    else if (param->internal_user_data)
+      /* Provide userdata for the callback. */
+      args[i + callable->has_self].v_pointer = callable->user_data;
 
   /* Add error for 'throws' type function. */
   if (callable->throws)
@@ -947,10 +963,33 @@ callable_call (lua_State *L)
   return nret;
 }
 
+static int
+callable_index (lua_State *L)
+{
+  Callable *callable = callable_get (L, 1);
+  if (g_strcmp0 (lua_tostring (L, 2), "user_data"))
+    return 0;
+
+  lua_pushlightuserdata (L, callable->user_data);
+  return 1;
+}
+
+static int
+callable_newindex (lua_State *L)
+{
+  Callable *callable = callable_get (L, 1);
+  if (g_strcmp0 (lua_tostring (L, 2), "user_data") == 0)
+    callable->user_data = lua_touserdata (L, 3);
+
+  return 0;
+}
+
 static const struct luaL_Reg callable_reg[] = {
   { "__gc", callable_gc },
   { "__tostring", callable_tostring },
   { "__call", callable_call },
+  { "__index", callable_index },
+  { "__newindex", callable_newindex },
   { NULL, NULL }
 };
 
@@ -1039,7 +1078,8 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
     if (!param->internal && param->dir != GI_DIRECTION_OUT)
       {
 	if (i != 3 || !callable->is_closure_marshal)
-	  lgi_marshal_2lua (L, param->ti, param->dir, GI_TRANSFER_NOTHING,
+	  lgi_marshal_2lua (L, param->ti, callable->info ? &param->ai : NULL,
+			    param->dir, GI_TRANSFER_NOTHING,
 			    args[i + callable->has_self], 0,
 			    callable->info, args + callable->has_self);
 	else

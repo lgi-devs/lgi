@@ -425,7 +425,8 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIDirection dir,
 	    break;
 
 	  /* Store value into the table. */
-	  lgi_marshal_2lua (L, eti, dir, (transfer == GI_TRANSFER_EVERYTHING) ?
+	  lgi_marshal_2lua (L, eti, NULL, dir,
+			    (transfer == GI_TRANSFER_EVERYTHING) ?
 			    GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING,
 			    eval, parent, NULL, NULL);
 	  lua_rawseti (L, -2, index + 1);
@@ -526,7 +527,7 @@ marshal_2lua_list (lua_State *L, GITypeInfo *ti, GIDirection dir,
       GIArgument *eval = (GIArgument *) &i->data;
 
       /* Store it into the table. */
-      lgi_marshal_2lua (L, eti, dir, (xfer == GI_TRANSFER_EVERYTHING) ?
+      lgi_marshal_2lua (L, eti, NULL, dir, (xfer == GI_TRANSFER_EVERYTHING) ?
 			GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING,
 			eval, LGI_PARENT_FORCE_POINTER, NULL, NULL);
       lua_rawseti(L, -2, ++index);
@@ -672,8 +673,8 @@ marshal_2lua_hash (lua_State *L, GITypeInfo *ti, GIDirection dir,
 	{
 	  /* Marshal key and value to the stack. */
 	  for (i = 0; i < 2; i++)
-	    lgi_marshal_2lua (L, eti[i], dir, GI_TRANSFER_NOTHING, &eval[i],
-			      LGI_PARENT_FORCE_POINTER, NULL, NULL);
+	    lgi_marshal_2lua (L, eti[i], NULL, dir, GI_TRANSFER_NOTHING,
+			      &eval[i], LGI_PARENT_FORCE_POINTER, NULL, NULL);
 
 	  /* Store these two elements to the table. */
 	  lua_settable (L, -3);
@@ -1099,7 +1100,7 @@ lgi_marshal_2c_caller_alloc (lua_State *L, GITypeInfo *ti, GIArgument *val,
 /* Marshalls single value from GLib/C to Lua.  Returns 1 if something
    was pushed to the stack. */
 void
-lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIDirection dir,
+lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIArgInfo *ai, GIDirection dir,
 		  GITransfer transfer, gpointer source, int parent,
 		  GICallableInfo *ci, void **args)
 {
@@ -1196,10 +1197,24 @@ lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIDirection dir,
 	    break;
 
 	  case GI_INFO_TYPE_CALLBACK:
-	    if (arg->v_pointer)
-	      lgi_callable_create (L, info, arg->v_pointer);
-	    else
+	    if (arg->v_pointer == NULL)
 	      lua_pushnil (L);
+	    else
+	      {
+		lgi_callable_create (L, info, arg->v_pointer);
+		if (ai != NULL && args != NULL)
+		  {
+		    gint closure = g_arg_info_get_closure (ai);
+		    if (closure >= 0)
+		      {
+			/* Store context associated with the callback
+			   to the callback object. */
+			GIArgument *arg = args[closure];
+			lua_pushlightuserdata (L, arg->v_pointer);
+			lua_setfield (L, -2, "user_data");
+		      }
+		  }
+	      }
 	    break;
 
 	  default:
@@ -1331,7 +1346,7 @@ lgi_marshal_field (lua_State *L, gpointer object, gboolean getmode,
 	    if (getmode)
 	      {
 		/* Use typeinfo to unmarshal numeric value. */
-		lgi_marshal_2lua (L, ti, GI_DIRECTION_OUT,
+		lgi_marshal_2lua (L, ti, NULL, GI_DIRECTION_OUT,
 				  GI_TRANSFER_NOTHING, object, 0,
 				  NULL, NULL);
 
@@ -1367,7 +1382,7 @@ lgi_marshal_field (lua_State *L, gpointer object, gboolean getmode,
 
   if (getmode)
     {
-      lgi_marshal_2lua (L, ti, GI_DIRECTION_OUT, GI_TRANSFER_NOTHING,
+      lgi_marshal_2lua (L, ti, NULL, GI_DIRECTION_OUT, GI_TRANSFER_NOTHING,
 			object, parent_arg, NULL, NULL);
       nret = 1;
     }

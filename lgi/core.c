@@ -266,7 +266,7 @@ core_constant (lua_State *L)
   GITypeInfo *ti = g_constant_info_get_type (ci);
   lgi_gi_info_new (L, ti);
   g_constant_info_get_value (ci, &val);
-  lgi_marshal_2lua (L, ti, GI_DIRECTION_IN, GI_TRANSFER_NOTHING, &val,
+  lgi_marshal_2lua (L, ti, NULL, GI_DIRECTION_IN, GI_TRANSFER_NOTHING, &val,
 		    0, NULL, NULL);
   return 1;
 }

@@ -114,8 +114,9 @@ gboolean lgi_marshal_2c_caller_alloc (lua_State *L, GITypeInfo *ti,
 /* Marshalls single value from GLib/C to Lua. If parent is non-0, it
    is stack index of parent structure/array in which this C value
    resides. */
-void lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIDirection dir,
-		       GITransfer xfer, gpointer source, int parent,
+void lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
+		       GIDirection dir, GITransfer xfer,
+		       gpointer source, int parent,
 		       GICallableInfo *ci, void **args);
 
 /* Marshalls field to/from given memory (struct, union or
