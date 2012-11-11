@@ -173,12 +173,15 @@ object_load_function (lua_State *L, GType gtype, const gchar *name)
 
 /* Adds one reference to the object, returns TRUE if succeded. */
 static gboolean
-object_refsink (lua_State *L, gpointer obj)
+object_refsink (lua_State *L, gpointer obj, gboolean no_sink)
 {
   GType gtype = G_TYPE_FROM_INSTANCE (obj);
   if (G_TYPE_IS_OBJECT (gtype))
     {
-      g_object_ref_sink (obj);
+      if (G_UNLIKELY (no_sink))
+	g_object_ref (obj);
+      else
+	g_object_ref_sink (obj);
       return TRUE;
     }
 
@@ -299,13 +302,13 @@ lgi_object_2c (lua_State *L, int narg, GType gtype, gboolean optional,
     object_type_error (L, narg, gtype);
 
   if (transfer)
-    object_refsink (L, obj);
+    object_refsink (L, obj, FALSE);
 
   return obj;
 }
 
 int
-lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
+lgi_object_2lua (lua_State *L, gpointer obj, gboolean own, gboolean no_sink)
 {
   /* NULL pointer results in nil. */
   if (!obj)
@@ -354,7 +357,7 @@ lgi_object_2lua (lua_State *L, gpointer obj, gboolean own)
   /* If we don't own the object, take its ownership (and also remove
      floating reference if there is any). */
   if (!own)
-    object_refsink (L, obj);
+    object_refsink (L, obj, no_sink);
 
   return 1;
 }
@@ -544,14 +547,15 @@ object_env (lua_State *L)
 }
 
 /* Creates new object.  Lua-side prototypes:
-   res = object.new(luserdata-ptr, already_own)
+   res = object.new(luserdata-ptr[, already_own[, no_sink]])
    res = object.new(gtype, { GParameter }) */
 static int
 object_new (lua_State *L)
- {
+{
   if (lua_islightuserdata (L, 1))
     /* Create object from the given pointer. */
-    return lgi_object_2lua (L, lua_touserdata (L, 1), lua_toboolean (L, 2));
+    return lgi_object_2lua (L, lua_touserdata (L, 1), lua_toboolean (L, 2),
+			    lua_toboolean (L, 3));
   else
     {
       /* Normally Lua code uses GObject.Object.new(), which maps
@@ -583,7 +587,8 @@ object_new (lua_State *L)
 	}
 
       /* Create the object and return it. */
-      return lgi_object_2lua (L, g_object_newv (gtype, size, params), TRUE);
+      return lgi_object_2lua (L, g_object_newv (gtype, size, params),
+			      TRUE, FALSE);
     }
 }
 

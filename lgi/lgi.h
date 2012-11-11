@@ -114,8 +114,8 @@ gboolean lgi_marshal_2c_caller_alloc (lua_State *L, GITypeInfo *ti,
 /* Marshalls single value from GLib/C to Lua. If parent is non-0, it
    is stack index of parent structure/array in which this C value
    resides. */
-void lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GITransfer xfer,
-		       gpointer source, int parent,
+void lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIDirection dir,
+		       GITransfer xfer, gpointer source, int parent,
 		       GICallableInfo *ci, void **args);
 
 /* Marshalls field to/from given memory (struct, union or
@@ -166,7 +166,7 @@ gpointer lgi_record_2c (lua_State *L, int narg, gboolean optional,
    owned (own == FALSE), an ownership is automatically acquired.  Returns
    number of elements pushed to the stack, i.e. always 1. */
 int
-lgi_object_2lua (lua_State *L, gpointer obj, gboolean own);
+lgi_object_2lua (lua_State *L, gpointer obj, gboolean own, gboolean no_sink);
 
 /* Gets pointer to C-side object represented by given Lua proxy. If
    gtype is not G_TYPE_INVALID, the real type is checked to conform to
