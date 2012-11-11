@@ -708,7 +708,7 @@ callable_param_2lua (lua_State *L, Param *param, GIArgument *arg,
   if (param->kind != PARAM_KIND_RECORD)
     {
       if (param->ti)
-	lgi_marshal_2lua (L, param->ti, param->transfer,
+	lgi_marshal_2lua (L, param->ti, param->dir, param->transfer,
 			  arg, parent, callable->info,
 			  args + callable->has_self);
       else
@@ -1023,7 +1023,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
       gpointer addr = ((GIArgument*) args[0])->v_pointer;
       npos++;
       if (type == GI_INFO_TYPE_OBJECT || type == GI_INFO_TYPE_INTERFACE)
-	lgi_object_2lua (L, addr, FALSE);
+	lgi_object_2lua (L, addr, FALSE, FALSE);
       else if (type == GI_INFO_TYPE_STRUCT || type == GI_INFO_TYPE_UNION)
 	{
 	  lgi_type_get_repotype (L, G_TYPE_INVALID, parent);
@@ -1039,7 +1039,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
     if (!param->internal && param->dir != GI_DIRECTION_OUT)
       {
 	if (i != 3 || !callable->is_closure_marshal)
-	  lgi_marshal_2lua (L, param->ti, GI_TRANSFER_NOTHING,
+	  lgi_marshal_2lua (L, param->ti, param->dir, GI_TRANSFER_NOTHING,
 			    args[i + callable->has_self], 0,
 			    callable->info, args + callable->has_self);
 	else
