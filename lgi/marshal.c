@@ -1530,13 +1530,14 @@ marshal_container_marshaller (lua_State *L)
   return get_mode ? 1 : 0;
 }
 
+static const char* const transfers[] = { "none", "container", "full", NULL };
+
 /* Creates container (array, list, slist, hash) marshaller for
    specified container typeinfo.  Signature is:
    marshaller = marshal.container(typeinfo, transfer) */
 static int
 marshal_container (lua_State *L)
 {
-  static const char* const transfers[] = { "none", "container", "full", NULL };
   GIBaseInfo **info = luaL_checkudata (L, 1, LGI_GI_INFO);
   GITypeTag tag = g_type_info_get_tag (*info);
   GITransfer transfer = luaL_checkoption (L, 2, transfers[0], transfers);
@@ -1616,8 +1617,44 @@ marshal_fundamental (lua_State *L)
   return 1;
 }
 
-/* Creates callback for Lua target callable from C side.
-   guard, addr = marshal.callback(ciinfo, target) */
+/* Creates or marshalls content of GIArgument to/from lua according to
+   specified typeinfo.
+   arg, ptr = marshal.argument()
+   value = marshal.argument(arg, typeinfo, transfer)
+   marshal.argument(arg, typeinfo, transfer, value) */
+static int
+marshal_argument (lua_State *L)
+{
+  GITypeInfo **info;
+  GITransfer transfer;
+  GIArgument *arg;
+
+  if (lua_isnone (L, 1))
+    {
+      /* Create new argument userdata. */
+      GIArgument *arg = lua_newuserdata (L, sizeof (*arg));
+      memset (arg, 0, sizeof (*arg));
+      lua_pushlightuserdata (L, arg);
+      return 2;
+    }
+
+  arg = lua_touserdata (L, 1);
+  info = luaL_checkudata (L, 2, LGI_GI_INFO);
+  transfer = luaL_checkoption (L, 3, transfers[0], transfers);
+  if (lua_isnone (L, 4))
+    {
+      lgi_marshal_2lua (L, *info, NULL, GI_DIRECTION_IN, transfer, arg,
+			0, NULL, NULL);
+      return 1;
+    }
+  else
+    {
+      lua_pop (L, lgi_marshal_2c (L, *info, NULL, transfer, arg, 4,
+				  0, NULL, NULL));
+      return 0;
+    }
+}
+
 static int
 marshal_callback (lua_State *L)
 {
@@ -1713,6 +1750,7 @@ marshal_typeinfo (lua_State *L)
 static const struct luaL_Reg marshal_api_reg[] = {
   { "container", marshal_container },
   { "fundamental", marshal_fundamental },
+  { "argument", marshal_argument },
   { "callback", marshal_callback },
   { "closure_set_marshal", marshal_closure_set_marshal },
   { "typeinfo", marshal_typeinfo },
