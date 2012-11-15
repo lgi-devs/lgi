@@ -206,14 +206,14 @@ local function emit_signal(obj, gtype, info, detail, ...)
    local call_info = Closure.CallInfo.new(info)
 
    -- Marshal input arguments.
-   local retval, params, keepalive = call_info:pre_call(obj, ...)
+   local retval, params, marshalling_params = call_info:pre_call(obj, ...)
 
    -- Invoke the signal.
    signal_emitv(params, signal_lookup(info.name, gtype),
 		detail and quark_from_string(detail) or 0, retval)
 
    -- Unmarshal results.
-   return call_info:post_call(params, retval)
+   return call_info:post_call(params, retval, marshalling_params)
 end
 
 -- Signal accessor.
