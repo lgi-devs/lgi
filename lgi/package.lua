@@ -16,6 +16,7 @@ local core = require 'lgi.core'
 
 -- Repo package metatable.
 local package = { mt = {} }
+package.mt.__index = package.mt
 
 -- There is no lazy-loading, but define _resolve to do nothing to
 -- achieve API compatibility with GI-based namespaces.
