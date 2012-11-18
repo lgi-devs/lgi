@@ -5,49 +5,26 @@ local lgi = require 'lgi'
 local GObject = lgi.GObject
 local Gtk = lgi.Gtk
 local Gdk = lgi.Gdk
+local cairo = lgi.cairo
 local GtkDemo = lgi.GtkDemo
 
 local log = lgi.log.domain 'gtk-demo'
 
-GtkDemo:class('RotatedBin', Gtk.Bin)
+GtkDemo:class('MirrorBin', Gtk.Bin)
 
-function GtkDemo.RotatedBin:_init()
+function GtkDemo.MirrorBin:_init()
    self.has_window = true
-   self.priv.angle = 0
 end
 
 local function to_child(bin, widget_x, widget_y)
-   local s, c = math.sin(bin.priv.angle), math.cos(bin.priv.angle)
-   local child_area = bin.priv.child.allocation
-   local w = c * child_area.width + s * child_area.height
-   local h = s * child_area.width + c * child_area.height
-
-   local x = widget_x - w / 2
-   local y = widget_y - h / 2
-
-   local xr = x * c + y * s
-   local yr = y * c - x * s
-
-   return xr + child_area.width / 2, yr + child_area.height / 2
+   return widget_x, widget_y
 end
 
 local function to_parent(bin, offscreen_x, offscreen_y)
-   local s, c = math.sin(bin.priv.angle), math.cos(bin.priv.angle)
-   local child_area = bin.priv.child.allocation
-
-   local w = c * child_area.width + s * child_area.height
-   local h = s * child_area.width + c * child_area.height
-
-   local x = offscreen_x - child_area.width / 2
-   local y = offscreen_y - child_area.height / 2
-
-   local xr = x * c - y * s
-   local yr = x * s + y * c
-
-   return xr + child_area.width - w / 2, yr + child_area.height - h / 2
+   return offscreen_x, offscreen_y
 end
 
-function GtkDemo.RotatedBin:do_realize()
+function GtkDemo.MirrorBin:do_realize()
    self.realized = true
 
    -- Create Gdk.Window and bind it with the widget.
@@ -116,21 +93,21 @@ function GtkDemo.RotatedBin:do_realize()
    self.priv.offscreen_window:show()
 end
 
-function GtkDemo.RotatedBin:do_unrealize()
+function GtkDemo.MirrorBin:do_unrealize()
    -- Destroy offscreen window.
    self.priv.offscreen_window.widget = nil
    self.priv.offscreen_window:destroy()
    self.priv.offscreen_window = nil
 
    -- Chain to parent.
-   GtkDemo.RotatedBin._parent.do_unrealize(self)
+   GtkDemo.MirrorBin._parent.do_unrealize(self)
 end
 
-function GtkDemo.RotatedBin:do_child_type()
+function GtkDemo.MirrorBin:do_child_type()
    return self.priv.child and GObject.Type.NONE or Gtk.Widget
 end
 
-function GtkDemo.RotatedBin:do_add(widget)
+function GtkDemo.MirrorBin:do_add(widget)
    if not self.priv.child then
       if self.priv.offscreen_window then
 	 widget:set_parent_window(self.priv.offscreen_window)
@@ -138,11 +115,11 @@ function GtkDemo.RotatedBin:do_add(widget)
       widget:set_parent(self)
       self.priv.child = widget
    else
-      log.warning("GtkDemo.RotatedBin cannot have more than one child")
+      log.warning("GtkDemo.MirrorBin cannot have more than one child")
    end
 end
 
-function GtkDemo.RotatedBin:do_remove(widget)
+function GtkDemo.MirrorBin:do_remove(widget)
    local was_visible = widget.visible
    if self.priv.child == widget then
       widget:unparent()
@@ -153,16 +130,10 @@ function GtkDemo.RotatedBin:do_remove(widget)
    end
 end
 
-function GtkDemo.RotatedBin:do_forall(include_internals, callback)
+function GtkDemo.MirrorBin:do_forall(include_internals, callback)
    if self.priv.child then
       callback(self.priv.child, callback.user_data)
    end
-end
-
-function GtkDemo.RotatedBin:set_angle(angle)
-   self.priv.angle = angle
-   self:queue_resize()
-   self.priv.offscreen_window:geometry_changed()
 end
 
 local function size_request(self)
@@ -171,23 +142,22 @@ local function size_request(self)
       child_requisition = self.priv.child:get_preferred_size()
    end
 
-   local s, c = math.sin(self.priv.angle), math.cos(self.priv.angle)
-   local w = c * child_requisition.width + s * child_requisition.height
-   local h = s * child_requisition.width + c * child_requisition.height
-   return w + 2 * self.border_width, h + 2 * self.border_width
+   local w = child_requisition.width + 10 + 2 * self.border_width
+   local h = child_requisition.height + 10 + 2 * self.border_width
+   return w, h
 end
 
-function GtkDemo.RotatedBin:do_get_preferred_width()
+function GtkDemo.MirrorBin:do_get_preferred_width()
    local w, h = size_request(self)
    return w, w
 end
 
-function GtkDemo.RotatedBin:do_get_preferred_height()
+function GtkDemo.MirrorBin:do_get_preferred_height()
    local w, h = size_request(self)
    return h, h
 end
 
-function GtkDemo.RotatedBin:do_size_allocate(allocation)
+function GtkDemo.MirrorBin:do_size_allocate(allocation)
    self:set_allocation(allocation)
 
    local w = allocation.width - self.border_width * 2
@@ -200,75 +170,69 @@ function GtkDemo.RotatedBin:do_size_allocate(allocation)
    end
 
    if self.priv.child and self.priv.child.visible then
-      local s, c = math.sin(self.priv.angle), math.cos(self.priv.angle)
       local child_requisition = self.priv.child:get_preferred_size()
       local child_allocation = Gtk.Allocation {
-	 height = child_requisition.height }
-      if c == 0 then child_allocation.width = h / s
-      elseif s == 0 then child_allocation.width = w / c
-      else child_allocation.width = math.min(
-	    (w - s * child_allocation.height) / c,
-	    (h - c * child_allocation.width) / s)
-      end
+	 height = child_requisition.height,
+	 width = child_requisition.width
+      }
+
       if self.realized then
 	 self.priv.offscreen_window:move_resize(child_allocation.x,
 						child_allocation.y,
 						child_allocation.width,
 						child_allocation.height)
       end
-      child_allocation.x = 0
-      child_allocation.y = 0
       self.priv.child:size_allocate(child_allocation)
    end
 end
 
-function GtkDemo.RotatedBin:do_damage(event)
+function GtkDemo.MirrorBin:do_damage(event)
    self.window:invalidate_rect(nil, false)
    return true
 end
 
-function GtkDemo.RotatedBin:_class_init()
+function GtkDemo.MirrorBin:_class_init()
    -- Unfortunately, damage-event signal does not have virtual
    -- function associated, so we have to go through following funky
    -- dance to install default signal handler.
    GObject.signal_override_class_closure(
       GObject.signal_lookup('damage-event', Gtk.Widget),
-      GtkDemo.RotatedBin,
-      GObject.Closure(GtkDemo.RotatedBin.do_damage,
+      GtkDemo.MirrorBin,
+      GObject.Closure(GtkDemo.MirrorBin.do_damage,
 		      Gtk.Widget.on_damage_event))
 end
 
-function GtkDemo.RotatedBin:do_draw(cr)
+function GtkDemo.MirrorBin:do_draw(cr)
    if cr:should_draw_window(self.window) then
       if self.priv.child and self.priv.child.visible then
 	 local surface = Gdk.offscreen_window_get_surface(
 	    self.priv.offscreen_window)
-	 local child_area = self.priv.child.allocation
+	 local height = self.priv.offscreen_window:get_height()
 
-	 -- transform
-	 local s, c = math.sin(self.priv.angle), math.cos(self.priv.angle)
-	 local w = c * child_area.width + s * child_area.height
-	 local h = s * child_area.width + c * child_area.height
-
-	 cr:translate((w - child_area.width) / 2,
-		      (h - child_area.height) / 2)
-	 cr:translate(child_area.width / 2, child_area.height / 2)
-	 cr:rotate(self.priv.angle)
-	 cr:translate(-child_area.width / 2, -child_area.height / 2)
-
-	 -- clip
-	 cr:rectangle(0, 0,
-		      self.priv.offscreen_window:get_width(),
-		      self.priv.offscreen_window:get_height())
-	 cr:clip()
-
-	 -- paint
+	 -- Paint the offscreen child
 	 cr:set_source_surface(surface, 0, 0)
 	 cr:paint()
-      end
-   end
 
-   if cr:should_draw_window(self.priv.offscreen_window) then
+	 local matrix = cairo.Matrix {
+	    xx = 1, yx = 0, xy = 0.3, yy = 1, x0 = 0, y0 = 0 }
+	 matrix:scale(1, -1)
+	 matrix:translate(-10, -3 * height, - 10)
+	 cr:transform(matrix)
+
+	 cr:set_source_surface(surface, 0, height)
+
+	 -- Create linear gradient as mask-pattern to fade out the source
+	 local mask = cairo.LinearPattern(0, height, 0, 2 * height)
+	 mask:add_color_stop_rgba(0, 0, 0, 0, 0)
+	 mask:add_color_stop_rgba(0.25, 0, 0, 0, 0.01)
+	 mask:add_color_stop_rgba(0.5, 0, 0, 0, 0.25)
+	 mask:add_color_stop_rgba(0.75, 0, 0, 0, 0.5)
+	 mask:add_color_stop_rgba(1, 0, 0, 0, 1)
+
+	 -- Paint the reflection
+	 cr:mask(mask)
+      end
+   elseif cr:should_draw_window(self.priv.offscreen_window) then
       Gtk.render_background(self.style_context, cr, 0, 0,
 			    self.priv.offscreen_window:get_width(),
 			    self.priv.offscreen_window:get_height())
@@ -281,43 +245,42 @@ function GtkDemo.RotatedBin:do_draw(cr)
 end
 
 local window = Gtk.Window {
-   title = "Rotated widget",
+   title = "Effects",
    border_width = 10,
    Gtk.Box {
       orientation = 'VERTICAL',
-      Gtk.Scale {
-	 id = 'scale',
-	 orientation = 'HORIZONTAL',
-	 adjustment = Gtk.Adjustment {
-	    lower = 0,
-	    upper = math.pi / 2,
-	    step_increment = 0.01,
+      expand = true,
+      GtkDemo.MirrorBin {
+	 Gtk.Box {
+	    orientation = 'HORIZONTAL',
+	    spacing = 6,
+	    Gtk.Button {
+	       Gtk.Image {
+		  stock = Gtk.STOCK_GO_BACK,
+		  icon_size = 4,
+	       },
+	    },
+	    Gtk.Entry {
+	       expand = true,
+	    },
+	    Gtk.Button {
+	       Gtk.Image {
+		  stock = Gtk.STOCK_APPLY,
+		  icon_size = 4,
+	       },
+	    },
 	 },
-	 draw_value = false,
       },
-      GtkDemo.RotatedBin {
-	 id = 'bin',
-	 Gtk.Button {
-	    label = "A Button",
-	    expand = true,
-	 },
-      },
-   }
+   },
 }
-
-function window.child.scale:on_value_changed()
-   window.child.bin:set_angle(self.adjustment.value)
-end
-
-window:override_background_color(0, Gdk.RGBA.parse('black'))
 
 window:show_all()
 return window
 end,
 
-"Offscreen windows/Rotated button",
+"Offscreen windows/Effects",
 
 table.concat {
-   [[Offscreen windows can be used to transform parts or a ]],
-   [[widget hierarchy. Note that the rotated button is fully functional.]],
+   [[Offscreen windows can be used to render elements multiple times ]],
+   [[to achieve various effects.]]
 }
