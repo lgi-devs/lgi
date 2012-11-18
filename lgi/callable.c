@@ -1171,9 +1171,10 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
       for (i = 0; i < callable->nargs; ++i, ++param)
 	if (!param->internal && param->dir != GI_DIRECTION_IN)
 	  {
+	    gpointer *arg = args[i + callable->has_self];
 	    to_pop =
 	      lgi_marshal_2c (L, param->ti, &param->ai, param->transfer,
-			      args[i + callable->has_self], npos, 0,
+			      *arg, npos, 0,
 			      callable->info, args + callable->has_self);
 	    if (to_pop != 0)
 	      {
