@@ -11,7 +11,11 @@
 local select, type, pairs, unpack, rawget = select, type, pairs, unpack, rawget
 
 local lgi = require 'lgi'
+
 local core = require 'lgi.core'
+local ffi = require 'lgi.ffi'
+local ti = ffi.types
+
 local Gdk = lgi.Gdk
 local cairo = lgi.cairo
 
@@ -60,6 +64,18 @@ function Gdk.RGBA._method.parse(arg1, arg2)
       local rgba = Gdk.RGBA()
       return parse(rgba, arg1) and rgba or nil
    end
+end
+
+-- Gdk.Window.destroy() actually consumes 'self'.  Prepare workaround
+-- with override doing ref on input arg first.
+local destroy = Gdk.Window.destroy
+local ref = core.callable.new {
+   addr = core.gi.GObject.resolve.g_object_ref,
+   ret = ti.ptr, ti.ptr
+}
+function Gdk.Window._method:destroy()
+   ref(self._native)
+   destroy(self)
 end
 
 -- Better integrate Gdk cairo helpers.
