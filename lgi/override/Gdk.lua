@@ -49,6 +49,19 @@ for name, val in pairs {
    SELECTION_TYPE_STRING = 31,
 } do Gdk._constant[name] = Gdk.Atom(val) end
 
+-- Easier-to-use Gdk.RGBA.parse() override.
+local parse = Gdk.RGBA.parse
+function Gdk.RGBA._method.parse(arg1, arg2)
+   if Gdk.RGBA:is_type_of(arg1) then
+      -- Standard member method.
+      return parse(arg1, arg2)
+   else
+      -- Static constructor variant.
+      local rgba = Gdk.RGBA()
+      return parse(rgba, arg1) and rgba or nil
+   end
+end
+
 -- Better integrate Gdk cairo helpers.
 Gdk.Window._method.cairo_create = Gdk.cairo_create
 cairo.Region._method.create_from_surface = Gdk.cairo_region_create_from_surface
