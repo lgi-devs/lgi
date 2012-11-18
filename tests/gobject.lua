@@ -72,7 +72,7 @@ end
 
 function gobject.subclass_derive1()
    local GObject = lgi.GObject
-   local Derived = GObject.Object:derive()
+   local Derived = GObject.Object:derive('LgiTestDerived1')
    local der = Derived()
    check(Derived:is_type_of(der))
    check(not Derived:is_type_of(GObject.Object()))
@@ -80,8 +80,8 @@ end
 
 function gobject.subclass_derive2()
    local GObject = lgi.GObject
-   local Derived = GObject.Object:derive()
-   local Subderived = Derived:derive('sub.derive/d')
+   local Derived = GObject.Object:derive('LgiTestDerived2')
+   local Subderived = Derived:derive('LgiTestSubDerived2')
    local der = Derived()
    check(Derived:is_type_of(der))
    check(not Subderived:is_type_of(der))
@@ -93,7 +93,7 @@ end
 
 function gobject.subclass_override1()
    local GObject = lgi.GObject
-   local Derived = GObject.Object:derive()
+   local Derived = GObject.Object:derive('LgiTestOverride1')
    local state = 0
    local obj
    function Derived:do_constructed()
@@ -116,7 +116,7 @@ end
 function gobject.subclass_override2()
    local GObject = lgi.GObject
    local state = 0
-   local Derived = GObject.Object:derive()
+   local Derived = GObject.Object:derive('LgiTestOverride2')
    function Derived:do_constructed()
       self.priv.id = 1
       state = state + 1
@@ -129,7 +129,7 @@ function gobject.subclass_override2()
       state = state + 8
       self.priv.id = self.priv.id + 4
    end
-   local Subderived = Derived:derive()
+   local Subderived = Derived:derive('LgiTestOverrideSub2')
    function Subderived:do_constructed()
       Derived.do_constructed(self)
       self.priv.id = self.priv.id + 2
@@ -150,7 +150,7 @@ end
 function gobject.subclass_derive3()
    local GObject = lgi.GObject
    local history = {}
-   local Derived = GObject.InitiallyUnowned:derive()
+   local Derived = GObject.InitiallyUnowned:derive('LgiTestDerived3')
    function Derived:_class_init()
       history[#history + 1] = 'class_init'
       check(self == Derived)

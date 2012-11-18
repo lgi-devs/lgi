@@ -42,6 +42,9 @@ local repo = core.repo
 local namespace = require 'lgi.namespace'
 lgi.require = namespace.require
 
+-- Install 'lgi.package' method.
+lgi.package = require('lgi.package').ensure
+
 -- Install metatable into repo table, so that on-demand loading works.
 setmetatable(repo, { __index = function(_, name)
 				  return lgi.require(name)
