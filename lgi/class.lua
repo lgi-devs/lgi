@@ -287,7 +287,7 @@ function class.class_mt:derive(typename, ifaces)
       {
 	 _parent = self, _override = {}, _guard = {}, _implements = {},
 	 _element = class.derived_mt._element,
-	 _class = self._class
+	 _class = self._class, _name = typename
       },
       class.derived_mt)
 
@@ -332,13 +332,6 @@ function class.class_mt:derive(typename, ifaces)
       GObject.InstanceInitFunc, instance_init)
    new_class._guard._instance_init = instance_init_guard
 
-   -- Generate typename, if not provided
-   if not typename then
-      derived_name_counter = derived_name_counter + 1
-      typename = derived_name_base .. tostring(derived_name_counter)
-   end
-   rawset(new_class, '_name', typename)
-
    -- Prepare GTypeInfo with the registration.
    local parent_info = type_query(self._gtype)
    local type_info = core.repo.GObject.TypeInfo {
@@ -349,7 +342,7 @@ function class.class_mt:derive(typename, ifaces)
    }
 
    -- Register new type with GType system.
-   local gtype = register_static(self._gtype, typename:gsub('[^%w]', '_'),
+   local gtype = register_static(self._gtype, typename:gsub('%.', ''),
 				 type_info, {})
    rawset(new_class, '_gtype', core.gtype(gtype))
    if not new_class._gtype then
