@@ -177,3 +177,25 @@ function gobject.subclass_derive3()
    collectgarbage()
 --   check(history[4] == 'dispose')
 end
+
+function gobject.iface_virtual()
+   local Gio = lgi.Gio
+   local file = Gio.File.new_for_path('hey')
+   check(file:is_native() == file:do_is_native())
+   check(file:get_basename() == file:do_get_basename())
+end
+
+function gobject.iface_impl()
+   local GObject = lgi.GObject
+   local Gio = lgi.Gio
+   local FakeFile = GObject.Object:derive('LgiTestFakeFile1', { Gio.File })
+   function FakeFile:do_get_basename()
+      return self.priv.basename
+   end
+   function FakeFile:set_basename(basename)
+      self.priv.basename = basename
+   end
+   local fakefile = FakeFile()
+   fakefile:set_basename('fakename')
+   check(fakefile:get_basename() == 'fakename')
+end

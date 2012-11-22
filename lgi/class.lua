@@ -2,7 +2,7 @@
 --
 --  LGI Support for generic GType objects and interfaces
 --
---  Copyright (c) 2010, 2011 Pavel Holejsovsky
+--  Copyright (c) 2010, 2011, 2012 Pavel Holejsovsky
 --  Licensed under the MIT license:
 --  http://www.opensource.org/licenses/mit-license.php
 --
@@ -13,7 +13,6 @@ getmetatable, setmetatable, error, assert
    = type, tostring, rawget, rawset, pairs, select,
    getmetatable, setmetatable, error, assert
 local string = require 'string'
-local math = require 'math'
 
 local core = require 'lgi.core'
 local gi = core.gi
@@ -36,6 +35,10 @@ local class = {
 local type_class_peek = core.callable.new {
    addr = GObject.resolve.g_type_class_peek,
    ret = ti.ptr, ti.GType
+}
+local type_interface_peek = core.callable.new {
+   addr = GObject.resolve.g_type_interface_peek,
+   ret = ti.ptr, ti.ptr, ti.GType
 }
 
 local type_class = component.create(nil, record.struct_mt)
@@ -181,16 +184,37 @@ end
 
 -- Add accessor '_virtual' handling.
 function class.class_mt:_access_virtual(instance, vfi)
-   -- Retrieve proper method from the class.
-   return instance._class[vfi.name]
+   local class_struct
+   local container = vfi.container
+   if container.is_interface then
+      local gtype = class.class_mt._access_gtype(self, instance)
+      local ptr = type_interface_peek(type_class_peek(gtype), container.gtype)
+      class_struct = core.record.new(core.index[container.gtype]._class, ptr)
+   else
+      class_struct = class.class_mt._access_class(self, instance)
+   end
+
+   -- Retrieve proper method from the class struct.
+   return class_struct[vfi.name]
 end
 
 -- Add __index for _virtual handling.  Convert vfi baseinfo into real
 -- callable pointer according to the target type.
 function class.class_mt:_index_virtual(vfi)
-   -- Get proper class.  TODO: We might actually need g_type_class_ref here...
-   local class = core.record.new(self._class, type_class_peek(self._gtype))
-   return class and class[vfi.name]
+   -- Get proper class struct, either from class or interface.
+   local ptr, class_struct = type_class_peek(self._gtype)
+   if not ptr then return nil end
+   local container = vfi.container
+   if container.is_interface then
+      local gtype = container._gtype
+      local ptr = type_interface_peek(ptr, gtype)
+      class_struct = core.record.new(core.index[gtype]._class, ptr)
+   else
+      class_struct = core.record.new(self._class, ptr)
+   end
+
+   -- Retrieve proper method from the class struct.
+   return class_struct[vfi.name]
 end
 
 function class.load_interface(namespace, info)
@@ -206,6 +230,7 @@ function class.load_interface(namespace, info)
       interface._virtual = component.get_category(
 	 info.vfuncs, nil, load_vfunc_name, load_vfunc_name_reverse)
       interface._class = record.load(type_struct)
+      interface._class._parent = core.repo.GObject.TypeInterface
    end
    interface._new = find_constructor(info)
    return interface
@@ -252,16 +277,15 @@ function class.load_class(namespace, info)
    return class
 end
 
-local derived_name_base = 'lgi' .. tostring(math.random(100000)) .. 'gen'
-local derived_name_counter = 0
-
 local register_static = core.callable.new(GObject.type_register_static)
 local type_query = core.callable.new(GObject.type_query)
-function class.class_mt:derive(typename)
+local type_add_interface_static = core.callable.new(
+   GObject.type_add_interface_static)
+function class.class_mt:derive(typename, ifaces)
    -- Prepare repotable for newly registered class.
    local new_class = setmetatable(
       {
-	 _parent = self, _override = {}, _guard = {},
+	 _parent = self, _override = {}, _guard = {}, _implements = {},
 	 _element = class.derived_mt._element,
 	 _class = self._class, _name = typename
       },
@@ -271,11 +295,13 @@ function class.class_mt:derive(typename)
    -- all known overriden virtual methods.
    local function class_init(class_addr)
       -- Create instance of real class.
-      local class = core.record.new(new_class._class, class_addr)
+      local class_struct = core.record.new(new_class._class, class_addr)
 
       -- Iterate through all overrides and assign to the virtual callbacks.
       for name, addr in pairs(new_class._override) do
-	 class[name] = addr
+	 if type(addr) == 'userdata' then
+	    class_struct[name] = addr
+	 end
       end
 
       -- If type specified _class_init method, invoke it.
@@ -325,6 +351,34 @@ function class.class_mt:derive(typename)
 
    -- Add newly registered type into the lgi type index.
    core.index[new_class._gtype] = new_class
+
+   -- Create interface initialization closures.
+   for _, iface in pairs(ifaces or {}) do
+      local override = {}
+      new_class._override[iface._name] = override
+      new_class._implements[iface._name] = iface
+
+      -- Prepare interface initialization closure.
+      local function iface_init(iface_addr)
+	 local iface_struct = core.record.new(iface._class, iface_addr)
+
+	 -- Iterate through all interface overrides and assign to the
+	 -- virtual callbacks.
+	 for name, addr in pairs(override) do
+	    iface_struct[name] = addr
+	 end
+      end
+      local iface_init_guard, iface_init_addr = core.marshal.callback(
+	 GObject.InterfaceInitFunc, iface_init)
+      new_class._guard['_iface_init_' .. iface._name] = iface_init_guard
+
+      -- Hook up interface to the registered class.
+      local iface_info = core.repo.GObject.InterfaceInfo {
+	 interface_init = iface_init_addr,
+      }
+      type_add_interface_static(new_class, iface, iface_info)
+   end
+
    return new_class
 end
 
@@ -361,14 +415,23 @@ function class.derived_mt:__newindex(name, target)
       -- member function to the class (or some static member).
       rawset(self, name, target)
    elseif category == '_virtual' then
-      -- Overriding virtual method.  Prepare callback to the target
-      -- and store it to the _override type helper subtable.
+      -- Overriding virtual method. Prepare callback to the target and
+      -- store it to the _override type helper subtable.
       name = load_vfunc_name(name)
-      local field = self._class[name]
+      local container = value.container
+      local class_struct, override
+      if container.is_interface then
+	 class_struct = core.index[container.gtype]
+	 override = self._override[class_struct._name]
+	 class_struct = class_struct._class
+      else
+	 class_struct = self._class
+	 override = self._override
+      end
       local guard, vfunc = core.marshal.callback(
-	 field.typeinfo.interface, target)
-      self._override[name] = vfunc
-      self._guard[name] = guard
+	 class_struct[name].typeinfo.interface, target)
+      override[name] = vfunc
+      self._guard[container.name .. ':' .. name] = guard
    else
       -- Do not allow assigning to anything else.
       error(("`%s': `%s' not assignable"):format(self._name, name))
