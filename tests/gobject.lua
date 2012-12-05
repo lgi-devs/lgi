@@ -199,3 +199,36 @@ function gobject.iface_impl()
    fakefile:set_basename('fakename')
    check(fakefile:get_basename() == 'fakename')
 end
+
+function gobject.treemodel_impl()
+   local GObject = lgi.GObject
+   local Gtk = lgi.Gtk
+   local Model = GObject.Object:derive('LgiTestModel1', { Gtk.TreeModel })
+   function Model:do_get_n_columns()
+      return 2
+   end
+
+   function Model:do_get_column_type(index)
+      return index == 0 and GObject.Type.STRING or GObject.Type.INT
+   end
+
+   function Model:do_get_iter(path)
+      return Gtk.TreeIter { user_data = path._native }
+   end
+
+   function Model:do_get_value(iter, column)
+      return GObject.Value(self:get_column_type(column), 1)
+   end
+
+   local model = Model()
+   check(model:get_n_columns() == 2)
+   check(model:get_column_type(0) == GObject.Type.STRING)
+   check(model:get_column_type(1) == GObject.Type.INT)
+
+   local p = Gtk.TreePath.new_from_string('0')
+   local i = model:get_iter(p)
+   check(i.user_data == p._native)
+
+   check(model[Gtk.TreeIter()][1] == '1')
+   check(model[Gtk.TreeIter()][2] == 1)
+end

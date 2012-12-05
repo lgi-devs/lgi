@@ -98,6 +98,11 @@ void lgi_state_leave (gpointer state_lock);
    requirements. */
 #define LGI_PARENT_IS_RETVAL (G_MAXINT - 1)
 
+/* Yet another special value for 'parent' argument, meaning that the
+   value already contains address of caller-allocated space into which
+   the result should be marshalled. */
+#define LGI_PARENT_CALLER_ALLOC (G_MAXINT - 2)
+
 /* Marshalls single value from Lua to GLib/C. Returns number of temporary
    entries pushed to Lua stack, which should be popped before function call
    returns. */
