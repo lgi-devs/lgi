@@ -1172,10 +1172,14 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	if (!param->internal && param->dir != GI_DIRECTION_IN)
 	  {
 	    gpointer *arg = args[i + callable->has_self];
-	    to_pop =
-	      lgi_marshal_2c (L, param->ti, &param->ai, param->transfer,
-			      *arg, npos, 0,
-			      callable->info, args + callable->has_self);
+	    gboolean caller_alloc =
+	      callable->info && g_arg_info_is_caller_allocates (&param->ai)
+	      && g_type_info_get_tag (param->ti) == GI_TYPE_TAG_INTERFACE;
+	    to_pop = lgi_marshal_2c (L, param->ti, &param->ai,
+				     param->transfer, *arg, npos,
+				     caller_alloc ? LGI_PARENT_CALLER_ALLOC : 0,
+				     callable->info,
+				     args + callable->has_self);
 	    if (to_pop != 0)
 	      {
 		g_warning ("cbk %s.%s: arg `%s' (transfer none) %d, unsafe!",
