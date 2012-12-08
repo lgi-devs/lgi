@@ -288,7 +288,7 @@ end
 Gtk.TextTagTable._container_add = Gtk.TextTagTable.add
 
 -------------------------------- Gtk.TreeModel and relatives.
-Gtk.TreeModel._attribute = { }
+Gtk.TreeModel._attribute = {}
 
 local tree_model_item_mt = {}
 function tree_model_item_mt:__index(column)
@@ -348,6 +348,41 @@ function Gtk.TreeModel:next(iter)
 end
 function Gtk.TreeModel:pairs(parent)
    return Gtk.TreeModel.next, self, parent and { parent }
+end
+
+-- Iterator support.  Adds 'value' attribute which associates an
+-- arbitrary value with the iterator.
+local nullptr = Gtk.TreeIter().user_data
+local treeiter_cache_ptr_iter = setmetatable({}, { __mode = 'v' })
+local treeiter_cache_iter_value = setmetatable({}, { __mode = 'k' })
+local treeiter_cache_iter_parent = setmetatable({}, {__mode = 'k' })
+Gtk.TreeIter._attribute = { value = {} }
+function Gtk.TreeIter._attribute.value:get()
+   local ptr = self.user_data
+   if ptr ~= nullptr then
+      local iter = treeiter_cache_ptr_iter[ptr]
+      if iter then
+	 if iter ~= self then
+	    treeiter_cache_iter_parent[self] = iter
+	 end
+	 return treeiter_cache_iter_value[iter]
+      end
+   end
+end
+
+function Gtk.TreeIter._attribute.value:set(val)
+   local ptr = self._native
+   self.user_data = ptr
+   treeiter_cache_ptr_iter[ptr] = self
+   treeiter_cache_iter_parent[self] = nil
+   treeiter_cache_iter_value[self] = val
+end
+
+local treeiter_new = Gtk.TreeIter._new
+function Gtk.TreeIter:_new(value)
+   local iter = treeiter_new(self)
+   if value then self._attribute.value.set(iter, value) end
+   return iter
 end
 
 -- Redirect 'set' method to our one inherited from TreeModel, it is

@@ -213,7 +213,9 @@ function gobject.treemodel_impl()
    end
 
    function Model:do_get_iter(path)
-      return Gtk.TreeIter { user_data = path._native }
+      local iter = Gtk.TreeIter()
+      iter.user_data = path._native
+      return iter
    end
 
    function Model:do_get_value(iter, column)

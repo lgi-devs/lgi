@@ -275,6 +275,22 @@ function gtk.treestore()
    checkv(store[first][cols.int], 16, 'number')
 end
 
+function gtk.treeiter()
+   local Gtk = lgi.Gtk
+   local GObject = lgi.GObject
+   local val = {}
+   local giter = Gtk.TreeIter(val)
+   local Model = GObject.Object:derive('LgiTestModel2', { Gtk.TreeModel })
+   function Model:do_get_iter(path)
+      return giter
+   end
+   local model = Model()
+   local niter = model:get_iter(Gtk.TreePath.new_from_string('0'))
+   check(giter.value == val)
+   check(niter.value == val)
+   check(giter ~= niter)
+end
+
 function gtk.treemodel_pairs()
    local Gtk = lgi.Gtk
    local GObject = lgi.GObject
