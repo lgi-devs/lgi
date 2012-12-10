@@ -166,7 +166,7 @@ void lgi_record_2lua (lua_State *L, gpointer addr, gboolean own, int parent);
    record to specified address. Expects repo typetable of expected
    argument pushed on the top of the stack, removes it. */
 void lgi_record_2c (lua_State *L, gint narg, gpointer target, gboolean by_value,
-		    gboolean optional, gboolean nothrow);
+		    gboolean own, gboolean optional, gboolean nothrow);
 
 /* Creates Lua-side part (proxy) of given object. If the object is not
    owned (own == FALSE), an ownership is automatically acquired.  Returns

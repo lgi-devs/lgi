@@ -913,7 +913,8 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 		parent == LGI_PARENT_CALLER_ALLOC;
 
 	      lgi_type_get_repotype (L, G_TYPE_INVALID, info);
-	      lgi_record_2c (L, narg, target, by_value, optional, FALSE);
+	      lgi_record_2c (L, narg, target, by_value,
+			     transfer != GI_TRANSFER_NOTHING, optional, FALSE);
 	      break;
 	    }
 
@@ -993,7 +994,7 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 			  /* Check any kind of record. */
 			  lua_pushnil (L);
 			  lgi_record_2c (L, narg, &arg->v_pointer, FALSE,
-					 FALSE, TRUE);
+					 FALSE, FALSE, TRUE);
 			}
 		    }
 		}
@@ -1329,7 +1330,8 @@ lgi_marshal_field (lua_State *L, gpointer object, gboolean getmode,
 	    else
 	      {
 		g_assert (kind == 1);
-		lgi_record_2c (L, val_arg, arg->v_pointer, FALSE, FALSE, FALSE);
+		lgi_record_2c (L, val_arg, arg->v_pointer,
+			       FALSE, FALSE, FALSE, FALSE);
 		return 0;
 	      }
 	    break;
@@ -1429,7 +1431,7 @@ marshal_container_marshaller (lua_State *L)
 
   /* Get GValue to operate on. */
   lgi_type_get_repotype (L, G_TYPE_VALUE, NULL);
-  lgi_record_2c (L, 1, &value, FALSE, FALSE, FALSE);
+  lgi_record_2c (L, 1, &value, FALSE, FALSE, FALSE, FALSE);
 
   /* Get raw pointer from the value. */
   if (get_mode)
@@ -1558,7 +1560,7 @@ marshal_fundamental_marshaller (lua_State *L)
   gboolean get_mode = lua_isnone (L, 3);
   GValue *value;
   lgi_type_get_repotype (L, G_TYPE_VALUE, NULL);
-  lgi_record_2c (L, 1, &value, FALSE, FALSE, FALSE);
+  lgi_record_2c (L, 1, &value, FALSE, FALSE, FALSE, FALSE);
   if (get_mode)
     {
       /* Get fundamental from value. */
@@ -1693,7 +1695,7 @@ marshal_closure_set_marshal (lua_State *L)
 
   ci = g_irepository_find_by_name (NULL, "GObject", "ClosureMarshal");
   lgi_type_get_repotype (L, G_TYPE_CLOSURE, NULL);
-  lgi_record_2c (L, 1, &closure, FALSE, FALSE, FALSE);
+  lgi_record_2c (L, 1, &closure, FALSE, FALSE, FALSE, FALSE);
   user_data = lgi_closure_allocate (L, 1);
   marshal = lgi_closure_create (L, user_data, ci, 2, FALSE);
   g_closure_set_marshal (closure, marshal);

@@ -553,7 +553,7 @@ object_new (lua_State *L)
 	  lua_pushnumber (L, i + 1);
 	  lua_gettable (L, 2);
 	  lgi_type_get_repotype (L, G_TYPE_INVALID, gparam_info);
-	  lgi_record_2c (L, -2, &params[i], TRUE, FALSE, FALSE);
+	  lgi_record_2c (L, -2, &params[i], TRUE, FALSE, FALSE, FALSE);
 	  lua_pop (L, 1);
 	}
 
