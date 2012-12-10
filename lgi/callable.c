@@ -706,7 +706,8 @@ callable_param_2c (lua_State *L, Param *param, int narg, GIArgument *arg,
       /* Marshal record according to custom information. */
       lua_getfenv (L, 1);
       lua_rawgeti (L, -1, param->repotype_index);
-      lgi_record_2c (L, narg, &arg->v_pointer, FALSE, TRUE, FALSE);
+      lgi_record_2c (L, narg, &arg->v_pointer, FALSE,
+		     param->transfer != GI_TRANSFER_NOTHING, TRUE, FALSE);
       lua_pop (L, 1);
     }
 
@@ -796,7 +797,7 @@ callable_call (lua_State *L)
       else
 	{
 	  lgi_type_get_repotype (L, G_TYPE_INVALID, parent);
-	  lgi_record_2c (L, 2, &args[0].v_pointer, FALSE, FALSE, FALSE);
+	  lgi_record_2c (L, 2, &args[0].v_pointer, FALSE, FALSE, FALSE, FALSE);
 	  nret++;
 	}
 

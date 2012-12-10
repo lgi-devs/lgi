@@ -268,7 +268,7 @@ record_get (lua_State *L, int narg)
 
 void
 lgi_record_2c (lua_State *L, int narg, gpointer target, gboolean by_value,
-	       gboolean optional, gboolean nothrow)
+	       gboolean own, gboolean optional, gboolean nothrow)
 {
   Record *record = NULL;
 
@@ -315,7 +315,17 @@ lgi_record_2c (lua_State *L, int narg, gpointer target, gboolean by_value,
     }
 
   if (G_LIKELY (!by_value))
-    *(gpointer *) target = record ? record->addr : NULL;
+    {
+      *(gpointer *) target = record ? record->addr : NULL;
+      if (own)
+	{
+	  /* Caller wants to steal ownership from us. */
+	  if (G_LIKELY (record->store == RECORD_STORE_ALLOCATED))
+	    record->store = RECORD_STORE_EXTERNAL;
+	  else
+	    g_critical ("attempt to steal record ownership from unowned rec");
+	}
+    }
   else
     {
       gsize size;
@@ -542,7 +552,7 @@ record_query (lua_State *L)
 	{
 	  gpointer addr;
 	  lua_pushvalue (L, 3);
-	  lgi_record_2c (L, 1, &addr, FALSE, TRUE, FALSE);
+	  lgi_record_2c (L, 1, &addr, FALSE, FALSE, TRUE, FALSE);
 	  lua_pushlightuserdata (L, addr);
 	}
 
