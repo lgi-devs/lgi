@@ -266,58 +266,79 @@ record_get (lua_State *L, int narg)
   return record;
 }
 
-gpointer
-lgi_record_2c (lua_State *L, int narg, gboolean optional, gboolean nothrow)
+void
+lgi_record_2c (lua_State *L, int narg, gpointer target, gboolean by_value,
+	       gboolean optional, gboolean nothrow)
 {
-  Record *record;
+  Record *record = NULL;
 
   /* Check for nil. */
-  if (optional && lua_isnoneornil (L, narg))
+  if (!optional || !lua_isnoneornil (L, narg))
     {
-      lua_pop (L, 1);
-      return NULL;
-    }
-
-  /* Get record and check its type. */
-  lgi_makeabs (L, narg);
-  luaL_checkstack (L, 4, "");
-  record = record_check (L, narg);
-  if (record)
-    {
-      /* Check, whether type fits. Also take into account possible
-	 inheritance. */
-      lua_getfenv (L, narg);
-      for (;;)
+      /* Get record and check its type. */
+      lgi_makeabs (L, narg);
+      luaL_checkstack (L, 4, "");
+      record = record_check (L, narg);
+      if (record)
 	{
-	  if (lua_equal (L, -1, -2))
-	    break;
-
-	  /* Try to get parent of the real type. */
-	  lua_getfield (L, -1, "_parent");
-	  lua_replace (L, -2);
-	  if (lua_isnil (L, -1))
+	  /* Check, whether type fits. Also take into account possible
+	     inheritance. */
+	  lua_getfenv (L, narg);
+	  for (;;)
 	    {
-	      record = NULL;
-	      break;
+	      if (lua_equal (L, -1, -2))
+		break;
+
+	      /* Try to get parent of the real type. */
+	      lua_getfield (L, -1, "_parent");
+	      lua_replace (L, -2);
+	      if (lua_isnil (L, -1))
+		{
+		  record = NULL;
+		  break;
+		}
 	    }
+
+	  lua_pop (L, 1);
 	}
 
-      lua_pop (L, 1);
+      if (!nothrow && !record)
+	{
+	  const gchar *name = NULL;
+	  if (!lua_isnil (L, -1))
+	    {
+	      lua_getfield (L, -1, "_name");
+	      name = lua_tostring (L, -1);
+	    }
+	  record_error (L, narg, name);
+	}
     }
 
-  if (!nothrow && !record)
+  if (G_LIKELY (!by_value))
+    *(gpointer *) target = record ? record->addr : NULL;
+  else
     {
-      const gchar *name = NULL;
-      if (!lua_isnil (L, -1))
+      gsize size;
+      lua_getfield (L, -1, "_size");
+      size = lua_tonumber (L, -1);
+      lua_pop (L, 1);
+
+      if (record)
 	{
-	  lua_getfield (L, -1, "_name");
-	  name = lua_tostring (L, -1);
+	  /* Check, whether custom _copy is registered. */
+	  void (*copy_func)(gpointer, gpointer) =
+	    lgi_gi_load_function (L, -1, "_copy");
+	  if (copy_func)
+	    copy_func (record->addr, target);
+	  else
+	    memcpy (target, record->addr, size);
 	}
-      record_error (L, narg, name);
+      else
+	/* Transferring NULL ptr, simply NULL target. */
+	memset (target, 0, size);
     }
 
   lua_pop (L, 1);
-  return record ? record->addr : NULL;
 }
 
 static int
@@ -519,8 +540,10 @@ record_query (lua_State *L)
 	lua_pushlightuserdata (L, record_check (L, 1)->addr);
       else
 	{
+	  gpointer addr;
 	  lua_pushvalue (L, 3);
-	  lua_pushlightuserdata (L, lgi_record_2c (L, 1, TRUE, FALSE));
+	  lgi_record_2c (L, 1, &addr, FALSE, TRUE, FALSE);
+	  lua_pushlightuserdata (L, addr);
 	}
 
       return 1;
@@ -648,6 +671,15 @@ record_value_unset (GValue *value)
     g_value_unset (value);
 }
 
+/* Similar stuff for g_value_copy(), requires target argument to be
+   preinitialized with proper type. */
+static void
+record_value_copy (const GValue *src, GValue *dest)
+{
+  g_value_init (dest, G_VALUE_TYPE (src));
+  g_value_copy (src, dest);
+}
+
 void
 lgi_record_init (lua_State *L)
 {
@@ -666,5 +698,7 @@ lgi_record_init (lua_State *L)
   luaL_register (L, NULL, record_api_reg);
   lua_pushlightuserdata (L, record_value_unset);
   lua_setfield (L, -2, "value_unset");
+  lua_pushlightuserdata (L, record_value_copy);
+  lua_setfield (L, -2, "value_copy");
   lua_setfield (L, -2, "record");
 }

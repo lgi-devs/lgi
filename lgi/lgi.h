@@ -162,24 +162,23 @@ gpointer lgi_record_new (lua_State *L, int count);
    the arg record is part of). */
 void lgi_record_2lua (lua_State *L, gpointer addr, gboolean own, int parent);
 
-/* Gets pointer to C-structure from given Lua-side object. Expects
-   repo typetable of expected argument pushed on the top of the stack,
-   removes it. */
-gpointer lgi_record_2c (lua_State *L, int narg, gboolean optional,
-			gboolean nothrow);
+/* Gets pointer to C-structure from given Lua-side object, or copies
+   record to specified address. Expects repo typetable of expected
+   argument pushed on the top of the stack, removes it. */
+void lgi_record_2c (lua_State *L, gint narg, gpointer target, gboolean by_value,
+		    gboolean optional, gboolean nothrow);
 
 /* Creates Lua-side part (proxy) of given object. If the object is not
    owned (own == FALSE), an ownership is automatically acquired.  Returns
    number of elements pushed to the stack, i.e. always 1. */
-int
-lgi_object_2lua (lua_State *L, gpointer obj, gboolean own, gboolean no_sink);
+int lgi_object_2lua (lua_State *L, gpointer obj, gboolean own,
+		     gboolean no_sink);
 
 /* Gets pointer to C-side object represented by given Lua proxy. If
    gtype is not G_TYPE_INVALID, the real type is checked to conform to
    requested type. */
-gpointer
-lgi_object_2c (lua_State *L, int narg, GType gtype, gboolean optional,
-	       gboolean nothrow, gboolean transfer);
+gpointer lgi_object_2c (lua_State *L, int narg, GType gtype, gboolean optional,
+			gboolean nothrow, gboolean transfer);
 
 #if !GLIB_CHECK_VERSION(2, 30, 0)
 /* Workaround for broken g_struct_info_get_size() for GValue, see

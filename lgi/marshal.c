@@ -780,8 +780,9 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 		int parent, GICallableInfo *ci, void **args)
 {
   int nret = 0;
-  gboolean optional = (ai == NULL || (g_arg_info_is_optional (ai) ||
-				      g_arg_info_may_be_null (ai)));
+  gboolean optional = (parent == LGI_PARENT_CALLER_ALLOC) ||
+    (ai == NULL || (g_arg_info_is_optional (ai) ||
+		       g_arg_info_may_be_null (ai)));
   GITypeTag tag = g_type_info_get_tag (ti);
   GIArgument *arg = target;
 
@@ -898,13 +899,6 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 	  case GI_INFO_TYPE_STRUCT:
 	  case GI_INFO_TYPE_UNION:
 	    {
-	      gpointer addr;
-	      gsize size;
-	      lgi_type_get_repotype (L, G_TYPE_INVALID, info);
-	      lua_getfield (L, -1, "_size");
-	      size = lua_tonumber (L, -1);
-	      lua_pop (L, 1);
-	      addr = lgi_record_2c (L, narg, optional, FALSE);
 	      /* Ideally the g_type_info_is_pointer() should be
 		 sufficient here, but there is some
 		 gobject-introspection quirk that some struct
@@ -914,22 +908,12 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 		 sets is_pointer attribute fails).  Workaround it by
 		 checking also argument type - structs as C function
 		 arguments are always passed as pointers. */
-	      if ((!g_type_info_is_pointer (ti) && ai == NULL) ||
-		  parent == LGI_PARENT_CALLER_ALLOC)
-		{
-		  /* 'target' is actually the place where to put the
-		     whole structure, so copy it there. */
-		  memcpy (target, addr, size);
+	      gboolean by_value =
+		(!g_type_info_is_pointer (ti) && ai == NULL) ||
+		parent == LGI_PARENT_CALLER_ALLOC;
 
-		  /* We have to clean the original place, because we
-		     have to 'steal' the structure, avoid
-		     double-freeing it. */
-		  if (parent == LGI_PARENT_CALLER_ALLOC)
-		    memset (addr, 0, size);
-		}
-	      else
-		arg->v_pointer = addr;
-
+	      lgi_type_get_repotype (L, G_TYPE_INVALID, info);
+	      lgi_record_2c (L, narg, target, by_value, optional, FALSE);
 	      break;
 	    }
 
@@ -1008,7 +992,8 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 			{
 			  /* Check any kind of record. */
 			  lua_pushnil (L);
-			  arg->v_pointer = lgi_record_2c (L, narg, FALSE, TRUE);
+			  lgi_record_2c (L, narg, &arg->v_pointer, FALSE,
+					 FALSE, TRUE);
 			}
 		    }
 		}
@@ -1344,7 +1329,7 @@ lgi_marshal_field (lua_State *L, gpointer object, gboolean getmode,
 	    else
 	      {
 		g_assert (kind == 1);
-		arg->v_pointer = lgi_record_2c (L, val_arg, FALSE, FALSE);
+		lgi_record_2c (L, val_arg, arg->v_pointer, FALSE, FALSE, FALSE);
 		return 0;
 	      }
 	    break;
@@ -1444,7 +1429,7 @@ marshal_container_marshaller (lua_State *L)
 
   /* Get GValue to operate on. */
   lgi_type_get_repotype (L, G_TYPE_VALUE, NULL);
-  value = lgi_record_2c (L, 1, FALSE, FALSE);
+  lgi_record_2c (L, 1, &value, FALSE, FALSE, FALSE);
 
   /* Get raw pointer from the value. */
   if (get_mode)
@@ -1573,7 +1558,7 @@ marshal_fundamental_marshaller (lua_State *L)
   gboolean get_mode = lua_isnone (L, 3);
   GValue *value;
   lgi_type_get_repotype (L, G_TYPE_VALUE, NULL);
-  value = lgi_record_2c (L, 1, FALSE, FALSE);
+  lgi_record_2c (L, 1, &value, FALSE, FALSE, FALSE);
   if (get_mode)
     {
       /* Get fundamental from value. */
@@ -1708,7 +1693,7 @@ marshal_closure_set_marshal (lua_State *L)
 
   ci = g_irepository_find_by_name (NULL, "GObject", "ClosureMarshal");
   lgi_type_get_repotype (L, G_TYPE_CLOSURE, NULL);
-  closure = lgi_record_2c (L, 1, FALSE, FALSE);
+  lgi_record_2c (L, 1, &closure, FALSE, FALSE, FALSE);
   user_data = lgi_closure_allocate (L, 1);
   marshal = lgi_closure_create (L, user_data, ci, 2, FALSE);
   g_closure_set_marshal (closure, marshal);
