@@ -351,31 +351,22 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIDirection dir,
 		    gpointer array, gssize size, int parent)
 {
   GITypeInfo *eti;
-  gssize len, esize;
+  gssize len = 0, esize;
   gint index, eti_guard;
-  char *data;
+  char *data = NULL;
 
   /* Avoid propagating return value marshaling flag to array elements. */
   if (parent == LGI_PARENT_IS_RETVAL)
     parent = 0;
 
-  /* Get pointer to array data. */
-  if (array == NULL)
-    {
-      /* NULL array is represented by empty table for C arrays, nil
-	 for other types. */
-      if (atype == GI_ARRAY_TYPE_C)
-	lua_newtable (L);
-      else
-	lua_pushnil (L);
-      return;
-    }
-
   /* First of all, find out the length of the array. */
   if (atype == GI_ARRAY_TYPE_ARRAY)
     {
-      len = ((GArray *) array)->len;
-      data = ((GArray *) array)->data;
+      if (array)
+	{
+	  len = ((GArray *) array)->len;
+	  data = ((GArray *) array)->data;
+	}
     }
   else
     {
@@ -403,13 +394,26 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIDirection dir,
     {
       /* UINT8 arrays are marshalled as 'bytes' instances. */
       if (len < 0)
-	len = strlen(data);
+	len = data ? strlen(data) : 0;
       memcpy (lua_newuserdata (L, len), data, len);
       luaL_getmetatable (L, LGI_BYTES_BUFFER);
       lua_setmetatable (L, -2);
     }
   else
     {
+      if (array == NULL)
+	{
+	  /* NULL array is represented by empty table for C arrays, nil
+	     for other types. */
+	  if (atype == GI_ARRAY_TYPE_C)
+	    lua_newtable (L);
+	  else
+	    lua_pushnil (L);
+
+	  lua_remove (L, eti_guard);
+	  return;
+	}
+
       /* Create Lua table which will hold the array. */
       lua_createtable (L, len > 0 ? len : 0, 0);
 
