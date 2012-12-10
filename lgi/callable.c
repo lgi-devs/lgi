@@ -1137,9 +1137,17 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   /* Check, whether we can report an error here. */
   if (res == 0)
     {
-      /* Marshal return value from Lua. */
       int to_pop;
-      GITypeTag tag = g_type_info_get_tag (callable->retval.ti);
+      GITypeTag tag;
+
+      /* Make sure that all unspecified returns and outputs are set as
+	 nil; during marshalling we might create temporary values on
+	 the stack, which can be confused with output values expected
+	 but not passed by caller. */
+      lua_settop(L, lua_gettop (L) + callable->has_self + callable->nargs + 1);
+
+      /* Marshal return value from Lua. */
+      tag = g_type_info_get_tag (callable->retval.ti);
       if (tag != GI_TYPE_TAG_VOID
 	  || g_type_info_is_pointer (callable->retval.ti))
 	{
