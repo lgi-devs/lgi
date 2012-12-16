@@ -568,6 +568,14 @@ if not Gtk.Menu.popup then
    Gtk.Menu._method.popup = Gtk.Menu.popup_for_device
 end
 
+-------------------------------- Gtk.MenuItem
+Gtk.MenuItem._attribute = { child = {} }
+function Gtk.MenuItem._attribute.child:get()
+   local children = Gtk.Container._attribute.child.get(self)
+   children[#children + 1] = Gtk.MenuItem.get_submenu(self)
+   return children
+end
+
 -------------------------------- Gtk.EntryCompletion
 
 -- Workaround for bug in GTK+; text_column accessors don't do an extra
