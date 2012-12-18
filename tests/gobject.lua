@@ -69,3 +69,133 @@ function gobject.gtype_create()
    local m = GObject.Object.new(Gio.ThemedIcon, { name = 'icon' })
    check(Gio.ThemedIcon:is_type_of(m))
 end
+
+function gobject.subclass_derive1()
+   local GObject = lgi.GObject
+   local Derived = GObject.Object:derive()
+   local der = Derived()
+   check(Derived:is_type_of(der))
+   check(not Derived:is_type_of(GObject.Object()))
+end
+
+function gobject.subclass_derive2()
+   local GObject = lgi.GObject
+   local Derived = GObject.Object:derive()
+   local Subderived = Derived:derive('sub.derive/d')
+   local der = Derived()
+   check(Derived:is_type_of(der))
+   check(not Subderived:is_type_of(der))
+   local sub = Subderived()
+   check(Subderived:is_type_of(sub))
+   check(Derived:is_type_of(sub))
+   check(GObject.Object:is_type_of(sub))
+end
+
+function gobject.subclass_override1()
+   local GObject = lgi.GObject
+   local Derived = GObject.Object:derive()
+   local state = 0
+   local obj
+   function Derived:do_constructed()
+      obj = self
+      state = state + 1
+   end
+   function Derived:do_dispose()
+      state = state + 2
+   end
+   check(state == 0)
+   local der = Derived()
+   check(der == obj)
+   check(state == 1)
+   der = nil
+   obj = nil
+   collectgarbage()
+   check(state == 3)
+end
+
+function gobject.subclass_override2()
+   local GObject = lgi.GObject
+   local state = 0
+   local Derived = GObject.Object:derive()
+   function Derived:do_constructed()
+      self.priv.id = 1
+      state = state + 1
+   end
+   function Derived:do_dispose()
+      state = state + 2
+      GObject.Object.do_dispose(self)
+   end
+   function Derived:custom_method()
+      state = state + 8
+      self.priv.id = self.priv.id + 4
+   end
+   local Subderived = Derived:derive()
+   function Subderived:do_constructed()
+      Derived.do_constructed(self)
+      self.priv.id = self.priv.id + 2
+      state = state + 4
+   end
+   check(state == 0)
+   local sub = Subderived()
+   check(state == 5)
+   check(sub.priv.id == 3)
+   sub:custom_method()
+   check(state == 13)
+   check(sub.priv.id == 7)
+   sub = nil
+   collectgarbage()
+   check(state == 15)
+end
+
+function gobject.subclass_derive3()
+   local GObject = lgi.GObject
+   local history = {}
+   local Derived = GObject.InitiallyUnowned:derive()
+   function Derived:_class_init()
+      history[#history + 1] = 'class_init'
+      check(self == Derived)
+      collectgarbage()
+   end
+   function Derived:_init()
+      history[#history + 1] = 'init'
+      collectgarbage()
+   end
+   function Derived:do_constructed()
+      history[#history + 1] = 'constructed'
+      Derived._parent.do_constructed(self)
+      collectgarbage()
+   end
+--   function Derived:do_dispose()
+--      history[#history + 1] = 'dispose'
+--      Derived._parent.do_dispose(self)
+--   end
+   local obj = Derived()
+   check(history[1] == 'class_init')
+   check(history[2] == 'init')
+   check(history[3] == 'constructed')
+   obj = nil
+   collectgarbage()
+--   check(history[4] == 'dispose')
+end
+
+function gobject.iface_virtual()
+   local Gio = lgi.Gio
+   local file = Gio.File.new_for_path('hey')
+   check(file:is_native() == file:do_is_native())
+   check(file:get_basename() == file:do_get_basename())
+end
+
+function gobject.iface_impl()
+   local GObject = lgi.GObject
+   local Gio = lgi.Gio
+   local FakeFile = GObject.Object:derive('LgiTestFakeFile1', { Gio.File })
+   function FakeFile:do_get_basename()
+      return self.priv.basename
+   end
+   function FakeFile:set_basename(basename)
+      self.priv.basename = basename
+   end
+   local fakefile = FakeFile()
+   fakefile:set_basename('fakename')
+   check(fakefile:get_basename() == 'fakename')
+end

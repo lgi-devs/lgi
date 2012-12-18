@@ -73,7 +73,6 @@ function CallInfo.new(callable_info, to_lua)
       else
 	 -- Indirect marshalling, value contains just pointer to the
 	 -- real storage pointer.  Used for inout and out arguments.
-	 print('handling closure our arg', ti.name, ti.tag)
 	 cell.gtype = Type.POINTER
 	 local marshaller = Value.find_marshaller(cell.gtype)
 	 if to_lua then
