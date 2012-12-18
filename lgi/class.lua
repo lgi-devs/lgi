@@ -410,11 +410,7 @@ function class.derived_mt:__newindex(name, target)
 		  or rawget(getmetatable(self), '_element'))
    local value, category = _element(self, nil, name)
 
-   if not value then
-      -- Simply assign to type.  This most probably means adding new
-      -- member function to the class (or some static member).
-      rawset(self, name, target)
-   elseif category == '_virtual' then
+   if category == '_virtual' then
       -- Overriding virtual method. Prepare callback to the target and
       -- store it to the _override type helper subtable.
       name = load_vfunc_name(name)
@@ -433,8 +429,9 @@ function class.derived_mt:__newindex(name, target)
       override[name] = vfunc
       self._guard[container.name .. ':' .. name] = guard
    else
-      -- Do not allow assigning to anything else.
-      error(("`%s': `%s' not assignable"):format(self._name, name))
+      -- Simply assign to type.  This most probably means adding new
+      -- member function to the class (or some static member).
+      rawset(self, name, target)
    end
 end
 
