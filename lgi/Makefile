@@ -6,8 +6,9 @@
 #
 
 PREFIX = /usr/local
-LUA_LIBDIR = $(PREFIX)/lib/lua/5.1
-LUA_SHAREDIR = $(PREFIX)/share/lua/5.1
+LUA_VERSION=5.1
+LUA_LIBDIR = $(PREFIX)/lib/lua/$(LUA_VERSION)
+LUA_SHAREDIR = $(PREFIX)/share/lua/$(LUA_VERSION)
 
 GINAME = gobject-introspection-1.0
 PKGS = $(GINAME) gmodule-2.0 libffi
