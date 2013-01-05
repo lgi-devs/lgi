@@ -717,7 +717,7 @@ marshal_2c_callable (lua_State *L, GICallableInfo *ci, GIArgInfo *ai,
 		     GICallableInfo *argci, void **args)
 {
   int nret = 0;
-  GIScopeType scope = g_arg_info_get_scope (ai);
+  GIScopeType scope = (ai == NULL) ? GI_SCOPE_TYPE_CALL : g_arg_info_get_scope (ai);
   gpointer user_data = NULL;
 
   /* Check 'nil' in optional case.  In this case, return NULL as
