@@ -288,7 +288,7 @@ end
 Gtk.TextTagTable._container_add = Gtk.TextTagTable.add
 
 -------------------------------- Gtk.TreeModel and relatives.
-Gtk.TreeModel._attribute = { }
+Gtk.TreeModel._attribute = {}
 
 local tree_model_item_mt = {}
 function tree_model_item_mt:__index(column)
