@@ -224,25 +224,30 @@ function Object:_access_signal(object, info, ...)
       connect_signal(object, gtype, info.name, Closure((...), info))
    else
       -- Reading yields table with signal operations.
-      local pad = {}
+      local mt = {}
+      local pad = setmetatable({}, mt)
       function pad:connect(target, detail, after)
 	 return connect_signal(object, gtype, info.name,
 			       Closure(target, info), detail, after)
       end
-      function pad:emit(detail, ...)
-	 return emit_signal(object, gtype, info, detail, object, ...)
+      function pad:emit(...)
+	 return emit_signal(object, gtype, info, nil, ...)
+      end
+      function mt:__call(_, ...)
+	 return emit_signal(object, gtype, info, nil, ...)
       end
 
       -- If signal supports details, add metatable implementing
       -- __newindex for connecting in the 'on_signal['detail'] =
       -- handler' form.
       if not info.is_signal or info.flags.detailed then
-	 local mt = {}
+	 function pad:emit(detail, ...)
+	    return emit_signal(object, gtype, info, detail, ...)
+	 end
 	 function mt:__newindex(detail, target)
 	    connect_signal(object, gtype, info.name, Closure(target, info),
 			   detail)
 	 end
-	 setmetatable(pad, mt)
       end
 
       -- Return created signal pad.
