@@ -26,10 +26,14 @@ endif
 PKGS = gio-2.0 cairo cairo-gobject gobject-introspection-1.0 gmodule-2.0 libffi
 LUA = lua
 
-COPTFLAGS = -Wall -g
-CFLAGS = $(CCSHARED) $(COPTFLAGS) $(LUA_CFLAGS) $(shell pkg-config --cflags $(PKGS))
+ifndef CFLAGS
+ifndef COPTFLAGS
+CFLAGS = -Wall -g
+endif
+endif
+ALL_CFLAGS = $(CCSHARED) $(COPTFLAGS) $(LUA_CFLAGS) $(shell pkg-config --cflags $(PKGS)) $(CFLAGS)
 LIBS += $(shell pkg-config --libs $(PKGS))
-LDFLAGS = $(LIBFLAG)
+ALL_LDFLAGS = $(LIBFLAG) $(LDFLAGS)
 DEPCHECK = .depcheck
 
 # Precondition check
@@ -51,12 +55,12 @@ check : all
 	cd .. && LD_LIBRARY_PATH=tests:$$LD_LIBRARY_PATH GI_TYPELIB_PATH=tests:$$GI_TYPELIB_PATH $(LUA) tests/test.lua
 
 $(REGRESS) : regress.o
-	$(CC) $(LDFLAGS) -o $@ regress.o $(LIBS)
+	$(CC) $(ALL_LDFLAGS) -o $@ regress.o $(LIBS)
 
 GIDATADIR = $(shell pkg-config --variable=gidatadir gobject-introspection-1.0)/tests
 
 regress.o : $(GIDATADIR)/regress.c $(GIDATADIR)/regress.h $(DEPCHECK)
-	$(CC) $(CFLAGS) -c -o $@ $<
+	$(CC) $(ALL_CFLAGS) -c -o $@ $<
 
 # Build .gir and .typelib
 Regress-1.0.gir : $(REGRESS)

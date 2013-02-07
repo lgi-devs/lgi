@@ -32,10 +32,14 @@ endif
 
 OBJS = buffer.o callable.o core.o gi.o marshal.o object.o record.o
 
-COPTFLAGS = -Wall -Wextra -O2 -g
-CFLAGS = $(CCSHARED) $(COPTFLAGS) $(LUA_CFLAGS) $(shell pkg-config --cflags $(PKGS))
+ifndef CFLAGS
+ifndef COPTFLAGS
+CFLAGS = -Wall -Wextra -O2 -g
+endif
+endif
+ALL_CFLAGS = $(CCSHARED) $(COPTFLAGS) $(LUA_CFLAGS) $(shell pkg-config --cflags $(PKGS)) $(CFLAGS)
 LIBS += $(shell pkg-config --libs $(PKGS))
-LDFLAGS = $(LIBFLAG)
+ALL_LDFLAGS = $(LIBFLAG) $(LDFLAGS)
 DEPCHECK = .depcheck
 
 # Precondition check
@@ -49,8 +53,11 @@ all : $(CORE) $(VERSION_FILE)
 clean :
 	rm -f $(CORE) $(OBJS)
 
+%.o : %.c
+	$(CC) $(ALL_CFLAGS) -c -o $@ $<
+
 $(CORE) : $(OBJS)
-	$(CC) $(LDFLAGS) -o $@ $(OBJS) $(LIBS)
+	$(CC) $(ALL_LDFLAGS) -o $@ $(OBJS) $(LIBS)
 
 $(VERSION_FILE) : Makefile ../Makefile
 	echo "return '$(VERSION)'" > $@
