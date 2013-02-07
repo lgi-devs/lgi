@@ -1,6 +1,6 @@
-# LGI User's Guide
+# lgi User's Guide
 
-All LGI functionality is exported through `lgi` module.  To access it,
+All lgi functionality is exported through `lgi` module.  To access it,
 use standard `require` construct, e.g.:
 
     local lgi = require 'lgi'
@@ -76,7 +76,7 @@ mapping between GLib types and Lua types is established.
 * C arrays of 1-byte-sized elements (i.e. byte buffers) is mapped to
   Lua `string` instead of tables, although when going Lua->GLib
   direction, tables are also accepted for this type of arrays.
-* GObject class, struct or union is mapped to LGI instances of
+* GObject class, struct or union is mapped to lgi instances of
   specific class, struct or union.  It is also possible to pass `nil`,
   in which case the `NULL` is passed to C-side (but only if the
   annotation `(allow-none)` of the original C method allows passing
@@ -84,7 +84,7 @@ mapping between GLib types and Lua types is established.
 * `gpointer` are mapped to Lua `lightuserdata` type.  In Lua->GLib
   direction, following values are accepted for `gpointer` type:
     - Lua `string` instances
-    - Instances of LGI classes, structs or unions
+    - Instances of lgi classes, structs or unions
     - Binary buffers (see below)
 
 ### 2.1. Modifiable binary buffers
@@ -92,10 +92,10 @@ mapping between GLib types and Lua types is established.
 Pure Lua lacks native binary modifiable buffer structure, which is a
 problem for some GObject APIs, for example `Gio.InputStream.read()`,
 which request pre-allocated buffer which will be modified (filled)
-during the call.  To overcome this problem, LGI adopts the
+during the call.  To overcome this problem, lgi adopts the
 [bytes proposal](http://permalink.gmane.org/gmane.comp.lang.lua.general/79288
 "Defining a library for mutable byte arrays").  Since the standalone
-implementation of this proposal does not seem to be available yet, LGI
+implementation of this proposal does not seem to be available yet, lgi
 uses its own implementation which is used when no external `bytes`
 package can be found.  An example of `bytes` buffer usage follows:
 
@@ -141,7 +141,7 @@ bit unnatural in Lua:
     -- instance of the iterator, so following line is necessary:
     if not ok then iter = nil end
 
-To ease usage of such method, LGI avoids returning first boolean
+To ease usage of such method, lgi avoids returning first boolean
 return.  If C function returns `false` in this case, all other output
 arguments are returned as `nil`.  This means that previous example
 should be instead written simply as:
@@ -182,14 +182,14 @@ this technique.
 Classes are usually derived from `GObject` base class.  Classes
 contain entities like properties, methods and signals and provide
 inheritance, i.e. entities of ancestor class are also available in all
-inherited classes.  LGI supports Lua-like access to entities using `.`
+inherited classes.  lgi supports Lua-like access to entities using `.`
 and `:` operators.
 
 There is no need to invoke any memory management GObject controls,
-like `ref` or `unref` methods, because LGI handles reference
+like `ref` or `unref` methods, because lgi handles reference
 management transparently underneath.  In fact, calling these low-level
 methods can probably always be considered either as a bug or
-workaround for possible bug in LGI :-)
+workaround for possible bug in lgi :-)
 
 ### 3.1. Creating instances
 
@@ -258,7 +258,7 @@ first argument) are usually invoked using class namespace,
 e.g. `Gtk.Window.list_toplevels()`.  Very common form of static
 methods are `new` constructors, e.g. `Gtk.Window.new()`.  Note that in
 most cases, `new` constructors are provided only as convenience for C
-programmers, in LGI it might be preferable to use `window =
+programmers, in lgi it might be preferable to use `window =
 Gtk.Window { type = Gtk.WindowType.TOPLEVEL }` instead of `window =
 Gtk.Window.new(Gtk.WindowType.TOPLEVEL)`.
 
@@ -336,12 +336,12 @@ to 'call' the signal on the class instance:
 
 ### 3.5. Dynamic typing of classes
 
-LGI assigns real class types to class instances dynamically, using
+lgi assigns real class types to class instances dynamically, using
 runtime GObject introspection facilities.  When new classes instance
-is passed from C code into Lua, LGI queries the real type of the
+is passed from C code into Lua, lgi queries the real type of the
 object, finds the nearest type in the loaded repository and assigns
 this type to the Lua-side created proxy for the object.  This means
-that there is no casting needed in LGI (and there is also no casting
+that there is no casting needed in lgi (and there is also no casting
 facility available).
 
 Hopefully everything can be explained in following example.  Assume
@@ -358,12 +358,12 @@ labeled `window1` and `GtkAction` called `action1` (among others).
     action.sensitive = false
 
 Although `Gtk.Builder.get_object()` method is marked as returning
-`GObject*`, LGI actually checks the real type of returned object and
+`GObject*`, lgi actually checks the real type of returned object and
 assigns proper type to it, so `builder:get_object('window1')` returns
 instance of `Gtk.Window` and `builder:get_object('action1')` returns
 instance of `Gtk.Action`.
 
-Another mechanism which allows complete lack of casting in LGI is
+Another mechanism which allows complete lack of casting in lgi is
 automatic interface discovery.  If some class implements some
 interface, the properties and methods of the interface are directly
 available on the class instance.
@@ -371,7 +371,7 @@ available on the class instance.
 ### 3.6. Accessing object's class instance
 
 GObject has the notion of object class.  There are sometimes useful
-methods defined on objects class, which are accessible to LGI using
+methods defined on objects class, which are accessible to lgi using
 object instance pseudo-property `class`.  For example, to list all
 properties registered for object's class, GObject library provides
 `g_object_class_list_properties()` function.  Following sample
@@ -380,14 +380,14 @@ instance.
 
     function dump_props(obj)
        print("Dumping properties of ", obj)
-       for _, pspec in pairs(obj.class:list_properties()) do
-	  print(pspec.name, pspec.value_type)
+       for _, pspec in pairs(obj._class:list_properties()) do
+          print(pspec.name, pspec.value_type)
        end
     end
 
 Running `dump_props(Gtk.Window())` yields following output:
 
-    Dumping props of 	lgi.obj 0xe5c070:Gtk.Window(GtkWindow)
+    Dumping props of	lgi.obj 0xe5c070:Gtk.Window(GtkWindow)
     name	gchararray
     parent	GtkContainer
     width-request	gint
@@ -491,7 +491,7 @@ containing fields and values to which the fields should be
 initialized: `local blue = Gdk.RGBA { blue = 1, alpha = 1 }`.
 
 If the structure has defined any constructor named `new`, it is
-automatically mapped by LGI to the structure creation construct, so
+automatically mapped by lgi to the structure creation construct, so
 calling `local main_loop = GLib.MainLoop(nil, false)` is exactly
 equivalent with `local main_loop = GLib.MainLoop.new(nil, false)`, and
 `local color = Clutter.Color(0, 0, 0, 255)` is exactly equivalent with
@@ -516,7 +516,7 @@ Fields are accessed using `.` operator on structure instance, for example
 
 ## 5. Enums and bitflags, constants
 
-LGI primarily maps enumerations to strings containing uppercased nicks
+lgi primarily maps enumerations to strings containing uppercased nicks
 of enumeration constant names.  Optionally, a direct enumeration value
 is also accepted.  Similarly, bitflags are primarily handled as sets
 containing uppercased flag nicks, but also lists of these nicks or
@@ -551,7 +551,7 @@ construct, or directly using string `'TOPLEVEL'` when a
 
 ### 5.2. Backward mapping, getting names from numeric values
 
-There is another facility in LGI, which allows backward mapping of
+There is another facility in lgi, which allows backward mapping of
 numeric constants to symbolic names.  Indexing enum table with number
 actually provides symbolic name to which the specified constant maps:
 
@@ -581,7 +581,7 @@ all symbolic names which make up the requested value:
       SORTED = 32;
       ODD = 2;
     };
-    
+
 This way, it is possible to check for presence of specified flag very
 easily:
 
@@ -623,24 +623,24 @@ Lua state.  This rules out any usage of GLib's threading API.
 However, wrapped libraries can be using threads, and this can lead to
 situations that callbacks or signals can be invoked from different
 threads.  To avoid corruption which would result from running multiple
-threads in a single Lua state, LGI implements one internal lock
-(mutex) which protects access to Lua state.  LGI automatically locks
+threads in a single Lua state, lgi implements one internal lock
+(mutex) which protects access to Lua state.  lgi automatically locks
 (i.e. waits on) this lock when performing C->Lua transition (invoking
 Lua callback or returning from C call) and unlocks it on Lua->C
 transition (returning from Lua callback or invoking C call).
 
 In a typical GLib-based application, most of the runtime is spent
-inside mainloop.  During this time, LGI lock is unlocked and mainloop
+inside mainloop.  During this time, lgi lock is unlocked and mainloop
 can invoke Lua callbacks and signals as needed.  This means that
-LGI-based application does not have to worry about synchronization at
+lgi-based application does not have to worry about synchronization at
 all.
 
 The only situation which needs intervention is when mainloop is not
 used or a different form of mainloop is used (e.g. Copas scheduler, Qt
-UI etc).  In this case, LGI lock is locked almost all the time and
+UI etc).  In this case, lgi lock is locked almost all the time and
 callbacks and signals are blocked and cannot be delivered.  To cope
 with this situation, a `lgi.yield()` call exists.  This call
-temporarily unlocks the LGI lock, letting other threads to deliver
+temporarily unlocks the lgi lock, letting other threads to deliver
 waiting callbacks, and before returning the lock is closed back.  This
 allows code which runs foreign, non-GLib style of mainloop to stick
 `lgi.yield()` calls to some repeatedly invoked place and thus allowing
@@ -649,12 +649,12 @@ delivery of callbacks from other threads.
 ## 7. Logging
 
 GLib provides generic logging facility using `g_message` and similar C
-macros.  These utilities are not directly usable in Lua, so LGI
+macros.  These utilities are not directly usable in Lua, so lgi
 provides layer which allows logging messages using GLib logging
 facilities and controlling behavior of logging methods.
 
 All logging is controlled by `lgi.log` table.  To allow logging in
-LGI-enabled code, `lgi.log.domain(name)` method exists.  This method
+lgi-enabled code, `lgi.log.domain(name)` method exists.  This method
 returns table containing methods `message`, `warning`, `critical`,
 `error` and `debug` methods, which take format string optionally
 followed by inserts and logs specified string.  An example of typical
@@ -675,10 +675,10 @@ the rules for Lua formatting strings apply here.
 ## 8. Interoperability with native code
 
 There might be some scenarios where it is important to either export
-objects or records created in Lua into C code or vice versa.  LGI
+objects or records created in Lua into C code or vice versa.  lgi
 allows transfers using Lua `lightuserdata` type.  To get native
-pointer to the LGI object, use `_native` attribute of the object.  To
-create LGI object from external pointer, it is possible to pass
+pointer to the lgi object, use `_native` attribute of the object.  To
+create lgi object from external pointer, it is possible to pass
 lightuserdata with object pointer to type constructor.  Following
 example illustrates both techniques:
 
@@ -711,11 +711,11 @@ works also for structures and unions.
 
 Although GObject library is already covered by gobject-introspection,
 most of the elements in it are basic object system building blocks and
-either need or greatly benefit from special handling by LGI.
+either need or greatly benefit from special handling by lgi.
 
 ### 9.1. GObject.Type
 
-Contrary to C `GType` representation (which is unsigned number), LGI
+Contrary to C `GType` representation (which is unsigned number), lgi
 represents GType by its name, as a string.  GType-related constants
 and methods useful for handling GType are present in `GObject.Type`
 namespace.
@@ -761,7 +761,7 @@ any loaded component which has its type assigned.  Some examples of
 
 ### 9.2. GObject.Value
 
-LGI does not implement any automatic `GValue` boxing or unboxing,
+lgi does not implement any automatic `GValue` boxing or unboxing,
 because this would involve guessing `GType` from Lua value, which is
 generally unsafe.  Instead, an easy to use and convenient wrappers for
 accessing `GValue` type and contents are provided.
