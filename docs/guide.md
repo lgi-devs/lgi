@@ -372,11 +372,10 @@ available on the class instance.
 
 GObject has the notion of object class.  There are sometimes useful
 methods defined on objects class, which are accessible to lgi using
-object instance pseudo-property `class`.  For example, to list all
+object instance pseudo-property `_class`.  For example, to list all
 properties registered for object's class, GObject library provides
-`g_object_class_list_properties()` function.  Following sample
-lists all properties registered for the given object
-instance.
+`g_object_class_list_properties()` function.  Following sample lists
+all properties registered for the given object instance.
 
     function dump_props(obj)
        print("Dumping properties of ", obj)

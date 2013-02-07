@@ -129,7 +129,8 @@ end
 
 -- _element implementation for objects, checks parent and implemented
 -- interfaces if element cannot be found in current typetable.
-local internals = { _native = true, _type = true, _class = true, _gtype = true }
+local internals = { _native = true, _type = true, _gtype = true,
+		    _class = true, class = true }
 function class.class_mt:_element(instance, symbol)
    -- Special handling of internal symbols.
    if internals[symbol] then return symbol, symbol end
@@ -181,6 +182,7 @@ function class.class_mt:_access_class(instance)
    local gtype = class.class_mt._access_gtype(self, instance)
    return core.record.new(self._class, type_class_peek(gtype))
 end
+class.class_mt._accessclass = class.class_mt._access_class
 
 -- Add accessor '_virtual' handling.
 function class.class_mt:_access_virtual(instance, vfi)
