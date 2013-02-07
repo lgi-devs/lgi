@@ -271,12 +271,16 @@ can contain `-` character.  Since this character is illegal in Lua
 identifiers, it is mapped to `_`, so `can-focus` window property is
 accessed as `window.can_focus`.
 
-### 3.4. Connecting signals
+### 3.4. Signals
 
 Signals are exposed as `on_signalname` entities on the class
-instances.  Assigning Lua function connects that function to the
-signal.  Signal routine gets object as first argument, followed by
-other arguments of the signal. Simple example:
+instances.
+
+#### 3.4.1. Connecting signals
+
+Assigning Lua function connects that function to the signal.  Signal
+routine gets object as first argument, followed by other arguments of
+the signal. Simple example:
 
     local window = Gtk.Window()
     window.on_destroy = function(w)
@@ -320,6 +324,15 @@ style follows:
        print("Window is active:", self.is_active)
     end
     window.on_notify:connect(notify_handler, 'is-active', false)
+
+#### 3.4.2 Emitting signals
+
+Emitting existing signals is usually needed only when implementing
+subclasses of existing classes.  Simplest method to emit a signal is
+to 'call' the signal on the class instance:
+
+    local treemodel = <subclass implementing Gtk.TreeModel>
+    treemodel:on_row_inserted(path, iter)
 
 ### 3.5. Dynamic typing of classes
 
@@ -409,6 +422,56 @@ object, using `_type` property.
     function same_type(template, unknown)
        local type = template._type
        return type:is_type_of(unknown)
+    end
+
+### 3.8. Implementing subclasses
+
+It is possible to implement subclass of any existing class in pure
+Lua.  The reason to do so is to implement virtual methods of parent
+class (and possibly one or more interfaces).
+
+In order to create subclass, lgi requires to create `package` first,
+which is basically namespace where the new classes will live.  To
+create a package, use `lgi.package` function:
+
+    -- Create MyApp package
+    local MyApp = lgi.package 'MyApp'
+
+Once the package is created, it is possible to reference it from `lgi`
+as any other existing namespace:
+
+    local Gtk = lgi.Gtk
+    local MyApp = lgi.MyApp
+
+To create subclass, use package's method `class(name, parent[, ifacelist])`:
+
+    MyApp:class('MyWidget', Gtk.Widget)
+    MyApp:class('MyModel', GObject.Object, { Gtk.TreeModel })
+
+### 3.8.1. Overriding virtual methods
+
+To make subclass useful, it is needed to override some of its virtual
+methods.  Existing virtual methods are prefixed with `do_`.  In order
+to call inherited virtual methods, it is needed to use an explicit
+function reference.  There is an automatic property called `priv`
+which is plain Lua table and allows subclass implementation to store
+some internal status.  All these techniques are illustrated in
+following sample:
+
+    function MyApp.MyWidget:do_show()
+       if not self.priv.invisible then
+	  -- All three lines perform forwarding to inherited virtual:
+	  Gtk.Widget.do_show(self)
+	  -- or:
+	  MyApp.MyWidget._parent.do_show(self)
+	  -- or:
+	  self._type._parent.do_show(self)
+       end
+    end
+
+    -- Convenience method for setting MyWidget 'invisible'
+    function MyApp.MyWidget:set_invisible(invisible)
+       self.priv.invisible = invisible
     end
 
 ## 4. Structures and unions
