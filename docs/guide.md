@@ -410,7 +410,6 @@ this construct:
     print(Gtk.Buildable:is_type_of(window)) -- prints 'true'
     print(Gtk.Action:is_type_of(window))    -- prints 'false'
     print(Gtk.Window:is_type_of('string'))  -- prints 'false'
-    print(Gtk.Window:is_type_of('string'))  -- prints 'false'
     print(Gtk.Window:is_type_of(nil))       -- prints 'false'
 
 There is also possibility to query the type-table from instantiated
@@ -447,6 +446,17 @@ To create subclass, use package's method `class(name, parent[, ifacelist])`:
     MyApp:class('MyWidget', Gtk.Widget)
     MyApp:class('MyModel', GObject.Object, { Gtk.TreeModel })
 
+After that, newly created class behaves exactly the same as classes
+picked up from GObjectIntrospection namespaces, like shown in
+following examples:
+
+    local widget = MyApp.MyWidget()
+    widget:show()
+
+Note that it is important to override virtual methods _before_ any
+instance of the derived class (see chapter about virtual methods
+below).
+
 ### 3.8.1. Overriding virtual methods
 
 To make subclass useful, it is needed to override some of its virtual
@@ -459,12 +469,12 @@ following sample:
 
     function MyApp.MyWidget:do_show()
        if not self.priv.invisible then
-	  -- All three lines perform forwarding to inherited virtual:
-	  Gtk.Widget.do_show(self)
-	  -- or:
-	  MyApp.MyWidget._parent.do_show(self)
-	  -- or:
-	  self._type._parent.do_show(self)
+          -- All three lines perform forwarding to inherited virtual:
+          Gtk.Widget.do_show(self)
+          -- or:
+          MyApp.MyWidget._parent.do_show(self)
+          -- or:
+          self._type._parent.do_show(self)
        end
     end
 
@@ -472,6 +482,10 @@ following sample:
     function MyApp.MyWidget:set_invisible(invisible)
        self.priv.invisible = invisible
     end
+
+The important fact is that virtual method overrides are picked up only
+up to the first instantiation of the class or inheriting new subclass
+from it.  After this point, virtual function overrides are ignored.
 
 ## 4. Structures and unions
 
