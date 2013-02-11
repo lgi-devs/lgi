@@ -10,9 +10,9 @@ license, see LICENSE file for full text.
 
 Home of the project is on [GitHub](http://github.com/pavouk/lgi).
 
-LGI is tested and compatible with standard Lua 5.1 and Lua 5.2 and
-recent LuaJIT 2 betas.  Compatibility with other Lua implementations
-is not tested yet.
+LGI is tested and compatible with standard Lua 5.1, Lua 5.2 and
+LuaJIT2.  Compatibility with other Lua implementations is not tested
+yet.
 
 If you need to support pre-gobject-introspection GTK (ancient GTK+ 2.x
 releases), use [Lua-Gnome](http://sourceforge.net/projects/lua-gnome/).
@@ -44,10 +44,32 @@ markdown processor if you want to read it in HTML.
 
 ## History
 
+### 0.7.0 ()
+
+ - New feature - subclassing.  Allows defining subclasses of GObject
+   classes and overriding their virtual methods, implementing them in
+   Lua.
+ - cairo: add support for most 1.12-specific cairo features
+ - cairo: create hierarchy for Pattern subclasses
+ - cairo: assorted small cairo bugfixes
+ - samples: GDBus client example
+ - samples: GnomeKeyring example
+ - samples: GTK: offscreen window demos
+ - platforms: added support for darwin/macosx platform
+ - platforms: additional fixes for OpenBSD
+ - build: Makefiles now respect CFLAGS and LDFLAGS env vars values
+ - build: Add Lua version option into Makefile
+ - fix: custom ffi enum/flags handling
+ - fix: more exotic callback-to-Lua marshalling scenarios
+ - fix: do not allow GTK+ and gstreamer to call setlocale() - this
+   might break Lua in some locales
+ - fix: small adjustments, fixes and additions in Gtk override
+ - fix: tons of other small fixes
+
 ### 0.6.2 (25-Jun-2012)
  - Avoid unexpected dependency on cairo-devel, cairo-runtime is now
    enough
- - Make set_resident() more robust and fix stack leak for lua5.2 case,
+ - Make set\_resident() more robust and fix stack leak for lua5.2 case,
    avoid useless warning when set_resident() fails (to accomodate for
    static linking case).
  - Fix small memory leak (mutex) which occured once per opened
