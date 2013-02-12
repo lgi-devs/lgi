@@ -42,18 +42,32 @@ See examples in samples/ directory.  Documentation is available in
 doc/ directory in markdown format.  Process it with your favorite
 Markdown processor if you want to read it in HTML.
 
+## Credits
+
+List of contributors, in no particular order:
+
+- Uli Schlachter
+- Jasper Lievisse Adriaanse
+- Ildar Mulyukov
+- Nils Nordman
+- Ignas Anikevicius
+- Craig Barnes
+
+Many other people contributed to what lgi is today, in many forms -
+writing patches, reporting bugs, packaging for distributions,
+providing ideas, spreading a word...  *Many thanks to all of you!*
+
 ## History
 
 ### 0.7.0 ()
 
- - New feature - subclassing.  Allows defining subclasses of GObject
-   classes and overriding their virtual methods, implementing them in
-   Lua.
+ - New feature - subclassing.  Allows creating GObject subclasses and
+   implementing their virtual methods in Lua.
  - cairo: add support for most 1.12-specific cairo features
  - cairo: create hierarchy for Pattern subclasses
  - cairo: assorted small cairo bugfixes
- - samples: GDBus client example
- - samples: GnomeKeyring example
+ - samples: add GDBus client example
+ - samples: add GnomeKeyring example
  - samples: GTK: offscreen window demos
  - platforms: added support for darwin/macosx platform
  - platforms: additional fixes for OpenBSD
