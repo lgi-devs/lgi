@@ -40,7 +40,7 @@ Please note that on BSD-systems you may need to use 'gmake'.
 
 See examples in samples/ directory.  Documentation is available in
 doc/ directory in markdown format.  Process it with your favorite
-markdown processor if you want to read it in HTML.
+Markdown processor if you want to read it in HTML.
 
 ## History
 
@@ -57,7 +57,7 @@ markdown processor if you want to read it in HTML.
  - samples: GTK: offscreen window demos
  - platforms: added support for darwin/macosx platform
  - platforms: additional fixes for OpenBSD
- - build: Makefiles now respect CFLAGS and LDFLAGS env vars values
+ - build: Makefiles now respect `CFLAGS` and `LDFLAGS` env vars values
  - build: Add Lua version option into Makefile
  - fix: custom ffi enum/flags handling
  - fix: more exotic callback-to-Lua marshalling scenarios
@@ -69,25 +69,25 @@ markdown processor if you want to read it in HTML.
 ### 0.6.2 (25-Jun-2012)
  - Avoid unexpected dependency on cairo-devel, cairo-runtime is now
    enough
- - Make set\_resident() more robust and fix stack leak for lua5.2 case,
-   avoid useless warning when set_resident() fails (to accomodate for
+ - Make `set_resident()` more robust and fix stack leak for Lua 5.2 case,
+   avoid useless warning when `set_resident()` fails (to accomodate for
    static linking case).
  - Fix small memory leak (mutex) which occured once per opened
-   lua_State using lgi.
+   `lua_State` using lgi.
 
 ### 0.6.1 (19-Jun-2012)
- - objects and structs: actually implement '_type' property as documented
+ - objects and structs: actually implement `_type` property as documented
  - tests: Fix regression tests for less common platforms
  - Pango: Add a few missing overrides
- - cairo: Fix Context:user_to_device() family of methods.
+ - cairo: Fix `Context:user_to_device()` family of methods.
  - GStreamer: Add support for transfer!=none for input objects.  This
    is needed to avoid leaks caused by strange usage of transfer
    annotations of gstreamer-0.10
  - GStreamer: Add more missing overrides
  - GStreamer: Fix and improve samples
- - Various fixes for usecase when lua context with loaded lgi is
+ - Various fixes for usecase when Lua context with loaded lgi is
    closed and opened again
- - Gtk: Add missing Gtk.Builder:connect_signals() override
+ - Gtk: Add missing `Gtk.Builder:connect_signals()` override
 
 ### 0.6 (22-May-2012)
 - Add cairo bindings, cairo sample and finish some gtk-demo parts
@@ -107,7 +107,7 @@ markdown processor if you want to read it in HTML.
 - Fix: a few bugs with resolving bitflags values
 - Fix: a few bugs in coroutines-as-callbacks feature
 - Fix: workaround for crashing bug in gobject-introspection 1.32.0
-- Fix: don't try to squeeze GType into lua_Number any more; this could
+- Fix: don't try to squeeze `GType` into `lua_Number` any more; this could
   cause crashes on some 64bit arches.
 
 ### 0.4 (4-Jan-2012)
