@@ -110,6 +110,7 @@ for _, sourcefile in ipairs {
    'corocbk.lua',
    'record.lua',
    'gobject.lua',
+   'glib.lua',
    'variant.lua',
    'gtk.lua',
    'cairo.lua',
