@@ -69,6 +69,7 @@ providing ideas, spreading a word...  *Many thanks to all of you!*
  - samples: add GDBus client example
  - samples: add GnomeKeyring example
  - samples: GTK: offscreen window demos
+ - samples: libsoup simple http server example
  - platforms: added support for darwin/macosx platform
  - platforms: additional fixes for OpenBSD
  - build: Makefiles now respect `CFLAGS` and `LDFLAGS` env vars values
