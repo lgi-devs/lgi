@@ -59,7 +59,7 @@ providing ideas, spreading a word...  *Many thanks to all of you!*
 
 ## History
 
-### 0.7.0 ()
+### 0.7.0 (23-Feb-2013)
 
  - New feature - subclassing.  Allows creating GObject subclasses and
    implementing their virtual methods in Lua.
