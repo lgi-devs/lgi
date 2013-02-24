@@ -10,11 +10,13 @@ local GLib = lgi.GLib
 local Gtk  = lgi.Gtk
 local GdkX11 = lgi.GdkX11
 local Gst  = lgi.Gst
+if tonumber(Gst._version) >= 1.0 then
+   local GstVideo = lgi.GstVideo
+end
 
 local app = Gtk.Application { application_id = 'org.lgi.samples.gstvideo' }
 
 local window = Gtk.Window {
-   application = app,
    title = "LGI Based Video Player",
    Gtk.Box {
       orientation = 'VERTICAL',
@@ -50,12 +52,13 @@ function window.child.quit:on_clicked()
    window:destroy()
 end
 
-local pipeline	 = Gst.Pipeline.new('mypipeline')
-local src	 = Gst.ElementFactory.make('autovideosrc', 'videosrc')
-local colorspace = Gst.ElementFactory.make('ffmpegcolorspace', 'colorspace')
-local scale	 = Gst.ElementFactory.make('videoscale', 'scale')
-local rate	 = Gst.ElementFactory.make('videorate', 'rate')
-local sink	 = Gst.ElementFactory.make('xvimagesink', 'sink')
+local pipeline = Gst.Pipeline.new('mypipeline')
+local src = Gst.ElementFactory.make('autovideosrc', 'videosrc')
+local colorspace = Gst.ElementFactory.make('videoconvert', 'colorspace')
+                or Gst.ElementFactory.make('ffmpegcolorspace', 'colorspace')
+local scale = Gst.ElementFactory.make('videoscale', 'scale')
+local rate = Gst.ElementFactory.make('videorate', 'rate')
+local sink = Gst.ElementFactory.make('xvimagesink', 'sink')
 
 pipeline:add_many(src, colorspace, scale, rate, sink)
 src:link_many(colorspace, scale, rate, sink)
@@ -104,9 +107,10 @@ function window.child.video:on_realize()
    sink:set_window_handle(self.window:get_xid())
 end
 
-pipeline.bus:add_watch(bus_callback)
 
 function app:on_activate()
+   window.application = app
+   pipeline.bus:add_watch(GLib.PRIORITY_DEFAULT, bus_callback)
    window:show_all()
 end
 
