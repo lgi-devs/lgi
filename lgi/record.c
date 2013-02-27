@@ -492,6 +492,7 @@ record_new (lua_State *L)
   if (lua_isnoneornil (L, 2))
     {
       /* Create new record instance. */
+      luaL_checktype (L, 1, LUA_TTABLE);
       lua_pushvalue (L, 1);
       lgi_record_new (L, luaL_optinteger (L, 3, 1));
     }
