@@ -317,7 +317,7 @@ lgi_record_2c (lua_State *L, int narg, gpointer target, gboolean by_value,
   if (G_LIKELY (!by_value))
     {
       *(gpointer *) target = record ? record->addr : NULL;
-      if (own)
+      if (record && own)
 	{
 	  /* Caller wants to steal ownership from us. */
 	  if (G_LIKELY (record->store == RECORD_STORE_ALLOCATED))
