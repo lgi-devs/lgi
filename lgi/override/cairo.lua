@@ -527,7 +527,7 @@ for _, info in ipairs {
    {  'PsSurface', parent = cairo.Surface,
       methods = {
 	 create = { static = true, ret = { cairo.Surface, xfer = true },
-		    ti.double, ti.double },
+		    ti.filename, ti.double, ti.double },
 	 restrict_to_level = { cairo.PsLevel },
 	 set_eps = { ti.boolean },
 	 get_eps = { ret = ti.boolean },
