@@ -60,7 +60,7 @@ for _, name in pairs {
 end
 
 cairo._enum.Status.to_string = core.callable.new {
-   addr = cairo._module.cairo_status_to_string, ret = ti.utf8, ti.int }
+   addr = cairo._module.cairo_status_to_string, ret = ti.utf8, cairo._enum.Status }
 
 -- Load definitions of all boxed records.
 cairo._struct = cairo._struct or {}
