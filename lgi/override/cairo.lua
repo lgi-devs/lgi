@@ -94,6 +94,12 @@ cairo._union.PathData = component.create(nil, record.union_mt, 'cairo.PathData')
 
 -- Populate methods into records.
 for _, info in ipairs {
+   {  'Status',
+      methods = {
+	 to_string = { static = true, ret = ti.utf8, cairo.Status }
+      },
+   },
+
    {  'Rectangle',
       fields = {
 	 { 'x', ti.double }, { 'y', ti.double },
