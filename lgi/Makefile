@@ -30,7 +30,7 @@ CCSHARED = -fPIC
 endif
 endif
 
-OBJS = buffer.o callable.o core.o gi.o marshal.o object.o record.o
+OBJS = buffer.o callable.o compat.o core.o gi.o marshal.o object.o record.o
 
 ifndef CFLAGS
 ifndef COPTFLAGS
@@ -64,6 +64,7 @@ $(VERSION_FILE) : Makefile ../Makefile
 
 buffer.o : buffer.c lgi.h $(DEPCHECK)
 callable.o : callable.c lgi.h $(DEPCHECK)
+compat.o : compat.c lgi.h $(DEPCHECK)
 core.o : core.c lgi.h $(DEPCHECK)
 gi.o : gi.c lgi.h $(DEPCHECK)
 marshal.o : marshal.c lgi.h $(DEPCHECK)
