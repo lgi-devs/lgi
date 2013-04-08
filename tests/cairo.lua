@@ -16,6 +16,16 @@ local check = testsuite.check
 local checkv = testsuite.checkv
 local cairo = testsuite.group.new('cairo')
 
+function cairo.status()
+   local cairo = lgi.cairo
+
+   for name, value in pairs(cairo.Status) do
+       checkv(cairo.Status.to_string(name),
+	      cairo.Status.to_string(value),
+	      'string')
+   end
+end
+
 function cairo.matrix()
    local cairo = lgi.cairo
 
