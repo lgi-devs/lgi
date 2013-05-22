@@ -11,6 +11,19 @@
 #include <string.h>
 #include "lgi.h"
 
+/* GLib 2.32 deprecated GStaticRecMutex in favor of GRecMutex.  For
+   older GLib versions, use still older version. */
+#if !GLIB_CHECK_VERSION(2, 32, 0)
+#define GRecMutex GStaticRecMutex
+#define G_REC_MUTEX_INIT  = G_STATIC_REC_MUTEX_INIT
+#define g_rec_mutex_init g_static_rec_mutex_init
+#define g_rec_mutex_lock g_static_rec_mutex_lock
+#define g_rec_mutex_unlock g_static_rec_mutex_unlock
+#define g_rec_mutex_clear g_static_rec_mutex_free
+#else
+#define G_REC_MUTEX_INIT
+#endif
+
 #ifndef NDEBUG
 const char *lgi_sd (lua_State *L)
 {
@@ -275,21 +288,21 @@ typedef struct _LgiStateMutex
 {
   /* Pointer to either local state lock (next member of this
      structure) or to global package lock. */
-  GStaticRecMutex *mutex;
-  GStaticRecMutex state_mutex;
+  GRecMutex *mutex;
+  GRecMutex state_mutex;
 } LgiStateMutex;
 
 /* Global package lock (the one used for
    gdk_threads_enter/clutter_threads_enter) */
-static GStaticRecMutex package_mutex = G_STATIC_REC_MUTEX_INIT;
+static GRecMutex package_mutex G_REC_MUTEX_INIT;
 
-/* GC method for GStaticRecMutex structure, which lives inside lua_State. */
+/* GC method for GRecMutex structure, which lives inside lua_State. */
 static int
 call_mutex_gc (lua_State* L)
 {
   LgiStateMutex *mutex = lua_touserdata (L, 1);
-  g_static_rec_mutex_unlock (mutex->mutex);
-  g_static_rec_mutex_free (&mutex->state_mutex);
+  g_rec_mutex_unlock (mutex->mutex);
+  g_rec_mutex_clear (&mutex->state_mutex);
   return 0;
 }
 
@@ -315,7 +328,7 @@ void
 lgi_state_enter (gpointer state_lock)
 {
   LgiStateMutex *mutex = state_lock;
-  GStaticRecMutex *wait_on;
+  GRecMutex *wait_on;
 
   /* There is a complication with lock switching.  During the wait for
      the lock, someone could call core.registerlock() and thus change
@@ -323,12 +336,12 @@ lgi_state_enter (gpointer state_lock)
   for (;;)
     {
       wait_on = g_atomic_pointer_get (&mutex->mutex);
-      g_static_rec_mutex_lock (wait_on);
+      g_rec_mutex_lock (wait_on);
       if (wait_on == mutex->mutex)
 	break;
 
       /* The lock is changed, unlock this one and wait again. */
-      g_static_rec_mutex_unlock (wait_on);
+      g_rec_mutex_unlock (wait_on);
     }
 }
 
@@ -337,7 +350,7 @@ lgi_state_leave (gpointer state_lock)
 {
   /* Get pointer to the call mutex belonging to this state. */
   LgiStateMutex *mutex = state_lock;
-  g_static_rec_mutex_unlock (mutex->mutex);
+  g_rec_mutex_unlock (mutex->mutex);
 }
 
 static const char* log_levels[] = {
@@ -370,13 +383,13 @@ core_yield (lua_State *L)
 static void
 package_lock_enter (void)
 {
-  g_static_rec_mutex_lock (&package_mutex);
+  g_rec_mutex_lock (&package_mutex);
 }
 
 static void
 package_lock_leave (void)
 {
-  g_static_rec_mutex_unlock (&package_mutex);
+  g_rec_mutex_unlock (&package_mutex);
 }
 
 static gpointer package_lock_register[8] = { NULL };
@@ -386,7 +399,7 @@ core_registerlock (lua_State *L)
 {
   void (*set_lock_functions)(GCallback, GCallback);
   LgiStateMutex *mutex;
-  GStaticRecMutex *wait_on;
+  GRecMutex *wait_on;
   unsigned i;
 
   /* Get registration function. */
@@ -414,9 +427,9 @@ core_registerlock (lua_State *L)
   wait_on = g_atomic_pointer_get (&mutex->mutex);
   if (wait_on != &package_mutex)
     {
-      g_static_rec_mutex_lock (&package_mutex);
+      g_rec_mutex_lock (&package_mutex);
       g_atomic_pointer_set (&mutex->mutex, &package_mutex);
-      g_static_rec_mutex_unlock (wait_on);
+      g_rec_mutex_unlock (wait_on);
     }
   return 0;
 }
@@ -655,8 +668,8 @@ luaopen_lgi_corelgilua51 (lua_State* L)
   lua_pushlightuserdata (L, &call_mutex);
   mutex = lua_newuserdata (L, sizeof (*mutex));
   mutex->mutex = &mutex->state_mutex;
-  g_static_rec_mutex_init (&mutex->state_mutex);
-  g_static_rec_mutex_lock (&mutex->state_mutex);
+  g_rec_mutex_init (&mutex->state_mutex);
+  g_rec_mutex_lock (&mutex->state_mutex);
   lua_pushlightuserdata (L, &call_mutex_mt);
   lua_rawget (L, LUA_REGISTRYINDEX);
   lua_setmetatable (L, -2);
