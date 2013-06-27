@@ -390,7 +390,13 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIDirection dir,
   eti_guard = lua_gettop (L);
   esize = array_get_elt_size (eti);
 
-  if (esize == 1 && g_type_info_get_tag (eti) == GI_TYPE_TAG_UINT8)
+  /* Note that we ignore is_pointer check for uint8 type.  Although it
+     is not exactly correct, we probably would not handle uint8*
+     correctly anyway, this is strange type to use, and moreover this
+     is workaround for g-ir-scanner bug which might mark elements of
+     uint8 arrays as gconstpointer, thus setting is_pointer=true on
+     it.  See https://github.com/pavouk/lgi/issues/57 */
+  if (g_type_info_get_tag (eti) == GI_TYPE_TAG_UINT8)
     {
       /* UINT8 arrays are marshalled as 'bytes' instances. */
       if (len < 0)
