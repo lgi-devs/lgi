@@ -9,15 +9,13 @@ local bytes = require 'bytes'
 local GLib = lgi.GLib
 local Gio = lgi.Gio
 
-local log = lgi.log.domain('lgiostream')
-
 local app = Gio.Application.new('org.lgi.samples.giostream', 0)
 
 local function read_sync(file)
    local info = assert(file:query_info('standard::size', 0))
    local buffer = bytes.new(info:get_size())
    local stream = assert(file:read(nil))
-   local read = assert(stream:read_all(buffer, #buffer))
+   local read = assert(stream:read_all(buffer))
    return tostring(buffer):sub(1,read)
 end
 
@@ -26,13 +24,13 @@ local function read_async(file)
    file:query_info_async('standard::size', 0, GLib.PRIORITY_DEFAULT, nil,
 			 coroutine.running())
    local info = assert(file.query_info_finish(coroutine.yield()))
-   local buffer = bytes.new(info:get_size())
    file:read_async(GLib.PRIORITY_DEFAULT, nil, coroutine.running())
    local stream = assert(file.read_finish(coroutine.yield()))
    local read_buffers = {}
-   local remaining = #buffer
+   local remaining = info:get_size()
    while remaining > 0 do
-      stream:read_async(buffer, remaining, GLib.PRIORITY_DEFAULT, nil,
+      local buffer = bytes.new(remaining)
+      stream:read_async(buffer, GLib.PRIORITY_DEFAULT, nil,
 			coroutine.running())
       local read_now, err = stream.read_finish(coroutine.yield())
       assert(read_now >= 0, err)
