@@ -96,56 +96,55 @@ local function do_error(err)
 end
 
 local abort_load, timer_id
-local load_coro = coroutine.create(
-   function()
-      while not abort_load do
-	 local stream, err = dir:get_child('alphatest.png'):read()
-	 if not stream then
-	    do_error(err)
-	    abort_load = true
-	    break
-	 end
-
-	 -- Create pixbuf loader and register callbacks.
-	 local loader = GdkPixbuf.PixbufLoader()
-	 function loader:on_area_prepared()
-	    local pixbuf = self:get_pixbuf()
-	    pixbuf:fill(0xaaaaaaff)
-	    window.child.progressive.pixbuf = pixbuf
-	 end
-
-	 function loader:on_area_updated()
-	    -- Let the image know that the pixbuf changed.
-	    window.child.progressive:queue_draw()
-	 end
-
-	 while not abort_load do
-	    -- Wait for the next timer tick.
-	    coroutine.yield(true)
-
-	    -- Load a chunk from the stream.
-	    local buffer = bytes.new(256)
-	    local read, err = stream:read(buffer, #buffer)
-	    if read < 0 then
-	       do_error(err)
-	       abort_load = true
-	    end
-	    if read <= 0 then break end
-      
-	    -- Send it to the pixbuf loader.
-	    if not loader:write(tostring(buffer):sub(1, read)) then
-	       do_error(err)
-	       abort_load = true
-	    end
-	 end
-	 loader:close()
+local load_coro = coroutine.create(function()
+   while not abort_load do
+      local stream, err = dir:get_child('alphatest.png'):read()
+      if not stream then
+	 do_error(err)
+	 abort_load = true
+	 break
       end
 
-      -- Make sure that timeout is unregistered when the coroutine
-      -- does not run any more.
-      timer_id = nil
-      return false
-   end)
+      -- Create pixbuf loader and register callbacks.
+      local loader = GdkPixbuf.PixbufLoader()
+      function loader:on_area_prepared()
+	 local pixbuf = self:get_pixbuf()
+	 pixbuf:fill(0xaaaaaaff)
+	 window.child.progressive.pixbuf = pixbuf
+      end
+
+      function loader:on_area_updated()
+	 -- Let the image know that the pixbuf changed.
+	 window.child.progressive:queue_draw()
+      end
+
+      while not abort_load do
+	 -- Wait for the next timer tick.
+	 coroutine.yield(true)
+
+	 -- Load a chunk from the stream.
+	 local buffer = bytes.new(256)
+	 local read, err = stream:read(buffer)
+	 if read < 0 then
+	    do_error(err)
+	    abort_load = true
+	 end
+	 if read <= 0 then break end
+      
+	 -- Send it to the pixbuf loader.
+	 if not loader:write(tostring(buffer):sub(1, read)) then
+	    do_error(err)
+	    abort_load = true
+	 end
+      end
+      loader:close()
+   end
+
+   -- Make sure that timeout is unregistered when the coroutine does
+   -- not run any more.
+   timer_id = nil
+   return false
+end)
 timer_id = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 150, load_coro)
 
 -- Stop loading when the window is destroyed.
