@@ -196,6 +196,6 @@ end,
 "Entry/Search Entry",
 
 table.concat {
-   "GtkEntry allows to display icons and progress information. ",
+   "Gtk.Entry allows to display icons and progress information. ",
    "This demo shows how to use these features in a search entry."
 }

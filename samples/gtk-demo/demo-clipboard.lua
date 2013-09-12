@@ -143,7 +143,7 @@ end,
 "Clipboard",
 
 table.concat {
-   "GtkClipboard is used for clipboard handling. This demo shows how to ",
+   "Gtk.Clipboard is used for clipboard handling. This demo shows how to ",
    "copy and paste text to and from the clipboard.\n",
    "It also shows how to transfer images via the clipboard or via ",
    "drag-and-drop, and how to make clipboard contents persist after ",

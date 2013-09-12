@@ -123,7 +123,7 @@ end,
 "Icon View/Icon View Basics",
 
 table.concat {
-   [[The GtkIconView widget is used to display and manipulate icons. ]],
-   [[It uses a GtkTreeModel for data storage, so the list store example ]],
+   [[The Gtk.IconView widget is used to display and manipulate icons. ]],
+   [[It uses a Gtk.TreeModel for data storage, so the list store example ]],
    [[might be helpful.]]
 }
