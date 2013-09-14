@@ -159,11 +159,7 @@ function component.mt:_access(instance, symbol, ...)
    if not element then
       error(("%s: no `%s'"):format(self._name, tostring(symbol)), 3)
    end
-   return self:_access_element(instance, category, symbol, element, ...)
-end
 
--- Internal worker of access, which works over already resolved element.
-function component.mt:_access_element(instance, category, symbol, element, ...)
    -- Get category handler to be used, and invoke it.
    if category then
       local handler = self['_access' .. category]
