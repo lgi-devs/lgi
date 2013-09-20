@@ -140,7 +140,7 @@ function Object:_element(object, name)
    for i = 1, #interfaces do
       local info = gi[core.gtype(interfaces[i])]
       local iface = info and repo[info.namespace][info.name]
-      if iface then element, category = iface:_element(object, name) end
+      if iface then element, category = iface:_element(object, name, self) end
       if element then return element, category end
    end
 

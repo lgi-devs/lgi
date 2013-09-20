@@ -56,7 +56,7 @@ for name, val in pairs {
 -- Easier-to-use Gdk.RGBA.parse() override.
 if Gdk.RGBA then
     local parse = Gdk.RGBA.parse
-    function Gdk.RGBA._method.parse(arg1, arg2)
+    function Gdk.RGBA.parse(arg1, arg2)
        if Gdk.RGBA:is_type_of(arg1) then
           -- Standard member method.
           return parse(arg1, arg2)
@@ -75,17 +75,17 @@ local ref = core.callable.new {
    addr = core.gi.GObject.resolve.g_object_ref,
    ret = ti.ptr, ti.ptr
 }
-function Gdk.Window._method:destroy()
+function Gdk.Window:destroy()
    ref(self._native)
    destroy(self)
 end
 
 -- Better integrate Gdk cairo helpers.
-Gdk.Window._method.cairo_create = Gdk.cairo_create
-cairo.Region._method.create_from_surface = Gdk.cairo_region_create_from_surface
+Gdk.Window.cairo_create = Gdk.cairo_create
+cairo.Region.create_from_surface = Gdk.cairo_region_create_from_surface
 
-local cairo_set_source_rgba = cairo.Context._method.set_source_rgba
-function cairo.Context._method:set_source_rgba(...)
+local cairo_set_source_rgba = cairo.Context.set_source_rgba
+function cairo.Context:set_source_rgba(...)
    if select('#', ...) == 1 then
       return Gdk.cairo_set_source_rgba(self, ...)
    else
@@ -93,8 +93,8 @@ function cairo.Context._method:set_source_rgba(...)
    end
 end
 
-local cairo_rectangle = cairo.Context._method.rectangle
-function cairo.Context._method:rectangle(...)
+local cairo_rectangle = cairo.Context.rectangle
+function cairo.Context:rectangle(...)
    if select('#', ...) == 1 then
       return Gdk.cairo_rectangle(self, ...)
    else

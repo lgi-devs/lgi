@@ -25,7 +25,8 @@ for name, def in pairs {
 } do
    local _ = Timer[name]
    def.addr = module['g_timer_' .. name]
-   Timer._method[name] = core.callable.new(def)
+   def.name = 'GLib.Timer.' .. name
+   Timer[name] = core.callable.new(def)
 end
 
 Timer._free = core.gi.GLib.Timer.methods.destroy

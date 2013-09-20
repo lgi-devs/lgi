@@ -25,15 +25,15 @@ for _, name in pairs {
 } do
    cairo.Context._method[name] = PangoCairo[name]
 end
-Pango.Layout._method.create = PangoCairo.create_layout
+Pango.Layout.create = PangoCairo.create_layout
 
 -- Extend Pango.Context with additional methods and attributes coming from
 -- PangoCairo package.
-Pango.Context._method.create = PangoCairo.context_create
+Pango.Context.create = PangoCairo.context_create
 for _, name in pairs {
    'get_font_options', 'set_font_options', 'get_resolution', 'set_resolution',
    'set_shape_renderer' } do
-   Pango.Context._method[name] = PangoCairo['context_' .. name]
+   Pango.Context[name] = PangoCairo['context_' .. name]
 end
 for _, name in pairs { 'font_options', 'resolution', 'shape_renderer' } do
    Pango.Context._attribute[name] = {

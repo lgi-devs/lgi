@@ -2,7 +2,7 @@
 --
 --  LGI Support for generic GType objects and interfaces
 --
---  Copyright (c) 2010, 2011, 2012 Pavel Holejsovsky
+--  Copyright (c) 2010, 2011, 2012, 2013 Pavel Holejsovsky
 --  Licensed under the MIT license:
 --  http://www.opensource.org/licenses/mit-license.php
 --
@@ -147,7 +147,7 @@ function class.class_mt:_element(instance, symbol)
    end
    local implements = rawget(self, '_implements') or {}
    for _, implemented in pairs(implements or {}) do
-      element, category = implemented:_element(instance, symbol)
+      element, category = implemented:_element(instance, symbol, self)
       if element then return element, category end
    end
 end

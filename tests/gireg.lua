@@ -1284,6 +1284,7 @@ function gireg.obj_prop_dynamic()
    -- GLib property system.
    local old_prop = R.TestObj.int
    R.TestObj._property.int = nil
+   R.TestObj._cached = nil
    check(R.TestObj.int == nil)
 
    check(o.int == 0)

@@ -23,7 +23,7 @@ local gi = core.gi
 -- flaw.
 for _, name in pairs { 'path', 'uri', 'commandline_arg' } do
    if not Gio.File['new_for_' .. name] then
-      Gio.File._method['new_for_' .. name] = Gio['file_new_for_' .. name]
+      Gio.File['new_for_' .. name] = Gio['file_new_for_' .. name]
    end
 end
 
@@ -31,9 +31,9 @@ end
 -- taking an array.  Apply workaround.
 -- https://github.com/pavouk/lgi/issues/59
 for _, name in pairs { 'read', 'read_all', 'read_async' } do
-   local raw_read = Gio.InputStream._method[name]
+   local raw_read = Gio.InputStream[name]
    if gi.Gio.InputStream.methods[name].args[1].typeinfo.tag ~= 'array' then
-      Gio.InputStream._method[name] = function(self, buffer, ...)
+      Gio.InputStream[name] = function(self, buffer, ...)
 	 return raw_read(self, buffer, #buffer, ...)
       end
    end

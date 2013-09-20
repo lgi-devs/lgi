@@ -59,7 +59,7 @@ end
 -- gtk_widget_intersect is missing an (out caller-allocates) annotation
 if core.gi.Gtk.Widget.methods.intersect.args[2].direction == 'in' then
    local real_intersect = Gtk.Widget.intersect
-   function Gtk.Widget._method:intersect(area)
+   function Gtk.Widget:intersect(area)
       local intersection = Gdk.Rectangle()
       local notempty = real_intersect(self, area, intersection)
       return notempty and intersection or nil
@@ -303,13 +303,13 @@ end
 -- Map access of lines to iterators by directly indexing treemodel
 -- instance values with iterators.
 local tree_model_element = Gtk.TreeModel._element
-function Gtk.TreeModel:_element(model, key)
+function Gtk.TreeModel:_element(model, key, origin)
    if Gtk.TreeIter:is_type_of(key) then
       return key, '_iter'
    elseif Gtk.TreePath:is_type_of(key) then
       return model:get_iter(key), '_iter'
    end
-   return tree_model_element(self, model, key)
+   return tree_model_element(self, model, key, origin)
 end
 function Gtk.TreeModel:_access_iter(model, iter, ...)
    if select('#', ...) > 0 then
@@ -354,6 +354,7 @@ end
 -- the preferred one.  Rename the original to set_values().
 Gtk.ListStore._method.set_values = Gtk.ListStore.set
 Gtk.ListStore._method.set = nil
+Gtk.ListStore.set = nil
 
 -- Allow insert() and append() to handle also 'with_values' case.
 function Gtk.ListStore:insert(position, values)
@@ -384,6 +385,7 @@ end
 -- Similar treatment for treestore.
 Gtk.TreeStore._method.set_values = Gtk.TreeStore.set
 Gtk.TreeStore._method.set = nil
+Gtk.TreeStore.set = nil
 function Gtk.TreeStore:insert(parent, position, values)
    local iter
    if not values then
@@ -525,7 +527,7 @@ end
 -------------------------------- Gtk.Assistant
 Gtk.Assistant._attribute = { property = {} }
 
-function Gtk.Assistant._method:add(child)
+function Gtk.Assistant:add(child)
    if type(child) == 'table' then
       local widget = child[1]
       self:append_page(widget)

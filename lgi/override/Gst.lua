@@ -35,7 +35,7 @@ for _, name in ipairs {
    }
 end
 
-function Gst.Element._method:link_many(...)
+function Gst.Element:link_many(...)
    local target = self
    for _, source in ipairs {...} do
       if not target:link(source) then
@@ -48,7 +48,7 @@ end
 
 -- Gst.Bin adjustments
 if tonumber(Gst._version) < 1.0 then
-   function Gst.Bus._method:add_watch(priority, callback)
+   function Gst.Bus:add_watch(priority, callback)
       if not callback then
 	 callback = priority
 	 priority = GLib.PRIORITY_DEFAULT
@@ -57,7 +57,7 @@ if tonumber(Gst._version) < 1.0 then
    end
 end
 
-function Gst.Bin._method:add_many(...)
+function Gst.Bin:add_many(...)
    local args = {...}
    for i = 1, #args do self:add(args[i]) end
 end

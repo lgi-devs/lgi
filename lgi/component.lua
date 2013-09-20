@@ -2,7 +2,7 @@
 --
 --  LGI Basic repo type component implementation
 --
---  Copyright (c) 2010, 2011, 2012 Pavel Holejsovsky
+--  Copyright (c) 2010, 2011, 2012, 2013 Pavel Holejsovsky
 --  Licensed under the MIT license:
 --  http://www.opensource.org/licenses/mit-license.php
 --
@@ -186,7 +186,7 @@ local keyword_dictionary = {
 
 -- Retrieves (element, category) pair from given componenttable and
 -- instance for given symbol.
-function component.mt:_element(instance, symbol)
+function component.mt:_element(instance, symbol, origin)
    -- This generic version can work only with strings.  Refuse
    -- everything other, hoping that some more specialized _element
    -- implementation will handle it.
@@ -199,6 +199,14 @@ function component.mt:_element(instance, symbol)
    -- Check whether symbol is directly accessible in the component.
    local element = rawget(self, symbol)
    if element then return element end
+
+   -- Check whether symbol is accessible in cached directory of the
+   -- component, packed as element value and category
+   local cached = rawget(self, '_cached')
+   if cached then
+      element = cached[symbol]
+      if element then return element[1], element[2] end
+   end
 
    -- Decompose symbol name, in case that it contains category prefix
    -- (e.g. '_field_name' when requesting explicitely field called
@@ -225,6 +233,23 @@ function component.mt:_element(instance, symbol)
       if type(element) == 'table' and category == '_attribute' then
 	 element._name = element._name or symbol
       end
+
+      -- If possible, cache the element in root table.
+      if not category or not (origin or self)['_access' .. category] then
+	 -- No category or no special category handler is present,
+	 -- store it directly, which results in fastest access.  This
+	 -- is most typical for methods.
+	 self[symbol] = element
+      else
+	 -- Store into _cached table, because we have to preserve the
+	 -- category.
+	 if not cached then
+	    cached = {}
+	    self['_cached'] = cached
+	 end
+	 cached[symbol] = { element, category }
+      end
+
       return element, category
    end
 end
