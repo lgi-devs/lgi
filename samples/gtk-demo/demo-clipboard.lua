@@ -54,7 +54,7 @@ local function button_press(ebox, event_button)
       },
    }
    menu:show_all()
-   menu:popup(nil, nil, nil, nil, event_button.button, event_button.time)
+   menu:popup(nil, nil, nil, event_button.button, event_button.time)
 end
 
 local window = Gtk.Window {

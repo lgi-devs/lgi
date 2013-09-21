@@ -574,8 +574,12 @@ end
 Gtk.InfoBar._attribute = { buttons = Gtk.Dialog._attribute.buttons }
 
 -------------------------------- Gtk.Menu
-if not Gtk.Menu.popup then
-   Gtk.Menu._method.popup = Gtk.Menu.popup_for_device
+function Gtk.Menu:popup(a1, a2, a3, a4, a5, ...)
+   if select('#', ...) > 0 then
+      Gtk.Menu.popup_for_device(self, a1, a2, a3, a4, a5, ...)
+   else
+      Gtk.Menu.popup_for_device(self, nil, a1, a2, a3, a4, a5)
+   end
 end
 
 -------------------------------- Gtk.MenuItem
