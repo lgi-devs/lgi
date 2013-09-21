@@ -1,7 +1,7 @@
 /*
  * Dynamic Lua binding to GObject using dynamic gobject-introspection.
  *
- * Copyright (c) 2010-2012 Pavel Holejsovsky
+ * Copyright (c) 2010-2013 Pavel Holejsovsky
  * Licensed under the MIT license:
  * http://www.opensource.org/licenses/mit-license.php
  *
@@ -730,12 +730,26 @@ marshal_2c_callable (lua_State *L, GICallableInfo *ci, GIArgInfo *ai,
   int nret = 0;
   GIScopeType scope;
   gpointer user_data = NULL;
+  gint nargs = 0;
+
+  if (argci != NULL)
+    nargs = g_callable_info_get_n_args (argci);
 
   /* Check 'nil' in optional case.  In this case, return NULL as
      callback. */
   if (optional && lua_isnoneornil (L, narg))
     {
       *callback = NULL;
+
+      /* Also set associated destroy handler to NULL, because some
+	 callees tend to call it when left as garbage even when main
+	 callback is NULL (gtk_menu_popup_for_device() case). */
+      if (ai != NULL)
+	{
+	  gint arg = g_arg_info_get_destroy (ai);
+	  if (arg >= 0 && arg < nargs)
+	    ((GIArgument *) args[arg])->v_pointer = NULL;
+	}
       return 0;
     }
 
@@ -748,7 +762,6 @@ marshal_2c_callable (lua_State *L, GICallableInfo *ci, GIArgInfo *ai,
 
   if (argci != NULL)
     {
-      gint nargs = g_callable_info_get_n_args (argci);
       gint arg = g_arg_info_get_closure (ai);
 
       /* user_data block is already preallocated from function call. */
