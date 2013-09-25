@@ -242,7 +242,7 @@ for _, info in ipairs {
 			  { ti.double, dir = 'out' } },
 	 in_fill = { ret = ti.boolean, ti.double, ti.double },
 	 mask = { cairo.Pattern },
-	 mask_surface = { cairo.Pattern, ti.double, ti.double },
+	 mask_surface = { cairo.Surface, ti.double, ti.double },
 	 paint = {},
 	 paint_with_alpha = { ti.double },
 	 stroke = {},
