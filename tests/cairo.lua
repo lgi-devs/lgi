@@ -345,6 +345,69 @@ function cairo.pattern_mesh()
    check(i == #expected + 1)
 end
 
+function cairo.context_getset()
+   local cairo = lgi.cairo
+   local surface = cairo.ImageSurface('ARGB32', 100, 100)
+   local cr = cairo.Context(surface)
+
+   local s2 = cr.target
+   check(s2 == surface)
+
+   local s3 = cr.group_target
+   check(s3 == surface)
+
+   cr.source = cairo.Pattern.create_linear(0, 0, 10, 10)
+   check(cairo.LinearPattern:is_type_of(cr.source))
+
+   cr.antialias = "BEST"
+   check(cr.antialias == "BEST")
+
+   cr.fill_rule = "EVEN_ODD"
+   check(cr.fill_rule == "EVEN_ODD")
+
+   cr.line_cap = "SQUARE"
+   check(cr.line_cap == "SQUARE")
+
+   cr.line_join = "BEVEL"
+   check(cr.line_join == "BEVEL")
+
+   cr.line_width = 42
+   check(cr.line_width == 42)
+
+   cr.miter_limit = 5
+   check(cr.miter_limit == 5)
+
+   cr.operator = "ATOP"
+   check(cr.operator == "ATOP")
+
+   cr.tolerance = 21
+   check(cr.tolerance == 21)
+
+   local m = cairo.Matrix.create_translate(-1, 4)
+   cr.matrix = m
+   check_matrix(cr.matrix, 1, 0, 0, 1, -1, 4)
+
+   local m = cairo.Matrix.create_scale(2, 3)
+   cr.font_matrix = m
+   check_matrix(cr.font_matrix, 2, 0, 0, 3, 0, 0)
+
+   -- font size is read-only, but messes with the font matrix
+   cr.font_size = 100
+   check_matrix(cr.font_matrix, 100, 0, 0, 100, 0, 0)
+
+   local opt = cairo.FontOptions.create()
+   cr.font_options = opt
+   check(cr.font_options:equal(opt))
+
+   local font_face = cairo.ToyFontFace.create("Arial", cairo.FontSlant.NORMAL, cairo.FontWeight.BOLD)
+   cr.font_face = font_face
+   check(cairo.ToyFontFace:is_type_of(cr.font_face))
+
+   local scaled_font = cairo.ScaledFont.create(font_face, m, m, opt)
+   cr.scaled_font = scaled_font
+   check(cairo.ScaledFont:is_type_of(cr.scaled_font))
+end
+
 function cairo.context_transform()
    local cairo = lgi.cairo
    local surface = cairo.ImageSurface('ARGB32', 100, 100)
