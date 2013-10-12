@@ -28,26 +28,25 @@ function cairo.status()
    end
 end
 
+local function check_matrix(matrix, xx, yx, xy, yy, x0, y0)
+   checkv(matrix.xx, xx, 'number')
+   checkv(matrix.yx, yx, 'number')
+   checkv(matrix.xy, xy, 'number')
+   checkv(matrix.yy, yy, 'number')
+   checkv(matrix.x0, x0, 'number')
+   checkv(matrix.y0, y0, 'number')
+end
+
 function cairo.matrix()
    local cairo = lgi.cairo
 
    local matrix = cairo.Matrix()
-   checkv(matrix.xx, 0, 'number')
-   checkv(matrix.yx, 0, 'number')
-   checkv(matrix.xy, 0, 'number')
-   checkv(matrix.yy, 0, 'number')
-   checkv(matrix.x0, 0, 'number')
-   checkv(matrix.y0, 0, 'number')
+   check_matrix(matrix, 0, 0, 0, 0, 0, 0)
 
    matrix = cairo.Matrix { xx = 1, yx =1.5,
 			   xy = 2, yy = 2.5,
 			   x0 = 3, y0 = 3.5 }
-   checkv(matrix.xx, 1, 'number')
-   checkv(matrix.yx, 1.5, 'number')
-   checkv(matrix.xy, 2, 'number')
-   checkv(matrix.yy, 2.5, 'number')
-   checkv(matrix.x0, 3, 'number')
-   checkv(matrix.y0, 3.5, 'number')
+   check_matrix(matrix, 1, 1.5, 2, 2.5, 3, 3.5)
 end
 
 function cairo.matrix_getset()
@@ -66,6 +65,56 @@ function cairo.matrix_getset()
    check(m.yy == m2.yy)
    check(m.x0 == m2.x0)
    check(m.y0 == m2.y0)
+end
+
+function cairo.matrix_init()
+   local cairo = lgi.cairo
+
+   local m = cairo.Matrix.create_identity()
+   check_matrix(m, 1, 0, 0, 1, 0, 0)
+
+   local m = cairo.Matrix.create_translate(2, 3)
+   check_matrix(m, 1, 0, 0, 1, 2, 3)
+
+   local m = cairo.Matrix.create_scale(2, 3)
+   check_matrix(m, 2, 0, 0, 3, 0, 0)
+
+   local angle = math.pi / 2
+   local m = cairo.Matrix.create_rotate(angle)
+   local c, s = math.cos(angle), math.sin(angle)
+   check_matrix(m, c, s, -s, c, 0, 0)
+end
+
+function cairo.matrix_operations()
+   local cairo = lgi.cairo
+   local m = cairo.Matrix.create_identity()
+
+   m:translate(2, 3)
+   check_matrix(m, 1, 0, 0, 1, 2, 3)
+
+   m:scale(-2, -3)
+   check_matrix(m, -2, 0, 0, -3, 2, 3)
+
+   m:rotate(0)
+   check_matrix(m, -2, 0, 0, -3, 2, 3)
+
+   local m2 = cairo.Matrix.create_translate(2, 3)
+   local status = m2:invert()
+   checkv(status, 'SUCCESS', 'string')
+   check_matrix(m2, 1, 0, 0, 1, -2, -3)
+
+   -- XXX: This API could be improved
+   local result = cairo.Matrix.create_identity()
+   result:multiply(m, m2)
+   check_matrix(result, -2, 0, 0, -3, 0, 0)
+
+   local x, y = m:transform_point(1, 1)
+   checkv(x, 0, 'number')
+   checkv(y, 0, 'number')
+
+   local x, y = m:transform_distance(1, 1)
+   checkv(x, -2, 'number')
+   checkv(y, -3, 'number')
 end
 
 function cairo.dash()
