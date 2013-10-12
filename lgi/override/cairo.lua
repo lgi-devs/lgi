@@ -160,11 +160,6 @@ for _, info in ipairs {
 	 { 'data', cairo.PathData, ptr = true },
 	 { 'num_data', ti.int },
       },
-
-      methods = {
-	 extents = { { ti.double, dir = 'out' }, { ti.double, dir = 'out' },
-		     { ti.double, dir = 'out' }, { ti.double, dir = 'out' } },
-      },
    },
 
    {  'FontExtents',
@@ -317,9 +312,10 @@ for _, info in ipairs {
       },
 
       properties = {
-	 'status', 'target', 'source', 'antialias', 'fill_rule', 'line_cap',
-	 'line_join', 'line_width', 'miter_limit', 'operator', 'tolerance',
-	 'font_size', 'font_face', 'scaled_font',
+	 'status', 'target', 'group_target', 'source', 'antialias', 'fill_rule',
+	 'line_cap', 'line_join', 'line_width', 'miter_limit', 'operator',
+	 'tolerance', 'font_size', 'font_face', 'font_matrix', 'scaled_font',
+	 'matrix',
       },
    },
 
