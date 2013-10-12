@@ -200,6 +200,11 @@ function cairo.surface_type()
    check(cairo.ImageSurface:is_type_of(s2))
    check(cairo.Surface:is_type_of(s2))
    check(not cairo.RecordingSurface:is_type_of(s2))
+
+   local s3 = cr.group_target
+   check(cairo.ImageSurface:is_type_of(s3))
+   check(cairo.Surface:is_type_of(s3))
+   check(not cairo.RecordingSurface:is_type_of(s3))
 end
 
 function cairo.pattern_type()
