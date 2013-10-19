@@ -797,7 +797,8 @@ marshal_2c_callable (lua_State *L, GICallableInfo *ci, GIArgInfo *ai,
     }
 
   /* Create the closure. */
-  *callback = lgi_closure_create (L, user_data, ci, narg,
+  lgi_callable_create (L, ci, NULL);
+  *callback = lgi_closure_create (L, user_data, narg,
 				  scope == GI_SCOPE_TYPE_ASYNC);
   return nret;
 }
@@ -1693,10 +1694,16 @@ marshal_callback (lua_State *L)
   gpointer user_data, addr;
   GICallableInfo **ci;
 
-  ci = lgi_udata_test (L, 1, LGI_GI_INFO);
   user_data = lgi_closure_allocate (L, 1);
   *lgi_guard_create (L, lgi_closure_destroy) = user_data;
-  addr = lgi_closure_create (L, user_data, *ci, 2, FALSE);
+  if (lua_istable (L, 1))
+    lgi_callable_parse (L, 1);
+  else
+    {
+      ci = lgi_udata_test (L, 1, LGI_GI_INFO);
+      lgi_callable_create (L, *ci, NULL);
+    }
+  addr = lgi_closure_create (L, user_data, 2, FALSE);
   lua_pushlightuserdata (L, addr);
   return 2;
 }
@@ -1730,7 +1737,8 @@ marshal_closure_set_marshal (lua_State *L)
   lgi_type_get_repotype (L, G_TYPE_CLOSURE, NULL);
   lgi_record_2c (L, 1, &closure, FALSE, FALSE, FALSE, FALSE);
   user_data = lgi_closure_allocate (L, 1);
-  marshal = lgi_closure_create (L, user_data, ci, 2, FALSE);
+  lgi_callable_create (L, ci, NULL);
+  marshal = lgi_closure_create (L, user_data, 2, FALSE);
   g_closure_set_marshal (closure, marshal);
   g_closure_add_invalidate_notifier (closure, user_data, gclosure_destroy);
   return 0;

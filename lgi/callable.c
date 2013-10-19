@@ -32,6 +32,9 @@ typedef struct _Param
   GITypeInfo *ti;
   GIArgInfo ai;
 
+  /* Indicates whether ai field is valid. */
+  guint has_arg_info : 1;
+
   /* Direction of the argument. */
   guint dir : 2;
 
@@ -274,6 +277,7 @@ static void
 callable_param_init (Param *param)
 {
   param->ti = NULL;
+  param->has_arg_info =FALSE;
   param->internal = FALSE;
   param->internal_user_data = FALSE;
   param->n_closures = 0;
@@ -373,6 +377,7 @@ lgi_callable_create (lua_State *L, GICallableInfo *info, gpointer addr)
   for (argi = 0; argi < nargs; argi++, param++, ffi_arg++)
     {
       g_callable_info_load_arg (callable->info, argi, &param->ai);
+      param->has_arg_info = TRUE;
       param->ti = g_arg_info_get_type (&param->ai);
       param->dir = g_arg_info_get_direction (&param->ai);
       param->transfer = g_arg_info_get_ownership_transfer (&param->ai);
@@ -491,13 +496,13 @@ callable_param_parse (lua_State *L, Param *param)
 	? GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING;
       lua_pop (L, 1);
 
-      /* Get type, assume record (if not overriden by real giingo type
+      /* Get type, assume record (if not overriden by real giinfo type
 	 below). */
       lua_getfield (L, -1, "type");
       if (!lua_isnil (L, -1))
 	{
-	  /* This is actually an enum, and type contains numeric type
-	     for this enum.  Store it into the ti. */
+	  /* This is actually an enum, and 'type' field contains
+	     numeric type for this enum.  Store it into the ti. */
 	  GITypeInfo **ti = luaL_checkudata (L, -1, LGI_GI_INFO);
 	  param->ti = g_base_info_ref (*ti);
 	}
@@ -533,8 +538,8 @@ callable_param_parse (lua_State *L, Param *param)
 }
 
 /* Parses callable from given table. */
-static int
-callable_parse (lua_State *L, int info)
+int
+lgi_callable_parse (lua_State *L, int info)
 {
   Callable *callable;
   int nargs, i;
@@ -670,8 +675,8 @@ callable_tostring (lua_State *L)
 }
 
 static int
-callable_param_2c (lua_State *L, Param *param, int narg, GIArgument *arg,
-		   Callable *callable, void **args)
+callable_param_2c (lua_State *L, Param *param, int narg, int parent,
+		   GIArgument *arg, Callable *callable, void **args)
 {
   int nret = 0;
   if (param->kind == PARAM_KIND_ENUM && lua_type (L, narg) != LUA_TNUMBER)
@@ -688,8 +693,8 @@ callable_param_2c (lua_State *L, Param *param, int narg, GIArgument *arg,
     {
       if (param->ti)
 	nret = lgi_marshal_2c (L, param->ti,
-			       callable->info ? &param->ai : NULL,
-			       param->transfer, arg, narg, 0,
+			       param->has_arg_info ? &param->ai : NULL,
+			       param->transfer, arg, narg, parent,
 			       callable->info, args + callable->has_self);
       else
 	{
@@ -841,7 +846,7 @@ callable_call (lua_State *L)
       {
 	int argi = i + callable->has_self;
 	if (param->dir != GI_DIRECTION_OUT)
-	  nret += callable_param_2c (L, param, lua_argi++, &args[argi],
+	  nret += callable_param_2c (L, param, lua_argi++, 0, &args[argi],
 				     callable, ffi_args);
 	/* Special handling for out/caller-alloc structures; we have to
 	   manually pre-create them and store them on the stack. */
@@ -1078,11 +1083,9 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   for (i = 0; i < callable->nargs; ++i, ++param)
     if (!param->internal && param->dir != GI_DIRECTION_OUT)
       {
-	if (i != 3 || !callable->is_closure_marshal)
-	  lgi_marshal_2lua (L, param->ti, callable->info ? &param->ai : NULL,
-			    param->dir, GI_TRANSFER_NOTHING,
-			    args[i + callable->has_self], 0,
-			    callable->info, args + callable->has_self);
+	if G_LIKELY (i != 3 || !callable->is_closure_marshal)
+	  callable_param_2lua (L, param, args[i + callable->has_self], 0,
+			       callable, args + callable->has_self);
 	else
 	  {
 	    /* Workaround incorrectly annotated but crucial
@@ -1159,10 +1162,9 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	    *(ffi_sarg *) ret = lua_isnoneornil (L, npos) ? FALSE : TRUE;
 	  else
 	    {
-	      to_pop = lgi_marshal_2c (L, callable->retval.ti, NULL,
-				       callable->retval.transfer, ret, npos,
-				       LGI_PARENT_IS_RETVAL, callable->info,
-				       args + callable->has_self);
+	      to_pop = callable_param_2c (L, &callable->retval, npos,
+					  LGI_PARENT_IS_RETVAL, ret, callable,
+					  args + callable->has_self);
 	      if (to_pop != 0)
 		{
 		  g_warning ("cbk `%s.%s': return (transfer none) %d, unsafe!",
@@ -1184,11 +1186,9 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	    gboolean caller_alloc =
 	      callable->info && g_arg_info_is_caller_allocates (&param->ai)
 	      && g_type_info_get_tag (param->ti) == GI_TYPE_TAG_INTERFACE;
-	    to_pop = lgi_marshal_2c (L, param->ti, &param->ai,
-				     param->transfer, *arg, npos,
-				     caller_alloc ? LGI_PARENT_CALLER_ALLOC : 0,
-				     callable->info,
-				     args + callable->has_self);
+	    to_pop = callable_param_2c (L, param, npos, caller_alloc
+					? LGI_PARENT_CALLER_ALLOC : 0, *arg,
+					callable, args + callable->has_self);
 	    if (to_pop != 0)
 	      {
 		g_warning ("cbk %s.%s: arg `%s' (transfer none) %d, unsafe!",
@@ -1207,7 +1207,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
       GQuark q = g_quark_from_static_string ("lgi-callback-error-quark");
       GError **err = ((GIArgument *) args[callable->has_self +
 					  callable->nargs])->v_pointer;
-      g_set_error_literal (err, q, 1, lua_tostring(L, -1));
+      g_set_error_literal (err, q, 1, lua_tostring (L, -1));
       lua_pop (L, 1);
 
       /* Such function should usually return FALSE, so do it. */
@@ -1293,7 +1293,7 @@ lgi_closure_allocate (lua_State *L, int count)
 /* Creates closure from Lua function to be passed to C. */
 gpointer
 lgi_closure_create (lua_State *L, gpointer user_data,
-		    GICallableInfo *ci, int target, gboolean autodestroy)
+		    int target, gboolean autodestroy)
 {
   FfiClosureBlock* block = user_data;
   FfiClosure *closure;
@@ -1309,7 +1309,6 @@ lgi_closure_create (lua_State *L, gpointer user_data,
     }
 
   /* Prepare callable and store reference to it. */
-  lgi_callable_create (L, ci, NULL);
   callable = lua_touserdata (L, -1);
   call_addr = closure->call_addr;
   closure->created = 1;
@@ -1332,7 +1331,7 @@ lgi_closure_create (lua_State *L, gpointer user_data,
   if (ffi_prep_closure_loc (&closure->ffi_closure, &callable->cif,
 			    closure_callback, closure, call_addr) != FFI_OK)
     {
-      lua_concat (L, lgi_type_get_name (L, ci));
+      lua_concat (L, lgi_type_get_name (L, callable->info));
       luaL_error (L, "failed to prepare closure for `%'", lua_tostring (L, -1));
       return NULL;
     }
@@ -1347,7 +1346,7 @@ static int
 callable_new (lua_State *L)
 {
   if (lua_istable (L, 1))
-    return callable_parse (L, 1);
+    return lgi_callable_parse (L, 1);
   else
     return lgi_callable_create (L,  *(GICallableInfo **)
 				luaL_checkudata (L, 1, LGI_GI_INFO),
