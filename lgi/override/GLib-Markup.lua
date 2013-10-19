@@ -90,6 +90,12 @@ function MarkupParseContext:parse(text, len)
    return MarkupParseContext._method.parse(self,  text, len or -1)
 end
 
+MarkupParseContext._method.pop = core.callable.new {
+   name = 'GLib.MarkupParseContext.pop',
+   addr = core.gi.GLib.resolve.g_markup_parse_context_pop,
+   ret = ti.ptr, MarkupParseContext
+}
+
 local escape_text = lgi.GLib.markup_escape_text
 function lgi.GLib.markup_escape_text(text)
    return escape_text(text, -1)
