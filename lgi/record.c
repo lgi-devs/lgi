@@ -577,6 +577,7 @@ record_field (lua_State *L)
   record = record_get (L, 1);
 
   /* Call field marshalling worker. */
+  lua_getfenv (L, 1);
   return lgi_marshal_field (L, record->addr, getmode, 1, 2, 3);
 }
 

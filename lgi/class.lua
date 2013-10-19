@@ -232,6 +232,7 @@ function class.load_interface(namespace, info)
       interface._virtual = component.get_category(
 	 info.vfuncs, nil, load_vfunc_name, load_vfunc_name_reverse)
       interface._class = record.load(type_struct)
+      interface._class._allow = true
       interface._class._parent = core.repo.GObject.TypeInterface
    end
    interface._new = find_constructor(info)
@@ -264,6 +265,7 @@ function class.load_class(namespace, info)
       class._virtual = component.get_category(
 	 info.vfuncs, nil, load_vfunc_name, load_vfunc_name_reverse)
       class._class = record.load(type_struct)
+      class._class._allow = true
       class._class._parent =
 	 parent and parent._class or core.repo.GObject.TypeClass
    end

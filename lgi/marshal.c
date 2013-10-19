@@ -1288,14 +1288,15 @@ lgi_marshal_field (lua_State *L, gpointer object, gboolean getmode,
       GIFieldInfo **fi = lua_touserdata (L, field_arg);
       GIFieldInfoFlags flags;
 
-      /* Check, whether field is readable/writable.  Turn off this
-	 check for class structures, because we need to read/write
-	 their virtual function pointers. */
-      if (!g_struct_info_is_gtype_struct (g_base_info_get_container (*fi)))
-	{
-	  flags = g_field_info_get_flags (*fi);
-	  if ((flags & (getmode ? GI_FIELD_IS_READABLE
+      /* Check, whether field is readable/writable. */
+      flags = g_field_info_get_flags (*fi);
+      if ((flags & (getmode ? GI_FIELD_IS_READABLE
 			: GI_FIELD_IS_WRITABLE)) == 0)
+	{
+	  /* Check,  whether  parent  did not  disable  access  checks
+	     completely. */
+	  lua_getfield (L, -1, "_allow");
+	  if (!lua_toboolean (L, -1))
 	    {
 	      /* Prepare proper error message. */
 	      lua_concat (L,
@@ -1306,6 +1307,7 @@ lgi_marshal_field (lua_State *L, gpointer object, gboolean getmode,
 				 g_base_info_get_name (*fi),
 				 getmode ? "readable" : "writable");
 	    }
+	  lua_pop (L, 1);
 	}
 
       /* Map GIArgument to proper memory location, get typeinfo of the

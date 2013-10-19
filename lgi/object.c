@@ -421,6 +421,7 @@ object_field (lua_State *L)
   gpointer object = object_get (L, 1);
 
   /* Call field marshalling worker. */
+  lua_getfenv (L, 1);
   return lgi_marshal_field (L, object, getmode, 1, 2, 3);
 }
 
