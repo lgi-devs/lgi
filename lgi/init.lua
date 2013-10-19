@@ -65,6 +65,8 @@ for _, name in pairs { 'Variant', 'VariantType', 'VariantBuilder' } do
    repo.GLib._precondition[name] = 'GLib-Variant'
 end
 repo.GLib._precondition.Timer = 'GLib-Timer'
+repo.GLib._precondition.MarkupParser = 'GLib-Markup'
+repo.GLib._precondition.MarkupParseContext = 'GLib-Markup'
 
 -- Access to module proxies the whole repo, so that lgi.'namespace'
 -- notation works.
