@@ -40,7 +40,7 @@ function app:on_activate()
 	    while true do
 	       -- Read another chunk of data from the source to the
 	       -- buffer.
-	       stream:read_async(buffer, #buffer, GLib.PRIORITY_DEFAULT, nil,
+	       stream:read_async(buffer, GLib.PRIORITY_DEFAULT, nil,
 				 coroutine.running())
 	       local size = stream.read_finish(coroutine.yield())
 	       if size < 0 then
@@ -57,7 +57,7 @@ function app:on_activate()
 
 	       -- Wait until soup signalizes that chunk was written.
 	       coroutine.yield()
-	       if (size < #buffer) then break end
+	       if size < #buffer then break end
 	    end
 	    msg.response_body:complete()
 	 end)
