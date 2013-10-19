@@ -737,20 +737,26 @@ marshal_2c_callable (lua_State *L, GICallableInfo *ci, GIArgInfo *ai,
 
   /* Check 'nil' in optional case.  In this case, return NULL as
      callback. */
-  if (optional && lua_isnoneornil (L, narg))
+  if (lua_isnoneornil (L, narg))
     {
-      *callback = NULL;
-
-      /* Also set associated destroy handler to NULL, because some
-	 callees tend to call it when left as garbage even when main
-	 callback is NULL (gtk_menu_popup_for_device() case). */
-      if (ai != NULL)
+      if (optional)
 	{
-	  gint arg = g_arg_info_get_destroy (ai);
-	  if (arg >= 0 && arg < nargs)
-	    ((GIArgument *) args[arg])->v_pointer = NULL;
+	  *callback = NULL;
+
+	  /* Also set associated destroy handler to NULL, because some
+	     callees tend to call it when left as garbage even when
+	     main callback is NULL (gtk_menu_popup_for_device()
+	     case). */
+	  if (ai != NULL)
+	    {
+	      gint arg = g_arg_info_get_destroy (ai);
+	      if (arg >= 0 && arg < nargs)
+		((GIArgument *) args[arg])->v_pointer = NULL;
+	    }
+	  return 0;
 	}
-      return 0;
+      else
+	return luaL_argerror (L, narg, "nil is not allowed");
     }
 
   /* Check lightuserdata case; simply use that data if provided. */
