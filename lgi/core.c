@@ -628,14 +628,17 @@ luaopen_lgi_corelgilua51 (lua_State* L)
      module is 'statically' linked with glib/gobject, and these
      libraries are not designed to be unloaded.  Once they are
      unloaded, they cannot be safely loaded again into the same
-     process.  To avoid problems when repeately opening and closing
+     process.  To avoid problems when repeatedly opening and closing
      lua_States and loading lgi into them, we try to make the whole
      'core' module resident. */
   set_resident (L);
 
+#if !GLIB_CHECK_VERSION(2, 36, 0)
+  g_type_init ();
+#endif
+
   /* Early GLib initializations. Make sure that following fundamental
      G_TYPEs are already initialized. */
-  g_type_init ();
   volatile GType unused;
   unused = G_TYPE_DATE;
   unused = G_TYPE_REGEX;
