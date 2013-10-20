@@ -76,6 +76,21 @@ for name, def in pairs {
 end
 
 -- ParseContext helper overrides.
+if not MarkupParseContext._gtype then
+   -- Note that older glib/gobject-introspection combos did not mark
+   -- MarkupParseContext as boxed.  This means that we have to teach
+   -- lgi how to free context and also new(), because in this case
+   -- new() is marked as introspectable="0".
+   MarkupParseContext._free = core.gi.GLib.resolve.g_markup_parse_context_free
+   MarkupParseContext._method.new = core.callable.new {
+      name = 'GLib.MarkupParseContext.new',
+      addr = core.gi.GLib.resolve.g_markup_parse_context_new,
+      ret = { MarkupParseContext, xfer = true },
+      MarkupParser, lgi.GLib.MarkupParseFlags, ti.ptr, ti.ptr,
+      ti.GDestroyNotify,
+   }
+end
+
 function MarkupParseContext.new(parser, flags, user_data)
    -- DestroyNotify is required (allow-none) annotation is missing, so
    -- provide dummy one.

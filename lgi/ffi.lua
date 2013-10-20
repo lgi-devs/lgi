@@ -54,6 +54,8 @@ ffi.types = {
 
    GStrv = glib.KeyFile.methods.get_groups.return_type,
 
+   GDestroyNotify = glib.Hook.fields.destroy.typeinfo,
+
    ptr = glib.CompareDataFunc.args[1].typeinfo,
 }
 
