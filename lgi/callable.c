@@ -1,7 +1,7 @@
 /*
  * Dynamic Lua binding to GObject using dynamic gobject-introspection.
  *
- * Copyright (c) 2010, 2011, 2012 Pavel Holejsovsky
+ * Copyright (c) 2010, 2011, 2012, 2013 Pavel Holejsovsky
  * Licensed under the MIT license:
  * http://www.opensource.org/licenses/mit-license.php
  *
@@ -676,13 +676,14 @@ callable_tostring (lua_State *L)
 
 static int
 callable_param_2c (lua_State *L, Param *param, int narg, int parent,
-		   GIArgument *arg, Callable *callable, void **args)
+		   GIArgument *arg, int callable_index,
+		   Callable *callable, void **args)
 {
   int nret = 0;
   if (param->kind == PARAM_KIND_ENUM && lua_type (L, narg) != LUA_TNUMBER)
     {
       /* Convert enum symbolic value to numeric one. */
-      lua_getfenv (L, 1);
+      lua_getfenv (L, callable_index);
       lua_rawgeti (L, -1, param->repotype_index);
       lua_pushvalue (L, narg);
       lua_call (L, 1, 1);
@@ -709,7 +710,7 @@ callable_param_2c (lua_State *L, Param *param, int narg, int parent,
   else
     {
       /* Marshal record according to custom information. */
-      lua_getfenv (L, 1);
+      lua_getfenv (L, callable_index);
       lua_rawgeti (L, -1, param->repotype_index);
       lgi_record_2c (L, narg, &arg->v_pointer, FALSE,
 		     param->transfer != GI_TRANSFER_NOTHING, TRUE, FALSE);
@@ -721,7 +722,8 @@ callable_param_2c (lua_State *L, Param *param, int narg, int parent,
 
 static void
 callable_param_2lua (lua_State *L, Param *param, GIArgument *arg,
-		     int parent, Callable *callable, void **args)
+		     int parent, int callable_index,
+		     Callable *callable, void **args)
 {
   if (param->kind != PARAM_KIND_RECORD)
     {
@@ -740,7 +742,7 @@ callable_param_2lua (lua_State *L, Param *param, GIArgument *arg,
   if (param->kind == PARAM_KIND_TI)
     return;
 
-  lua_getfenv (L, 1);
+  lua_getfenv (L, callable_index);
   lua_rawgeti (L, -1, param->repotype_index);
   if (param->kind == PARAM_KIND_RECORD)
     {
@@ -847,7 +849,7 @@ callable_call (lua_State *L)
 	int argi = i + callable->has_self;
 	if (param->dir != GI_DIRECTION_OUT)
 	  nret += callable_param_2c (L, param, lua_argi++, 0, &args[argi],
-				     callable, ffi_args);
+				     1, callable, ffi_args);
 	/* Special handling for out/caller-alloc structures; we have to
 	   manually pre-create them and store them on the stack. */
 	else if (callable->info && g_arg_info_is_caller_allocates (&param->ai)
@@ -895,7 +897,7 @@ callable_call (lua_State *L)
 	      || g_type_info_is_pointer (callable->retval.ti))))
     {
       callable_param_2lua (L, &callable->retval, &retval, LGI_PARENT_IS_RETVAL,
-			   callable, ffi_args);
+			   1, callable, ffi_args);
       nret++;
       lua_insert (L, -caller_allocated - 1);
     }
@@ -940,7 +942,7 @@ callable_call (lua_State *L)
 	  {
 	    /* Marshal output parameter. */
 	    callable_param_2lua (L, param, &args[i + callable->has_self],
-				 0, callable, ffi_args);
+				 0, 1, callable, ffi_args);
 	    lua_insert (L, -caller_allocated - 1);
 	  }
 
@@ -1005,6 +1007,7 @@ static void
 closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 {
   Callable *callable;
+  int callable_index;
   FfiClosure *closure = closure_arg;
   FfiClosureBlock *block = closure->block;
   gint res = 0, npos, i, stacktop;
@@ -1057,7 +1060,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   /* Get access to Callable structure. */
   lua_rawgeti (L, LUA_REGISTRYINDEX, closure->callable_ref);
   callable = lua_touserdata (L, -1);
-  lua_pop (L, 1);
+  callable_index = lua_gettop (L);
 
   /* Marshall 'self' argument, if it is present. */
   npos = 0;
@@ -1085,7 +1088,8 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
       {
 	if G_LIKELY (i != 3 || !callable->is_closure_marshal)
 	  callable_param_2lua (L, param, args[i + callable->has_self], 0,
-			       callable, args + callable->has_self);
+			       callable_index, callable,
+			       args + callable->has_self);
 	else
 	  {
 	    /* Workaround incorrectly annotated but crucial
@@ -1105,6 +1109,10 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	  }
 	npos++;
       }
+
+  /* Remove callable userdata from callable_index, otehrwise they mess
+     up carefully prepared stack structure. */
+  lua_remove (L, callable_index);
 
   /* Call it. */
   if (call)
@@ -1136,7 +1144,13 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	  lua_error (block->callback.L);
 	}
     }
-  npos = stacktop + 1;
+
+  /* Reintroduce callable to the stack, we might need it during
+     marshalling of the response. Put it right before all returns. */
+  lua_rawgeti (L, LUA_REGISTRYINDEX, closure->callable_ref);
+  lua_insert (L, stacktop + 1);
+  callable_index = stacktop + 1;
+  npos = stacktop + 2;
 
   /* Check, whether we can report an error here. */
   if (res == 0)
@@ -1163,7 +1177,8 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	  else
 	    {
 	      to_pop = callable_param_2c (L, &callable->retval, npos,
-					  LGI_PARENT_IS_RETVAL, ret, callable,
+					  LGI_PARENT_IS_RETVAL, ret,
+					  callable_index, callable,
 					  args + callable->has_self);
 	      if (to_pop != 0)
 		{
@@ -1188,7 +1203,8 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	      && g_type_info_get_tag (param->ti) == GI_TYPE_TAG_INTERFACE;
 	    to_pop = callable_param_2c (L, param, npos, caller_alloc
 					? LGI_PARENT_CALLER_ALLOC : 0, *arg,
-					callable, args + callable->has_self);
+					callable_index, callable,
+					args + callable->has_self);
 	    if (to_pop != 0)
 	      {
 		g_warning ("cbk %s.%s: arg `%s' (transfer none) %d, unsafe!",
