@@ -5,7 +5,6 @@
 --
 
 local lgi = require 'lgi'
-local bytes = require 'bytes'
 local GLib = lgi.GLib
 local Gio = lgi.Gio
 
@@ -13,14 +12,19 @@ local app = Gio.Application.new('org.lgi.samples.giostream', 0)
 
 local function read_sync(file)
    local info = assert(file:query_info('standard::size', 0))
-   local buffer = bytes.new(info:get_size())
-   local stream = assert(file:read(nil))
-   local read = assert(stream:read_all(buffer))
-   return tostring(buffer):sub(1,read)
+   local stream = assert(file:read())
+   local read_buffers = {}
+   local remaining = info:get_size()
+   while remaining > 0 do
+      local buffer = assert(stream:read_bytes(remaining))
+      table.insert(read_buffers, buffer.data)
+      remaining = remaining - #buffer
+   end
+   assert(stream:close())
+   return table.concat(read_buffers)
 end
 
 local function read_async(file)
-   app:hold()
    local info = assert(file:async_query_info('standard::size', 0,
 					     GLib.PRIORITY_DEFAULT))
 
@@ -28,28 +32,31 @@ local function read_async(file)
    local read_buffers = {}
    local remaining = info:get_size()
    while remaining > 0 do
-      local buffer = bytes.new(remaining)
-      local read_now, err = stream:async_read(buffer, GLib.PRIORITY_DEFAULT)
-      assert(read_now >= 0, err)
-      read_buffers[#read_buffers + 1] = tostring(buffer):sub(1, read_now)
-      remaining = remaining - read_now
+      local buffer = assert(stream:async_read_bytes(
+			       remaining, GLib.PRIORITY_DEFAULT))
+      table.insert(read_buffers, buffer.data)
+      remaining = remaining - #buffer
    end
    stream:async_close(GLib.PRIORITY_DEFAULT)
-   app:release()
    return table.concat(read_buffers)
 end
 
 local function write_sync(file, contents)
    local stream = assert(file:create(0))
-   assert(stream:write_all(contents))
+   local pos = 1
+   while pos <= #contents do
+      local wrote, err = stream:write_bytes(GLib.Bytes(contents:sub(pos)))
+      assert(wrote >= 0, err)
+      pos = pos + wrote
+   end
 end
 
 local function write_async(file, contents)
    local stream = assert(file:async_create(0, GLib.PRIORITY_DEFAULT))
    local pos = 1
    while pos <= #contents do
-      local wrote, err = stream:async_write(contents:sub(pos),
-					    GLib.PRIORITY_DEFAULT)
+      local wrote, err = stream:async_write_bytes(
+	 GLib.Bytes(contents:sub(pos)), GLib.PRIORITY_DEFAULT)
       assert(wrote >= 0, err)
       pos = pos + wrote
    end
