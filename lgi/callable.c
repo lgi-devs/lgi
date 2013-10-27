@@ -1179,6 +1179,11 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	  lua_xmove (L, block->callback.L, 1);
 	  lua_error (block->callback.L);
 	}
+
+      /* If coroutine somehow consumed more than expected(?), do not
+	 blow up, adjust to the new situation. */
+      if (stacktop > lua_gettop (L))
+	stacktop = lua_gettop (L);
     }
 
   /* Reintroduce callable to the stack, we might need it during
