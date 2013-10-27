@@ -398,12 +398,10 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIDirection dir,
      it.  See https://github.com/pavouk/lgi/issues/57 */
   if (g_type_info_get_tag (eti) == GI_TYPE_TAG_UINT8)
     {
-      /* UINT8 arrays are marshalled as 'bytes' instances. */
+      /* UINT8 arrays are marshalled as Lua strings. */
       if (len < 0)
 	len = data ? strlen(data) : 0;
-      memcpy (lua_newuserdata (L, len), data, len);
-      luaL_getmetatable (L, LGI_BYTES_BUFFER);
-      lua_setmetatable (L, -2);
+      lua_pushlstring (L, data, len);
     }
   else
     {

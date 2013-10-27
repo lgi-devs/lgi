@@ -87,33 +87,7 @@ mapping between GLib types and Lua types is established.
     - Instances of lgi classes, structs or unions
     - Binary buffers (see below)
 
-### 2.1. Modifiable binary buffers
-
-Pure Lua lacks native binary modifiable buffer structure, which is a
-problem for some GObject APIs, for example `Gio.InputStream.read()`,
-which request pre-allocated buffer which will be modified (filled)
-during the call.  To overcome this problem, lgi adopts the
-[bytes proposal](http://permalink.gmane.org/gmane.comp.lang.lua.general/79288
-"Defining a library for mutable byte arrays").  Since the standalone
-implementation of this proposal does not seem to be available yet, lgi
-uses its own implementation which is used when no external `bytes`
-package can be found.  An example of `bytes` buffer usage follows:
-
-    local lgi = require 'lgi'
-    local bytes = require 'bytes'
-    local Gio = lgi.Gio
-
-    local stream = assert(Gio.File.new_for_path('foo.txt'):read())
-    local buffer = bytes.new(50)
-    local size = stream:read(buffer, #buffer)
-    assert(size >= 0)
-    print(tostring(buffer):sub(1, size))
-
-Note that not full `bytes` proposal is currently implemented, 'Derived
-operations' are not available except creating buffer from string using
-`bytes.new` function.
-
-### 2.2. Calling functions and methods
+### 2.1. Calling functions and methods
 
 When calling GLib functions, following conventions apply:
 
@@ -127,7 +101,7 @@ When calling GLib functions, following conventions apply:
   indicating either success or failure, and if failure occurs,
   following return values represent error message and error code.
 
-#### 2.2.1. Phantom boolean return values
+#### 2.1.1. Phantom boolean return values
 
 GLib based libraries often use boolean return value indicating whether
 logically-output argument is filled in or not.  Typical example is
@@ -144,11 +118,11 @@ bit unnatural in Lua:
 To ease usage of such method, lgi avoids returning first boolean
 return.  If C function returns `false` in this case, all other output
 arguments are returned as `nil`.  This means that previous example
-should be instead written simply as:
+must be instead written simply as:
 
     local iter = model:get_iter_first()
 
-### 2.3. Callbacks
+### 2.2. Callbacks
 
 When some GLib function or method requires callback argument, a Lua
 function should be provided (or userdata or table implementing
