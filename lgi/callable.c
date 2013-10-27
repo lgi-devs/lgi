@@ -975,11 +975,47 @@ static int
 callable_index (lua_State *L)
 {
   Callable *callable = callable_get (L, 1);
-  if (g_strcmp0 (lua_tostring (L, 2), "user_data"))
-    return 0;
+  const gchar *verb = lua_tostring (L, 2);
+  if (g_strcmp0 (verb, "info") == 0)
+    return lgi_gi_info_new (L, callable->info);
+  else if (g_strcmp0 (verb, "params") == 0)
+    {
+      int index = 1, i;
+      lua_newtable (L);
+      if (callable->has_self)
+	{
+	  lua_newtable (L);
+	  lua_pushboolean (L, 1);
+	  lua_setfield (L, -2, "in");
+	  lua_rawseti (L, -2, index++);
+	}
+      for (i = 0; i < callable->nargs; i++)
+	if (!callable->params[i].internal)
+	  {
+	    lua_newtable (L);
+	    if (callable->params[i].dir == GI_DIRECTION_IN ||
+		callable->params[i].dir == GI_DIRECTION_INOUT)
+	      {
+		lua_pushboolean (L, 1);
+		lua_setfield (L, -2, "in");
+	      }
+	    if (callable->params[i].dir == GI_DIRECTION_OUT ||
+		callable->params[i].dir == GI_DIRECTION_INOUT)
+	      {
+		lua_pushboolean (L, 1);
+		lua_setfield (L, -2, "out");
+	      }
+	    lua_rawseti (L, -2, index++);
+	  }
+      return 1;
+    }
+  else if (g_strcmp0 (verb, "user_data") == 0)
+    {
+      lua_pushlightuserdata (L, callable->user_data);
+      return 1;
+    }
 
-  lua_pushlightuserdata (L, callable->user_data);
-  return 1;
+  return 0;
 }
 
 static int

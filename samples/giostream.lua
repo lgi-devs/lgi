@@ -21,22 +21,20 @@ end
 
 local function read_async(file)
    app:hold()
-   file:query_info_async('standard::size', 0, GLib.PRIORITY_DEFAULT, nil,
-			 coroutine.running())
-   local info = assert(file.query_info_finish(coroutine.yield()))
-   file:read_async(GLib.PRIORITY_DEFAULT, nil, coroutine.running())
-   local stream = assert(file.read_finish(coroutine.yield()))
+   local info = assert(file:async_query_info('standard::size', 0,
+					     GLib.PRIORITY_DEFAULT))
+
+   local stream = assert(file:async_read(GLib.PRIORITY_DEFAULT))
    local read_buffers = {}
    local remaining = info:get_size()
    while remaining > 0 do
       local buffer = bytes.new(remaining)
-      stream:read_async(buffer, GLib.PRIORITY_DEFAULT, nil,
-			coroutine.running())
-      local read_now, err = stream.read_finish(coroutine.yield())
+      local read_now, err = stream:async_read(buffer, GLib.PRIORITY_DEFAULT)
       assert(read_now >= 0, err)
       read_buffers[#read_buffers + 1] = tostring(buffer):sub(1, read_now)
       remaining = remaining - read_now
    end
+   stream:async_close(GLib.PRIORITY_DEFAULT)
    app:release()
    return table.concat(read_buffers)
 end
@@ -47,13 +45,11 @@ local function write_sync(file, contents)
 end
 
 local function write_async(file, contents)
-   file:create_async(0, GLib.PRIORITY_DEFAULT, nil, coroutine.running())
-   local stream = assert(file.create_finish(coroutine.yield()))
+   local stream = assert(file:async_create(0, GLib.PRIORITY_DEFAULT))
    local pos = 1
    while pos <= #contents do
-      stream:write_async(contents:sub(pos), GLib.PRIORITY_DEFAULT, nil,
-			 coroutine.running())
-      local wrote, err = stream.write_finish(coroutine.yield())
+      local wrote, err = stream:async_write(contents:sub(pos),
+					    GLib.PRIORITY_DEFAULT)
       assert(wrote >= 0, err)
       pos = pos + wrote
    end
