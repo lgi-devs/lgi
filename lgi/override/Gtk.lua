@@ -609,7 +609,7 @@ Gtk._constant.PRINT_OUTPUT_URI = 'output-uri'
 cairo.Context._method.should_draw_window = Gtk.cairo_should_draw_window
 
 --------------------------------- Gtk-2 workarounds
-if tonumber(Gtk._version) < 3.0 then
+if Gtk._version == '2.0' then
    -- Get rid of Gtk.Bin internal 'child' field, which gets in the way
    -- of 'child' attribute mechanism introduced in this override.
    local _ = Gtk.Bin.child
