@@ -1,7 +1,7 @@
 #! /usr/bin/env lua
 
 --
--- Sample GMarkupParser which parses input into the table. EXpects
+-- Sample GMarkupParser which parses input into the table. Expects
 -- name of the markup file on the commandline.
 --
 
@@ -19,7 +19,7 @@ local function make_parser(doc)
 
       text = function(context, text)
 	 -- Avoid just whitespace.
-	 if not text:match('^%s*$') then
+	 if text:match('%S') then
 	    local element = stack[#stack]
 	    element[#element + 1] = text
 	 end
@@ -71,4 +71,5 @@ local context = GLib.MarkupParseContext(parser, 'TREAT_CDATA_AS_TEXT')
 for line in io.lines((...), 512) do
    assert(context:parse(line))
 end
+context:end_parse()
 print(dump_doc(document))
