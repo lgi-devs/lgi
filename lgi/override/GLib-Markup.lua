@@ -35,19 +35,14 @@ for name, def in pairs {
 	 name = 'start_element', throws = true, ret = ti.void,
 	 MarkupParseContext, ti.utf8, ti.GStrv, ti.GStrv, ti.ptr
       },
-      override = function(target)
+      override = function(start_element)
 	 return function(context, element, attr_names, attr_values, user_data)
-	    -- Extend attr_names with name=value dictionary part.
+	    -- Convert attribute lists to table.
+	    local attrs = {}
 	    for i = 1, #attr_names do
-	       attr_names[attr_names[i]] = attr_values[i]
+	       attrs[attr_names[i]] = attr_values[i]
 	    end
-	    (function(...)
-		if select('#', ...) == 1 then
-		   error(select(1, ...), 0)
-		elseif select('#', ...) > 1 and not select(1, ...) then
-		   error(select(2, ...), 0)
-		end
-	    end)(target(context, element, attr_names, attr_values, user_data))
+	    start_element(context, element, attrs, user_data)
 	 end
       end,
    },

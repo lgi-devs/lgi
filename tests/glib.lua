@@ -51,9 +51,9 @@ function glib.markup_base()
 
    local p = MarkupParser()
    local el, at = {}, {}
-   function p.start_element(context, element_name, attrs_names, attrs_values)
+   function p.start_element(context, element_name, attrs)
       el[#el + 1] = element_name
-      at[#at + 1] = { names = attrs_names, values = attrs_values }
+      at[#at + 1] = attrs
    end
    function p.end_element(context)
    end
@@ -73,16 +73,9 @@ function glib.markup_base()
    check(el[1] == 'map')
    check(el[2] == 'entry')
    check(#at == 2)
-   check(#at[1].names == 0)
-   check(#at[1].values == 0)
-   check(#at[2].names == 2)
-   check(at[2].names[1] == 'key')
-   check(at[2].names[2] == 'value')
-   check(at[2].names.key == 'method')
-   check(at[2].names.value == 'printf')
-   check(#at[2].values == 2)
-   check(at[2].values[1] == 'method')
-   check(at[2].values[2] == 'printf')
+   check(not next(at[1]))
+   check(at[2].key == 'method')
+   check(at[2].value == 'printf')
 end
 
 function glib.markup_error1()
@@ -116,16 +109,6 @@ function glib.markup_error2()
    }
    local context = MarkupParseContext(parser, {})
    local ok, err = context:parse('<e/>')
-   check(not ok)
-   check(err == 'snafu')
-   check(saved_err.message == err)
-
-   saved_err = nil
-   function parser.start_element(context, element)
-      return false, 'snafu'
-   end
-   context = MarkupParseContext(parser, {})
-   ok, err = context:parse('<e/>')
    check(not ok)
    check(err == 'snafu')
    check(saved_err.message == err)
