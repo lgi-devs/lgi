@@ -193,8 +193,9 @@ for _, name in pairs { 'read', 'read_all', 'read_async' } do
       end
       if name == 'read_async' then
 	 raw_finish = Gio.InputStream.read_finish
-	 function Gio.InputStream.async_read(stream, buffer, prio, cancellable)
-	    raw_read(stream, buffer, prio, cancellable, coroutine.running())
+	 function Gio.InputStream.async_read(stream, buffer)
+	    raw_read(stream, buffer, Gio.Async.io_priority,
+		     Gio.Async.cancellable, coroutine.running())
 	    return raw_finish(coroutine.yield())
 	 end
       end
