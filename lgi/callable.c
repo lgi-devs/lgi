@@ -981,6 +981,8 @@ callable_index (lua_State *L)
   else if (g_strcmp0 (verb, "params") == 0)
     {
       int index = 1, i;
+      Param *param;
+
       lua_newtable (L);
       if (callable->has_self)
 	{
@@ -989,18 +991,33 @@ callable_index (lua_State *L)
 	  lua_setfield (L, -2, "in");
 	  lua_rawseti (L, -2, index++);
 	}
-      for (i = 0; i < callable->nargs; i++)
-	if (!callable->params[i].internal)
+      for (i = 0, param = callable->params; i < callable->nargs; i++, param++)
+	if (!param->internal)
 	  {
 	    lua_newtable (L);
-	    if (callable->params[i].dir == GI_DIRECTION_IN ||
-		callable->params[i].dir == GI_DIRECTION_INOUT)
+	    /* Add name. */
+	    if (param->has_arg_info)
+	      {
+		lua_pushstring (L, g_base_info_get_name (&param->ai));
+		lua_setfield (L, -2, "name");
+	      }
+
+	    /* Add typeinfo. */
+	    if (param->ti)
+	      {
+		lgi_gi_info_new (L, g_base_info_ref (param->ti));
+		lua_setfield (L, -2, "typeinfo");
+	      }
+
+	    /* Add in.out info. */
+	    if (param->dir == GI_DIRECTION_IN ||
+		param->dir == GI_DIRECTION_INOUT)
 	      {
 		lua_pushboolean (L, 1);
 		lua_setfield (L, -2, "in");
 	      }
-	    if (callable->params[i].dir == GI_DIRECTION_OUT ||
-		callable->params[i].dir == GI_DIRECTION_INOUT)
+	    if (param->dir == GI_DIRECTION_OUT ||
+		param->dir == GI_DIRECTION_INOUT)
 	      {
 		lua_pushboolean (L, 1);
 		lua_setfield (L, -2, "out");
@@ -1175,7 +1192,6 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	  /* If closure is not allowed to return errors and coroutine
 	     finished with error, rethrow the error in the context of
 	     the original thread. */
-	  lua_settop (L, stacktop + 1);
 	  lua_xmove (L, block->callback.L, 1);
 	  lua_error (block->callback.L);
 	}

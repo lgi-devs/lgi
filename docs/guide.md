@@ -148,20 +148,10 @@ when either coroutine terminates (in this case, callback return
 value(s) are coroutine final result(s)) or yields again (in this case,
 callback return value(s) are arguments to `coroutine.yield()` call).
 This mode of operation is very useful when using Gio-style
-asynchronous calls.  To further ease the manual
-`do_async()/do_finish()` invocation of Gio-style asynchronous
-functionality, lgi provides automatic wrapper called `async_do()`.  So
-for example, instead of writing following code for opening read stream
-from Gio file:
-
-    file:read_async(GLib.PRIORITY_DEFAULT, nil, coroutine.running())
-    local stream, err = file.read_finish(coroutine.yield())
-
-it is possible to use lgi-generated method `async_read()` like this:
-
-    local stream, err = file:async_read(GLib.PRIORITY_DEFAULT)
-
-See `samples/giostream.lua` for example usage of this technique.
+asynchronous calls.  However, it is recommended to use lgi-specific
+`Gio.Async` facility for this purpose, as described in its own
+documentation, because it wraps and hides many intricacies which arise
+with coroutines and mainloop integration.
 
 ## 3. Classes
 

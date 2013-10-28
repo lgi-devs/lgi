@@ -48,7 +48,7 @@ function corocbk.rethrow()
    local coro = coroutine.create(
       function()
 	 (function()
-	     error('err')
+	     error('err', 0)
 	  end)()
       end)
    GLib.idle_add(GLib.PRIORITY_DEFAULT, coro)
