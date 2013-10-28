@@ -83,6 +83,28 @@ function Object:_construct(gtype, param, owns)
    -- Create the object.
    object = object_new(gtype, parameters)
 
+   -- Perform initialization on interfaces.
+   if next(self._implements) then
+      local inited
+      for _, initname in ipairs { '_init1', '_init2' } do
+	 for _, interface in pairs(self._implements) do
+	    local init = interface[initname]
+	    if init then
+	       local ok, err = init(object)
+	       if not ok then return nil, err end
+	       if ok == '_initskip' then
+		  -- This initializer does not apply, continue looking
+		  -- for others.
+	       else
+		  inited = true
+		  break;
+	       end
+	    end
+	 end
+	 if inited then break end
+      end
+   end
+
    -- Attach arguments previously filtered out from creation.
    for name, value in pairs(others) do
       if type(name) == 'string' then object[name] = value end

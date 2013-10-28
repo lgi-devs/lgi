@@ -171,6 +171,21 @@ function GObject.Object:_access_async(object, element, ...)
    end
 end
 
+function Gio.Initable._init2(object)
+   -- Avoid passing cancellable, because it might cause init() to
+   -- fail, even if we could retrieve cancellable from async context.
+   return object:init()
+end
+
+function Gio.AsyncInitable._init1(object)
+   -- Check, whether we are running in async context.  If not, skip
+   -- initializer (do not fail it).
+   if not async_context[coroutine.running()] then return '_initskip' end
+
+   -- Invoke async initializer.
+   return object:async_init()
+end
+
 -- GOI < 1.30 did not map static factory method into interface
 -- namespace.  The prominent example of this fault was that
 -- Gio.File.new_for_path() had to be accessed as
