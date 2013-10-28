@@ -28,13 +28,13 @@ Gio.Async = setmetatable(
    {}, {
       __index = function(self, key)
 	 if key == 'io_priority' or key == 'cancellable' then
-	    return (async_context[coroutine.running] or {})[key]
+	    return (async_context[coroutine.running()] or {})[key]
 	 end
       end,
 
       __newindex = function(self, key, value)
 	 if key == 'io_priority' or key == 'cancellable' then
-	    (async_context[coroutine.running])[key] = value
+	    (async_context[coroutine.running()])[key] = value
 	 else
 	    rawset(self, key, value)
 	 end
