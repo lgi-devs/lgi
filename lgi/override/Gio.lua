@@ -110,6 +110,16 @@ function GObject.Object:_element(object, name)
    if name_root then
       local async = inherited_element(self, object, name_root .. '_async')
       local finish = inherited_element(self, object, name_root .. '_finish')
+
+      -- Some clients name async method just 'name' and use
+      -- 'name_sync' for synchronous variant.
+      if finish and not async
+      and inherited_element(self, object, name_root .. '_sync') then
+	 async = inherited_element(self, object, name_root)
+      end
+
+      -- We have async/finish pair, create element table containing
+      -- information how to synthesize calling function.
       if async and finish then
 	 element = { name = name_root, in_args = 0,
 		     async = async, finish = finish, }
