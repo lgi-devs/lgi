@@ -91,12 +91,13 @@ function glib.markup_error1()
    local context = MarkupParseContext(parser, 0)
    local ok, err = context:parse('invalid>uh')
    check(not ok)
-   check(err == saved_err.message)
+   check(err:matches(saved_err))
 end
 
 function glib.markup_error2()
-   local MarkupParser = lgi.GLib.MarkupParser
-   local MarkupParseContext = lgi.GLib.MarkupParseContext
+   local GLib = lgi.GLib
+   local MarkupParser = GLib.MarkupParser
+   local MarkupParseContext = GLib.MarkupParseContext
 
    local saved_err
    local parser = MarkupParser {
@@ -104,12 +105,13 @@ function glib.markup_error2()
 	 saved_err = error
       end,
       start_element = function(context, element)
-	 error('snafu', 0)
+	 error(GLib.MarkupError('UNKNOWN_ELEMENT', 'snafu %d', 1))
       end,
    }
    local context = MarkupParseContext(parser, {})
    local ok, err = context:parse('<e/>')
    check(not ok)
-   check(err == 'snafu')
-   check(saved_err.message == err)
+   check(err:matches(GLib.MarkupError, 'UNKNOWN_ELEMENT'))
+   check(err.message == 'snafu 1')
+   check(saved_err:matches(err))
 end

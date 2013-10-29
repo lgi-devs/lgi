@@ -1120,10 +1120,14 @@ end
 
 function gireg.obj_methods()
    local R = lgi.Regress
+   local GLib = lgi.GLib
+   local Gio = lgi.Gio
+
    if R.TestObj._method.do_matrix then
       R.TestObj._method.invoke_matrix = R.TestObj._method.do_matrix
       R.TestObj._method.do_matrix = nil
    end
+
    local o = R.TestObj()
    check(o:instance_method() == -1)
    check(o.static_method(42) == 42)
@@ -1135,10 +1139,10 @@ function gireg.obj_methods()
    check(y == 1)
    check(z == 2)
    check(q == 5)
-   local res, msg, code = o:torture_signature_1(1, 'foo', 3)
+   local res, err = o:torture_signature_1(1, 'foo', 3)
    check(not res)
-   check(type(msg) == 'string')
-   check(type(code) == 'number')
+   check(GLib.Error:is_type_of(err))
+   check(err:matches(Gio.IOErrorEnum, 'FAILED'))
    check(o:invoke_matrix('unused') == 42)
 end
 
