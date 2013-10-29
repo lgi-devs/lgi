@@ -59,8 +59,9 @@ for _, name in pairs { 'Type', 'Value', 'Closure', 'Object' } do
 end
 repo.GObject._precondition.InitiallyUnowned = 'GObject-Object'
 
--- Create lazy-loading components for variant stuff.
+-- Create lazy-loading components for GLib primitives.
 repo.GLib._precondition = {}
+repo.GLib._precondition.Error = 'GLib-Error'
 for _, name in pairs { 'Variant', 'VariantType', 'VariantBuilder' } do
    repo.GLib._precondition[name] = 'GLib-Variant'
 end

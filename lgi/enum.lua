@@ -1,14 +1,15 @@
 ------------------------------------------------------------------------------
 --
---  LGI Support for enums and bitflags
+--  lgi support for enums and bitflags
 --
---  Copyright (c) 2010, 2011 Pavel Holejsovsky
+--  Copyright (c) 2010, 2011, 2013 Pavel Holejsovsky
 --  Licensed under the MIT license:
 --  http://www.opensource.org/licenses/mit-license.php
 --
 ------------------------------------------------------------------------------
 
-local setmetatable, pairs, type = setmetatable, pairs, type
+local setmetatable, pairs, type, select
+   = setmetatable, pairs, type, select
 local core = require 'lgi.core'
 local gi = core.gi
 local component = require 'lgi.component'
@@ -22,6 +23,7 @@ local enum = {
 
 function enum.load(info, meta)
    local enum_type = component.create(info, meta)
+   enum_type.error_domain = info.error_domain
    if info.methods then
       enum_type._method = component.get_category(
 	 info.methods, core.callable.new)
@@ -60,10 +62,15 @@ function enum.enum_mt:_element(instance, value)
    end
 end
 
--- Constructs enum number from specified string.
-function enum.enum_mt:_new(param)
+-- Constructs enum number from specified string. Eventually, for
+-- error-type enums, allows creating error instance.
+function enum.enum_mt:_new(param, ...)
    if type(param) == 'string' then param = self[param] end
-   return param
+   if self.error_domain and select('#', ...) > 0 then
+      return core.repo.GLib.Error(self, param, ...)
+   else
+      return param
+   end
 end
 
 -- Resolving arbitrary number to the table containing symbolic names

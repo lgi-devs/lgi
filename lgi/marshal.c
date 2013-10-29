@@ -704,18 +704,9 @@ marshal_2lua_error (lua_State *L, GITransfer xfer, GError *err)
     lua_pushnil (L);
   else
     {
-      /* Create Lua table with duplicated error information. */
-      lua_newtable (L);
-      lua_pushstring (L, g_quark_to_string (err->domain));
-      lua_setfield (L, -2, "domain");
-      lua_pushstring (L, err->message);
-      lua_setfield (L, -2, "message");
-      lua_pushnumber (L, err->code);
-      lua_setfield (L, -2, "code");
-
-      /* If the ownership is transferred, free the original error. */
-      if (xfer != GI_TRANSFER_NOTHING)
-	g_error_free (err);
+      /* Wrap error instance with GLib.Error record. */
+      lgi_type_get_repotype (L, G_TYPE_ERROR, NULL);
+      lgi_record_2lua (L, err, xfer != GI_TRANSFER_NOTHING, 0);
     }
 }
 

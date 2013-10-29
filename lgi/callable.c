@@ -921,10 +921,10 @@ callable_call (lua_State *L)
 	  nret = 1;
 	}
 
-      lua_pushstring (L, err->message);
-      lua_pushnumber (L, err->code);
-      g_error_free (err);
-      return nret + 2;
+      /* Wrap error instance into GLib.Error record. */
+      lgi_type_get_repotype (L, G_TYPE_ERROR, NULL);
+      lgi_record_2lua (L, err, TRUE, 0);
+      return nret + 1;
     }
 
   /* Process output parameters. */
@@ -1276,12 +1276,21 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
     }
   else
     {
-      /* If the function is expected to return errors, create proper error. */
-      GQuark q = g_quark_from_static_string ("lgi-callback-error-quark");
+      /* If the function is expected to return errors, create proper
+	 error. */
       GError **err = ((GIArgument *) args[callable->has_self +
 					  callable->nargs])->v_pointer;
-      g_set_error_literal (err, q, 1, lua_tostring (L, -1));
-      lua_pop (L, 1);
+
+      /* Check, whether thrown error is actually GLib.Error instance. */
+      lgi_type_get_repotype (L, G_TYPE_ERROR, NULL);
+      lgi_record_2c (L, -2, err, FALSE, TRUE, TRUE, TRUE);
+      if (*err == NULL)
+	{
+	  /* Nope, so come up with something funny. */
+	  GQuark q = g_quark_from_static_string ("lgi-callback-error-quark");
+	  g_set_error_literal (err, q, 1, lua_tostring (L, -1));
+	  lua_pop (L, 1);
+	}
 
       /* Such function should usually return FALSE, so do it. */
       if (g_type_info_get_tag (callable->retval.ti) == GI_TYPE_TAG_BOOLEAN)
