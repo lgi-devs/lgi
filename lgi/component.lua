@@ -302,6 +302,11 @@ function component.mt:_access_attribute(instance, element, ...)
    return element(instance, ...)
 end
 
+-- Pretty prints type name
+function component.mt:__tostring()
+   return self._name
+end
+
 -- Creates new component and sets up common parts according to given
 -- info.
 function component.create(info, mt, name)
