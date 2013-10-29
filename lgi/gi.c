@@ -404,7 +404,17 @@ info_index (lua_State *L)
 #if GLIB_CHECK_VERSION (2, 30, 0)
       INFOS (enum, method)
 #endif
-	INFOS (enum, value);
+	INFOS (enum, value)
+      else if (strcmp (prop, "error_domain") == 0)
+	{
+	  const gchar *domain = g_enum_info_get_error_domain (*info);
+	  if (domain != NULL)
+	    lua_pushnumber (L, g_quark_from_string (domain));
+	  else
+	    lua_pushnil (L);
+
+	  return 1;
+	}
     }
 
   if (GI_IS_VALUE_INFO (*info))
@@ -753,6 +763,12 @@ gi_index (lua_State *L)
 	? g_irepository_find_by_gtype (NULL, gtype) : NULL;
       return lgi_gi_info_new (L, info);
     }
+  else if (lua_type (L, 2) == LUA_TNUMBER)
+    {
+      GQuark domain = (GQuark) lua_tonumber (L, 2);
+      GIBaseInfo *info = g_irepository_find_by_error_domain (NULL, domain);
+      return lgi_gi_info_new (L, info);
+    }
   else
     {
       const gchar *ns = luaL_checkstring (L, 2);
@@ -760,7 +776,6 @@ gi_index (lua_State *L)
 	return namespace_new (L, ns);
     }
 
-  lua_pushnil (L);
   return 0;
 }
 
