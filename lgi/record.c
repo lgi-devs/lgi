@@ -423,14 +423,24 @@ static int
 record_tostring (lua_State *L)
 {
   Record *record = record_get (L, 1);
-  lua_pushfstring (L, "lgi.rec %p:", record->addr);
   lua_getfenv (L, 1);
-  lua_getfield (L, -1, "_name");
-  lua_replace (L, -2);
-  if (!lua_isnil (L, -1))
-    lua_concat (L, 2);
+  lua_getfield (L, -1, "_tostring");
+  if (lua_isnil (L, -1))
+    {
+      lua_pop (L, 1);
+      lua_pushfstring (L, "lgi.rec %p:", record->addr);
+      lua_getfield (L, -2, "_name");
+      if (!lua_isnil (L, -1))
+	lua_concat (L, 2);
+      else
+	lua_pop (L, 1);
+    }
   else
-    lua_pop (L, 1);
+    {
+      lua_pushvalue (L, 1);
+      lua_call (L, 1, 1);
+    }
+
   return 1;
 }
 
