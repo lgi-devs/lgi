@@ -34,7 +34,7 @@ store:set_default_sort_func(
       -- Sort folders before files.
       a = model[a]
       b = model[b]
-      local is_dir_a, is_dir_b = 
+      local is_dir_a, is_dir_b =
 	 a[ViewColumn.IS_DIRECTORY], b[ViewColumn.IS_DIRECTORY]
       if not is_dir_a and is_dir_b then
 	 return 1
@@ -83,21 +83,55 @@ local window = Gtk.Window {
 }
 
 local current_dir = Gio.File.new_for_path('/')
+local cancellable
 local function fill_store()
-   store:clear()
-   local enum = current_dir:enumerate_children('standard::*', 'NONE')
-   while true do
-      local info, err = enum:next_file()
-      if not info then assert(not err, err) break end
-      store:append {
-	 [ViewColumn.PATH] = current_dir:get_child(info:get_name()),
-	 [ViewColumn.DISPLAY_NAME] = info:get_display_name(),
-	 [ViewColumn.IS_DIRECTORY] = info:get_file_type() == 'DIRECTORY',
-	 [ViewColumn.PIXBUF] = pixbuf[info:get_file_type()],
-      }
+   -- If the opertion is already running, just cancel it.  It will
+   -- restart itself when cancel is detected.
+   if cancellable then
+      cancellable:cancel()
+      return
    end
-   window.child.up_button.sensitive = (current_dir:get_parent() ~= nil)
+
+   -- Asynchronously started worker routine.
+   local function fill()
+      local function check(condition, err)
+	 return not cancellable:is_cancelled() and assert(condition, err)
+      end
+
+      local dir = current_dir
+      cancellable = Gio.Cancellable()
+      Gio.Async.cancellable = cancellable
+      store:clear()
+      window.child.up_button.sensitive = (current_dir:get_parent() ~= nil)
+      local enum = check(dir:async_enumerate_children('standard::*', 'NONE'))
+      while not cancellable:is_cancelled() do
+	 local infos = check(enum:async_next_files(16))
+	 if not infos or #infos == 0 then break end
+	 for _, info in pairs(infos) do
+	    store:append {
+	       [ViewColumn.PATH] = current_dir:get_child(info:get_name()),
+	       [ViewColumn.DISPLAY_NAME] = info:get_display_name(),
+	       [ViewColumn.IS_DIRECTORY] = info:get_file_type() == 'DIRECTORY',
+	       [ViewColumn.PIXBUF] = pixbuf[info:get_file_type()],
+	    }
+	 end
+      end
+
+      -- Signalize that we are finished.
+      cancellable = nil
+
+      -- Check, whether someone else already requested different
+      -- request.  If yes, spawn another query.
+      if dir ~= current_dir then
+	 Gio.Async.start(fill)()
+      end
+   end
+
+   -- Perform actual fill asynchronously.
+   Gio.Async.start(fill)()
 end
+
+-- Initial fill of the store.
 fill_store()
 
 function window.child.up_button:on_clicked()
@@ -115,6 +149,12 @@ function window.child.icon_view:on_item_activated(path)
    if row[ViewColumn.IS_DIRECTORY] then
       current_dir = row[ViewColumn.PATH]
       fill_store()
+   end
+end
+
+function window:on_destroy()
+   if cancellable then
+      cancellable:cancel()
    end
 end
 
