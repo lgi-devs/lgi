@@ -245,7 +245,7 @@ function component.mt:_element(instance, symbol, origin)
 	 -- category.
 	 if not cached then
 	    cached = {}
-	    self['_cached'] = cached
+	    self._cached = cached
 	 end
 	 cached[symbol] = { element, category }
       end

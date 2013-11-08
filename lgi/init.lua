@@ -8,8 +8,10 @@
 --
 ------------------------------------------------------------------------------
 
-local assert, require, pcall, setmetatable, pairs
-   = assert, require, pcall, setmetatable, pairs
+local assert, require, pcall, setmetatable, pairs, type, error, tostring,
+_VERSION, jit
+   = assert, require, pcall, setmetatable, pairs, type, error, tostring,
+_VERSION, jit
 local package = require 'package'
 
 -- Require core lgi utilities, used during bootstrap.
@@ -45,6 +47,20 @@ lgi.require = namespace.require
 -- Install 'lgi.package' method.
 lgi.package = require('lgi.package').ensure
 
+-- Add assert override, which accepts not only text message but any
+-- kind of error object.
+function lgi.assert(cond, ...)
+   if cond then return cond, ... end
+   local err = ...
+   if _VERSION == 'Lua 5.1' and not jit then
+      -- Lua 5.1 does not support displaying message of non-string
+      -- errors on the commandline interpreter, so better stringize
+      -- the error message right now.
+      err = tostring(err)
+   end
+   error(err, 2)
+end
+
 -- Install metatable into repo table, so that on-demand loading works.
 setmetatable(repo, { __index = function(_, name)
 				  return lgi.require(name)
@@ -62,13 +78,13 @@ repo.GObject._precondition.InitiallyUnowned = 'GObject-Object'
 -- Create lazy-loading components for GLib primitives.
 repo.GLib._precondition = {}
 repo.GLib._precondition.Error = 'GLib-Error'
-for _, name in pairs { 'Variant', 'VariantType', 'VariantBuilder' } do
-   repo.GLib._precondition[name] = 'GLib-Variant'
-end
 repo.GLib._precondition.Bytes = 'GLib-Bytes'
 repo.GLib._precondition.Timer = 'GLib-Timer'
 repo.GLib._precondition.MarkupParser = 'GLib-Markup'
 repo.GLib._precondition.MarkupParseContext = 'GLib-Markup'
+for _, name in pairs { 'Variant', 'VariantType', 'VariantBuilder' } do
+   repo.GLib._precondition[name] = 'GLib-Variant'
+end
 
 -- Access to module proxies the whole repo, so that lgi.'namespace'
 -- notation works.

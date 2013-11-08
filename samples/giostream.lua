@@ -10,6 +10,8 @@ local lgi = require 'lgi'
 local GLib = lgi.GLib
 local Gio = lgi.Gio
 
+local assert = lgi.assert
+
 local app = Gio.Application { application_id = 'org.lgi.samples.giostream' }
 
 local function read_lua(file)

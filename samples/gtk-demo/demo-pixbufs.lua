@@ -7,6 +7,8 @@ local Gdk = lgi.Gdk
 local GdkPixbuf = lgi.GdkPixbuf
 local cairo = lgi.cairo
 
+local assert = lgi.assert
+
 -- Load pixbuf images.
 local background = assert(GdkPixbuf.Pixbuf.new_from_file(
 			     dir:get_child('background.jpg'):get_path()))

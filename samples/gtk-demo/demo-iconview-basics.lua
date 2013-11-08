@@ -7,6 +7,8 @@ local Gio = lgi.Gio
 local Gtk = lgi.Gtk
 local GdkPixbuf = lgi.GdkPixbuf
 
+local assert = lgi.assert
+
 local pixbuf = {
    REGULAR = assert(GdkPixbuf.Pixbuf.new_from_file(
 		       dir:get_child('gnome-fs-regular.png'):get_path())),

@@ -5,6 +5,8 @@ local GObject = lgi.GObject
 local Gtk = lgi.Gtk
 local GdkPixbuf = lgi.GdkPixbuf
 
+local assert = lgi.assert
+
 -- Register icon.
 Gtk.stock_add {
    Gtk.StockItem {

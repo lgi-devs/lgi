@@ -9,6 +9,8 @@ local cairo = lgi.cairo
 local Pango = lgi.Pango
 local PangoCairo = lgi.PangoCairo
 
+local assert = lgi.assert
+
 -- Prepare settings.
 local settings = Gtk.PrintSettings {}
 local outdir = GLib.get_user_special_dir('DIRECTORY_DOCUMENTS')
@@ -44,9 +46,9 @@ function operation:on_begin_print(context)
       base_stream = assert(file:read()),
    }
    while true do
-      local line, err = input:read_line_utf8()
-      if not line and err == 0 then break end
-      assert(line, err)
+      local line, len = input:read_line_utf8()
+      if not line and len == 0 then break end
+      assert(line, len)
       contents[#contents + 1] = line
    end
    contents.num_pages =

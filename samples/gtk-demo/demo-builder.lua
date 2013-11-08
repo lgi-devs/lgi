@@ -3,6 +3,8 @@ return function(parent, dir)
 local lgi = require 'lgi'
 local Gtk = lgi.Gtk
 
+local assert = lgi.assert
+
 local builder = Gtk.Builder()
 assert(builder:add_from_file(dir:get_child('demo.ui'):get_path()))
 local ui = builder.objects

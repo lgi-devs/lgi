@@ -38,6 +38,8 @@ local GtkSource = lgi.GtkSource
 -- Create package for the whole demo.
 local GtkDemo = lgi.package 'GtkDemo'
 
+local assert = lgi.assert
+
 local DemoListColumn = {
    TITLE = 1,
    INFO = 2,

@@ -9,6 +9,8 @@ local io = require 'io'
 local lgi = require 'lgi'
 local GLib = lgi.GLib
 
+local assert = lgi.assert
+
 local function make_parser(doc)
    local stack = { doc }
    local parser = GLib.MarkupParser {
