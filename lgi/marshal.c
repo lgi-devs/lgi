@@ -1209,11 +1209,16 @@ lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIArgInfo *ai, GIDirection dir,
 
 	  case GI_INFO_TYPE_STRUCT:
 	  case GI_INFO_TYPE_UNION:
-	    lgi_type_get_repotype (L, G_TYPE_INVALID, info);
-	    lgi_record_2lua (L, parent == LGI_PARENT_FORCE_POINTER ||
-			     g_type_info_is_pointer (ti)
-			     ? arg->v_pointer : source, own, parent);
-	    break;
+	    {
+	      gboolean by_ref = parent == LGI_PARENT_FORCE_POINTER ||
+		g_type_info_is_pointer (ti);
+	      if (parent < LGI_PARENT_CALLER_ALLOC && by_ref)
+		parent = 0;
+	      lgi_type_get_repotype (L, G_TYPE_INVALID, info);
+	      lgi_record_2lua (L, by_ref ? arg->v_pointer : source,
+			       own, parent);
+	      break;
+	    }
 
 	  case GI_INFO_TYPE_OBJECT:
 	  case GI_INFO_TYPE_INTERFACE:
