@@ -1,8 +1,8 @@
 ------------------------------------------------------------------------------
 --
---  LGI Handling of structs and unions
+--  lgi - handling of structs and unions
 --
---  Copyright (c) 2010, 2011 Pavel Holejsovsky
+--  Copyright (c) 2010, 2011,2013 Pavel Holejsovsky
 --  Licensed under the MIT license:
 --  http://www.opensource.org/licenses/mit-license.php
 --
@@ -54,6 +54,7 @@ function record.struct_mt:_element(instance, symbol)
    -- Special handling of '_native' attribute.
    if symbol == '_native' then return symbol, '_internal'
    elseif symbol == '_type' then return symbol, '_internal'
+   elseif symbol == '_refsink' then return symbol, '_internal'
    end
 
    -- If the record has parent struct, try it there.
@@ -102,6 +103,10 @@ function record.struct_mt:_access_internal(instance, element, ...)
    elseif element == '_type' then
       return core.record.query(instance, 'repo')
    end
+end
+
+function record.struct_mt:_index_internal(element)
+   return nil
 end
 
 -- Create structure instance and initialize it with given fields.

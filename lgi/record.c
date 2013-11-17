@@ -330,7 +330,16 @@ lgi_record_2c (lua_State *L, int narg, gpointer target, gboolean by_value,
 	{
 	  /* Caller wants to steal ownership from us. */
 	  if (G_LIKELY (record->store == RECORD_STORE_ALLOCATED))
-	    record->store = RECORD_STORE_EXTERNAL;
+	    {
+	      /* Check, whether refrepo table specifies custom _refsink
+		 function. */
+	      void (*refsink_func)(gpointer) =
+		lgi_gi_load_function (L, narg, "_refsink");
+	      if (refsink_func)
+		refsink_func(record->addr);
+	      else
+		record->store = RECORD_STORE_EXTERNAL;
+	    }
 	  else
 	    g_critical ("attempt to steal record ownership from unowned rec");
 	}
