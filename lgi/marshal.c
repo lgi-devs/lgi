@@ -1362,7 +1362,7 @@ lgi_marshal_field (lua_State *L, gpointer object, gboolean getmode,
 	      {
 		g_assert (kind == 1);
 		lgi_record_2c (L, val_arg, arg->v_pointer,
-			       FALSE, FALSE, FALSE, FALSE);
+			       FALSE, TRUE, FALSE, FALSE);
 		return 0;
 	      }
 	    break;
@@ -1418,7 +1418,7 @@ lgi_marshal_field (lua_State *L, gpointer object, gboolean getmode,
     }
   else
     {
-      lgi_marshal_2c (L, ti, NULL, GI_TRANSFER_NOTHING, object, val_arg,
+      lgi_marshal_2c (L, ti, NULL, GI_TRANSFER_EVERYTHING, object, val_arg,
 		      0, NULL, NULL);
       nret = 0;
     }
