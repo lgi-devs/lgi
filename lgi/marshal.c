@@ -1053,7 +1053,7 @@ lgi_marshal_2c_caller_alloc (lua_State *L, GITypeInfo *ti, GIArgument *val,
 	    if (pos == 0)
 	      {
 		lgi_type_get_repotype (L, G_TYPE_INVALID, ii);
-		val->v_pointer = lgi_record_new (L, 1);
+		val->v_pointer = lgi_record_new (L, 1, FALSE);
 	      }
 	    handled = TRUE;
 	  }

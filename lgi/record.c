@@ -1,7 +1,7 @@
 /*
  * Dynamic Lua binding to GObject using dynamic gobject-introspection.
  *
- * Copyright (c) 2010, 2011, 2012 Pavel Holejsovsky
+ * Copyright (c) 2010, 2011, 2012, 2013 Pavel Holejsovsky
  * Licensed under the MIT license:
  * http://www.opensource.org/licenses/mit-license.php
  *
@@ -64,7 +64,7 @@ static int record_cache;
 static int parent_cache;
 
 gpointer
-lgi_record_new (lua_State *L, int count)
+lgi_record_new (lua_State *L, int count, gboolean alloc)
 {
   Record *record;
   size_t size;
@@ -73,18 +73,27 @@ lgi_record_new (lua_State *L, int count)
 
   /* Calculate size of the record to allocate. */
   lua_getfield (L, -1, "_size");
-  size = G_STRUCT_OFFSET (Record, data) + lua_tonumber (L, -1) * count;
+  size = lua_tonumber (L, -1) * count;
   lua_pop (L, 1);
 
   /* Allocate new userdata for record object, attach proper
      metatable. */
-  record = lua_newuserdata (L, size);
+  record = lua_newuserdata (L, G_STRUCT_OFFSET (Record, data) +
+			    (alloc ? 0 : size));
   lua_pushlightuserdata (L, &record_mt);
   lua_rawget (L, LUA_REGISTRYINDEX);
   lua_setmetatable (L, -2);
-  record->addr = record->data;
-  memset (record->addr, 0, size - G_STRUCT_OFFSET (Record, data));
-  record->store = RECORD_STORE_EMBEDDED;
+  if (G_LIKELY (!alloc))
+    {
+      record->addr = record->data;
+      memset (record->addr, 0, size);
+      record->store = RECORD_STORE_EMBEDDED;
+    }
+  else
+    {
+      record->addr = g_malloc0 (size);
+      record->store = RECORD_STORE_ALLOCATED;
+    }
 
   /* Get ref_repo table, attach it as an environment. */
   lua_pushvalue (L, -2);
@@ -490,7 +499,7 @@ static const struct luaL_Reg record_meta_reg[] = {
    unless 'addr' argument (lightuserdata or integer) is specified, in
    which case wraps specified address as record.  Lua prototype:
 
-   recordinstance = core.record.new(repotable[, nil[, count]])
+   recordinstance = core.record.new(repotable[, nil[, count[, alloc]]])
    recordinstance = core.record.new(repotable[, addr[, own]])
 
    own (default false) means whether Lua takes record ownership
@@ -502,9 +511,10 @@ record_new (lua_State *L)
   if (lua_isnoneornil (L, 2))
     {
       /* Create new record instance. */
+      gboolean alloc = lua_toboolean (L, 4);
       luaL_checktype (L, 1, LUA_TTABLE);
       lua_pushvalue (L, 1);
-      lgi_record_new (L, luaL_optinteger (L, 3, 1));
+      lgi_record_new (L, luaL_optinteger (L, 3, 1), alloc);
     }
   else
     {
