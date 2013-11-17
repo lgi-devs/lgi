@@ -226,3 +226,12 @@ for _, name in pairs { 'read', 'read_all', 'read_async' } do
       end
    end
 end
+
+-- Add preconditions for auto-loading DBus overrides.
+Gio._precondition = {}
+for _, name in pairs {
+   'AnnotationInfo', 'ArgInfo', 'MethodInfo', 'SignalInfo', 'PropertyInfo',
+   'InterfaceInfo', 'NodeInfo',
+} do
+   Gio._precondition['DBus' .. name] = 'Gio-DBus'
+end

@@ -112,6 +112,7 @@ for _, sourcefile in ipairs {
    'gobject.lua',
    'glib.lua',
    'variant.lua',
+   'dbus.lua',
    'gtk.lua',
    'cairo.lua',
 } do
