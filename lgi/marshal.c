@@ -240,6 +240,12 @@ array_get_elt_size (GITypeInfo *ti)
   return size;
 }
 
+static void
+array_detach (GArray *array)
+{
+  g_array_free (array, FALSE);
+}
+
 /* Marshalls array from Lua to C. Returns number of temporary elements
    pushed to the stack. */
 static int
@@ -309,7 +315,9 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 	      array = g_array_sized_new (zero_terminated, TRUE, esize,
 					 *out_size);
 	      g_array_set_size (array, *out_size);
-	      *lgi_guard_create (L, (GDestroyNotify) g_array_unref) = array;
+	      *lgi_guard_create (L, (GDestroyNotify)
+				 (transfer == GI_TRANSFER_EVERYTHING
+				  ? array_detach : g_array_unref)) = array;
 	      vals = 1;
 	    }
 
