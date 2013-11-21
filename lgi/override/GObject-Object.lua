@@ -129,6 +129,9 @@ end
 function Object.new(gtype, params, owns)
    -- Find proper repo instance for gtype.
    local self = core.repotype(gtype)
+   if not self then
+      error(("`%s': cannot create object, type not found"):format(gtype), 2)
+   end
    return self:_construct(gtype, params, owns)
 end
 

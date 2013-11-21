@@ -1,7 +1,7 @@
 /*
  * Dynamic Lua binding to GObject using dynamic gobject-introspection.
  *
- * Copyright (c) 2010, 2011, 2012 Pavel Holejsovsky
+ * Copyright (c) 2010, 2011, 2012, 2013 Pavel Holejsovsky
  * Licensed under the MIT license:
  * http://www.opensource.org/licenses/mit-license.php
  *
@@ -160,7 +160,7 @@ lgi_type_get_repotype (lua_State *L, GType gtype, GIBaseInfo *info)
     {
       /* Not indexed yet.  Try to lookup by name - this works when
 	 lazy-loaded repo tables are not loaded yet. */
-      if (!info)
+      if (!info && gtype != G_TYPE_INVALID)
 	{
 	  info = g_irepository_find_by_gtype (NULL, gtype);
 	  lgi_gi_info_new (L, info);
