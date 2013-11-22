@@ -128,7 +128,7 @@ end
 -- specified GType.
 function Object.new(gtype, params, owns)
    -- Find proper repo instance for gtype.
-   local gtype_walker, self = gtype
+   local gtype_walker = gtype
    while true do
       local self = core.repotype(gtype_walker)
       if self then
