@@ -2,7 +2,7 @@
 --
 --  LGI Gdk3 override module.
 --
---  Copyright (c) 2011 Pavel Holejsovsky
+--  Copyright (c) 2011, 2014 Pavel Holejsovsky
 --  Licensed under the MIT license:
 --  http://www.opensource.org/licenses/mit-license.php
 --
@@ -113,4 +113,16 @@ for _, name in pairs { 'clip_rectangle', 'source_color', 'source_pixbuf',
       get = cairo.Context._method['get_' .. name],
       set = cairo.Context._method['set_' .. name],
    }
+end
+
+-- Gdk events have strange hierarchy; GdkEvent is union of all known
+-- GdkEventXxx specific types.  This means that generic gdk_event_xxx
+-- methods are not available on GdkEventXxxx specific types.  Work
+-- around this by setting GdkEvent as parent for GdkEventXxxx specific
+-- types.
+for _, event_type in pairs {
+   'Any', 'Expose', 'Visibility', 'Motion', 'Button', 'Touch', 'Scroll', 'Key',
+   'Crossing', 'Focus', 'Configure', 'Property', 'Selection', 'OwnerChange',
+   'Proximity', 'DND', 'WindowState', 'Setting', 'GrabBroken' } do
+   Gdk['Event' .. event_type]._parent = Gdk.Event
 end
