@@ -13,9 +13,15 @@
 
 /* Lua 5.2 compatibility stuff. */
 #if LUA_VERSION_NUM >= 502
+#ifndef luaL_register
 #define luaL_register(L, null, regs) luaL_setfuncs (L, regs, 0)
+#endif
+#ifndef lua_equal
 #define lua_equal(L, p1, p2) lua_compare (L, p1, p2, LUA_OPEQ)
+#endif
+#ifndef lua_objlen
 #define lua_objlen(L, p) lua_rawlen (L, p)
+#endif
 #define lua_setfenv(L, p) lua_setuservalue (L, p)
 #define lua_getfenv(L, p) lua_getuservalue (L, p)
 #endif
