@@ -13,6 +13,7 @@ local assert, pairs, select, type, tostring, error =
 local lgi = require 'lgi'
 local core = require 'lgi.core'
 local repo = core.repo
+local ffi = require 'lgi.ffi'
 local gi = core.gi
 local Type = repo.GObject.Type
 
@@ -34,6 +35,15 @@ for _, name in pairs { 'set_object', 'set_variant', 'set_string' } do
       end
    end
 end
+
+-- Workaround for incorrect annotations - g_value_get_variant is missing
+-- (transfer-none).
+local _ = Value.get_variant
+Value.get_variant = core.callable.new {
+   addr = gi.GObject.resolve.g_value_get_variant,
+   name = 'GObject.Value.get_variant',
+   ret = repo.GLib.Variant, Value,
+}
 
 -- Do not allow direct access to fields.
 local value_field_gtype = Value._field.g_type
@@ -74,8 +84,8 @@ end
 
 local value_marshallers = {}
 for name, gtype in pairs(Type) do
-   local get = Value._method['get_' .. name:lower()]
-   local set = Value._method['set_' .. name:lower()]
+   local get = Value['get_' .. name:lower()]
+   local set = Value['set_' .. name:lower()]
    if get and set then
       value_marshallers[gtype] =
       function(value, params, ...)
