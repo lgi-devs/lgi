@@ -123,6 +123,50 @@ lgi_record_new (lua_State *L, int count, gboolean alloc)
   return record->addr;
 }
 
+static void
+record_free (lua_State *L, Record *record, int narg)
+{
+  GType gtype;
+  g_assert (record->store == RECORD_STORE_ALLOCATED);
+  lua_getfenv (L, narg);
+  for (;;)
+    {
+      lua_getfield (L, -1, "_gtype");
+      gtype = (GType) lua_touserdata (L, -1);
+      lua_pop (L, 1);
+      if (G_TYPE_IS_BOXED (gtype))
+	{
+	  g_boxed_free (gtype, record->addr);
+	  break;
+	}
+      else
+	{
+	  /* Use custom _free function. */
+	  void (*free_func)(gpointer) =
+	    lgi_gi_load_function (L, -1, "_free");
+	  if (free_func)
+	    {
+	      free_func (record->addr);
+	      break;
+	    }
+	}
+
+      /* Try to get parent of the type. */
+      lua_getfield (L, -1, "_parent");
+      lua_replace (L, -2);
+      if (lua_isnil (L, -1))
+	{
+	  lua_getfenv (L, 1);
+	  lua_getfield (L, -1, "_name");
+	  g_warning ("unable to free record %s, leaking it",
+		     lua_tostring (L, -1));
+	  lua_pop (L, 2);
+	  break;
+	}
+    }
+  lua_pop (L, 1);
+}
+
 void
 lgi_record_2lua (lua_State *L, gpointer addr, gboolean own, int parent)
 {
@@ -161,8 +205,13 @@ lgi_record_2lua (lua_State *L, gpointer addr, gboolean own, int parent)
 	 ownership is properly updated. */
       record = lua_touserdata (L, -1);
       g_assert (record->addr == addr);
-      if (own && record->store == RECORD_STORE_EXTERNAL)
-	record->store = RECORD_STORE_ALLOCATED;
+      if (own)
+	{
+	  if (record->store == RECORD_STORE_EXTERNAL)
+	    record->store = RECORD_STORE_ALLOCATED;
+	  else if (record->store == RECORD_STORE_ALLOCATED)
+	    record_free (L, record, -1);
+	}
 
       return;
     }
@@ -385,46 +434,8 @@ record_gc (lua_State *L)
 	uninit (record->addr);
     }
   else if (record->store == RECORD_STORE_ALLOCATED)
-    {
-      /* Free the owned record. */
-      GType gtype;
-      lua_getfenv (L, 1);
-      for (;;)
-	{
-	  lua_getfield (L, -1, "_gtype");
-	  gtype = (GType) lua_touserdata (L, -1);
-	  lua_pop (L, 1);
-	  if (G_TYPE_IS_BOXED (gtype))
-	    {
-	      g_boxed_free (gtype, record->addr);
-	      break;
-	    }
-	  else
-	    {
-	      /* Use custom _free function. */
-	      void (*free_func)(gpointer) =
-		lgi_gi_load_function (L, -1, "_free");
-	      if (free_func)
-		{
-		  free_func (record->addr);
-		  break;
-		}
-	    }
-
-	  /* Try to get parent of the type. */
-	  lua_getfield (L, -1, "_parent");
-	  lua_replace (L, -2);
-	  if (lua_isnil (L, -1))
-	    {
-	      lua_getfenv (L, 1);
-	      lua_getfield (L, -1, "_name");
-	      g_warning ("unable to record_gc %s, leaking it",
-			 lua_tostring (L, -1));
-	      lua_pop (L, 2);
-	      break;
-	    }
-	}
-    }
+    /* Free the owned record. */
+    record_free (L, record, 1);
 
   if (record->store == RECORD_STORE_NESTED)
     {
