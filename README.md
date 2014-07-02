@@ -54,12 +54,41 @@ List of contributors, in no particular order:
 - Craig Barnes
 - Nicola Fontana
 - Andreas Stührk
+- Aaron Faanes
 
 Many other people contributed to what lgi is today, in many forms -
 writing patches, reporting bugs, packaging for distributions,
 providing ideas, spreading a word...  *Many thanks to all of you!*
 
 ## History
+
+### 0.8.0 (02-Jul-2013)
+
+ - new feature: add automatically-generated wrappers for
+   do_async()/do_finish() pairs.  Documented as Gio.Async namespace
+   functionality.
+ - new feature: automatically initialize objects implementing
+   Gio.Initable and Gio.AsyncInitable interfaces.
+ - new feature: GLib.Error is now handled properly, functions
+   returning errors return GLib.Error instances instead of error
+   numbers and strings.  This also allows overriding virtual methods
+   from Lua which report errors by returning GLib.Error
+ - new feature: GLib.Bytes support, adding # operator and 'data'
+   property allowing easy use of GLib.Bytes object.  This leads to
+   deprecation of seldomly used modifiable buffers extensions.
+ - optimization: type attribute caching brings significant speedup of
+   method and property lookups.
+ - fix: Gtk: override for Gtk.Menu.popup() compatible with new GTK
+   annotation.
+ - fix: cairo: assorted small fixes of bad signatures, added some
+   convenience properties.
+ - fix: GLib: add overrides for GLib.MarkupParser
+ - fix: Gio: add overrides for Gio.DBus*Info structures
+ - fix: Pango: add override for Pango.GlyphString.glyphs array
+ - fix: Gdk: Add override inheriting specific Gdk.EventXxx from Gdk.Event
+ - fix: Compile cleanly against Lua5.2 with compatibility mode turned on
+ - fix: avoid leak when adding already cached owned record and for
+   retrieving Variant from Value.
 
 ### 0.7.2 (12-Sep-2013)
 

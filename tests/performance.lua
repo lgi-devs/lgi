@@ -53,4 +53,7 @@ print('\n')
 
 *** Add support for automatic async_ invocation
 0.65	0.11	0.10	0.97	0.64	1.72	0.03	2.88
+
+*** 0.8.0: (On Lua5.2)
+0.65	0.10	0.10	0.93	0.62	1.62	0.03	2.78
 --]]
