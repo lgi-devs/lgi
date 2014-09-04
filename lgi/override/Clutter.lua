@@ -21,6 +21,9 @@ function Clutter.Container:add(...)
    for i = 1, #args do Clutter.Container.add_actor(self, args[i]) end
 end
 
+-- Allow ctor to add widgets from the array part
+Clutter.Container._container_add = Clutter.Container.add_actor
+
 -- Provides pseudo-attribute 'meta' for accessing container's
 -- child-meta elements.
 local container_child_meta_mt = {}
