@@ -725,6 +725,12 @@ Moreover, functions operating on `GType` are also present in
 > `parent`, `depth`, `next_base`, `is_a`, `children`, `interfaces`,
 > `query`, `fundamental_next`, `fundamental`
 
+There is special new method, `Type.type(gtype)` which returns lgi
+native type representing specified gtype.  For example:
+
+    assert(Gtk.Window == GObject.Type.type('GtkWindow'))
+    assert(Gtk.WidgetPath == GObject.Type.type('GtkWidgetPath'))
+
 When transferring `GType` value from Lua to C (e.g. calling function
 which accepts argument of `GType`), it is possible to use either
 string with type name, number representing numeric `GType` value, or

@@ -65,3 +65,8 @@ function Type.from_typeinfo(ti)
    end
    return gtype
 end
+
+-- Gets lgi type from gtype.
+function Type.type(ti)
+   return core.repotype(ti)
+end
