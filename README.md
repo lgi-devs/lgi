@@ -62,7 +62,7 @@ providing ideas, spreading a word...  *Many thanks to all of you!*
 
 ## History
 
-### 0.8.0 (02-Jul-2013)
+### 0.8.0 (02-Jul-2014)
 
  - new feature: add automatically-generated wrappers for
    do_async()/do_finish() pairs.  Documented as Gio.Async namespace
