@@ -60,6 +60,7 @@ function Object:_construct(gtype, param, owns)
 	 if gi.isinfo(argtype) and argtype.is_property then
 	    local parameter = core.record.new(parameter_repo)
 	    name = argtype.name
+	    local value = parameter.value
 
 	    -- Store the name string in some safe Lua place ('safe'
 	    -- table), because param is GParameter, which contains
@@ -67,12 +68,13 @@ function Object:_construct(gtype, param, owns)
 	    -- Lua-GC'ed while still referenced by GParameter
 	    -- instance.
 	    safe[#safe + 1] = name
+	    safe[#safe + 1] = value
 
 	    parameter.name = name
 	    local gtype = Type.from_typeinfo(argtype.typeinfo)
-	    Value.init(parameter.value, gtype)
+	    Value.init(value, gtype)
 	    local marshaller = Value.find_marshaller(gtype, argtype.typeinfo)
-	    marshaller(parameter.value, nil, arg)
+	    marshaller(value, nil, arg)
 	    parameters[#parameters + 1] = parameter
 	 else
 	    others[name] = arg

@@ -234,3 +234,21 @@ function gobject.treemodel_impl()
    check(model[Gtk.TreeIter()][1] == '1')
    check(model[Gtk.TreeIter()][2] == 1)
 end
+
+function gobject.ctor_gc()
+   local Gtk = lgi.Gtk
+
+   local oldpause = collectgarbage('setpause', 10)
+   local oldstepmul = collectgarbage('setstepmul', 10000)
+
+   for i = 1, 1000 do
+      local window = Gtk.Window {
+	 width = 800,
+	 height = 600,
+	 title = "Test",
+      }
+   end
+
+   collectgarbage('setpause', oldpause)
+   collectgarbage('setstepmul', oldstepmul)
+end
