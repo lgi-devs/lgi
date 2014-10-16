@@ -401,7 +401,7 @@ end
 
 function class.derived_mt:_access_priv(instance, name, ...)
    if select('#', ...) > 0 then
-      error(("%s: cannot assign `%s'"):format(self._name), name, 5)
+      error(("%s: cannot assign `%s'"):format(self._name, name), 5)
    end
    return core.object.env(instance)
 end
