@@ -285,7 +285,7 @@ local register_static = core.callable.new(GObject.type_register_static)
 local type_query = core.callable.new(GObject.type_query)
 local type_add_interface_static = core.callable.new(
    GObject.type_add_interface_static)
-function class.class_mt:derive(typename, ifaces)
+function class.class_mt:derive(typename, ifaces, properties)
    -- Prepare repotable for newly registered class.
    local new_class = setmetatable(
       {
@@ -308,6 +308,12 @@ function class.class_mt:derive(typename, ifaces)
 	 end
       end
 
+      -- This must be done after get_property
+      -- and set_property have been assigned
+      for prop_id, pspec in pairs(properties or {}) do
+         class_struct:install_property(prop_id, pspec)
+      end
+
       -- If type specified _class_init method, invoke it.
       local _class_init = rawget(new_class, '_class_init')
       if _class_init then
@@ -325,11 +331,17 @@ function class.class_mt:derive(typename, ifaces)
    -- which looks up the init method of the type dynamically is used
    -- instead.
    local function instance_init(instance)
+      -- Convert instance to real type
+      local self = core.object.new(core.record.query(instance, 'addr'),
+                                   false, true)
+
+      -- Alternatives?
+      self.priv._property_helper = {}
+
+      -- If type specified _init method, invoke it.
       local _init = rawget(new_class, '_init')
       if _init then
-	 -- Convert instance to real type and call init with it.
-	 _init(core.object.new(core.record.query(instance, 'addr'),
-	       false, true))
+         _init(self)
       end
    end
    local instance_init_guard, instance_init_addr = core.marshal.callback(
@@ -383,6 +395,32 @@ function class.class_mt:derive(typename, ifaces)
       type_add_interface_static(new_class, iface, iface_info)
    end
 
+   local function get_property(self, prop_id, value, pspec)
+      local real_get_property = rawget(new_class, 'do_get_property')
+      if real_get_property then
+         value.value = real_get_property(self, pspec)
+      else
+         value.value = self.priv._property_helper[pspec.name]
+      end
+   end
+   local get_property_guard, get_property_addr = core.marshal.callback(
+      GObject.ObjectGetPropertyFunc, get_property)
+   new_class._override['get_property'] = get_property_addr
+   new_class._guard['get_property'] = get_property_guard
+
+   local function set_property(self, prop_id, value, pspec)
+      local real_set_property = rawget(new_class, 'do_set_property')
+      if real_set_property then
+         real_set_property(self, pspec, value.value)
+      else
+         self.priv._property_helper[pspec.name] = value.value
+      end
+   end
+   local set_property_guard, set_property_addr = core.marshal.callback(
+      GObject.ObjectSetPropertyFunc, set_property)
+   new_class._override['set_property'] = set_property_addr
+   new_class._guard['set_property'] = set_property_guard
+
    return new_class
 end
 
@@ -393,6 +431,10 @@ class.derived_mt = class.class_mt:clone('derived', {})
 function class.derived_mt:_element(instance, symbol)
    -- Special handling of 'priv' attribute.
    if instance and symbol == 'priv' then return symbol, '_priv' end
+
+   -- Handled by the class specially
+   if symbol == 'do_get_property' then return symbol, '_override' end
+   if symbol == 'do_set_property' then return symbol, '_override' end
 
    -- Check default implementation.
    local element, category = class.class_mt._element(self, instance, symbol)
