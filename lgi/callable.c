@@ -1140,9 +1140,20 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
     if (!param->internal && param->dir != GI_DIRECTION_OUT)
       {
 	if G_LIKELY (i != 3 || !callable->is_closure_marshal)
-	  callable_param_2lua (L, param, args[i + callable->has_self], 0,
-			       callable_index, callable,
-			       args + callable->has_self);
+	  {
+	    GIArgument *real_arg = args[i + callable->has_self];
+	    GIArgument arg_value;
+
+	    if (param->dir == GI_DIRECTION_INOUT)
+	      {
+	        arg_value = *(GIArgument *) real_arg->v_pointer;
+	        real_arg = &arg_value;
+	      }
+
+	    callable_param_2lua (L, param, real_arg, 0,
+			         callable_index, callable,
+			         args + callable->has_self);
+	  }
 	else
 	  {
 	    /* Workaround incorrectly annotated but crucial
