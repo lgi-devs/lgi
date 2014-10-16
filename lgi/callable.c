@@ -650,27 +650,52 @@ callable_gc (lua_State *L)
   return 0;
 }
 
-static int
-callable_tostring (lua_State *L)
+static void
+_callable_tostring (lua_State *L, Callable *callable, FfiClosure *closure)
 {
-  Callable *callable = callable_get (L, 1);
+  const gchar *addr;
+
+  luaL_checkstack (L, 2, "");
+
+  if (closure == NULL)
+    {
+      lua_pushfstring (L, "%p", callable->address);
+    }
+  else
+    {
+      lua_rawgeti (L, LUA_REGISTRYINDEX, closure->target_ref);
+      lua_pushfstring (L, "%s: %p", luaL_typename (L, -1),
+                       lua_topointer (L, -1));
+      lua_replace (L, -2);
+    }
+
   if (callable->info)
     {
-      lua_pushfstring (L, "lgi.%s (%p): ",
+      lua_pushfstring (L, "lgi.%s (%s): ",
 		       (GI_IS_FUNCTION_INFO (callable->info) ? "fun" :
 			(GI_IS_SIGNAL_INFO (callable->info) ? "sig" :
 			 (GI_IS_VFUNC_INFO (callable->info) ? "vfn" : "cbk"))),
-		       callable->address);
+		       lua_tostring (L, -1));
       lua_concat (L, lgi_type_get_name (L, callable->info) + 1);
     }
   else
     {
       lua_getfenv (L, 1);
       lua_rawgeti (L, -1, 0);
-      lua_pushfstring (L, "lgi.efn (%p): %s", callable->address,
+      lua_pushfstring (L, "lgi.efn (%s): %s", lua_tostring (L, -2),
 		       lua_tostring (L, -1));
+      lua_replace (L, -2);
     }
 
+  lua_replace (L, -2);
+}
+
+static int
+callable_tostring (lua_State *L)
+{
+  Callable *callable = callable_get (L, 1);
+
+  _callable_tostring (L, callable, NULL);
   return 1;
 }
 
@@ -1182,9 +1207,17 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   if (call)
     {
       if (callable->throws)
-	res = lua_pcall (L, npos, LUA_MULTRET, 0);
-      else
-	lua_call (L, npos, LUA_MULTRET);
+        res = lua_pcall (L, npos, LUA_MULTRET, 0);
+      else if (lua_pcall (L, npos, LUA_MULTRET, 0) != 0)
+        {
+          _callable_tostring (L, callable, closure);
+
+          g_warning ("Error raised while calling '%s': %s",
+                     lua_tostring (L, -1),
+                     lua_tostring (L, -2));
+
+          lua_pop (L, 2);
+        }
     }
   else
     {
