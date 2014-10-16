@@ -651,21 +651,22 @@ callable_gc (lua_State *L)
 }
 
 static void
-_callable_tostring (lua_State *L, Callable *callable, FfiClosure *closure)
+callable_describe (lua_State *L, Callable *callable, FfiClosure *closure)
 {
-  const gchar *addr;
-
   luaL_checkstack (L, 2, "");
 
   if (closure == NULL)
-    {
-      lua_pushfstring (L, "%p", callable->address);
-    }
+    lua_pushfstring (L, "%p", callable->address);
   else
     {
+      gconstpointer ptr;
       lua_rawgeti (L, LUA_REGISTRYINDEX, closure->target_ref);
-      lua_pushfstring (L, "%s: %p", luaL_typename (L, -1),
-                       lua_topointer (L, -1));
+      ptr = lua_topointer (L, -1);
+      if (ptr != NULL)
+	lua_pushfstring (L, "%s: %p", luaL_typename (L, -1),
+			 lua_topointer (L, -1));
+      else
+	lua_pushstring (L, luaL_typename (L, -1));
       lua_replace (L, -2);
     }
 
@@ -695,7 +696,7 @@ callable_tostring (lua_State *L)
 {
   Callable *callable = callable_get (L, 1);
 
-  _callable_tostring (L, callable, NULL);
+  callable_describe (L, callable, NULL);
   return 1;
 }
 
@@ -1210,12 +1211,9 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
         res = lua_pcall (L, npos, LUA_MULTRET, 0);
       else if (lua_pcall (L, npos, LUA_MULTRET, 0) != 0)
         {
-          _callable_tostring (L, callable, closure);
-
+          callable_describe (L, callable, closure);
           g_warning ("Error raised while calling '%s': %s",
-                     lua_tostring (L, -1),
-                     lua_tostring (L, -2));
-
+                     lua_tostring (L, -1), lua_tostring (L, -2));
           lua_pop (L, 2);
         }
     }
