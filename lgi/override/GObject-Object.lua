@@ -14,14 +14,28 @@ local pairs, select, setmetatable, error, type
 local core = require 'lgi.core'
 local gi = core.gi
 local repo = core.repo
+local ffi = require 'lgi.ffi'
+local ti = ffi.types
 
 local Value = repo.GObject.Value
 local Type = repo.GObject.Type
 local Closure = repo.GObject.Closure
 
+local TypeClass = repo.GObject.TypeClass
 local Object = repo.GObject.Object
 
--- Object constructor, 'param' contains table with properties/signals
+-- Add overrides for GObject.TypeClass
+TypeClass._free = gi.GObject.resolve.g_type_class_unref
+local type_class_ref = core.callable.new {
+   addr = gi.GObject.resolve.g_type_class_ref,
+   ret = ti.ptr, ti.GType
+}
+function TypeClass:_new()
+   local ptr = type_class_ref(self._gtype)
+   return core.record.new(self, ptr, true)
+end
+
+-- Object constructor, 'param' contains table _with properties/signals
 -- to initialize.
 local parameter_repo = repo.GObject.Parameter
 local object_new = gi.GObject.Object.methods.new
