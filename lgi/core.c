@@ -110,6 +110,10 @@ lgi_type_get_name (lua_State *L, GIBaseInfo *info)
   int n = 1;
   lua_pushstring (L, g_base_info_get_namespace (info));
 
+  if (g_base_info_get_type (info) == GI_INFO_TYPE_CALLBACK)
+    /* Avoid duplicate name for callbacks. */
+    info = g_base_info_get_container (info);
+
   /* Add names on the whole path, but in reverse order. */
   for (; info != NULL; info = g_base_info_get_container (info))
     if (!GI_IS_TYPE_INFO (info))
