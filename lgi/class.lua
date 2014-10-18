@@ -292,7 +292,7 @@ function class.class_mt:derive(typename, ifaces)
    local new_class = setmetatable(
       {
 	 _parent = self, _override = {}, _guard = {}, _implements = {},
-	 _element = class.derived_mt._element,
+	 _property = {}, _element = class.derived_mt._element,
 	 _class = self._class, _name = typename
       },
       class.derived_mt)
@@ -311,9 +311,9 @@ function class.class_mt:derive(typename, ifaces)
       end
 
       -- If type specified _class_init method, invoke it.
-      local _class_init = rawget(new_class, '_class_init')
+      local _class_init = new_class._class_init
       if _class_init then
-	 _class_init(new_class)
+	 _class_init(new_class, class_struct)
       end
    end
    local class_init_guard, class_init_addr = core.marshal.callback(

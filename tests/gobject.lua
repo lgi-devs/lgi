@@ -12,6 +12,7 @@ local lgi = require 'lgi'
 local core = require 'lgi.core'
 
 local check = testsuite.check
+local checkv = testsuite.checkv
 
 -- Basic GObject testing
 local gobject = testsuite.group.new('gobject')
@@ -251,4 +252,18 @@ function gobject.ctor_gc()
 
    collectgarbage('setpause', oldpause)
    collectgarbage('setstepmul', oldstepmul)
+end
+
+function gobject.subclass_prop1()
+   local GObject = lgi.GObject
+   local Derived = GObject.Object:derive('LgiTestDerivedProp1')
+   Derived._property.string = GObject.ParamSpecString(
+      'string', 'Nick string', 'Blurb string', 'string-default',
+      { 'READABLE', 'WRITABLE', 'CONSTRUCT' }
+   )
+   local der = Derived()
+   checkv(der.string, 'string-default', 'string')
+   der.string = 'assign'
+   checkv(der.string, 'assign', 'string')
+   checkv(der.priv.string, 'assign', 'string')
 end

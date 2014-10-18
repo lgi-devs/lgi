@@ -158,6 +158,41 @@ function Object.new(gtype, params, owns)
    end
 end
 
+-- Prepare callbacks for get_property and set_property
+local get_property_guard, get_property_addr = core.marshal.callback(
+   gi.GObject.ObjectClass.fields.get_property.typeinfo.interface,
+   function(self, prop_id, value, pspec)
+      value.value = self.priv[pspec.name:gsub('%-', '_')]
+end)
+
+local set_property_guard, set_property_addr = core.marshal.callback(
+   gi.GObject.ObjectClass.fields.get_property.typeinfo.interface,
+   function(self, prop_id, value, pspec)
+      self.priv[pspec.name:gsub('%-', '_')] = value.value
+end)
+
+-- _class_init method on the Object will install all properties
+-- accumulated in _property table.  It will be called automatically on
+-- derived classes during class initialization routine.
+function Object:_class_init(class)
+   if next(self._property) then
+      -- First install get/set_property overrides, unless already present.
+      if not self._override.get_property then
+	 class.get_property = get_property_addr
+      end
+      if not self._override.set_property then
+	 class.set_property = set_property_addr
+      end
+
+      -- Install properties.
+      local prop_id = 0
+      for name, pspec in pairs(self._property) do
+	 prop_id = prop_id + 1
+	 class:install_property(prop_id, pspec)
+      end
+   end
+end
+
 -- Initially unowned creation is similar to normal GObject creation,
 -- but we have to ref_sink newly created object.
 local InitiallyUnowned = repo.GObject.InitiallyUnowned
@@ -196,7 +231,7 @@ function Object:_element(object, name)
    -- property of the specified name exists.
    local property = Object._class.find_property(
       object._class, name:gsub('_', '-'))
-   if property then return property, '_paramspec' end
+   if property then return property, '_property' end
 end
 
 -- Sets/gets property using specified marshaller attributes.
@@ -217,20 +252,22 @@ local function marshal_property(obj, name, flags, gtype, marshaller, ...)
    end
 end
 
--- GI property accessor.
-function Object:_access_property(object, property, ...)
-   local typeinfo = property.typeinfo
-   local gtype = Type.from_typeinfo(typeinfo)
-   local marshaller = Value.find_marshaller(gtype, typeinfo, property.transfer)
-   return marshal_property(object, property.name,
-			   repo.GObject.ParamFlags[property.flags],
-			   gtype, marshaller, ...)
-end
-
--- GLib property accessor (paramspec).
-function Object:_access_paramspec(object, pspec, ...)
-   return marshal_property(object, pspec.name, pspec.flags, pspec.value_type,
-			   Value.find_marshaller(pspec.value_type), ...)
+-- Property accessor.
+function Object:_access_property(object, prop, ...)
+   if gi.isinfo(prop) then
+      -- GI-based property
+      local typeinfo = element.typeinfo
+      local gtype = Type.from_typeinfo(typeinfo)
+      local marshaller = Value.find_marshaller(gtype, typeinfo,
+					       element.transfer)
+      return marshal_property(object, element.name,
+			      repo.GObject.ParamFlags[property.flags],
+			      gtype, marshaller, ...)
+   else
+      -- pspec-based property
+      return marshal_property(object, prop.name, prop.flags, prop.value_type,
+			      Value.find_marshaller(prop.value_type), ...)
+   end
 end
 
 local quark_from_string = repo.GLib.quark_from_string
