@@ -1,8 +1,8 @@
 ------------------------------------------------------------------------------
 --
---  LGI Object handling.
+--  lgi GObject.Object handling.
 --
---  Copyright (c) 2010, 2011 Pavel Holejsovsky
+--  Copyright (c) 2010-2014 Pavel Holejsovsky
 --  Licensed under the MIT license:
 --  http://www.opensource.org/licenses/mit-license.php
 --
@@ -171,6 +171,10 @@ local set_property_guard, set_property_addr = core.marshal.callback(
       self.priv[pspec.name:gsub('%-', '_')] = value.value
 end)
 
+if not core.guards then core.guards = {} end
+core.guards.get_property = get_property_guard
+core.guards.set_property = set_property_guard
+
 -- _class_init method on the Object will install all properties
 -- accumulated in _property table.  It will be called automatically on
 -- derived classes during class initialization routine.
@@ -256,12 +260,12 @@ end
 function Object:_access_property(object, prop, ...)
    if gi.isinfo(prop) then
       -- GI-based property
-      local typeinfo = element.typeinfo
+      local typeinfo = prop.typeinfo
       local gtype = Type.from_typeinfo(typeinfo)
       local marshaller = Value.find_marshaller(gtype, typeinfo,
-					       element.transfer)
-      return marshal_property(object, element.name,
-			      repo.GObject.ParamFlags[property.flags],
+					       prop.transfer)
+      return marshal_property(object, prop.name,
+			      repo.GObject.ParamFlags[prop.flags],
 			      gtype, marshaller, ...)
    else
       -- pspec-based property

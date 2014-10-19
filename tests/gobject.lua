@@ -267,3 +267,36 @@ function gobject.subclass_prop1()
    checkv(der.string, 'assign', 'string')
    checkv(der.priv.string, 'assign', 'string')
 end
+
+function gobject.subclass_prop_inherit()
+   local GObject = lgi.GObject
+   local Gio = lgi.Gio
+   local FakeMonitor = GObject.Object:derive(
+      'LgiTestFakeMonitor1', { Gio.Initable, Gio.NetworkMonitor })
+   FakeMonitor._property.network_available =
+      GObject.ParamSpecBoolean('network-available',
+			       'LgiTestFakeMonitor1NetworkAvailable',
+			       'Whether the network is available.',
+			       false, { GObject.ParamFlags.READABLE })
+   function FakeMonitor:do_init(cancellable)
+      self.priv.inited = true
+      return true
+   end
+   local fakemonitor = FakeMonitor()
+
+   -- Gio.Initable is invoked automatically by lgi after object
+   -- construction.
+   check(fakemonitor.priv.inited)
+
+   -- If the object is not constructed yet, it defaults to false
+   check(fakemonitor:get_network_available() == false)
+   check(fakemonitor.network_available == false)
+
+   fakemonitor.priv.network_available = true
+   check(fakemonitor.network_available == true)
+   check(fakemonitor:get_network_available() == true)
+
+   fakemonitor.priv.network_available = false
+   check(fakemonitor.network_available == false)
+   check(fakemonitor:get_network_available() == false)
+end
