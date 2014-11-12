@@ -347,9 +347,11 @@ function class.class_mt:derive(typename, ifaces)
       instance_init = instance_init_addr,
    }
 
+   -- Create the name to register with the GType system.
+   g_typename = typename:gsub('%.', '') .. core.id
+
    -- Register new type with GType system.
-   local gtype = register_static(self._gtype, typename:gsub('%.', ''),
-				 type_info, {})
+   local gtype = register_static(self._gtype, g_typename, type_info, {})
    rawset(new_class, '_gtype', core.gtype(gtype))
    if not new_class._gtype then
       error(("failed to derive `%s' from `%s'"):format(typename, self._name))
