@@ -708,6 +708,14 @@ luaopen_lgi_corelgilua51 (lua_State* L)
     lua_pushfstring (L, "+L%d", state_id);
   lua_setfield (L, -2, "id");
 
+  /* Add lock and enter/leave locking functions. */
+  lua_pushlightuserdata (L, lgi_state_get_lock (L));
+  lua_setfield (L, -2, "lock");
+  lua_pushlightuserdata (L, lgi_state_enter);
+  lua_setfield (L, -2, "enter");
+  lua_pushlightuserdata (L, lgi_state_leave);
+  lua_setfield (L, -2, "leave");
+
   /* Create repo and index table. */
   create_repo_table (L, "index", &repo_index);
   create_repo_table (L, "repo", &repo);

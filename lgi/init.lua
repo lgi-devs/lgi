@@ -20,8 +20,10 @@ local core = require 'lgi.core'
 -- Create lgi table, containing the module.
 local lgi = { _NAME = 'lgi', _VERSION = require 'lgi.version' }
 
--- Forward 'yield' functionality into external interface.
-lgi.yield = core.yield
+-- Forward selected core methods into external interface.
+for _, name in pairs { 'yield', 'lock', 'enter', 'leave' } do
+   lgi[name] = core[name]
+end
 
 -- If global package 'bytes' does not exist (i.e. not provided
 -- externally), use our internal (although incomplete) implementation.
