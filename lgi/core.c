@@ -35,7 +35,7 @@
   (g_atomic_int_exchange_and_add ((atomic), (val)))
 #endif
 
-volatile guint global_state_id = 0;
+volatile gint global_state_id = 0;
 
 #ifndef NDEBUG
 const char *lgi_sd (lua_State *L)
@@ -640,8 +640,7 @@ int
 luaopen_lgi_corelgilua51 (lua_State* L)
 {
   LgiStateMutex *mutex;
-  unsigned int state_id;
-  char *state_id_str;
+  gint state_id;
 
   /* Try to make itself resident.  This is needed because this dynamic
      module is 'statically' linked with glib/gobject, and these
@@ -702,15 +701,12 @@ luaopen_lgi_corelgilua51 (lua_State* L)
   luaL_register (L, NULL, lgi_reg);
 
   /* Add the state ID */
-  state_id = (unsigned int) g_atomic_int_add ((int *) &global_state_id, 1);
-  if (state_id == 1)
-    state_id_str = g_strdup ("");
+  state_id = g_atomic_int_add (&global_state_id, 1);
+  if (state_id == 0)
+    lua_pushliteral (L, "");
   else
-    state_id_str = g_strdup_printf ("+L%u", state_id);
-  lua_pushliteral (L, "id");
-  lua_pushstring (L, state_id_str);
-  lua_rawset (L, -3);
-  g_free (state_id_str);
+    lua_pushfstring (L, "+L%d", state_id);
+  lua_setfield (L, -2, "id");
 
   /* Create repo and index table. */
   create_repo_table (L, "index", &repo_index);
