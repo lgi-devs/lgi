@@ -293,6 +293,7 @@ function class.class_mt:derive(typename, ifaces)
       {
 	 _parent = self, _override = {}, _guard = {}, _implements = {},
 	 _property = {}, _element = class.derived_mt._element,
+	 _property_get = {}, _property_set = {},
 	 _class = self._class, _name = typename
       },
       class.derived_mt)

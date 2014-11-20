@@ -463,6 +463,35 @@ The important fact is that virtual method overrides are picked up only
 up to the first instantiation of the class or inheriting new subclass
 from it.  After this point, virtual function overrides are ignored.
 
+### 3.8.2. Installing new properties
+
+To add new property for derived class, a new `GObject.ParamSpec`
+instance describing property must be added into `_property` table of
+derived class.  This must be done before first instantiation of the class.
+
+By default, the value of the property is mirrored in `priv` table of
+the instance.  However, it is possible to specify custom getter and
+setter method in `_property_set` and `_property_get` tables.  Both
+approaches are illustrated in the following example with property
+called `my_label`
+
+    MyApp.MyWidget._property.my_label = GObject.ParamSpecString(
+        'my_label', 'Nick string', 'Blurb string', 'def-value',
+        { 'READABLE', 'WRITABLE', 'CONSTRUCT' })
+    function MyApp.MyWidget._property_set:my_label(new_value)
+        print(('%s changed my_label from %s to %s'):format(
+	    self, self.priv-my_label, new_value))
+        self.priv.my_label = new_value
+    end
+    local widget = MyApp.MyWidget()
+
+    -- Access through GObject's property machinery
+    widget.my_label = 'label1'
+    print(widget.my_label)
+
+    -- Direct access to underlying storage
+    print(widget.priv.my_label)
+
 ## 4. Structures and unions
 
 Structures and unions are supported in a very similar way to classes.

@@ -162,13 +162,25 @@ end
 local get_property_guard, get_property_addr = core.marshal.callback(
    gi.GObject.ObjectClass.fields.get_property.typeinfo.interface,
    function(self, prop_id, value, pspec)
-      value.value = self.priv[pspec.name:gsub('%-', '_')]
+      local name = pspec.name:gsub('%-', '_')
+      local prop_get = core.object.query(self, 'repo')._property_get[name]
+      if prop_get then
+	 value.value = prop_get(self)
+      else
+	 value.value = self.priv[name]
+      end
 end)
 
 local set_property_guard, set_property_addr = core.marshal.callback(
    gi.GObject.ObjectClass.fields.get_property.typeinfo.interface,
    function(self, prop_id, value, pspec)
-      self.priv[pspec.name:gsub('%-', '_')] = value.value
+      local name = pspec.name:gsub('%-', '_')
+      local prop_set = core.object.query(self, 'repo')._property_set[name]
+      if prop_set then
+	 prop_set(self, value.value)
+      else
+	 self.priv[name] = value.value
+      end
 end)
 
 if not core.guards then core.guards = {} end

@@ -300,3 +300,25 @@ function gobject.subclass_prop_inherit()
    check(fakemonitor.network_available == false)
    check(fakemonitor:get_network_available() == false)
 end
+
+function gobject.subclass_prop_getset()
+   local GObject = lgi.GObject
+   local Derived = GObject.Object:derive('LgiTestDerivedPropGetSet')
+   Derived._property.str = GObject.ParamSpecString(
+      'str', 'Nick string', 'Blurb string', 'string-default',
+      { 'READABLE', 'WRITABLE', 'CONSTRUCT' }
+   )
+   local propval
+   function Derived._property_set:str(new_value)
+      propval = new_value
+   end
+   function Derived._property_get:str()
+      return propval
+   end
+
+   local der = Derived()
+   checkv(der.str, 'string-default', 'string')
+   der.str = 'assign'
+   checkv(der.str, 'assign', 'string')
+   checkv(propval, 'assign', 'string')
+end
