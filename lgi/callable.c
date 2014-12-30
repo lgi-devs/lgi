@@ -1231,11 +1231,10 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	res = 0;
       else if (res == LUA_ERRRUN && !callable->throws)
 	{
-	  /* If closure is not allowed to return errors and coroutine
-	     finished with error, rethrow the error in the context of
-	     the original thread. */
-	  lua_xmove (L, block->callback.L, 1);
-	  lua_error (block->callback.L);
+          callable_describe (L, callable, closure);
+          g_warning ("Error raised while calling '%s': %s",
+                     lua_tostring (L, -1), lua_tostring (L, -2));
+          lua_pop (L, 2);
 	}
 
       /* If coroutine somehow consumed more than expected(?), do not
