@@ -275,10 +275,19 @@ object_tostring (lua_State *L)
   gpointer obj = object_get (L, 1);
   GType gtype = G_TYPE_FROM_INSTANCE (obj);
   lua_getfenv (L, 1);
-  if (!lua_isnil (L, -1))
-    lua_getfield (L, -1, "_name");
-  else
+  if (lua_isnil (L, -1))
     lua_pushliteral (L, "<??\?>");
+  else
+    {
+      lua_getfield (L, -1, "_tostring");
+      if (!lua_isnil (L, -1))
+        {
+          lua_pushvalue (L, 1);
+          lua_call (L, 1, 1);
+          return 1;
+        }
+      lua_getfield (L, -2, "_name");
+    }
   lua_pushfstring (L, "lgi.obj %p:%s(%s)", obj, lua_tostring (L, -1),
 		   g_type_name (gtype));
   return 1;
