@@ -376,6 +376,22 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIDirection dir,
 	  data = ((GArray *) array)->data;
 	}
     }
+  else if (atype == GI_ARRAY_TYPE_BYTE_ARRAY)
+    {
+      if (array)
+	{
+	  len = ((GByteArray *) array)->len;
+	  data = ((GByteArray *) array)->data;
+	}
+    }
+  else if (atype == GI_ARRAY_TYPE_PTR_ARRAY)
+    {
+      if (array)
+	{
+	  len = ((GPtrArray *) array)->len;
+	  data = ((GPtrArray *) array)->pdata;
+	}
+    }
   else
     {
       data = array;
@@ -454,6 +470,10 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIDirection dir,
     {
       if (atype == GI_ARRAY_TYPE_ARRAY)
 	g_array_free (array, TRUE);
+      else if (atype == GI_ARRAY_TYPE_BYTE_ARRAY)
+	g_byte_array_free (array, TRUE);
+      else if (atype == GI_ARRAY_TYPE_PTR_ARRAY)
+	g_ptr_array_free (array, TRUE);
       else
 	g_free (array);
     }
