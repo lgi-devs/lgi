@@ -11,7 +11,8 @@
 local assert, require, pcall, setmetatable, pairs, type, error, tostring,
 _VERSION, jit
    = assert, require, pcall, setmetatable, pairs, type, error, tostring,
-_VERSION, jit
+_VERSION, rawget(_G, 'jit')
+
 local package = require 'package'
 
 -- Require core lgi utilities, used during bootstrap.
