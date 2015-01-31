@@ -82,10 +82,15 @@ function Value._attribute.gtype.set(value, newtype)
    end
 end
 
+-- Get ascii_strdown method, because default Lua string.lower() is
+-- locale sensitive, which can spoil the fun significantly (see
+-- https://github.com/pavouk/lgi/issues/97)
+local strdown = lgi.GLib.ascii_strdown
+
 local value_marshallers = {}
 for name, gtype in pairs(Type) do
-   local get = Value['get_' .. name:lower()]
-   local set = Value['set_' .. name:lower()]
+   local get = Value['get_' .. strdown(name, -1)]
+   local set = Value['set_' .. strdown(name, -1)]
    if get and set then
       value_marshallers[gtype] =
       function(value, params, ...)
