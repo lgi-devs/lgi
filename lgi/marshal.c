@@ -246,6 +246,18 @@ array_detach (GArray *array)
   g_array_free (array, FALSE);
 }
 
+static void
+ptr_array_detach (GPtrArray *array)
+{
+  g_ptr_array_free (array, FALSE);
+}
+
+static void
+byte_array_detach (GByteArray *array)
+{
+  g_byte_array_free (array, FALSE);
+}
+
 /* Marshalls array from Lua to C. Returns number of temporary elements
    pushed to the stack. */
 static int
@@ -312,12 +324,37 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 	     if needed. */
 	  if (*out_size > 0 || zero_terminated)
 	    {
-	      array = g_array_sized_new (zero_terminated, TRUE, esize,
-					 *out_size);
-	      g_array_set_size (array, *out_size);
-	      *lgi_guard_create (L, (GDestroyNotify)
-				 (transfer == GI_TRANSFER_EVERYTHING
-				  ? array_detach : g_array_unref)) = array;
+	      guint total_size = *out_size + (zero_terminated ? 1 : 0);
+	      switch (atype)
+		{
+		case GI_ARRAY_TYPE_C:
+		case GI_ARRAY_TYPE_ARRAY:
+		  array = g_array_sized_new (zero_terminated, TRUE, esize,
+					     *out_size);
+		  g_array_set_size (array, *out_size);
+		  *lgi_guard_create (L, (GDestroyNotify)
+				     (transfer == GI_TRANSFER_EVERYTHING
+				      ? array_detach : g_array_unref)) = array;
+		  break;
+
+		case GI_ARRAY_TYPE_PTR_ARRAY:
+		  array = (GArray *) g_ptr_array_sized_new (total_size);
+		  g_ptr_array_set_size ((GPtrArray *) array, total_size);
+		  *lgi_guard_create (L, (GDestroyNotify)
+				     (transfer == GI_TRANSFER_EVERYTHING
+				      ? ptr_array_detach :
+				      g_ptr_array_unref)) = array;
+		  break;
+
+		case GI_ARRAY_TYPE_BYTE_ARRAY:
+		  array = (GArray *) g_byte_array_sized_new (total_size);
+		  g_byte_array_set_size ((GByteArray *) array, *out_size);
+		  *lgi_guard_create (L, (GDestroyNotify)
+				     (transfer == GI_TRANSFER_EVERYTHING
+				      ? byte_array_detach :
+				      g_byte_array_unref)) = array;
+		  break;
+		}
 	      vals = 1;
 	    }
 
@@ -343,8 +380,27 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 
 	  /* Return either GArray or direct pointer to the data,
 	     according to the array type. */
-	  *out_array = (atype == GI_ARRAY_TYPE_ARRAY || array == NULL)
-	    ? (void *) array : (void *) array->data;
+	  if (array == NULL)
+	    *out_array = NULL;
+	  else 
+	    switch (atype)
+	      {
+	      case GI_ARRAY_TYPE_C:
+		*out_array = (void *) array->data;
+		break;
+
+	      case GI_ARRAY_TYPE_ARRAY:
+		*out_array = (void *) array;
+		break;
+
+	      case GI_ARRAY_TYPE_PTR_ARRAY:
+		*out_array = (void *) ((GPtrArray *) array)->pdata;
+		break;
+
+	      case GI_ARRAY_TYPE_BYTE_ARRAY:
+		*out_array = (void *) ((GByteArray *) array)->data;
+		break;
+	      }
 	}
 
       lua_remove (L, eti_guard);
@@ -381,7 +437,7 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIDirection dir,
       if (array)
 	{
 	  len = ((GByteArray *) array)->len;
-	  data = ((GByteArray *) array)->data;
+	  data = (char *) ((GByteArray *) array)->data;
 	}
     }
   else if (atype == GI_ARRAY_TYPE_PTR_ARRAY)
@@ -389,7 +445,7 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIDirection dir,
       if (array)
 	{
 	  len = ((GPtrArray *) array)->len;
-	  data = ((GPtrArray *) array)->pdata;
+	  data = (char *) ((GPtrArray *) array)->pdata;
 	}
     }
   else
