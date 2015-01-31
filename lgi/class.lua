@@ -349,7 +349,7 @@ function class.class_mt:derive(typename, ifaces)
    }
 
    -- Create the name to register with the GType system.
-   g_typename = typename:gsub('%.', '') .. core.id
+   local g_typename = typename:gsub('%.', '') .. core.id
 
    -- Register new type with GType system.
    local gtype = register_static(self._gtype, g_typename, type_info, {})
