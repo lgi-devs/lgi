@@ -236,6 +236,9 @@ function gobject.treemodel_impl()
    check(model[Gtk.TreeIter()][2] == 1)
 end
 
+-- Lua 5.3 seems to have some problem with aggressive GC settings used
+-- here and completing this test takes literally ages, so skip it.
+if rawget(_G, '_VERSION') ~= 'Lua 5.3' then
 function gobject.ctor_gc()
    local Gtk = lgi.Gtk
 
@@ -252,6 +255,7 @@ function gobject.ctor_gc()
 
    collectgarbage('setpause', oldpause)
    collectgarbage('setstepmul', oldstepmul)
+end
 end
 
 function gobject.subclass_prop1()

@@ -39,6 +39,7 @@ function testsuite.group:run(id)
       self.results.total = self.results.total + 1
       if testsuite.verbose then
 	 io.write(('%-8s:%3d:%-35s'):format(self.name, num, self[num]))
+	 io.flush()
       end
       local ok, msg
       local func = self[self[num]]

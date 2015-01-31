@@ -24,6 +24,9 @@
 #endif
 #define lua_setfenv(L, p) lua_setuservalue (L, p)
 #define lua_getfenv(L, p) lua_getuservalue (L, p)
+#ifndef luaL_checkint
+#define luaL_checkint(L, p) luaL_checkinteger (L, p)
+#endif
 #endif
 
 #include <glib.h>
