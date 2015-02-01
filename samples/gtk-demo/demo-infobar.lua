@@ -1,6 +1,7 @@
 return function(parent, dir)
 
 local lgi = require 'lgi'
+local GLib = lgi.GLib
 local Gtk = lgi.Gtk
 
 local window = Gtk.Window {
@@ -53,7 +54,8 @@ for _, id in ipairs { 'info', 'warning', 'question', 'error', 'other' } do
    window.child[id]:get_content_area():add(
       Gtk.Label {
 	 label = ("This is an info bar with "
-		  .. "message type Gtk.MessageType.%s"):format(id:upper()),
+		  .. "message type Gtk.MessageType.%s"):format(
+	    GLib.ascii_strup(id, -1)),
       })
 end
 

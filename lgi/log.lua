@@ -27,7 +27,7 @@ function log.domain(name)
 	       if not ok then
 		  msg = ("BAD FMT: `%s', `%s'"):format(format, msg)
 	       end
-	       core.log(name, level:upper(), msg)
+	       core.log(name, core.upcase(level), msg)
 	    end
       end
    end

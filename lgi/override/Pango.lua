@@ -49,8 +49,7 @@ for _, enum in pairs {
    if not Pango[enum]._gtype then
       local gtype = ffi.load_gtype(
 	 core.gi.Pango.resolve,
-	 'pango_' .. enum:gsub('([%l%d])([%u])', '%1_%2'):lower()
-	 .. '_get_type')
+	 'pango_' .. core.uncamel(enum) .. '_get_type')
       Pango._enum[enum] = ffi.load_enum(gtype, 'Pango.' .. enum)
    end
 end

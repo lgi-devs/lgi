@@ -2,6 +2,7 @@ return function(parent, dir)
 
 local table = require 'table'
 local lgi = require 'lgi'
+local GLib = lgi.GLib
 local GObject = lgi.GObject
 local Gtk = lgi.Gtk
 local GdkPixbuf = lgi.GdkPixbuf
@@ -28,7 +29,8 @@ local function create_model()
    local icon_width, icon_height = Gtk.IconSize.lookup(Gtk.IconSize.MENU)
    for _, id in ipairs(ids) do
       local item = Gtk.stock_lookup(id)
-      local macro = id:upper():gsub('^GTK%-', 'Gtk.STOCK_'):gsub('%-', '_')
+      local macro = GLib.ascii_strup(id, -1):gsub(
+	 '^GTK%-', 'Gtk.STOCK_'):gsub('%-', '_')
 
       local small_icon
       local icon_set = Gtk.IconFactory.lookup_default(id)

@@ -85,7 +85,7 @@ function ffi.load_enum(gtype, name)
       type_class, is_flags and GObject.FlagsClass or GObject.EnumClass)
    for i = 0, enum_class.n_values - 1 do
       local val = core.record.fromarray(enum_class.values, i)
-      enum_component[val.value_nick:upper():gsub('%-', '_')] = val.value
+      enum_component[core.upcase(val.value_nick):gsub('%-', '_')] = val.value
    end
    type_class:unref()
    return enum_component

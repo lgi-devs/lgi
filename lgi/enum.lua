@@ -30,7 +30,7 @@ function enum.load(info, meta)
    else
       -- Enum.methods was added only in GI1.30; for older gi, simulate
       -- the access using lookup in the global namespace.
-      local prefix = info.name:gsub('%u+[^%u]+', '%1_'):lower()
+      local prefix = core.downcase(info.name:gsub('%u+[^%u]+', '%1_'))
       local namespace = core.repo[info.namespace]
       enum_type._method = setmetatable(
 	 {}, { __index = function(_, name)
@@ -42,7 +42,7 @@ function enum.load(info, meta)
    local values = info.values
    for i = 1, #values do
       local mi = values[i]
-      enum_type[mi.name:upper()] = mi.value
+      enum_type[core.upcase(mi.name)] = mi.value
    end
 
    -- Install metatable providing reverse lookup (i.e name(s) by

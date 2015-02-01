@@ -49,9 +49,8 @@ for _, name in pairs {
    'SurfaceType', 'Format', 'PatternType', 'Extend', 'Filter', 'RegionOverlap',
    'PdfVersion', 'PsLevel', 'SvgVersion',
 } do
-   local lower = name:gsub('([%l%d])([%u])', '%1_%2'):lower()
    local gtype = ffi.load_gtype(
-      module_gobject, 'cairo_gobject_' .. lower .. '_get_type')
+      module_gobject, 'cairo_gobject_' .. core.uncamel(name) .. '_get_type')
    if gtype then
       cairo._enum[name] = ffi.load_enum(gtype, 'cairo.' .. name)
    else
@@ -76,9 +75,9 @@ for index, struct in pairs {
       struct = index
    end
    if cairo.version >= since then
-      local lower = struct:gsub('([%l%d])([%u])', '%1_%2'):lower()
       local gtype = ffi.load_gtype(
-	 module_gobject, 'cairo_gobject_' .. lower .. '_get_type')
+	 module_gobject,
+	 'cairo_gobject_' .. core.uncamel(struct) .. '_get_type')
       local obj = component.create(gtype, record.struct_mt, 'cairo.' .. struct)
       cairo._struct[struct] = obj
    end
@@ -663,9 +662,7 @@ for _, info in ipairs {
 	 -- Go through description of the methods and create functions
 	 -- from them.
 	 obj._method = {}
-	 local cprefix = 'cairo_' ..
-	    (info.cprefix or
-	     name:gsub('([%l%d])([%u])', '%1_%2'):lower() .. '_')
+	 local cprefix = 'cairo_' .. (info.cprefix or core.uncamel(name) .. '_')
 	 local self_arg = { obj }
 	 for method_name, method_info in pairs(info.methods) do
 	    if cairo.version >= (method_info.since or 0) then

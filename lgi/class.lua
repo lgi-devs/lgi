@@ -94,10 +94,8 @@ local function load_properties(info)
 end
 
 local function find_constructor(info)
-   local name = info.name:gsub('([%d%l])(%u)', '%1_%2'):lower()
-   local ctor = gi[info.namespace][name]
-
-   -- Check that return value conforms to info type.
+   -- Check that ctor exists and return value conforms to info type.
+   local ctor = gi[info.namespace][core.uncamel(info.name)]
    if ctor then
       local ret = ctor.return_type.interface
       for walk in function(_, c) return c.parent end, nil, info do

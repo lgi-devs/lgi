@@ -555,6 +555,22 @@ core_module (lua_State *L)
   return 2;
 }
 
+static int core_upcase (lua_State *L)
+{
+  gchar *str = g_ascii_strup (luaL_checkstring (L, 1), -1);
+  lua_pushstring (L, str);
+  g_free (str);
+  return 1;
+}
+
+static int core_downcase (lua_State *L)
+{
+  gchar *str = g_ascii_strdown (luaL_checkstring (L, 1), -1);
+  lua_pushstring (L, str);
+  g_free (str);
+  return 1;
+}
+
 static const struct luaL_Reg lgi_reg[] = {
   { "log",  core_log },
   { "gtype", core_gtype },
@@ -565,6 +581,8 @@ static const struct luaL_Reg lgi_reg[] = {
   { "band", core_band },
   { "bor", core_bor },
   { "module", core_module },
+  { "upcase", core_upcase },
+  { "downcase", core_downcase },
   { NULL, NULL }
 };
 
