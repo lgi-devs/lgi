@@ -1,8 +1,8 @@
 ------------------------------------------------------------------------------
 --
---  lgi cairo override module.
+--  LGI Cairo override module.
 --
---  Copyright (c) 2012, 2015 Pavel Holejsovsky
+--  Copyright (c) 2012 Pavel Holejsovsky
 --  Licensed under the MIT license:
 --  http://www.opensource.org/licenses/mit-license.php
 --
@@ -19,11 +19,6 @@ local component = require 'lgi.component'
 local record = require 'lgi.record'
 local enum = require 'lgi.enum'
 local ti = ffi.types
-
--- Get ascii_strdown method, because default Lua string.lower() is
--- locale sensitive, which can spoil the fun significantly (see
--- https://github.com/pavouk/lgi/issues/97)
-local strdown = lgi.GLib.ascii_strdown
 
 cairo._module = core.module('cairo', 2)
 local module_gobject = core.gi.cairo.resolve
@@ -54,7 +49,7 @@ for _, name in pairs {
    'SurfaceType', 'Format', 'PatternType', 'Extend', 'Filter', 'RegionOverlap',
    'PdfVersion', 'PsLevel', 'SvgVersion',
 } do
-   local lower = strdown(name:gsub('([%l%d])([%u])', '%1_%2'), -1)
+   local lower = name:gsub('([%l%d])([%u])', '%1_%2'):lower()
    local gtype = ffi.load_gtype(
       module_gobject, 'cairo_gobject_' .. lower .. '_get_type')
    if gtype then
@@ -81,7 +76,7 @@ for index, struct in pairs {
       struct = index
    end
    if cairo.version >= since then
-      local lower = strdown(struct:gsub('([%l%d])([%u])', '%1_%2'), -1)
+      local lower = struct:gsub('([%l%d])([%u])', '%1_%2'):lower()
       local gtype = ffi.load_gtype(
 	 module_gobject, 'cairo_gobject_' .. lower .. '_get_type')
       local obj = component.create(gtype, record.struct_mt, 'cairo.' .. struct)
@@ -670,7 +665,7 @@ for _, info in ipairs {
 	 obj._method = {}
 	 local cprefix = 'cairo_' ..
 	    (info.cprefix or
-	     strdown(name:gsub('([%l%d])([%u])', '%1_%2'), -1) .. '_')
+	     name:gsub('([%l%d])([%u])', '%1_%2'):lower() .. '_')
 	 local self_arg = { obj }
 	 for method_name, method_info in pairs(info.methods) do
 	    if cairo.version >= (method_info.since or 0) then

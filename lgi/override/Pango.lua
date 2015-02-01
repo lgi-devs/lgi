@@ -21,11 +21,6 @@ local ti = ffi.types
 local record = require 'lgi.record'
 local component = require 'lgi.component'
 
--- Get ascii_strdown method, because default Lua string.lower() is
--- locale sensitive, which can spoil the fun significantly (see
--- https://github.com/pavouk/lgi/issues/97)
-local strdown = lgi.GLib.ascii_strdown
-
 -- Provide defines which are not present in the GIR
 local _ = Pango.SCALE
 for name, value in pairs {
@@ -54,7 +49,7 @@ for _, enum in pairs {
    if not Pango[enum]._gtype then
       local gtype = ffi.load_gtype(
 	 core.gi.Pango.resolve,
-	 strdown('pango_' .. enum:gsub('([%l%d])([%u])', '%1_%2'), -1)
+	 'pango_' .. enum:gsub('([%l%d])([%u])', '%1_%2'):lower()
 	 .. '_get_type')
       Pango._enum[enum] = ffi.load_enum(gtype, 'Pango.' .. enum)
    end

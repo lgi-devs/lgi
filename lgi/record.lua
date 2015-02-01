@@ -144,7 +144,7 @@ function record.load(info)
    -- i.e. method which has the same name as our record type (except
    -- that type is in CamelCase, while method is
    -- under_score_delimited).  If not found, check for 'new' method.
-   local func = info.name:gsub('([%l%d])([%u])', '%1_%2'):lower():gsub('I', 'i')
+   local func = info.name:gsub('([%l%d])([%u])', '%1_%2'):lower()
    local ctor = gi[info.namespace][func] or gi[info.namespace][func .. '_new']
    if not ctor then ctor = info.methods.new end
 
