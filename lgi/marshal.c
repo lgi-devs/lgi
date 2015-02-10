@@ -194,10 +194,10 @@ array_get_or_set_length (GITypeInfo *ti, gssize *get_length, gssize set_length,
 /* Retrieves pointer to GIArgument in given array, given that array
    contains elements of type ti. */
 static gssize
-array_get_elt_size (GITypeInfo *ti)
+array_get_elt_size (GITypeInfo *ti, gboolean force_ptr)
 {
   gssize size = sizeof (gpointer);
-  if (!g_type_info_is_pointer (ti))
+  if (!g_type_info_is_pointer (ti) && !force_ptr)
     {
       switch (g_type_info_get_tag (ti))
 	{
@@ -285,7 +285,7 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
       eti = g_type_info_get_param_type (ti, 0);
       lgi_gi_info_new (L, eti);
       eti_guard = lua_gettop (L);
-      esize = array_get_elt_size (eti);
+      esize = array_get_elt_size (eti, atype == GI_ARRAY_TYPE_PTR_ARRAY);
 
       /* Check the type. If this is C-array of byte-sized elements, we
 	 can try special-case and accept strings or buffers. */
@@ -446,6 +446,7 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIDirection dir,
 	{
 	  len = ((GPtrArray *) array)->len;
 	  data = (char *) ((GPtrArray *) array)->pdata;
+	  parent = LGI_PARENT_FORCE_POINTER;
 	}
     }
   else
@@ -468,7 +469,7 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIDirection dir,
   eti = g_type_info_get_param_type (ti, 0);
   lgi_gi_info_new (L, eti);
   eti_guard = lua_gettop (L);
-  esize = array_get_elt_size (eti);
+  esize = array_get_elt_size (eti, atype == GI_ARRAY_TYPE_PTR_ARRAY);
 
   /* Note that we ignore is_pointer check for uint8 type.  Although it
      is not exactly correct, we probably would not handle uint8*
@@ -1149,7 +1150,7 @@ lgi_marshal_2c_caller_alloc (lua_State *L, GITypeInfo *ti, GIArgument *val,
 
 		/* Currently only fixed-size arrays are supported. */
 		elt_size =
-		  array_get_elt_size (g_type_info_get_param_type (ti, 0));
+		  array_get_elt_size (g_type_info_get_param_type (ti, 0), FALSE);
 		size = g_type_info_get_array_fixed_size (ti);
 		g_assert (size > 0);
 
