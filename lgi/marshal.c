@@ -272,6 +272,7 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 		      ? GI_TRANSFER_EVERYTHING : GI_TRANSFER_NOTHING);
   gboolean zero_terminated;
   GArray *array = NULL;
+  int parent = 0;
 
   /* Represent nil as NULL array. */
   if (optional && lua_isnoneornil (L, narg))
@@ -338,6 +339,7 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 		  break;
 
 		case GI_ARRAY_TYPE_PTR_ARRAY:
+		  parent = LGI_PARENT_FORCE_POINTER;
 		  array = (GArray *) g_ptr_array_sized_new (total_size);
 		  g_ptr_array_set_size ((GPtrArray *) array, total_size);
 		  *lgi_guard_create (L, (GDestroyNotify)
@@ -368,7 +370,7 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 		 array. */
 	      to_pop = lgi_marshal_2c (L, eti, NULL, exfer,
 				       array->data + index * esize, -1,
-				       0, NULL, NULL);
+				       parent, NULL, NULL);
 
 	      /* Remove temporary element from the stack. */
 	      lua_remove (L, - to_pop - 1);
