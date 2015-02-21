@@ -31,7 +31,7 @@ ifndef COPTFLAGS
 CFLAGS = -Wall -g
 endif
 endif
-ALL_CFLAGS = $(CCSHARED) $(COPTFLAGS) $(LUA_CFLAGS) $(shell pkg-config --cflags $(PKGS)) $(CFLAGS)
+ALL_CFLAGS = $(CCSHARED) $(COPTFLAGS) $(LUA_CFLAGS) $(shell pkg-config --cflags $(PKGS)) $(CFLAGS) -I .
 LIBS += $(shell pkg-config --libs $(PKGS))
 ALL_LDFLAGS = $(LIBFLAG) $(LDFLAGS)
 DEPCHECK = .depcheck
