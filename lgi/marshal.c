@@ -392,15 +392,9 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 		break;
 
 	      case GI_ARRAY_TYPE_ARRAY:
-		*out_array = (void *) array;
-		break;
-
 	      case GI_ARRAY_TYPE_PTR_ARRAY:
-		*out_array = (void *) ((GPtrArray *) array)->pdata;
-		break;
-
 	      case GI_ARRAY_TYPE_BYTE_ARRAY:
-		*out_array = (void *) ((GByteArray *) array)->data;
+		*out_array = (void *) array;
 		break;
 	      }
 	}
