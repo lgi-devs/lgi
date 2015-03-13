@@ -5,12 +5,14 @@
 # License: MIT
 #
 
-ifneq ($(filter CYGWIN% MSYS% MINGW%, $(shell uname -s)),)
+HOST_OS = $(shell uname -s | tr A-Z a-z)
+
+ifneq ($(filter cygwin% msys% mingw%, $(HOST_OS)),)
 EXT = .dll
 PFX = cyg
 LIBFLAG = -shared
 else
-ifeq ($(shell uname -s),Darwin)
+ifeq ($(HOST_OS),darwin)
 EXT = .so
 PFX = lib
 LIBFLAG = -bundle -undefined dynamic_lookup

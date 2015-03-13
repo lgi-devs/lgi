@@ -6,6 +6,7 @@
 #
 
 PREFIX = /usr/local
+HOST_OS = $(shell uname -s | tr A-Z a-z)
 LUA_VERSION=5.1
 LUA_LIBDIR = $(PREFIX)/lib/lua/$(LUA_VERSION)
 LUA_SHAREDIR = $(PREFIX)/share/lua/$(LUA_VERSION)
@@ -15,12 +16,12 @@ GINAME = gobject-introspection-1.0
 PKGS = $(GINAME) gmodule-2.0 libffi
 VERSION_FILE = version.lua
 
-ifneq ($(filter CYGWIN% MSYS% MINGW%, $(shell uname -s)),)
+ifneq ($(filter cygwin% msys% mingw%, $(HOST_OS)),)
 CORE = corelgilua51.dll
 LIBFLAG = -shared
 LIBS += -llua
 else
-ifeq ($(shell uname -s),Darwin)
+ifeq ($(HOST_OS),darwin)
 CORE = corelgilua51.so
 LIBFLAG = -bundle -undefined dynamic_lookup
 CCSHARED = -fno-common
