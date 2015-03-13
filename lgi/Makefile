@@ -15,7 +15,7 @@ GINAME = gobject-introspection-1.0
 PKGS = $(GINAME) gmodule-2.0 libffi
 VERSION_FILE = version.lua
 
-ifneq ($(filter CYGWIN%, $(shell uname -s)),)
+ifneq ($(filter CYGWIN% MSYS% MINGW%, $(shell uname -s)),)
 CORE = corelgilua51.dll
 LIBFLAG = -shared
 LIBS += -llua
