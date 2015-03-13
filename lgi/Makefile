@@ -10,6 +10,7 @@ LUA_VERSION=5.1
 LUA_LIBDIR = $(PREFIX)/lib/lua/$(LUA_VERSION)
 LUA_SHAREDIR = $(PREFIX)/share/lua/$(LUA_VERSION)
 
+PKG_CONFIG = pkg-config
 GINAME = gobject-introspection-1.0
 PKGS = $(GINAME) gmodule-2.0 libffi
 VERSION_FILE = version.lua
@@ -37,14 +38,14 @@ ifndef COPTFLAGS
 CFLAGS = -Wall -Wextra -O2 -g
 endif
 endif
-ALL_CFLAGS = $(CCSHARED) $(COPTFLAGS) $(LUA_CFLAGS) $(shell pkg-config --cflags $(PKGS)) $(CFLAGS)
-LIBS += $(shell pkg-config --libs $(PKGS))
+ALL_CFLAGS = $(CCSHARED) $(COPTFLAGS) $(LUA_CFLAGS) $(shell $(PKG_CONFIG) --cflags $(PKGS)) $(CFLAGS)
+LIBS += $(shell $(PKG_CONFIG) --libs $(PKGS))
 ALL_LDFLAGS = $(LIBFLAG) $(LDFLAGS)
 DEPCHECK = .depcheck
 
 # Precondition check
 $(DEPCHECK) : Makefile
-	pkg-config --exists '$(GINAME) >= 0.10.8' --print-errors
+	$(PKG_CONFIG) --exists '$(GINAME) >= 0.10.8' --print-errors
 	touch $@
 
 .PHONY : all clean install
