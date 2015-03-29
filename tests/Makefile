@@ -5,12 +5,14 @@
 # License: MIT
 #
 
-ifneq ($(filter CYGWIN%, $(shell uname -s)),)
+HOST_OS = $(shell uname -s | tr A-Z a-z)
+
+ifneq ($(filter cygwin% msys% mingw%, $(HOST_OS)),)
 EXT = .dll
 PFX = cyg
 LIBFLAG = -shared
 else
-ifeq ($(shell uname -s),Darwin)
+ifeq ($(HOST_OS),darwin)
 EXT = .so
 PFX = lib
 LIBFLAG = -bundle -undefined dynamic_lookup
@@ -25,20 +27,21 @@ endif
 
 PKGS = gio-2.0 cairo cairo-gobject gobject-introspection-1.0 gmodule-2.0 libffi
 LUA = lua
+PKG_CONFIG = pkg-config
 
 ifndef CFLAGS
 ifndef COPTFLAGS
 CFLAGS = -Wall -g
 endif
 endif
-ALL_CFLAGS = $(CCSHARED) $(COPTFLAGS) $(LUA_CFLAGS) $(shell pkg-config --cflags $(PKGS)) $(CFLAGS) -I .
-LIBS += $(shell pkg-config --libs $(PKGS))
+ALL_CFLAGS = $(CCSHARED) $(COPTFLAGS) $(LUA_CFLAGS) $(shell $(PKG_CONFIG) --cflags $(PKGS)) $(CFLAGS) -I .
+LIBS += $(shell $(PKG_CONFIG) --libs $(PKGS))
 ALL_LDFLAGS = $(LIBFLAG) $(LDFLAGS)
 DEPCHECK = .depcheck
 
 # Precondition check
 $(DEPCHECK) : Makefile
-	pkg-config --exists '$(PKGS) >= 0.10.8' --print-errors
+	$(PKG_CONFIG) --exists '$(PKGS) >= 0.10.8' --print-errors
 	touch $@
 
 REGRESS = $(PFX)regress$(EXT)
@@ -61,7 +64,7 @@ check : all
 $(REGRESS) : regress.o
 	$(CC) $(ALL_LDFLAGS) -o $@ regress.o $(LIBS)
 
-GIDATADIR = $(shell pkg-config --variable=gidatadir gobject-introspection-1.0)/tests
+GIDATADIR = $(shell $(PKG_CONFIG) --variable=gidatadir gobject-introspection-1.0)/tests
 
 regress.o : $(GIDATADIR)/regress.c $(GIDATADIR)/regress.h $(DEPCHECK)
 	$(CC) $(ALL_CFLAGS) -c -o $@ $<
