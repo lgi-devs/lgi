@@ -124,5 +124,8 @@ for _, event_type in pairs {
    'Any', 'Expose', 'Visibility', 'Motion', 'Button', 'Touch', 'Scroll', 'Key',
    'Crossing', 'Focus', 'Configure', 'Property', 'Selection', 'OwnerChange',
    'Proximity', 'DND', 'WindowState', 'Setting', 'GrabBroken' } do
-   Gdk['Event' .. event_type]._parent = Gdk.Event
+   local event = Gdk['Event' .. event_type]
+   if event then
+      event._parent = Gdk.Event
+   end
 end
