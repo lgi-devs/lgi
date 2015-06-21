@@ -49,7 +49,15 @@ end
 function record.struct_mt:_element(instance, symbol)
    -- First of all, try normal inherited functionality.
    local element, category = component.mt._element(self, instance, symbol)
-   if element then return element, category end
+   if element then
+      if category == '_field' and gi.isinfo(element) and element.is_field then
+	 local ii = element.typeinfo.interface
+	 if ii and ii.type == 'callback' then
+	    category = '_cbkfield'
+	 end
+      end
+      return element, category
+   end
 
    -- Special handling of '_native' attribute.
    if symbol == '_native' then return symbol, '_internal'
@@ -93,6 +101,24 @@ function record.struct_mt:_access_field(instance, element, ...)
       -- In other cases, just access the instance using given info.
       return core.record.field(instance, element, ...)
    end
+end
+
+-- Add accessor for handling fields containing callbacks
+local guards_station = setmetatable({}, { __mode = 'k' })
+function record.struct_mt:_access_cbkfield(instance, element, ...)
+   if select('#', ...) == 0 or type(...) == 'userdata' then
+      return core.record.field(instance, element, ...)
+   end
+
+   local guard, ptr = core.marshal.callback(element.typeinfo.interface, ...)
+   local guards = guards_station[instance]
+   if not guards then
+      guards = {}
+      guards_station[instance] = guards
+   end
+   guards[element.name] = guard
+   local ffi = require 'lgi.ffi'
+   core.record.field(instance, { element.offset, 0, ffi.types.ptr }, ptr)
 end
 
 -- Add accessor for 'internal' fields handling.
