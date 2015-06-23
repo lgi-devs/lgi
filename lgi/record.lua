@@ -50,10 +50,26 @@ function record.struct_mt:_element(instance, symbol)
    -- First of all, try normal inherited functionality.
    local element, category = component.mt._element(self, instance, symbol)
    if element then
-      if category == '_field' and gi.isinfo(element) and element.is_field then
-	 local ii = element.typeinfo.interface
-	 if ii and ii.type == 'callback' then
+      if category == '_field' then
+	 if type(element) == 'table' and element.ret then
 	    category = '_cbkfield'
+	    local ffi = require 'lgi.ffi'
+	    element = {
+	       name = element.name,
+	       ptrfield = { element.offset, 0, ffi.types.ptr },
+	       callable = element
+	    }
+	 elseif gi.isinfo(element) and element.is_field then
+	    local ii = element.typeinfo.interface
+	    if ii and ii.type == 'callback' then
+	       category = '_cbkfield'
+	       local ffi = require 'lgi.ffi'
+	       element = {
+		  name = element.name,
+		  ptrfield = { element.offset, 0, ffi.types.ptr },
+		  callable = ii
+	       }
+	    end
 	 end
       end
       return element, category
@@ -106,19 +122,26 @@ end
 -- Add accessor for handling fields containing callbacks
 local guards_station = setmetatable({}, { __mode = 'k' })
 function record.struct_mt:_access_cbkfield(instance, element, ...)
-   if select('#', ...) == 0 or type(...) == 'userdata' then
-      return core.record.field(instance, element, ...)
+   if select('#', ...) == 0 then
+      -- Reading callback field, get pointer and wrap it in proper
+      -- callable, so that caller can actually call it.
+      local addr = core.record.field(instance, element.ptrfield)
+      return core.callable.new(element.callable, addr)
+   else
+      local target = ...
+      if type(target) ~= 'userdata' then
+	 -- Create closure over Lua target, keep guard stored.
+	 local guard
+	 guard, target = core.marshal.callback(element.callable, target)
+	 local guards = guards_station[instance]
+	 if not guards then
+	    guards = {}
+	    guards_station[instance] = guards
+	 end
+	 guards[element.name] = guard
+      end
+      core.record.field(instance, element.ptrfield, target)
    end
-
-   local guard, ptr = core.marshal.callback(element.typeinfo.interface, ...)
-   local guards = guards_station[instance]
-   if not guards then
-      guards = {}
-      guards_station[instance] = guards
-   end
-   guards[element.name] = guard
-   local ffi = require 'lgi.ffi'
-   core.record.field(instance, { element.offset, 0, ffi.types.ptr }, ptr)
 end
 
 -- Add accessor for 'internal' fields handling.

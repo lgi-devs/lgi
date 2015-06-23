@@ -432,7 +432,7 @@ function class.derived_mt:__newindex(name, target)
 	 override = self._override
       end
       local guard, vfunc = core.marshal.callback(
-	 class_struct[name].typeinfo.interface, target)
+	 class_struct[name].callable, target)
       override[name] = vfunc
       self._guard[container.name .. ':' .. name] = guard
    else
