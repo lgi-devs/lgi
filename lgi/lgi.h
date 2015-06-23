@@ -147,7 +147,7 @@ int lgi_marshal_access (lua_State *L, gboolean getmode,
 int lgi_callable_create (lua_State *L, GICallableInfo *ci, gpointer addr);
 
 /* Parses callable from table-driven info description. */
-int lgi_callable_parse (lua_State *L, int info);
+int lgi_callable_parse (lua_State *L, int info, gpointer addr);
 
 /* Creates container block for allocated closures.  Returns address of
    the block, suitable as user_data parameter. */

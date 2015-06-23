@@ -1772,7 +1772,7 @@ marshal_callback (lua_State *L)
   user_data = lgi_closure_allocate (L, 1);
   *lgi_guard_create (L, lgi_closure_destroy) = user_data;
   if (lua_istable (L, 1))
-    lgi_callable_parse (L, 1);
+    lgi_callable_parse (L, 1, NULL);
   else
     {
       ci = lgi_udata_test (L, 1, LGI_GI_INFO);
