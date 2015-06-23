@@ -683,6 +683,7 @@ callable_describe (lua_State *L, Callable *callable, FfiClosure *closure)
     {
       lua_getfenv (L, 1);
       lua_rawgeti (L, -1, 0);
+      lua_replace (L, -2);
       lua_pushfstring (L, "lgi.efn (%s): %s", lua_tostring (L, -2),
 		       lua_tostring (L, -1));
       lua_replace (L, -2);
@@ -1003,7 +1004,7 @@ callable_index (lua_State *L)
   Callable *callable = callable_get (L, 1);
   const gchar *verb = lua_tostring (L, 2);
   if (g_strcmp0 (verb, "info") == 0)
-    return lgi_gi_info_new (L, callable->info);
+    return lgi_gi_info_new (L, g_base_info_ref (callable->info));
   else if (g_strcmp0 (verb, "params") == 0)
     {
       int index = 1, i;
