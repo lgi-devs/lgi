@@ -122,15 +122,14 @@ function glib.gsourcefuncs()
    local called
    local source_funcs = GLib.SourceFuncs {
       prepare = function(source, timeout)
-	 called = { source, timeout }
-	 return true
+	 called = source
+	 return true, 42
       end
    }
 
-   local source = GLib.Source(source_funcs, GLib.Source._size)
-   local res = source_funcs.prepare(source, 42)
+   local source = GLib.Source(source_funcs)
+   local res, timeout  = source_funcs.prepare(source)
    check(res == true)
-   check(type(called) == 'table')
-   check(called[1] == source)
-   check(called[2] == 42)
+   check(timeout == 42)
+   check(called == source)
 end
