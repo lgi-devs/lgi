@@ -895,6 +895,10 @@ callable_call (lua_State *L)
 	    lua_insert (L, -nret - 1);
 	    caller_allocated++;
 	  }
+	else
+	  /* Normal OUT parameters.  Ideally we don't have to touch
+	     them, but see https://github.com/pavouk/lgi/issues/118 */
+	  memset (&args[argi], 0, sizeof (args[argi]));
       }
     else if (param->internal_user_data)
       /* Provide userdata for the callback. */
