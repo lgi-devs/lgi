@@ -23,7 +23,10 @@ typedef enum _ParamKind
     PARAM_KIND_RECORD,
 
     /* Foreign enum/flags. ti contains underlying numeric type. */
-    PARAM_KIND_ENUM
+    PARAM_KIND_ENUM,
+
+    /* Foreign callable definition. ti is unused. */
+    PARAM_KIND_CALLABLE
   } ParamKind;
 
 /* Represents single parameter in callable description. */
@@ -63,7 +66,7 @@ typedef struct _Param
   guint kind : 2;
 
   /* Index into env table attached to the callable, contains repotype
-     table for specified argument. */
+     table or callable for specified argument. */
   guint repotype_index : 4;
 } Param;
 
@@ -221,6 +224,7 @@ get_ffi_type(Param *param)
   switch (param->kind)
     {
     case PARAM_KIND_RECORD:
+    case PARAM_KIND_CALLABLE:
       return &ffi_type_pointer;
 
     case PARAM_KIND_ENUM:
@@ -449,8 +453,7 @@ callable_param_get_kind (lua_State *L)
   else
     {
       luaL_checktype (L, -1, LUA_TTABLE);
-      lua_getmetatable (L, -1);
-      if (!lua_isnil (L, -1))
+      if (lua_getmetatable (L, -1) != 0)
 	{
 	  lua_getfield (L, -1, "_type");
 	  if (!lua_isnil (L, -1))
@@ -463,6 +466,12 @@ callable_param_get_kind (lua_State *L)
 		       || g_strcmp0 (type, "flags") == 0)
 		kind = PARAM_KIND_ENUM;
 	    }
+	}
+      else
+	{
+	  lua_getfield (L, -1, "ret");
+	  if (!lua_isnil (L, -1))
+	    kind = PARAM_KIND_CALLABLE;
 	}
     }
 
@@ -517,24 +526,33 @@ callable_param_parse (lua_State *L, Param *param)
   /* Parse the type. */
   if (kind == -1)
     kind = callable_param_get_kind (L);
-  if (kind == PARAM_KIND_TI)
+  switch (kind)
     {
-      /* Expect typeinfo. */
-      GITypeInfo **pti = lua_touserdata (L, -1);
-      param->ti = g_base_info_ref (*pti);
-      param->kind = kind;
-      lua_pop (L, 1);
+    case PARAM_KIND_TI:
+      {
+	/* Expect typeinfo. */
+	GITypeInfo **pti = lua_touserdata (L, -1);
+	param->ti = g_base_info_ref (*pti);
+	param->kind = kind;
+	lua_pop (L, 1);
+	break;
+      }
+
+    case PARAM_KIND_ENUM:
+    case PARAM_KIND_RECORD:
+    case PARAM_KIND_CALLABLE:
+      {
+	/* Add it to the env table. */
+	int index = lua_objlen (L, -2) + 1;
+	lua_rawseti (L, -2, index);
+	param->repotype_index = index;
+	param->kind = kind;
+	break;
+      }
+
+    default:
+      luaL_error (L, "bad efn def");
     }
-  else if (kind == PARAM_KIND_ENUM || kind == PARAM_KIND_RECORD)
-    {
-      /* Add it to the env table. */
-      int index = lua_objlen (L, -2) + 1;
-      lua_rawseti (L, -2, index);
-      param->repotype_index = index;
-      param->kind = kind;
-    }
-  else
-    luaL_error (L, "bad efn def");
 }
 
 /* Parses callable from given table. */
@@ -623,10 +641,21 @@ callable_get (lua_State *L, int narg)
 	}
     }
 
-  lua_pushfstring (L, "expected lgi.callable, got %s",
-		   lua_typename (L, lua_type (L, narg)));
-  luaL_argerror (L, narg, lua_tostring (L, -1));
   return NULL;
+}
+
+static Callable *
+callable_check (lua_State *L, int narg)
+{
+  Callable *callable = callable_get (L, narg);
+  if (callable == NULL)
+    {
+      lua_pushfstring (L, "expected lgi.callable, got %s",
+		       lua_typename (L, lua_type (L, narg)));
+      luaL_argerror (L, narg, lua_tostring (L, -1));
+    }
+
+  return callable;
 }
 
 static void
@@ -699,7 +728,7 @@ callable_describe (lua_State *L, Callable *callable, FfiClosure *closure)
 static int
 callable_tostring (lua_State *L)
 {
-  Callable *callable = callable_get (L, 1);
+  Callable *callable = callable_check (L, 1);
 
   callable_describe (L, callable, NULL);
   return 1;
@@ -740,11 +769,16 @@ callable_param_2c (lua_State *L, Param *param, int narg, int parent,
     }
   else
     {
-      /* Marshal record according to custom information. */
+      /* Marshal record/callable according to custom information. */
       lua_getfenv (L, callable_index);
       lua_rawgeti (L, -1, param->repotype_index);
-      lgi_record_2c (L, narg, &arg->v_pointer, FALSE,
-		     param->transfer != GI_TRANSFER_NOTHING, TRUE, FALSE);
+      if (param->kind == PARAM_KIND_RECORD)
+	lgi_record_2c (L, narg, &arg->v_pointer, FALSE,
+		       param->transfer != GI_TRANSFER_NOTHING, TRUE, FALSE);
+      else if (param->kind == PARAM_KIND_CALLABLE)
+	/* This is not implemented yet. */
+	g_assert_not_reached ();
+
       lua_pop (L, 1);
     }
 
@@ -756,7 +790,7 @@ callable_param_2lua (lua_State *L, Param *param, GIArgument *arg,
 		     int parent, int callable_index,
 		     Callable *callable, void **args)
 {
-  if (param->kind != PARAM_KIND_RECORD)
+  if (param->kind != PARAM_KIND_RECORD && param->kind != PARAM_KIND_CALLABLE)
     {
       if (param->ti)
 	lgi_marshal_2lua (L, param->ti, callable->info ? &param->ai : NULL,
@@ -782,6 +816,13 @@ callable_param_2lua (lua_State *L, Param *param, GIArgument *arg,
 		       param->transfer != GI_TRANSFER_NOTHING, parent);
       lua_remove (L, -2);
     }
+  else if (param->kind == PARAM_KIND_CALLABLE)
+    {
+      /* Marshal callable according to custom information. */
+      lgi_callable_parse (L, -1, arg->v_pointer);
+      lua_replace (L, -3);
+      lua_pop (L, 2);
+    }
   else
     {
       /* Convert enum numeric value to symbolic one. */
@@ -801,7 +842,7 @@ callable_call (lua_State *L)
   void **ffi_args, **redirect_out;
   GError *err = NULL;
   gpointer state_lock = lgi_state_get_lock (L);
-  Callable *callable = callable_get (L, 1);
+  Callable *callable = callable_check (L, 1);
 
   /* Make sure that all unspecified arguments are set as nil; during
      marshalling we might create temporary values on the stack, which
@@ -1005,7 +1046,7 @@ callable_call (lua_State *L)
 static int
 callable_index (lua_State *L)
 {
-  Callable *callable = callable_get (L, 1);
+  Callable *callable = callable_check (L, 1);
   const gchar *verb = lua_tostring (L, 2);
   if (g_strcmp0 (verb, "info") == 0)
     return lgi_gi_info_new (L, g_base_info_ref (callable->info));
@@ -1069,7 +1110,7 @@ callable_index (lua_State *L)
 static int
 callable_newindex (lua_State *L)
 {
-  Callable *callable = callable_get (L, 1);
+  Callable *callable = callable_check (L, 1);
   if (g_strcmp0 (lua_tostring (L, 2), "user_data") == 0)
     callable->user_data = lua_touserdata (L, 3);
 

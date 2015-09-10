@@ -27,6 +27,12 @@ SourceFuncs._field.prepare = {
    offset = SourceFuncs._field.prepare.offset,
    ret = ti.boolean, Source, { ti.int, dir = 'out' }
 }
+SourceFuncs._field.dispatch = {
+   name = 'dispatch',
+   offset = SourceFuncs._field.dispatch.offset,
+   ret = ti.boolean, Source, { ret = ti.boolean, ti.ptr }, ti.ptr
+}
+
 local source_new = Source._new
 function Source:_new(funcs)
    if type(funcs) == 'table' then
