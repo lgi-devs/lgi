@@ -192,6 +192,7 @@ end
 Gtk.Container._attribute.child = {}
 local container_child_mt = {}
 function container_child_mt:__index(id)
+   if type(id) ~= 'string' then return nil end
    local found = (core.object.env(self._container).id == id
 	       and self._container)
    if not found then
