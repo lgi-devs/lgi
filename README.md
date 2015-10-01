@@ -162,7 +162,7 @@ providing ideas, spreading a word...  *Many thanks to all of you!*
  - Avoid unexpected dependency on cairo-devel, cairo-runtime is now
    enough
  - Make `set_resident()` more robust and fix stack leak for Lua 5.2 case,
-   avoid useless warning when `set_resident()` fails (to accomodate for
+   avoid useless warning when `set_resident()` fails (to accommodate for
    static linking case).
  - Fix small memory leak (mutex) which occured once per opened
    `lua_State` using lgi.
