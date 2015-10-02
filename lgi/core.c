@@ -536,6 +536,13 @@ core_module (lua_State *L)
     name = g_strdup_printf (MODULE_NAME_FORMAT_PLAIN,
 			    luaL_checkstring (L, 1));
 
+#if defined(__APPLE__)
+  char *path = g_module_build_path (GOBJECT_INTROSPECTION_LIBDIR,
+                                    name);
+  g_free(name);
+  name = path;
+#endif
+
   /* Try to load the module. */
   GModule *module = g_module_open (name, 0);
   if (module == NULL)
