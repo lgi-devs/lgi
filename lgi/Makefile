@@ -25,6 +25,7 @@ ifeq ($(HOST_OS),darwin)
 CORE = corelgilua51.so
 LIBFLAG = -bundle -undefined dynamic_lookup
 CCSHARED = -fno-common
+GOBJECT_INTROSPECTION_LIBDIR = $(shell pkg-config --variable=libdir $(GINAME))
 else
 CORE = corelgilua51.so
 LIBFLAG = -shared
@@ -38,6 +39,9 @@ ifndef CFLAGS
 ifndef COPTFLAGS
 CFLAGS = -Wall -Wextra -O2 -g
 endif
+endif
+ifeq ($(HOST_OS),darwin)
+CFLAGS += -DGOBJECT_INTROSPECTION_LIBDIR=\"$(GOBJECT_INTROSPECTION_LIBDIR)\"
 endif
 ALL_CFLAGS = $(CCSHARED) $(COPTFLAGS) $(LUA_CFLAGS) $(shell $(PKG_CONFIG) --cflags $(PKGS)) $(CFLAGS)
 LIBS += $(shell $(PKG_CONFIG) --libs $(PKGS))
