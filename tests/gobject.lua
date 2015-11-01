@@ -326,3 +326,15 @@ function gobject.subclass_prop_getset()
    checkv(der.str, 'assign', 'string')
    checkv(propval, 'assign', 'string')
 end
+
+function gobject.signal_query()
+   local GObject = lgi.GObject
+   local id = GObject.signal_lookup('notify', GObject.Object)
+   check(id ~= 0)
+   local query = GObject.signal_query(id)
+   check(query.signal_id == id)
+   check(query.signal_name == 'notify')
+   check(query.n_params == 1)
+   check(#query.param_types == 1)
+   check(query.param_types[1] == GObject.Type.name(GObject.Type.PARAM))
+end
