@@ -183,6 +183,8 @@ array_get_or_set_length (GITypeInfo *ti, gssize *get_length, gssize set_length,
 	  val = (GIArgument *) ((char *) args + g_field_info_get_offset (fi));
 	  g_base_info_unref (fi);
 	}
+      else
+	return;
 
       switch (g_type_info_get_tag (eti))
 	{
