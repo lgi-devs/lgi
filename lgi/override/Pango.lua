@@ -166,14 +166,16 @@ if gi.Pango.Layout.methods.move_cursor_visually.args[6].direction ~= 'out' then
    }
 end
 
--- Pango.GlyphString is struct with counted array inside.  Very GI
--- unfriendly, we have to handle it using lgi internal magic.
-Pango.GlyphString._attribute = { glyphs = {} }
-function Pango.GlyphString._attribute.glyphs:get()
-   local array = core.record.field(self, Pango.GlyphString._field.glyphs)
-   local glyphs = {}
-   for i = 0, self.num_glyphs - 1 do
-      glyphs[i + 1] = core.record.fromarray(array, i)
+-- Pango.GlyphString is struct with counted array inside, until
+-- Pango-1.38 which has fixed annotation.  Fix for previous versions.
+if gi.Pango.GlyphString.fields.glyphs.typeinfo.tag ~= 'array' then
+   Pango.GlyphString._attribute = { glyphs = {} }
+   function Pango.GlyphString._attribute.glyphs:get()
+      local array = core.record.field(self, Pango.GlyphString._field.glyphs)
+      local glyphs = {}
+      for i = 0, self.num_glyphs - 1 do
+	 glyphs[i + 1] = core.record.fromarray(array, i)
+      end
+      return glyphs
    end
-   return glyphs
 end
