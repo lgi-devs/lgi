@@ -282,6 +282,13 @@ function gobject.subclass_prop_inherit()
 			       'LgiTestFakeMonitor1NetworkAvailable',
 			       'Whether the network is available.',
 			       false, { GObject.ParamFlags.READABLE })
+   FakeMonitor._property.connectivity =
+      GObject.ParamSpecEnum('connectivity',
+			    'LgiTestFakeMonitor1Connectivity',
+			    'Type of connectivity.',
+			    Gio.NetworkConnectivity,
+			    Gio.NetworkConnectivity.LOCAL,
+			    { GObject.ParamFlags.READABLE })
    function FakeMonitor:do_init(cancellable)
       self.priv.inited = true
       return true
