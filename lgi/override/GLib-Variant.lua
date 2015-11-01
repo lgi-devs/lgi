@@ -168,6 +168,10 @@ end
 
 -- Variant.new() is just a facade over variant_new backend.
 function Variant.new(vt, val)
+   if type(vt) == 'userdata' then
+      -- Wrap existing pointer to variant.
+      return core.record.new(Variant, vt, val)
+   end
    if type(vt) ~= 'string' then vt = vt:dup_string() end
    local v, epos = variant_new(vt, 1, val)
    if not v or epos ~= #vt + 1 then
