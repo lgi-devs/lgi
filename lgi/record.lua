@@ -199,7 +199,8 @@ function record.load(info)
 
    -- Check, whether ctor is valid.  In order to be valid, it must
    -- return instance of this record.
-   if (ctor and ctor.return_type.tag =='interface'
+   if (ctor and ctor.type == 'function'
+       and ctor.return_type.tag =='interface'
        and ctor.return_type.interface == info) then
       ctor = core.callable.new(ctor)
       record._new = function(typetable, ...) return ctor(...) end
