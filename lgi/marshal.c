@@ -501,7 +501,10 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIDirection dir,
       /* UINT8 arrays are marshalled as Lua strings. */
       if (len < 0)
 	len = data ? strlen(data) : 0;
-      lua_pushlstring (L, data, len);
+      if (data != NULL || len != 0)
+        lua_pushlstring (L, data, len);
+      else
+        lua_pushnil (L);
     }
   else
     {

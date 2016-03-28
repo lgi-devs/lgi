@@ -117,6 +117,7 @@ for _, sourcefile in ipairs {
    'gtk.lua',
    'cairo.lua',
    'pango.lua',
+   'gio.lua',
 } do
    dofile(testpath .. '/' .. sourcefile)
 end
