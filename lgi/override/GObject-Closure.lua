@@ -294,5 +294,8 @@ function Closure:_new(target, callback_info)
    return closure
 end
 
+-- Use native marshalling for g_closure_invoke
+Closure.invoke = core.marshal.closure_invoke
+
 -- Export CallInfo as field of Closure.
 Closure.CallInfo = CallInfo

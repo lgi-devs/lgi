@@ -1819,6 +1819,39 @@ gclosure_destroy (gpointer user_data, GClosure *closure)
   lgi_closure_destroy (user_data);
 }
 
+/* Workaround for incorrectly annotated g_closure_invoke.  Since it is
+   pretty performance-sensitive, it is implemented here in native code
+   instead of creating overlay with custom ffi for it. */
+static int
+marshal_closure_invoke (lua_State *L)
+{
+  GClosure *closure;
+  lgi_type_get_repotype (L, G_TYPE_CLOSURE, NULL);
+  lgi_record_2c (L, 1, &closure, FALSE, FALSE, FALSE, FALSE);
+
+  GValue *result;
+  lgi_type_get_repotype (L, G_TYPE_VALUE, NULL);
+  lua_pushvalue (L, -1);
+  lgi_record_2c (L, 2, &result, FALSE, FALSE, FALSE, FALSE);
+
+  luaL_checktype (L, 3, LUA_TTABLE);
+  gint n_params = lua_objlen (L, 3);
+
+  GValue *params = g_newa (GValue, n_params);
+  memset (params, 0, sizeof (GValue) * n_params);
+  for (gint i = 0; i < n_params; i++)
+    {
+      lua_pushnumber (L, i + 1);
+      lua_gettable (L, 3);
+      lua_pushvalue (L, -2);
+      lgi_record_2c (L, -2, &params[i], TRUE, FALSE, FALSE, FALSE);
+      lua_pop (L, 1);
+    }
+
+  g_closure_invoke (closure, result, n_params, params, lua_touserdata (L, 4));
+  return 0;
+}
+
 /* This is workaround for missing glib function, which should look
    like this:
 
@@ -1897,6 +1930,7 @@ static const struct luaL_Reg marshal_api_reg[] = {
   { "argument", marshal_argument },
   { "callback", marshal_callback },
   { "closure_set_marshal", marshal_closure_set_marshal },
+  { "closure_invoke", marshal_closure_invoke },
   { "typeinfo", marshal_typeinfo },
   { NULL, NULL }
 };
