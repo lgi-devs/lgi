@@ -300,6 +300,7 @@ function class.class_mt:derive(typename, ifaces)
    -- all known overriden virtual methods.
    local function class_init(class_addr)
       -- Create instance of real class.
+      local class_addr = core.record.query(class_addr, "addr") or class_addr
       local class_struct = core.record.new(new_class._class, class_addr)
 
       -- Iterate through all overrides and assign to the virtual callbacks.
@@ -367,6 +368,7 @@ function class.class_mt:derive(typename, ifaces)
 
       -- Prepare interface initialization closure.
       local function iface_init(iface_addr)
+	 iface_addr = core.record.query(iface_addr, "addr") or iface_addr
 	 local iface_struct = core.record.new(iface._class, iface_addr)
 
 	 -- Iterate through all interface overrides and assign to the

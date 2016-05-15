@@ -588,7 +588,13 @@ record_query (lua_State *L)
   else
     {
       if (lua_isnoneornil (L, 3))
-	lua_pushlightuserdata (L, record_check (L, 1)->addr);
+	{
+	  record = record_check (L, 1);
+	  if (!record)
+	    return 0;
+
+	  lua_pushlightuserdata (L, record->addr);
+	}
       else
 	{
 	  gpointer addr;
