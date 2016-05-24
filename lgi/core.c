@@ -628,6 +628,18 @@ set_resident (lua_State *L)
     }
   else
     {
+      lua_pop (L, 1);
+      if (lua_gettop(L) == 2)
+	{
+	  /* Some Lua versions give us the path to the .so on the stack.
+	     Just load & leak it. */
+	  GModule* module = g_module_open(lua_tostring(L, 2),
+					  G_MODULE_BIND_LAZY |
+					  G_MODULE_BIND_LOCAL);
+	  if (module != NULL)
+	    return;
+	}
+
       /* This hack tries to enumerate the whole registry table and
 	 find 'LOADLIB: path' library.  When it detects itself, it
 	 just removes pointer to the loaded library, disallowing Lua
@@ -651,7 +663,7 @@ set_resident (lua_State *L)
 		    }
 
 		  /* Clean the stack and return. */
-		  lua_pop (L, 2);
+		  lua_pop (L, 1);
 		  return;
 		}
 	    }
