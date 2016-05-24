@@ -1826,20 +1826,22 @@ static int
 marshal_closure_invoke (lua_State *L)
 {
   GClosure *closure;
+  GValue *result, *params;
+  gint n_params, i;
+  
   lgi_type_get_repotype (L, G_TYPE_CLOSURE, NULL);
   lgi_record_2c (L, 1, &closure, FALSE, FALSE, FALSE, FALSE);
 
-  GValue *result;
   lgi_type_get_repotype (L, G_TYPE_VALUE, NULL);
   lua_pushvalue (L, -1);
   lgi_record_2c (L, 2, &result, FALSE, FALSE, FALSE, FALSE);
 
   luaL_checktype (L, 3, LUA_TTABLE);
-  gint n_params = lua_objlen (L, 3);
+  n_params = lua_objlen (L, 3);
 
-  GValue *params = g_newa (GValue, n_params);
+  params = g_newa (GValue, n_params);
   memset (params, 0, sizeof (GValue) * n_params);
-  for (gint i = 0; i < n_params; i++)
+  for (i = 0; i < n_params; i++)
     {
       lua_pushnumber (L, i + 1);
       lua_gettable (L, 3);
