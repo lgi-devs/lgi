@@ -28,13 +28,24 @@ function cairo.status()
    end
 end
 
+-- Helper, checks that given value has number type and expected value,
+-- with some tolerance.
+local function checkvf(val, exp, tolerance)
+   check(type(val) == 'number', string.format(
+	     "got type `%s', expected `number'", type(val)), 2)
+   check(math.abs(val - exp) <= tolerance,
+	  string.format("got value `%s', expected `%s'",
+			tostring(val), tostring(exp)), 2)
+end
+
 local function check_matrix(matrix, xx, yx, xy, yy, x0, y0)
-   checkv(matrix.xx, xx, 'number')
-   checkv(matrix.yx, yx, 'number')
-   checkv(matrix.xy, xy, 'number')
-   checkv(matrix.yy, yy, 'number')
-   checkv(matrix.x0, x0, 'number')
-   checkv(matrix.y0, y0, 'number')
+   local t = 0.0000001
+   checkvf(matrix.xx, xx, t)
+   checkvf(matrix.yx, yx, t)
+   checkvf(matrix.xy, xy, t)
+   checkvf(matrix.yy, yy, t)
+   checkvf(matrix.x0, x0, t)
+   checkvf(matrix.y0, y0, t)
 end
 
 function cairo.matrix()
