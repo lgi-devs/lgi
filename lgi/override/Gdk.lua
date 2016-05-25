@@ -23,13 +23,15 @@ local cairo = lgi.cairo
 core.registerlock(core.gi.Gdk.resolve.gdk_threads_set_lock_functions)
 Gdk.threads_init()
 
--- Gdk.Rectangle does not exist at all, because it is aliased to
--- cairo.RectangleInt.  Make sure that we have it exists, because it
--- is very commonly used in API documentation.
-Gdk.Rectangle = lgi.cairo.RectangleInt
-Gdk.Rectangle._method = rawget(Gdk.Rectangle, '_method') or {}
-Gdk.Rectangle._method.intersect = Gdk.rectangle_intersect
-Gdk.Rectangle._method.union = Gdk.rectangle_union
+-- Gdk.Rectangle does not exist at all in older GOI, because it is
+-- aliased to cairo.RectangleInt.  Make sure that we have it exists,
+-- because it is very commonly used in API documentation.
+if not Gdk.Rectangle then
+   Gdk.Rectangle = lgi.cairo.RectangleInt
+   Gdk.Rectangle._method = rawget(Gdk.Rectangle, '_method') or {}
+   Gdk.Rectangle._method.intersect = Gdk.rectangle_intersect
+   Gdk.Rectangle._method.union = Gdk.rectangle_union
+end
 
 -- Declare GdkAtoms which are #define'd in Gdk sources and not
 -- introspected in gir.
