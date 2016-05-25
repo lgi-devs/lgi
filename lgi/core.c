@@ -628,8 +628,7 @@ set_resident (lua_State *L)
     }
   else
     {
-      lua_pop (L, 1);
-      if (lua_gettop(L) == 2)
+      if (lua_gettop(L) == 3)
 	{
 	  /* Some Lua versions give us the path to the .so on the stack.
 	     Just load & leak it. */
@@ -663,7 +662,7 @@ set_resident (lua_State *L)
 		    }
 
 		  /* Clean the stack and return. */
-		  lua_pop (L, 1);
+		  lua_pop (L, 2);
 		  return;
 		}
 	    }
