@@ -58,12 +58,25 @@ List of contributors, in no particular order:
 - Jiří Klimeš
 - Garrett Regier
 - Kenneth Zhou
+- Travis Hoppe
 
 Many other people contributed to what lgi is today, in many forms -
 writing patches, reporting bugs, packaging for distributions,
 providing ideas, spreading a word...  *Many thanks to all of you!*
 
 ## History
+
+### 0.9.1 (27-May-2016)
+
+ - marshal NULL strings as nil instead of empty strings.  This allows
+   use of e.g. DataInputStream:read_line() APIs.
+ - fix and improve build for OSX and Win-based configurations
+ - add support for arrays with lengths as struct fields
+ - allow GLib.Variant construction for lightuserdata
+ - fix gtop binding (certain structs could not be imported)
+ - adapt to new set of annotations in newer glib
+ - assorted Lua5.3 fixes, lgi is now fully Lua5.3 compatible
+ - fix binding of Gdk.Rectangle from newer GDK
 
 ### 0.9.0 (23-Mar-2015)
 
