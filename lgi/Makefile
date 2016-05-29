@@ -25,7 +25,7 @@ ifeq ($(HOST_OS),darwin)
 CORE = corelgilua51.so
 LIBFLAG = -bundle -undefined dynamic_lookup
 CCSHARED = -fno-common
-GOBJECT_INTROSPECTION_LIBDIR = $(shell pkg-config --variable=libdir $(GINAME))
+GOBJECT_INTROSPECTION_LIBDIR = $(shell $(PKG_CONFIG) --variable=libdir $(GINAME))
 else
 CORE = corelgilua51.so
 LIBFLAG = -shared
