@@ -32,7 +32,7 @@ local function bus_callback(bus, message)
 end
 
 local play = Gst.ElementFactory.make('playbin', 'play')
-play.uri = 'http://streamer-dtc-aa02.somafm.com:80/stream/1018'
+play.uri = 'http://ice1.somafm.com/dronezone-128-mp3'
 --play.uri = 'http://www.cybertechmedia.com/samples/raycharles.mov'
 play.bus:add_watch(GLib.PRIORITY_DEFAULT, bus_callback)
 play.state = 'PLAYING'
