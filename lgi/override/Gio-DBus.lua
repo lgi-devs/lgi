@@ -69,3 +69,14 @@ function Gio.DBusNodeInfo._attribute:xml()
    self:generate_xml(0, xml)
    return xml.str
 end
+
+-- g_dbus_proxy_get_interface_info() is documented as "Do not unref the returned
+-- object", but has transfer=full. Fix this.
+if core.gi.Gio.DBusProxy.methods.get_interface_info.return_transfer ~= 'none' then
+   Gio.DBusProxy.get_interface_info = core.callable.new {
+      addr = core.gi.Gio.resolve.g_dbus_proxy_get_interface_info,
+      name = 'DBusProxy.get_interface_info',
+      ret = Gio.DBusInterfaceInfo,
+      core.gi.Gio.DBusProxy.methods.new_sync.return_type,
+   }
+end
