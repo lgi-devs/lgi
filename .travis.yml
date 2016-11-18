@@ -1,0 +1,59 @@
+sudo: required
+dist: trusty
+language: c
+env:
+  matrix:
+    - LUA=5.1 LUANAME=luajit-2.0
+    - LUA=5.1 LUANAME=lua5.1
+    - LUA=5.2 LUANAME=lua5.2
+    - LUA=5.3 LUANAME=lua5.3
+
+before_install:
+  - if [ -z $LUAINCLUDE ]; then LUAINCLUDE=/usr/include/${LUANAME}; fi
+
+install:
+  # Travis boilerplate: the apt-get cache might be out of date.
+  - travis_retry sudo apt-get update -qq
+
+  # Do not install recommended packages with apt-get.
+  - echo 'APT::Install-Recommends "false";' | sudo tee /etc/apt/apt.conf.d/no-recommends
+
+  # Install build dependencies
+  - travis_retry sudo apt-get install -y libgirepository1.0-dev libcairo2-dev gir1.2-gtk-3.0 libffi-dev libglib2.0-dev
+  # And dependencies for running tests
+  - travis_retry sudo apt-get install -y xvfb
+
+  # Install Lua (per env).
+  # Note that Lua 5.3 is installed manually, because it is not available in Ubuntu Trusty.
+  # For this we enable LUA_USE_APICHECK to catch errors in Lua API use.
+  # LuaJIT is also installed manually.
+  - |
+    set -ev
+    if [[ "$LUA" == "5.3" ]]; then
+      travis_retry wget https://github.com/lua/lua/releases/download/5.3.3/lua-5.3.3.tar.gz -O lua.tar.gz
+      tar -xvzf lua.tar.gz
+      (cd lua-5.3.3/src \
+        && make SYSCFLAGS="-DLUA_USE_LINUX -ULUA_COMPAT_5_2 -DLUA_USE_APICHECK" SYSLIBS="-Wl,-E -ldl -lreadline" LUA_A=liblua.so MYCFLAGS="-fPIC" RANLIB=: AR="gcc -shared -ldl -o" liblua.so \
+        && cd .. \
+        && sudo make INSTALL_TOP=/usr/ INSTALL_INC=${LUAINCLUDE} TO_LIB=liblua.so linux install)
+    elif [[ "$LUANAME" == "luajit-2.0" ]]; then
+      travis_retry git clone http://luajit.org/git/luajit-2.0.git
+      (cd luajit-2.0 && sudo make install PREFIX=/usr)
+
+      # "Create" /usr/bin/lua if needed (Yup, this is a bad hack)
+      if [ ! -e "/usr/bin/lua" ]; then sudo ln -s /usr/bin/luajit /usr/bin/lua; fi
+    else
+      sudo apt-get install -y lib${LUANAME}-dev ${LUANAME}
+    fi
+
+
+script:
+  # The tests need an enum value that is new in version 2.44. Of course Ubuntu
+  # Ancient (=Trusty) as used by Travis only has version 2.40.0.
+  - sed -e 's/Gio.NetworkConnectivity.LOCAL/1/' -i tests/gobject.lua
+
+  # Build everything and run the tests
+  - xvfb-run make check LUA_CFLAGS="-I$LUAINCLUDE"
+
+  # Just to also check make install
+  - sudo make install
