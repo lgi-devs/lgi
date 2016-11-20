@@ -64,7 +64,7 @@ function gio.async_access()
    check(res ~= nil)
 
    local b = Gio.Async.call(function()
-			       return Gio.async_bus_get('SESSION')
+			       return Gio.async_bus_get('SYSTEM')
    end)()
    check(Gio.DBusConnection:is_type_of(b))
 
