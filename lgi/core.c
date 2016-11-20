@@ -380,7 +380,14 @@ core_log (lua_State *L)
   const char *domain = luaL_checkstring (L, 1);
   int level = 1 << (luaL_checkoption (L, 2, log_levels[5], log_levels) + 2);
   const char *message = luaL_checkstring (L, 3);
+
+#if GLIB_CHECK_VERSION(2, 50, 0)
+  /* TODO: We can include more debug information such as lua line numbers */
+  g_log_structured (domain, level, "MESSAGE", "%s", message);
+#else
   g_log (domain, level, "%s", message);
+#endif
+
   return 0;
 }
 
