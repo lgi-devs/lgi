@@ -2,7 +2,7 @@
 --
 --  lgi Gio override module.
 --
---  Copyright (c) 2010, 2011, 2013 Pavel Holejsovsky
+--  Copyright (c) 2010, 2011, 2013, 2016 Pavel Holejsovsky
 --  Licensed under the MIT license:
 --  http://www.opensource.org/licenses/mit-license.php
 --
@@ -18,6 +18,8 @@ local GObject = lgi.GObject
 local Gio = lgi.Gio
 
 local component = require 'lgi.component'
+local class = require 'lgi.class'
+local namespace = require 'lgi.namespace'
 local core = require 'lgi.core'
 local gi = core.gi
 
@@ -100,22 +102,18 @@ end
 -- xxx_async()/xxx_finish() sequence using currently running
 -- coroutine.
 local tag_int = gi.GObject.ParamSpecEnum.fields.default_value.typeinfo.tag
-local inherited_element = GObject.Object._element
-function GObject.Object:_element(object, name)
-   local element, category = inherited_element(self, object, name)
-   if element or not object then return element, category end
-
+local function async_element(name, accessor, param_self, param_object)
    -- Check, whether we have async_xxx request.
-   local name_root = name:match('^async_(.+)$')
+   local name_root = type(name) == 'string' and name:match('^async_(.+)$')
    if name_root then
-      local async = inherited_element(self, object, name_root .. '_async')
-      local finish = inherited_element(self, object, name_root .. '_finish')
+      local async = accessor(param_self, param_object, name_root .. '_async')
+      local finish = accessor(param_self, param_object, name_root .. '_finish')
 
       -- Some clients name async method just 'name' and use
       -- 'name_sync' for synchronous variant.
-      if finish and not async
-      and inherited_element(self, object, name_root .. '_sync') then
-	 async = inherited_element(self, object, name_root)
+      if finish and not async and accessor(param_self, param_object,
+					   name_root .. '_sync') then
+	 async = accessor(param_self, param_object, name_root)
       end
 
       -- We have async/finish pair, create element table containing
@@ -147,12 +145,7 @@ function GObject.Object:_element(object, name)
    end
 end
 
-function GObject.Object:_access_async(object, element, ...)
-   if select('#', ...) > 0 then
-      error(("%s: `%s' not writable"):format(
-	       core.object.query(object, 'repo')._name, name))
-   end
-
+local function async_access(element, process_yield)
    -- Generate wrapper method calling _async/_finish pair automatically.
    return function(...)
       -- Check that we are running inside context.
@@ -177,8 +170,44 @@ function GObject.Object:_access_async(object, element, ...)
       args[element.in_args] = coroutine.running()
 
       element.async(unpack(args, 1, element.in_args))
-      return element.finish(coroutine.yield())
+      return element.finish(process_yield(coroutine.yield()))
    end
+end
+
+local inherited_class_element = class.class_mt._element
+function class.class_mt:_element(object, name)
+   local element, category = inherited_class_element(self, object, name)
+   if element then return element, category end
+   return async_element(name, inherited_class_element, self, object)
+end
+
+function class.class_mt:_index_async(element)
+   return async_access(element, function(_, ...) return ... end)
+end
+
+local inherited_gobject_element = GObject.Object._element
+function GObject.Object:_element(object, name)
+   local element, category = inherited_gobject_element(self, object, name)
+   if element then return element, category end
+   return async_element(name, inherited_gobject_element, self, object)
+end
+
+function GObject.Object:_access_async(object, element, ...)
+   if select('#', ...) > 0 then
+      error(("%s: `%s' not writable"):format(
+	       core.object.query(object, 'repo')._name, name))
+   end
+
+   return async_access(element, function(...) return ... end)
+end
+
+-- Enforce that Gio._function category is already created
+local _ = Gio.bus_get
+function namespace.mt._category_mt._function:__index(key)
+   local element = async_element(key, function(_, _, name)
+				    return self._namespace[name]
+   end)
+   return element and async_access(element, function(_, ...) return ... end)
 end
 
 function Gio.Initable._init2(object)

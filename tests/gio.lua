@@ -8,6 +8,8 @@
 
 --]]--------------------------------------------------------------------------
 
+local type = type
+
 local lgi = require 'lgi'
 local core = require 'lgi.core'
 
@@ -37,3 +39,42 @@ function gio.read()
     checkv(line, nil, "nil")
     checkv(length, 0, "number")
 end
+
+function gio.async_access()
+   local Gio = lgi.Gio
+   local res
+
+   res = Gio.DBusProxy.async_new
+   check(res ~= nil)
+   check(type(res) == 'function')
+
+   res = Gio.DBusProxy.async_call
+   check(res ~= nil)
+   check(type(res) == 'function')
+
+   res = Gio.async_bus_get
+   check(res ~= nil)
+   check(type(res) == 'function')
+
+   local file = Gio.File.new_for_path('.')
+   res = Gio.Async.call(function(target)
+			   return target:async_query_info('standard::size',
+							  'NONE')
+   end)(file)
+   check(res ~= nil)
+
+   local b = Gio.Async.call(function()
+			       return Gio.async_bus_get('SESSION')
+   end)()
+   check(Gio.DBusConnection:is_type_of(b))
+
+   local proxy = Gio.Async.call(function(bus)
+				   return Gio.DBusProxy.async_new(
+				      bus, 'NONE', nil,
+				      'org.freedesktop.DBus',
+				      '/',
+				      'org.freedesktop.DBus')
+   end)(b)
+   check(Gio.DBusProxy:is_type_of(proxy))
+end
+

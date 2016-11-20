@@ -1,8 +1,8 @@
 ------------------------------------------------------------------------------
 --
---  LGI Support for repository namespace
+--  lgi Support for repository namespace
 --
---  Copyright (c) 2010, 2011 Pavel Holejsovsky
+--  Copyright (c) 2010, 2011,2016 Pavel Holejsovsky
 --  Licensed under the MIT license:
 --  http://www.opensource.org/licenses/mit-license.php
 --
@@ -61,7 +61,9 @@ end
 local namespace = {
    mt = {
       _categories = { '_class', '_interface', '_struct', '_union', '_enum',
-		      '_function', '_constant', } }
+		      '_function', '_constant', },
+      _category_mt = {},
+   }
 }
 
 -- Gets symbol of the specified namespace, if not present yet, tries to load it
@@ -103,7 +105,12 @@ function namespace.mt:__index(symbol)
       if val then
 	 local cat = rawget(self, category)
 	 if not cat then
-	    cat = {}
+	    local mt = namespace.mt._category_mt[category]
+	    if not mt then
+	       mt = {}
+	       namespace.mt._category_mt[category] = mt
+	    end
+	    cat = setmetatable({ _namespace = self }, mt)
 	    self[category] = cat
 	 end
 	 -- Store symbol into the repo, but only if it is not already

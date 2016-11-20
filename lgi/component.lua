@@ -1,8 +1,8 @@
 ------------------------------------------------------------------------------
 --
---  LGI Basic repo type component implementation
+--  lgi Basic repo type component implementation
 --
---  Copyright (c) 2010, 2011, 2012, 2013 Pavel Holejsovsky
+--  Copyright (c) 2010, 2011, 2012, 2013, 2016 Pavel Holejsovsky
 --  Licensed under the MIT license:
 --  http://www.opensource.org/licenses/mit-license.php
 --
@@ -152,7 +152,7 @@ function component.mt:_resolve()
 end
 
 -- Implementation of _access method, which is called by _core when
--- repo instance is accessed for reading or writing.
+-- instance of repo-based type is accessed for reading or writing.
 function component.mt:_access(instance, symbol, ...)
    -- Invoke _element, which converts symbol to element and category.
    local element, category = self:_element(instance, symbol)
