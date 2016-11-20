@@ -68,6 +68,9 @@ function gio.async_access()
    end)()
    check(Gio.DBusConnection:is_type_of(b))
 
+   -- Disable randomly crashing test until issue with random dbus
+   -- crashes is resolved.
+   if false then
    local proxy = Gio.Async.call(function(bus)
 				   return Gio.DBusProxy.async_new(
 				      bus, 'NONE', nil,
@@ -76,5 +79,6 @@ function gio.async_access()
 				      'org.freedesktop.DBus')
    end)(b)
    check(Gio.DBusProxy:is_type_of(proxy))
+   end
 end
 
