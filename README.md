@@ -10,7 +10,7 @@ license, see LICENSE file for full text.
 
 Home of the project is on [GitHub](http://github.com/pavouk/lgi).
 
-LGI is tested and compatible with standard Lua 5.1, Lua 5.2 and
+LGI is tested and compatible with standard Lua 5.1, Lua 5.2, Lua 5.3 and
 LuaJIT2.  Compatibility with other Lua implementations is not tested
 yet.
 
