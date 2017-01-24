@@ -1101,13 +1101,13 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   gint res = 0, npos, i, stacktop;
   gboolean call;
   Param *param;
+  lua_State *L;
   (void)cif;
 
   /* Get access to proper Lua context. */
-  lua_State *L = block->callback.L;
   lgi_state_enter (block->callback.state_lock);
-  lua_rawgeti (L, LUA_REGISTRYINDEX, block->callback.thread_ref);
-  L = lua_tothread (L, -1);
+  lua_rawgeti (block->callback.L, LUA_REGISTRYINDEX, block->callback.thread_ref);
+  L = lua_tothread (block->callback.L, -1);
   call = (closure->target_ref != LUA_NOREF);
   if (call)
     {
