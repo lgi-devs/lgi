@@ -133,3 +133,24 @@ function glib.gsourcefuncs()
    check(timeout == 42)
    check(called == source)
 end
+
+function glib.coroutine_related_crash()
+    -- This test does not have a specific assert() or check() call. Instead it
+    -- is a regression test: Once upon a time this caused a segmentation fault
+    -- due to a use-after-free.
+
+    local glib = require("lgi").GLib
+    local mainloop = glib.MainLoop.new()
+    coroutine.wrap(function()
+	local co = coroutine.running()
+	for i=1,100 do
+	    glib.timeout_add(glib.PRIORITY_DEFAULT, 0, function()
+		coroutine.resume(co)
+		return false
+	    end)
+	    coroutine.yield()
+	end
+	mainloop:quit()
+    end)()
+    mainloop:run()
+end

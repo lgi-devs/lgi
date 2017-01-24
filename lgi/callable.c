@@ -1120,8 +1120,9 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	     the routine we are about to call is actually going to
 	     resume it.  Create new thread instead and switch closure
 	     to its context. */
-	  L = lua_newthread (L);
+	  lua_State *newL = lua_newthread (L);
 	  lua_rawseti (L, LUA_REGISTRYINDEX, block->callback.thread_ref);
+	  L = newL;
 	}
       lua_pop (block->callback.L, 1);
       block->callback.L = L;
