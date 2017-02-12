@@ -87,7 +87,7 @@ local Gio = lgi.require 'Gio'
       'ListNames',
       nil,
       nil,
-      Gio.DBusConnectionFlags.NONE,
+      Gio.DBusCallFlags.NONE,
       -1)
    -- We know that ListNames returns '(as)'
    local services = var[1].value
