@@ -310,7 +310,11 @@ function Gtk.TreeModel:_element(model, key, origin)
    elseif Gtk.TreePath:is_type_of(key) then
       return model:get_iter(key), '_iter'
    end
-   return tree_model_element(self, model, key, origin)
+   local natres = {tree_model_element(self, model, key, origin)}
+   if #natres > 0 then return unpack(natres) end
+   if model ~= nil and (type(key) == 'number' or type(key) == 'string') then
+      return model:get_iter(Gtk.TreePath.new_from_string(key)), '_iter'
+   end
 end
 function Gtk.TreeModel:_access_iter(model, iter, ...)
    if select('#', ...) > 0 then
