@@ -9,7 +9,7 @@
 ------------------------------------------------------------------------------
 
 local select, type, pairs, ipairs, unpack, setmetatable, error, next, rawget
-   = select, type, pairs, ipairs, unpack, setmetatable, error, next, rawget
+   = select, type, pairs, ipairs, unpack or table.unpack, setmetatable, error, next, rawget
 local lgi = require 'lgi'
 local core = require 'lgi.core'
 local Gtk = lgi.Gtk
