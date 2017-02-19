@@ -1359,9 +1359,9 @@ lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIArgInfo *ai, GIDirection dir,
       {
 	GIArrayType atype = g_type_info_get_array_type (ti);
 	gssize size = -1;
+	gpointer ptr = g_type_info_is_pointer (ti) ? arg->v_pointer : arg;
 	array_get_or_set_length (ti, &size, 0, ci, args);
-	marshal_2lua_array (L, ti, dir, atype, transfer, arg->v_pointer, size,
-			    parent);
+	marshal_2lua_array (L, ti, dir, atype, transfer, ptr, size, parent);
       }
       break;
 
