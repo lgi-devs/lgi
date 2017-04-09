@@ -267,7 +267,7 @@ guard_idle_delete (gpointer pointer)
   Guard *guard = pointer;
 
   guard->source_id = 0;
-  if (guard->data != NULL  && 0)
+  if (guard->data != NULL)
     guard->destroy (guard->data);
   guard->data = NULL;
 
