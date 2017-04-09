@@ -55,15 +55,6 @@ GType lgi_type_get_gtype (lua_State *L, int narg);
    handler. Returns pointer to user_data stored inside guard. */
 gpointer *lgi_guard_create (lua_State *L, GDestroyNotify destroy);
 
-gpointer *lgi_guard_create_with_idle (lua_State *L, GDestroyNotify destroy);
-
-/* Allocates guard, a pointer-size userdata with associated destroy
-   handler. Returns pointer to user_data stored inside guard. */
-gpointer *lgi_guard_create_on_list (lua_State *L, GDestroyNotify destroy, GSList **list);
-
-/* Add an idle callback to speed up deletion of the given guard. */
-void lgi_guard_add_idle (gpointer guard);
-
 /* Creates cache table (optionally with given table __mode), stores it
    into registry to specified userdata address. */
 void

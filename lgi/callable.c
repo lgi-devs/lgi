@@ -800,7 +800,6 @@ callable_call (lua_State *L)
   GIArgument retval, *args;
   void **ffi_args, **redirect_out;
   GError *err = NULL;
-  GSList *guards_list = NULL;
   gpointer state_lock = lgi_state_get_lock (L);
   Callable *callable = callable_get (L, 1);
 
@@ -868,7 +867,7 @@ callable_call (lua_State *L)
 	  if (param->call_scoped_user_data)
 	    /* Add guard which releases closure block after the
 	       call. */
-	    *lgi_guard_create_on_list (L, lgi_closure_destroy, &guards_list) = args[argi].v_pointer;
+	    *lgi_guard_create (L, lgi_closure_destroy) = args[argi].v_pointer;
 	}
     }
 
@@ -947,9 +946,6 @@ callable_call (lua_State *L)
       } *ru = (gpointer) &retval;
       ru->arg.v_boolean = (gboolean) ru->s;
     }
-
-  /* Speed up the deletion of Guards */
-  g_slist_free_full (guards_list, lgi_guard_add_idle);
 
   /* Check, whether function threw. */
   if (err != NULL)
@@ -1358,7 +1354,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
      delete the code under our feet and crash and burn :-(. Instead, we create
      marshal guard and leave it to GC to destroy the closure later. */
   if (closure->autodestroy)
-    *lgi_guard_create_with_idle (L, lgi_closure_destroy) = block;
+    *lgi_guard_create (L, lgi_closure_destroy) = block;
 
   /* This is NOT called by Lua, so we better leave the Lua stack we
      used pretty much tidied. */
