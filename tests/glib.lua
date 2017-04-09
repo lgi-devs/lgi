@@ -154,3 +154,48 @@ function glib.coroutine_related_crash()
     end)()
     mainloop:run()
 end
+
+function glib.foo()
+local lgi = require("lgi")
+local glib = lgi.GLib
+local gio = lgi.Gio
+
+local count = 1000
+
+local main = glib.MainLoop()
+
+local function launch(i)
+	print(i, collectgarbage("count"))
+
+	local launcher = gio.SubprocessLauncher.new(gio.SubprocessFlags.STDOUT_PIPE)
+	local proc = launcher:spawnv({"/bin/cat", "/proc/meminfo"})
+	local pipe = proc:get_stdout_pipe()
+	pipe = gio.DataInputStream.new(pipe)
+
+	local start_read, finish_read
+	start_read = function()
+		pipe:read_line_async(glib.PRIORITY_DEFAULT, nil, finish_read)
+	end
+	finish_read = function(obj, res)
+		local line, length = obj:read_line_finish(res)
+		if line then
+			start_read()
+		else
+			-- End of file
+			assert(obj:close())
+			assert(proc:wait())
+			assert(proc:get_successful())
+			if i < count then
+				launch(i+1)
+			else
+				main:quit()
+			end
+		end
+	end
+	start_read()
+end
+
+launch(1)
+
+main:run()
+end
