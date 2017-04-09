@@ -242,6 +242,7 @@ typedef struct _Guard
 {
   gpointer data;
   GDestroyNotify destroy;
+  guint idle_id;
 } Guard;
 #define UD_GUARD "lgi.guard"
 
@@ -249,13 +250,31 @@ static int
 guard_gc (lua_State *L)
 {
   Guard *guard = lua_touserdata (L, 1);
+  if (guard->idle_id)
+  {
+    g_source_remove (guard->idle_id);
+    guard->idle_id = 0;
+  }
   if (guard->data != NULL)
     guard->destroy (guard->data);
+  guard->data = NULL;
   return 0;
 }
 
+static gboolean
+guard_idle_delete (gpointer pointer)
+{
+  Guard *guard = pointer;
+
+  if (guard->data != NULL  && 0)
+    guard->destroy (guard->data);
+  guard->data = NULL;
+
+  return G_SOURCE_REMOVE;
+}
+
 gpointer *
-lgi_guard_create (lua_State *L, GDestroyNotify destroy)
+lgi_guard_create_on_list (lua_State *L, GDestroyNotify destroy, GSList **list)
 {
   Guard *guard = lua_newuserdata (L, sizeof (Guard));
   g_assert (destroy != NULL);
@@ -263,7 +282,41 @@ lgi_guard_create (lua_State *L, GDestroyNotify destroy)
   lua_setmetatable (L, -2);
   guard->data = NULL;
   guard->destroy = destroy;
+  guard->idle_id = 0;
+
+  if (list)
+  {
+    *list = g_slist_prepend (*list, guard);
+  }
+
   return &guard->data;
+}
+
+void
+lgi_guard_add_idle (gpointer pointer)
+{
+  Guard *guard = pointer;
+  guard->idle_id = g_idle_add (guard_idle_delete, pointer);
+}
+
+gpointer *
+lgi_guard_create_with_idle (lua_State *L, GDestroyNotify destroy)
+{
+  Guard *guard = lua_newuserdata (L, sizeof (Guard));
+  g_assert (destroy != NULL);
+  luaL_getmetatable (L, UD_GUARD);
+  lua_setmetatable (L, -2);
+  guard->data = NULL;
+  guard->destroy = destroy;
+  guard->idle_id = g_idle_add (guard_idle_delete, guard);
+
+  return &guard->data;
+}
+
+gpointer *
+lgi_guard_create (lua_State *L, GDestroyNotify destroy)
+{
+  return lgi_guard_create_on_list (L, destroy, NULL);
 }
 
 /* Converts any allowed GType kind to lightuserdata form. */
