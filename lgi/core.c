@@ -242,7 +242,7 @@ typedef struct _Guard
 {
   gpointer data;
   GDestroyNotify destroy;
-  guint idle_id;
+  guint source_id;
 } Guard;
 #define UD_GUARD "lgi.guard"
 
@@ -250,10 +250,10 @@ static int
 guard_gc (lua_State *L)
 {
   Guard *guard = lua_touserdata (L, 1);
-  if (guard->idle_id)
+  if (guard->source_id)
   {
-    g_source_remove (guard->idle_id);
-    guard->idle_id = 0;
+    g_source_remove (guard->source_id);
+    guard->source_id = 0;
   }
   if (guard->data != NULL)
     guard->destroy (guard->data);
@@ -266,7 +266,7 @@ guard_idle_delete (gpointer pointer)
 {
   Guard *guard = pointer;
 
-  guard->idle_id = 0;
+  guard->source_id = 0;
   if (guard->data != NULL  && 0)
     guard->destroy (guard->data);
   guard->data = NULL;
@@ -283,7 +283,7 @@ lgi_guard_create (lua_State *L, GDestroyNotify destroy)
   lua_setmetatable (L, -2);
   guard->data = NULL;
   guard->destroy = destroy;
-  guard->idle_id = g_idle_add (guard_idle_delete, guard);
+  guard->source_id = g_timeout_add (100, guard_idle_delete, guard);
 
   return &guard->data;
 }
