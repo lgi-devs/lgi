@@ -445,6 +445,9 @@ record_gc (lua_State *L)
       lua_rawset (L, LUA_REGISTRYINDEX);
     }
 
+  /* Unset the metatable / make the record unusable */
+  lua_pushnil (L);
+  lua_setmetatable (L, 1);
   return 0;
 }
 

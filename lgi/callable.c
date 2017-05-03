@@ -651,6 +651,10 @@ callable_gc (lua_State *L)
     callable_param_destroy (&callable->params[i]);
 
   callable_param_destroy (&callable->retval );
+
+  /* Unset the metatable / make the callable unusable */
+  lua_pushnil (L);
+  lua_setmetatable (L, 1);
   return 0;
 }
 

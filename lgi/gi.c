@@ -109,6 +109,10 @@ infos_gc (lua_State *L)
 {
   Infos *infos = luaL_checkudata (L, 1, LGI_GI_INFOS);
   g_base_info_unref (infos->info);
+
+  /* Unset the metatable / make the infos unusable */
+  lua_pushnil (L);
+  lua_setmetatable (L, 1);
   return 0;
 }
 
