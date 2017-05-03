@@ -266,6 +266,10 @@ static int
 object_gc (lua_State *L)
 {
   object_unref (L, object_get (L, 1));
+
+  /* Unset the metatable / make the object unusable */
+  lua_pushnil (L);
+  lua_setmetatable (L, 1);
   return 0;
 }
 

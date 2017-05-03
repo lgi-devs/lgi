@@ -481,6 +481,10 @@ module_gc (lua_State *L)
 {
   GModule **module = luaL_checkudata (L, 1, UD_MODULE);
   g_module_close (*module);
+
+  /* Unset the metatable / make the module unusable */
+  lua_pushnil (L);
+  lua_setmetatable (L, 1);
   return 0;
 }
 
