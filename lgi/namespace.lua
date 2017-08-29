@@ -183,6 +183,11 @@ function namespace.require(name, version)
 	    require(override_name)
 	 end
       end
+      if ok and type(msg) == "string" then
+	  -- It's an error message for something that does not want to be
+	  -- re-loaded, see e.g. the call to Gtk.init_check() in Gtk.lua.
+	  error(msg)
+      end
    end
    return ns
 end
