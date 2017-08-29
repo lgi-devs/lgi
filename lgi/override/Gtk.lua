@@ -21,7 +21,9 @@ local log = lgi.log.domain('lgi.Gtk')
 
 -- Initialize GTK.
 Gtk.disable_setlocale()
-assert(Gtk.init_check())
+if not Gtk.init_check() then
+    return "gtk_init_check() failed"
+end
 
 -- Gtk.Allocation is just an alias to Gdk.Rectangle.
 Gtk.Allocation = Gdk.Rectangle
