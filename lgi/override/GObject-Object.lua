@@ -38,7 +38,10 @@ end
 -- Object constructor, 'param' contains table _with properties/signals
 -- to initialize.
 local parameter_repo = repo.GObject.Parameter
-local object_new = gi.GObject.Object.methods.new
+-- Before GLib 2.54, g_object_newv() was annotated with [rename-to g_object_new].
+-- Starting from GLib 2.54, g_object_new_with_properties() has this annotation.
+-- We always want g_object_newv().
+local object_new = gi.GObject.Object.methods.newv or gi.GObject.Object.methods.new
 if object_new then
    object_new = core.callable.new(object_new)
 else
