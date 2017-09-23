@@ -53,8 +53,8 @@ script:
   - sed -e 's/Gio.NetworkConnectivity.LOCAL/1/' -i tests/gobject.lua
 
   # Build everything and run the tests
-  - xvfb-run make check LUA_CFLAGS="-I$LUAINCLUDE"
+  - xvfb-run -a make check LUA_CFLAGS="-I$LUAINCLUDE"
 
   # Just to also check make install
   - sudo make install LUA_VERSION="$LUA"
-  - xvfb-run lua -e 'Gtk = require("lgi").Gtk  c = Gtk.Grid()  w = Gtk.Label()  c:add(w)  assert(w.parent == c)  a, b = dofile("lgi/version.lua"), require("lgi.version")  assert(a == b, string.format("%s == %s", a, b))'
+  - xvfb-run -a lua -e 'Gtk = require("lgi").Gtk  c = Gtk.Grid()  w = Gtk.Label()  c:add(w)  assert(w.parent == c)  a, b = dofile("lgi/version.lua"), require("lgi.version")  assert(a == b, string.format("%s == %s", a, b))'
