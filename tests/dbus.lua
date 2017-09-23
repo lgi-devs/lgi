@@ -126,27 +126,15 @@ end
 function dbus.proxy_get_interface_info()
    local Gio = lgi.Gio
 
-   -- This test does not actually test much, it only checks for a double-free due
-   -- to a wrong annotation on GDBusProxy's get_interface_info()
-   local test_bus = Gio.TestDBus.new(Gio.TestDBusFlags.NONE)
-   test_bus:up()
+   local interface = Gio.DBusInterfaceInfo {
+      name = 'SomeInterface'
+   }
+   local bus = Gio.bus_get_sync(Gio.BusType.SESSION)
+   local proxy, err = Gio.DBusProxy.new_sync(bus, Gio.DBusProxyFlags.NONE, interface, "org.foo", "/", "org.foo.SomeInterface", nil)
+   assert(proxy, err)
 
-   do
-      local interface = Gio.DBusInterfaceInfo {
-         name = 'SomeInterface'
-      }
-      local bus = Gio.bus_get_sync(Gio.BusType.SESSION)
-      local proxy, err = Gio.DBusProxy.new_sync(bus, Gio.DBusProxyFlags.NONE, interface, "org.foo", "/", "org.foo.SomeInterface", nil)
-      assert(proxy, err)
+   local interface2 = proxy:get_interface_info()
 
-      local interface2 = proxy:get_interface_info()
-
-      -- Just so that we do test something
-      assert(interface == interface2)
-   end
-
-   -- Make sure the above-created objects are collected before the bus
-   collectgarbage("collect")
-
-   test_bus:down()
+   -- Just so that we do test something
+   assert(interface == interface2)
 end

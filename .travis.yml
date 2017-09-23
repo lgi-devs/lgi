@@ -21,7 +21,7 @@ install:
   # Install build dependencies
   - travis_retry sudo apt-get install -y libgirepository1.0-dev libcairo2-dev gir1.2-gtk-3.0 libffi-dev libglib2.0-dev
   # And dependencies for running tests
-  - travis_retry sudo apt-get install -y xvfb
+  - travis_retry sudo apt-get install -y xvfb dbus-x11
 
   # Install Lua (per env).
   # Note that Lua 5.3 is installed manually, because it is not available in Ubuntu Trusty.
