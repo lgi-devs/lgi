@@ -59,7 +59,7 @@ check : all
 	    GI_TYPELIB_PATH=tests:$$GI_TYPELIB_PATH \
 	    LUA_PATH="./?.lua;${LUA_PATH};" \
 	    LUA_CPATH="./?.so;${LUA_CPATH};" \
-	    $(LUA) tests/test.lua
+	    $(shell command -v dbus-run-session || echo /usr/bin/dbus-launch) $(LUA) tests/test.lua
 
 $(REGRESS) : regress.o
 	$(CC) $(ALL_LDFLAGS) -o $@ regress.o $(LIBS)
