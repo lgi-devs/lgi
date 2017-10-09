@@ -59,12 +59,31 @@ List of contributors, in no particular order:
 - Garrett Regier
 - Kenneth Zhou
 - Travis Hoppe
+- Tobias Jakobs
+- Heiko Becker
+- Vincent Bermel
+- Szunti
 
 Many other people contributed to what lgi is today, in many forms -
 writing patches, reporting bugs, packaging for distributions,
 providing ideas, spreading a word...  *Many thanks to all of you!*
 
 ## History
+
+### 0.9.2 (9-Oct-2017)
+
+ - fix assorted crashes in closure callback invocation code
+ - fix double-free bug caused by incorrect annotation of Gio.DBusProxy.get_interface_info
+ - fix marshaling of arrays of pointers
+ - make objects unusable in __gc metamethod
+ - work around API break in GLib 2.54
+ - use structured GLib logging when available
+ - add Gio.Async support also for static methods and global functions
+ - better error message when Gtk.init fails
+ - add support for Travis
+ - don't hardcode pkg-config executable
+ - fix URI in GStreamer sample
+ - fix flags for DBus samples
 
 ### 0.9.1 (27-May-2016)
 
