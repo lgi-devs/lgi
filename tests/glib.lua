@@ -34,7 +34,7 @@ function glib.timer()
    check(type(el1) == 'number')
    check(type(ms1) == 'number')
 
-   for i = 1, 1000000 do end
+   lgi.GLib.usleep(1000) -- wait one millisecond
 
    local el2, ms2 = timer:elapsed()
    check(el1 < el2)
