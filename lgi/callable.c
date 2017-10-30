@@ -769,7 +769,7 @@ callable_param_2lua (lua_State *L, Param *param, GIArgument *arg,
 			  args + callable->has_self);
       else
 	{
-	  union { GIArgument arg; int i; } *u = (gpointer) arg;
+	  union { GIArgument arg; ffi_sarg i; } *u = (gpointer) arg;
 	  lua_pushnumber (L, u->i);
 	}
     }
