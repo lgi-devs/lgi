@@ -1106,6 +1106,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   gboolean call;
   Param *param;
   lua_State *L;
+  lua_State *marshalL;
   (void)cif;
 
   /* Get access to proper Lua context. */
@@ -1150,10 +1151,19 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	stacktop--;
     }
 
+  marshalL = L;
+  if (lua_status (marshalL) == LUA_YIELD)
+    {
+	/* We cannot marshal arguments on a yielded thread since this might
+	 * execute various Lua code. Sadly, Lua might blow up as a result. Thus,
+	 * create a new thread that we just use for marshaling. */
+	marshalL = lua_newthread(L);
+    }
+
   /* Get access to Callable structure. */
-  lua_rawgeti (L, LUA_REGISTRYINDEX, closure->callable_ref);
-  callable = lua_touserdata (L, -1);
-  callable_index = lua_gettop (L);
+  lua_rawgeti (marshalL, LUA_REGISTRYINDEX, closure->callable_ref);
+  callable = lua_touserdata (marshalL, -1);
+  callable_index = lua_gettop (marshalL);
 
   /* Marshall 'self' argument, if it is present. */
   npos = 0;
@@ -1164,11 +1174,11 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
       gpointer addr = ((GIArgument*) args[0])->v_pointer;
       npos++;
       if (type == GI_INFO_TYPE_OBJECT || type == GI_INFO_TYPE_INTERFACE)
-	lgi_object_2lua (L, addr, FALSE, FALSE);
+	lgi_object_2lua (marshalL, addr, FALSE, FALSE);
       else if (type == GI_INFO_TYPE_STRUCT || type == GI_INFO_TYPE_UNION)
 	{
-	  lgi_type_get_repotype (L, G_TYPE_INVALID, parent);
-	  lgi_record_2lua (L, addr, FALSE, 0);
+	  lgi_type_get_repotype (marshalL, G_TYPE_INVALID, parent);
+	  lgi_record_2lua (marshalL, addr, FALSE, 0);
 	}
       else
 	g_assert_not_reached ();
@@ -1190,7 +1200,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	        real_arg = &arg_value;
 	      }
 
-	    callable_param_2lua (L, param, real_arg, 0,
+	    callable_param_2lua (marshalL, param, real_arg, 0,
 			         callable_index, callable,
 			         args + callable->has_self);
 	  }
@@ -1202,13 +1212,13 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	       annotation suggests. */
 	    guint i, nvals = ((GIArgument *)args[2])->v_uint32;
 	    GValue* vals = ((GIArgument *)args[3])->v_pointer;
-	    lua_createtable (L, nvals, 0);
+	    lua_createtable (marshalL, nvals, 0);
 	    for (i = 0; i < nvals; ++i)
 	      {
-		lua_pushnumber (L, i + 1);
-		lgi_type_get_repotype (L, G_TYPE_VALUE, NULL);
-		lgi_record_2lua (L, &vals[i], FALSE, 0);
-		lua_settable (L, -3);
+		lua_pushnumber (marshalL, i + 1);
+		lgi_type_get_repotype (marshalL, G_TYPE_VALUE, NULL);
+		lgi_record_2lua (marshalL, &vals[i], FALSE, 0);
+		lua_settable (marshalL, -3);
 	      }
 	  }
 	npos++;
@@ -1216,7 +1226,18 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 
   /* Remove callable userdata from callable_index, otehrwise they mess
      up carefully prepared stack structure. */
-  lua_remove (L, callable_index);
+  lua_remove (marshalL, callable_index);
+
+  /* Move arguments to the right stack */
+  if (marshalL != L)
+    {
+	g_assert (npos == lua_gettop(marshalL));
+	lua_xmove (marshalL, L, npos);
+
+	/* Remove the thread marshalL from the stack */
+	lua_remove (L, -(npos + 1));
+	marshalL = NULL;
+    }
 
   /* Call it. */
   if (call)
