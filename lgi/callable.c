@@ -1093,6 +1093,73 @@ static const struct luaL_Reg callable_reg[] = {
   { NULL, NULL }
 };
 
+static int
+marshal_arguments (lua_State *L, void **args, int callable_index, Callable *callable)
+{
+  Param *param;
+  int npos = 0, i;
+
+  /* Marshall 'self' argument, if it is present. */
+  if (callable->has_self)
+    {
+      GIBaseInfo *parent = g_base_info_get_container (callable->info);
+      GIInfoType type = g_base_info_get_type (parent);
+      gpointer addr = ((GIArgument*) args[0])->v_pointer;
+      npos++;
+      if (type == GI_INFO_TYPE_OBJECT || type == GI_INFO_TYPE_INTERFACE)
+	lgi_object_2lua (L, addr, FALSE, FALSE);
+      else if (type == GI_INFO_TYPE_STRUCT || type == GI_INFO_TYPE_UNION)
+	{
+	  lgi_type_get_repotype (L, G_TYPE_INVALID, parent);
+	  lgi_record_2lua (L, addr, FALSE, 0);
+	}
+      else
+	g_assert_not_reached ();
+    }
+
+  /* Marshal input arguments to lua. */
+  param = callable->params;
+  for (i = 0; i < callable->nargs; ++i, ++param)
+    if (!param->internal && param->dir != GI_DIRECTION_OUT)
+      {
+	if G_LIKELY (i != 3 || !callable->is_closure_marshal)
+	  {
+	    GIArgument *real_arg = args[i + callable->has_self];
+	    GIArgument arg_value;
+
+	    if (param->dir == GI_DIRECTION_INOUT)
+	      {
+	        arg_value = *(GIArgument *) real_arg->v_pointer;
+	        real_arg = &arg_value;
+	      }
+
+	    callable_param_2lua (L, param, real_arg, 0,
+			         callable_index, callable,
+			         args + callable->has_self);
+	  }
+	else
+	  {
+	    /* Workaround incorrectly annotated but crucial
+	       ClosureMarshal callback.  Its 3rd argument is actually
+	       an array of GValue, not a single GValue as missing
+	       annotation suggests. */
+	    guint i, nvals = ((GIArgument *)args[2])->v_uint32;
+	    GValue* vals = ((GIArgument *)args[3])->v_pointer;
+	    lua_createtable (L, nvals, 0);
+	    for (i = 0; i < nvals; ++i)
+	      {
+		lua_pushnumber (L, i + 1);
+		lgi_type_get_repotype (L, G_TYPE_VALUE, NULL);
+		lgi_record_2lua (L, &vals[i], FALSE, 0);
+		lua_settable (L, -3);
+	      }
+	  }
+	npos++;
+      }
+
+  return npos;
+}
+
 /* Closure callback, called by libffi when C code wants to invoke Lua
    callback. */
 static void
@@ -1155,66 +1222,9 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   callable = lua_touserdata (L, -1);
   callable_index = lua_gettop (L);
 
-  /* Marshall 'self' argument, if it is present. */
-  npos = 0;
-  if (callable->has_self)
-    {
-      GIBaseInfo *parent = g_base_info_get_container (callable->info);
-      GIInfoType type = g_base_info_get_type (parent);
-      gpointer addr = ((GIArgument*) args[0])->v_pointer;
-      npos++;
-      if (type == GI_INFO_TYPE_OBJECT || type == GI_INFO_TYPE_INTERFACE)
-	lgi_object_2lua (L, addr, FALSE, FALSE);
-      else if (type == GI_INFO_TYPE_STRUCT || type == GI_INFO_TYPE_UNION)
-	{
-	  lgi_type_get_repotype (L, G_TYPE_INVALID, parent);
-	  lgi_record_2lua (L, addr, FALSE, 0);
-	}
-      else
-	g_assert_not_reached ();
-    }
+  npos = marshal_arguments (L, args, callable_index, callable);
 
-  /* Marshal input arguments to lua. */
-  param = callable->params;
-  for (i = 0; i < callable->nargs; ++i, ++param)
-    if (!param->internal && param->dir != GI_DIRECTION_OUT)
-      {
-	if G_LIKELY (i != 3 || !callable->is_closure_marshal)
-	  {
-	    GIArgument *real_arg = args[i + callable->has_self];
-	    GIArgument arg_value;
-
-	    if (param->dir == GI_DIRECTION_INOUT)
-	      {
-	        arg_value = *(GIArgument *) real_arg->v_pointer;
-	        real_arg = &arg_value;
-	      }
-
-	    callable_param_2lua (L, param, real_arg, 0,
-			         callable_index, callable,
-			         args + callable->has_self);
-	  }
-	else
-	  {
-	    /* Workaround incorrectly annotated but crucial
-	       ClosureMarshal callback.  Its 3rd argument is actually
-	       an array of GValue, not a single GValue as missing
-	       annotation suggests. */
-	    guint i, nvals = ((GIArgument *)args[2])->v_uint32;
-	    GValue* vals = ((GIArgument *)args[3])->v_pointer;
-	    lua_createtable (L, nvals, 0);
-	    for (i = 0; i < nvals; ++i)
-	      {
-		lua_pushnumber (L, i + 1);
-		lgi_type_get_repotype (L, G_TYPE_VALUE, NULL);
-		lgi_record_2lua (L, &vals[i], FALSE, 0);
-		lua_settable (L, -3);
-	      }
-	  }
-	npos++;
-      }
-
-  /* Remove callable userdata from callable_index, otehrwise they mess
+  /* Remove callable userdata from callable_index, otherwise they mess
      up carefully prepared stack structure. */
   lua_remove (L, callable_index);
 
