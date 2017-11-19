@@ -109,6 +109,10 @@ typedef struct _Callback
   lua_State *L;
   int thread_ref;
 
+  /* Thread we created internally and can use for marshaling. */
+  lua_State *marshal_L;
+  int marshal_ref;
+
   /* State lock, to be passed to lgi_state_enter() when callback is
      invoked. */
   gpointer state_lock;
@@ -1106,12 +1110,16 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   gboolean call;
   Param *param;
   lua_State *L;
+  lua_State *marshal_L;
   (void)cif;
 
   /* Get access to proper Lua context. */
   lgi_state_enter (block->callback.state_lock);
-  lua_rawgeti (block->callback.L, LUA_REGISTRYINDEX, block->callback.thread_ref);
-  L = lua_tothread (block->callback.L, -1);
+  marshal_L = block->callback.marshal_L;
+  g_assert (lua_gettop (marshal_L) == 0);
+
+  lua_rawgeti (marshal_L, LUA_REGISTRYINDEX, block->callback.thread_ref);
+  L = lua_tothread (marshal_L, -1);
   call = (closure->target_ref != LUA_NOREF);
   if (call)
     {
@@ -1124,11 +1132,11 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	     the routine we are about to call is actually going to
 	     resume it.  Create new thread instead and switch closure
 	     to its context. */
-	  lua_State *newL = lua_newthread (L);
-	  lua_rawseti (L, LUA_REGISTRYINDEX, block->callback.thread_ref);
+	  lua_State *newL = lua_newthread (marshal_L);
+	  lua_rawseti (marshal_L, LUA_REGISTRYINDEX, block->callback.thread_ref);
 	  L = newL;
 	}
-      lua_pop (block->callback.L, 1);
+      lua_pop (marshal_L, 1);
       block->callback.L = L;
 
       /* Remember stacktop, this is the position on which we should
@@ -1142,7 +1150,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   else
     {
       /* Cleanup the stack of the original thread. */
-      lua_pop (block->callback.L, 1);
+      lua_pop (marshal_L, 1);
       stacktop = lua_gettop (L);
       if (lua_status (L) == 0)
 	/* Thread is not suspended yet, so it contains initial
@@ -1151,9 +1159,9 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
     }
 
   /* Get access to Callable structure. */
-  lua_rawgeti (L, LUA_REGISTRYINDEX, closure->callable_ref);
-  callable = lua_touserdata (L, -1);
-  callable_index = lua_gettop (L);
+  lua_rawgeti (marshal_L, LUA_REGISTRYINDEX, closure->callable_ref);
+  callable = lua_touserdata (marshal_L, -1);
+  callable_index = lua_gettop (marshal_L);
 
   /* Marshall 'self' argument, if it is present. */
   npos = 0;
@@ -1164,11 +1172,11 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
       gpointer addr = ((GIArgument*) args[0])->v_pointer;
       npos++;
       if (type == GI_INFO_TYPE_OBJECT || type == GI_INFO_TYPE_INTERFACE)
-	lgi_object_2lua (L, addr, FALSE, FALSE);
+	lgi_object_2lua (marshal_L, addr, FALSE, FALSE);
       else if (type == GI_INFO_TYPE_STRUCT || type == GI_INFO_TYPE_UNION)
 	{
-	  lgi_type_get_repotype (L, G_TYPE_INVALID, parent);
-	  lgi_record_2lua (L, addr, FALSE, 0);
+	  lgi_type_get_repotype (marshal_L, G_TYPE_INVALID, parent);
+	  lgi_record_2lua (marshal_L, addr, FALSE, 0);
 	}
       else
 	g_assert_not_reached ();
@@ -1190,7 +1198,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	        real_arg = &arg_value;
 	      }
 
-	    callable_param_2lua (L, param, real_arg, 0,
+	    callable_param_2lua (marshal_L, param, real_arg, 0,
 			         callable_index, callable,
 			         args + callable->has_self);
 	  }
@@ -1202,13 +1210,13 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	       annotation suggests. */
 	    guint i, nvals = ((GIArgument *)args[2])->v_uint32;
 	    GValue* vals = ((GIArgument *)args[3])->v_pointer;
-	    lua_createtable (L, nvals, 0);
+	    lua_createtable (marshal_L, nvals, 0);
 	    for (i = 0; i < nvals; ++i)
 	      {
-		lua_pushnumber (L, i + 1);
-		lgi_type_get_repotype (L, G_TYPE_VALUE, NULL);
-		lgi_record_2lua (L, &vals[i], FALSE, 0);
-		lua_settable (L, -3);
+		lua_pushnumber (marshal_L, i + 1);
+		lgi_type_get_repotype (marshal_L, G_TYPE_VALUE, NULL);
+		lgi_record_2lua (marshal_L, &vals[i], FALSE, 0);
+		lua_settable (marshal_L, -3);
 	      }
 	  }
 	npos++;
@@ -1216,9 +1224,11 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 
   /* Remove callable userdata from callable_index, otehrwise they mess
      up carefully prepared stack structure. */
-  lua_remove (L, callable_index);
+  lua_remove (marshal_L, callable_index);
 
   /* Call it. */
+  lua_xmove (marshal_L, L, npos);
+  g_assert (lua_gettop (marshal_L) == 0);
   if (call)
     {
       if (callable->throws)
@@ -1260,10 +1270,9 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 
   /* Reintroduce callable to the stack, we might need it during
      marshalling of the response. Put it right before all returns. */
-  lua_rawgeti (L, LUA_REGISTRYINDEX, closure->callable_ref);
-  lua_insert (L, stacktop + 1);
-  callable_index = stacktop + 1;
-  npos = stacktop + 2;
+  g_assert (lua_gettop (marshal_L) == 0);
+  lua_rawgeti (marshal_L, LUA_REGISTRYINDEX, closure->callable_ref);
+  callable_index = 1;
 
   /* Check, whether we can report an error here. */
   if (res == 0)
@@ -1275,7 +1284,9 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	 nil; during marshalling we might create temporary values on
 	 the stack, which can be confused with output values expected
 	 but not passed by caller. */
-      lua_settop(L, lua_gettop (L) + callable->has_self + callable->nargs + 1);
+      lua_settop(L, stacktop + callable->has_self + callable->nargs + 1);
+      lua_xmove (L, marshal_L, callable->has_self + callable->nargs + 1);
+      npos = callable_index + 1;
 
       /* Marshal return value from Lua. */
       tag = g_type_info_get_tag (callable->retval.ti);
@@ -1286,10 +1297,10 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	    /* Return value should be ignored on Lua side, so we have
 	       to synthesize the return value for C side.  We should
 	       return FALSE if next output argument is nil. */
-	    *(ffi_sarg *) ret = lua_isnoneornil (L, npos) ? FALSE : TRUE;
+	    *(ffi_sarg *) ret = lua_isnoneornil (marshal_L, npos) ? FALSE : TRUE;
 	  else
 	    {
-	      to_pop = callable_param_2c (L, &callable->retval, npos,
+	      to_pop = callable_param_2c (marshal_L, &callable->retval, npos,
 					  LGI_PARENT_IS_RETVAL, ret,
 					  callable_index, callable,
 					  args + callable->has_self);
@@ -1298,7 +1309,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 		  g_warning ("cbk `%s.%s': return (transfer none) %d, unsafe!",
 			     g_base_info_get_namespace (callable->info),
 			     g_base_info_get_name (callable->info), to_pop);
-		  lua_pop (L, to_pop);
+		  lua_pop (marshal_L, to_pop);
 		}
 
 	      npos++;
@@ -1314,7 +1325,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	    gboolean caller_alloc =
 	      callable->info && g_arg_info_is_caller_allocates (&param->ai)
 	      && g_type_info_get_tag (param->ti) == GI_TYPE_TAG_INTERFACE;
-	    to_pop = callable_param_2c (L, param, npos, caller_alloc
+	    to_pop = callable_param_2c (marshal_L, param, npos, caller_alloc
 					? LGI_PARENT_CALLER_ALLOC : 0, *arg,
 					callable_index, callable,
 					args + callable->has_self);
@@ -1324,7 +1335,7 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 			   g_base_info_get_namespace (callable->info),
 			   g_base_info_get_name (callable->info),
 			   g_base_info_get_name (&param->ai), to_pop);
-		lua_pop (L, to_pop);
+		lua_pop (marshal_L, to_pop);
 	      }
 
 	    npos++;
@@ -1338,14 +1349,15 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 					  callable->nargs])->v_pointer;
 
       /* Check, whether thrown error is actually GLib.Error instance. */
-      lgi_type_get_repotype (L, G_TYPE_ERROR, NULL);
-      lgi_record_2c (L, -2, err, FALSE, TRUE, TRUE, TRUE);
+      lua_xmove (L, marshal_L, 1);
+      lgi_type_get_repotype (marshal_L, G_TYPE_ERROR, NULL);
+      lgi_record_2c (marshal_L, -2, err, FALSE, TRUE, TRUE, TRUE);
       if (*err == NULL)
 	{
 	  /* Nope, so come up with something funny. */
 	  GQuark q = g_quark_from_static_string ("lgi-callback-error-quark");
-	  g_set_error_literal (err, q, 1, lua_tostring (L, -1));
-	  lua_pop (L, 1);
+	  g_set_error_literal (err, q, 1, lua_tostring (marshal_L, -1));
+	  lua_pop (marshal_L, 1);
 	}
 
       /* Such function should usually return FALSE, so do it. */
@@ -1358,11 +1370,12 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
      delete the code under our feet and crash and burn :-(. Instead, we create
      marshal guard and leave it to GC to destroy the closure later. */
   if (closure->autodestroy)
-    *lgi_guard_create (L, lgi_closure_destroy) = block;
+    *lgi_guard_create (marshal_L, lgi_closure_destroy) = block;
 
   /* This is NOT called by Lua, so we better leave the Lua stack we
      used pretty much tidied. */
   lua_settop (L, stacktop);
+  lua_settop (marshal_L, 0);
 
   /* Going back to C code, release the state synchronization. */
   lgi_state_leave (block->callback.state_lock);
@@ -1386,7 +1399,10 @@ lgi_closure_destroy (gpointer user_data)
 	  luaL_unref (L, LUA_REGISTRYINDEX, closure->target_ref);
 	}
       if (i < 0)
-	luaL_unref (L, LUA_REGISTRYINDEX, block->callback.thread_ref);
+	{
+	  luaL_unref (L, LUA_REGISTRYINDEX, block->callback.thread_ref);
+	  luaL_unref (L, LUA_REGISTRYINDEX, block->callback.marshal_ref);
+	}
       ffi_closure_free (closure);
     }
 }
@@ -1422,6 +1438,10 @@ lgi_closure_allocate (lua_State *L, int count)
   block->callback.L = L;
   lua_pushthread (L);
   block->callback.thread_ref = luaL_ref (L, LUA_REGISTRYINDEX);
+
+  /* Get us our own thread that never yields. */
+  block->callback.marshal_L = lua_newthread (L);
+  block->callback.marshal_ref = luaL_ref (L, LUA_REGISTRYINDEX);
 
   /* Retrieve and remember state lock. */
   block->callback.state_lock = lgi_state_get_lock (L);
