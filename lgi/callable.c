@@ -101,6 +101,9 @@ typedef struct _Callable
 /* Address is lightuserdata of Callable metatable in Lua registry. */
 static int callable_mt;
 
+/* Lua thread that can be used for argument marshaling if needed. */
+static lua_State *marshalling_L;
+
 /* Structure containing basic callback information. */
 typedef struct _Callback
 {
@@ -1260,9 +1263,10 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   int callable_index;
   FfiClosure *closure = closure_arg;
   FfiClosureBlock *block = closure->block;
-  gint res = 0, npos, stacktop;
+  gint res = 0, npos, stacktop, extra_args = 0;
   gboolean call;
   lua_State *L;
+  lua_State *marshal_L;
   (void)cif;
 
   /* Get access to proper Lua context. */
@@ -1302,23 +1306,37 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
       lua_pop (block->callback.L, 1);
       stacktop = lua_gettop (L);
       if (lua_status (L) == 0)
-	/* Thread is not suspended yet, so it contains initial
-	   function at the top of the stack, so count with it. */
-	stacktop--;
+	{
+	  /* Thread is not suspended yet, so it contains initial
+	     function at the top of the stack, so count with it. */
+	  stacktop--;
+	  extra_args++;
+	}
+    }
+
+  /* Pick a coroutine used for marshalling */
+  marshal_L = L;
+  if (lua_status (marshal_L) == LUA_YIELD)
+    {
+      marshal_L = marshalling_L;
+      g_assert (lua_gettop (marshal_L) == 0);
     }
 
   /* Get access to Callable structure. */
-  lua_rawgeti (L, LUA_REGISTRYINDEX, closure->callable_ref);
-  callable = lua_touserdata (L, -1);
-  callable_index = lua_gettop (L);
+  lua_rawgeti (marshal_L, LUA_REGISTRYINDEX, closure->callable_ref);
+  callable = lua_touserdata (marshal_L, -1);
+  callable_index = lua_gettop (marshal_L);
 
-  npos = marshal_arguments (L, args, callable_index, callable);
+  npos = marshal_arguments (marshal_L, args, callable_index, callable);
 
   /* Remove callable userdata from callable_index, otherwise they mess
      up carefully prepared stack structure. */
-  lua_remove (L, callable_index);
+  lua_remove (marshal_L, callable_index);
 
   /* Call it. */
+  lua_xmove (marshal_L, L, npos + extra_args);
+  if (L != marshal_L)
+      g_assert (lua_gettop (marshal_L) == 0);
   if (call)
     {
       if (callable->throws)
@@ -1358,18 +1376,20 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	stacktop = lua_gettop (L);
     }
 
+  lua_xmove (L, marshal_L, lua_gettop(L) - stacktop);
+
   /* Reintroduce callable to the stack, we might need it during
      marshalling of the response. Put it right before all returns. */
-  lua_rawgeti (L, LUA_REGISTRYINDEX, closure->callable_ref);
-  lua_insert (L, stacktop + 1);
+  lua_rawgeti (marshal_L, LUA_REGISTRYINDEX, closure->callable_ref);
+  lua_insert (marshal_L, stacktop + 1);
   callable_index = stacktop + 1;
   npos = stacktop + 2;
 
   /* Check, whether we can report an error here. */
   if (res == 0)
-    marshal_return_values (L, ret, args, callable_index, callable, npos);
+    marshal_return_values (marshal_L, ret, args, callable_index, callable, npos);
   else
-    marshal_return_error (L, ret, args, callable);
+    marshal_return_error (marshal_L, ret, args, callable);
 
   /* If the closure is marked as autodestroy, destroy it now.  Note that it is
      unfortunately not possible to destroy it directly here, because we would
@@ -1381,6 +1401,8 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   /* This is NOT called by Lua, so we better leave the Lua stack we
      used pretty much tidied. */
   lua_settop (L, stacktop);
+  if (L != marshal_L)
+    lua_settop (marshal_L, 0);
 
   /* Going back to C code, release the state synchronization. */
   lgi_state_leave (block->callback.state_lock);
@@ -1519,6 +1541,12 @@ static const luaL_Reg callable_api_reg[] = {
 void
 lgi_callable_init (lua_State *L)
 {
+  /* Create a thread for marshalling arguments to yielded threads, register it
+   * so that it is not GC'd. */
+  lua_pushlightuserdata (L, &marshalling_L);
+  marshalling_L = lua_newthread (L);
+  lua_rawset (L, LUA_REGISTRYINDEX);
+
   /* Register callable metatable. */
   lua_pushlightuserdata (L, &callable_mt);
   lua_newtable (L);
