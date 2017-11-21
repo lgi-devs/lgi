@@ -41,11 +41,6 @@ function gio.read()
 end
 
 function gio.async_access()
-   -- Sometimes this hangs with LuaJIT when the JIT is on, no idea why.
-   -- FIXME: Figure out what is going on and fix this.
-   -- See also https://github.com/LuaJIT/LuaJIT/issues/340.
-   if jit then jit.off() end
-
    local Gio = lgi.Gio
    local res
 
@@ -81,7 +76,5 @@ function gio.async_access()
 				      'org.freedesktop.DBus')
    end)(b)
    check(Gio.DBusProxy:is_type_of(proxy))
-
-   if jit then jit.on() end
 end
 
