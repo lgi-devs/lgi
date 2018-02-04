@@ -20,17 +20,7 @@ local record = require 'lgi.record'
 local enum = require 'lgi.enum'
 local ti = ffi.types
 
-cairo._module = core.module('cairo', 2)
 local module_gobject = core.gi.cairo.resolve
-
--- Versioning support.
-function cairo.version_encode(major, minor, micro)
-   return 10000 * major + 100 * minor + micro
-end
-cairo.version = core.callable.new {
-   addr = cairo._module.cairo_version, ret = ti.int } ()
-cairo.version_string = core.callable.new {
-   addr = cairo._module.cairo_version_string, ret = ti.utf8 } ()
 
 -- Load some constants.
 cairo._constant = {
@@ -57,6 +47,18 @@ for _, name in pairs {
       cairo._enum[name] = component.create(nil, enum.enum_mt, 'cairo.' .. name)
    end
 end
+
+-- Load libcairo.so directly; this has to happen after the typelib was used
+cairo._module = core.module('cairo', 2)
+
+-- Versioning support.
+function cairo.version_encode(major, minor, micro)
+   return 10000 * major + 100 * minor + micro
+end
+cairo.version = core.callable.new {
+   addr = cairo._module.cairo_version, ret = ti.int } ()
+cairo.version_string = core.callable.new {
+   addr = cairo._module.cairo_version_string, ret = ti.utf8 } ()
 
 -- Load definitions of all boxed records.
 cairo._struct = cairo._struct or {}
