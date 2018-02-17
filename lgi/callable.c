@@ -101,6 +101,9 @@ typedef struct _Callable
 /* Address is lightuserdata of Callable metatable in Lua registry. */
 static int callable_mt;
 
+/* Lua thread that can be used for argument marshaling if needed. */
+static lua_State *marshalling_L;
+
 /* Structure containing basic callback information. */
 typedef struct _Callback
 {
@@ -1093,70 +1096,13 @@ static const struct luaL_Reg callable_reg[] = {
   { NULL, NULL }
 };
 
-/* Closure callback, called by libffi when C code wants to invoke Lua
-   callback. */
-static void
-closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
+static int
+marshal_arguments (lua_State *L, void **args, int callable_index, Callable *callable)
 {
-  Callable *callable;
-  int callable_index;
-  FfiClosure *closure = closure_arg;
-  FfiClosureBlock *block = closure->block;
-  gint res = 0, npos, i, stacktop;
-  gboolean call;
   Param *param;
-  lua_State *L;
-  (void)cif;
-
-  /* Get access to proper Lua context. */
-  lgi_state_enter (block->callback.state_lock);
-  lua_rawgeti (block->callback.L, LUA_REGISTRYINDEX, block->callback.thread_ref);
-  L = lua_tothread (block->callback.L, -1);
-  call = (closure->target_ref != LUA_NOREF);
-  if (call)
-    {
-      /* We will call target method, prepare context/thread to do
-	 it. */
-      if (lua_status (L) != 0)
-	{
-	  /* Thread is not in usable state for us, it is suspended, we
-	     cannot afford to resume it, because it is possible that
-	     the routine we are about to call is actually going to
-	     resume it.  Create new thread instead and switch closure
-	     to its context. */
-	  lua_State *newL = lua_newthread (L);
-	  lua_rawseti (L, LUA_REGISTRYINDEX, block->callback.thread_ref);
-	  L = newL;
-	}
-      lua_pop (block->callback.L, 1);
-      block->callback.L = L;
-
-      /* Remember stacktop, this is the position on which we should
-	 expect return values (note that callback_prepare_call already
-	 might have pushed function to be executed to the stack). */
-      stacktop = lua_gettop (L);
-
-      /* Store function to be invoked to the stack. */
-      lua_rawgeti (L, LUA_REGISTRYINDEX, closure->target_ref);
-    }
-  else
-    {
-      /* Cleanup the stack of the original thread. */
-      lua_pop (block->callback.L, 1);
-      stacktop = lua_gettop (L);
-      if (lua_status (L) == 0)
-	/* Thread is not suspended yet, so it contains initial
-	   function at the top of the stack, so count with it. */
-	stacktop--;
-    }
-
-  /* Get access to Callable structure. */
-  lua_rawgeti (L, LUA_REGISTRYINDEX, closure->callable_ref);
-  callable = lua_touserdata (L, -1);
-  callable_index = lua_gettop (L);
+  int npos = 0, i;
 
   /* Marshall 'self' argument, if it is present. */
-  npos = 0;
   if (callable->has_self)
     {
       GIBaseInfo *parent = g_base_info_get_container (callable->info);
@@ -1214,11 +1160,183 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	npos++;
       }
 
-  /* Remove callable userdata from callable_index, otehrwise they mess
+  return npos;
+}
+
+static void
+marshal_return_values (lua_State *L, void *ret, void **args, int callable_index, Callable *callable, int npos)
+{
+  int to_pop, i;
+  GITypeTag tag;
+  Param *param;
+
+  /* Make sure that all unspecified returns and outputs are set as
+     nil; during marshalling we might create temporary values on
+     the stack, which can be confused with output values expected
+     but not passed by caller. */
+  lua_settop(L, lua_gettop (L) + callable->has_self + callable->nargs + 1);
+
+  /* Marshal return value from Lua. */
+  tag = g_type_info_get_tag (callable->retval.ti);
+  if (tag != GI_TYPE_TAG_VOID
+      || g_type_info_is_pointer (callable->retval.ti))
+    {
+      if (callable->ignore_retval)
+	/* Return value should be ignored on Lua side, so we have
+	   to synthesize the return value for C side.  We should
+	   return FALSE if next output argument is nil. */
+	*(ffi_sarg *) ret = lua_isnoneornil (L, npos) ? FALSE : TRUE;
+      else
+	{
+	  to_pop = callable_param_2c (L, &callable->retval, npos,
+				      LGI_PARENT_IS_RETVAL, ret,
+				      callable_index, callable,
+				      args + callable->has_self);
+	  if (to_pop != 0)
+	    {
+	      g_warning ("cbk `%s.%s': return (transfer none) %d, unsafe!",
+			 g_base_info_get_namespace (callable->info),
+			 g_base_info_get_name (callable->info), to_pop);
+	      lua_pop (L, to_pop);
+	    }
+
+	  npos++;
+	}
+    }
+
+  /* Marshal output arguments from Lua. */
+  param = callable->params;
+  for (i = 0; i < callable->nargs; ++i, ++param)
+    if (!param->internal && param->dir != GI_DIRECTION_IN)
+      {
+	gpointer *arg = args[i + callable->has_self];
+	gboolean caller_alloc =
+	  callable->info && g_arg_info_is_caller_allocates (&param->ai)
+	  && g_type_info_get_tag (param->ti) == GI_TYPE_TAG_INTERFACE;
+	to_pop = callable_param_2c (L, param, npos, caller_alloc
+				    ? LGI_PARENT_CALLER_ALLOC : 0, *arg,
+				    callable_index, callable,
+				    args + callable->has_self);
+	if (to_pop != 0)
+	  {
+	    g_warning ("cbk %s.%s: arg `%s' (transfer none) %d, unsafe!",
+		       g_base_info_get_namespace (callable->info),
+		       g_base_info_get_name (callable->info),
+		       g_base_info_get_name (&param->ai), to_pop);
+	    lua_pop (L, to_pop);
+	  }
+
+	npos++;
+      }
+}
+
+static void
+marshal_return_error (lua_State *L, void *ret, void **args, Callable *callable)
+{
+    /* If the function is expected to return errors, create proper
+       error. */
+    GError **err = ((GIArgument *) args[callable->has_self +
+					callable->nargs])->v_pointer;
+
+    /* Check, whether thrown error is actually GLib.Error instance. */
+    lgi_type_get_repotype (L, G_TYPE_ERROR, NULL);
+    lgi_record_2c (L, -2, err, FALSE, TRUE, TRUE, TRUE);
+    if (*err == NULL)
+      {
+	/* Nope, so come up with something funny. */
+	GQuark q = g_quark_from_static_string ("lgi-callback-error-quark");
+	g_set_error_literal (err, q, 1, lua_tostring (L, -1));
+	lua_pop (L, 1);
+      }
+
+    /* Such function should usually return FALSE, so do it. */
+    if (g_type_info_get_tag (callable->retval.ti) == GI_TYPE_TAG_BOOLEAN)
+      *(gboolean *) ret = FALSE;
+}
+
+/* Closure callback, called by libffi when C code wants to invoke Lua
+   callback. */
+static void
+closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
+{
+  Callable *callable;
+  int callable_index;
+  FfiClosure *closure = closure_arg;
+  FfiClosureBlock *block = closure->block;
+  gint res = 0, npos, stacktop, extra_args = 0;
+  gboolean call;
+  lua_State *L;
+  lua_State *marshal_L;
+  (void)cif;
+
+  /* Get access to proper Lua context. */
+  lgi_state_enter (block->callback.state_lock);
+  lua_rawgeti (block->callback.L, LUA_REGISTRYINDEX, block->callback.thread_ref);
+  L = lua_tothread (block->callback.L, -1);
+  call = (closure->target_ref != LUA_NOREF);
+  if (call)
+    {
+      /* We will call target method, prepare context/thread to do
+	 it. */
+      if (lua_status (L) != 0)
+	{
+	  /* Thread is not in usable state for us, it is suspended, we
+	     cannot afford to resume it, because it is possible that
+	     the routine we are about to call is actually going to
+	     resume it.  Create new thread instead and switch closure
+	     to its context. */
+	  lua_State *newL = lua_newthread (L);
+	  lua_rawseti (L, LUA_REGISTRYINDEX, block->callback.thread_ref);
+	  L = newL;
+	}
+      lua_pop (block->callback.L, 1);
+      block->callback.L = L;
+
+      /* Remember stacktop, this is the position on which we should
+	 expect return values (note that callback_prepare_call already
+	 might have pushed function to be executed to the stack). */
+      stacktop = lua_gettop (L);
+
+      /* Store function to be invoked to the stack. */
+      lua_rawgeti (L, LUA_REGISTRYINDEX, closure->target_ref);
+    }
+  else
+    {
+      /* Cleanup the stack of the original thread. */
+      lua_pop (block->callback.L, 1);
+      stacktop = lua_gettop (L);
+      if (lua_status (L) == 0)
+	{
+	  /* Thread is not suspended yet, so it contains initial
+	     function at the top of the stack, so count with it. */
+	  stacktop--;
+	  extra_args++;
+	}
+    }
+
+  /* Pick a coroutine used for marshalling */
+  marshal_L = L;
+  if (lua_status (marshal_L) == LUA_YIELD)
+    {
+      marshal_L = marshalling_L;
+      g_assert (lua_gettop (marshal_L) == 0);
+    }
+
+  /* Get access to Callable structure. */
+  lua_rawgeti (marshal_L, LUA_REGISTRYINDEX, closure->callable_ref);
+  callable = lua_touserdata (marshal_L, -1);
+  callable_index = lua_gettop (marshal_L);
+
+  npos = marshal_arguments (marshal_L, args, callable_index, callable);
+
+  /* Remove callable userdata from callable_index, otherwise they mess
      up carefully prepared stack structure. */
-  lua_remove (L, callable_index);
+  lua_remove (marshal_L, callable_index);
 
   /* Call it. */
+  lua_xmove (marshal_L, L, npos + extra_args);
+  if (L != marshal_L)
+      g_assert (lua_gettop (marshal_L) == 0);
   if (call)
     {
       if (callable->throws)
@@ -1258,100 +1376,20 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
 	stacktop = lua_gettop (L);
     }
 
+  lua_xmove (L, marshal_L, lua_gettop(L) - stacktop);
+
   /* Reintroduce callable to the stack, we might need it during
      marshalling of the response. Put it right before all returns. */
-  lua_rawgeti (L, LUA_REGISTRYINDEX, closure->callable_ref);
-  lua_insert (L, stacktop + 1);
+  lua_rawgeti (marshal_L, LUA_REGISTRYINDEX, closure->callable_ref);
+  lua_insert (marshal_L, stacktop + 1);
   callable_index = stacktop + 1;
   npos = stacktop + 2;
 
   /* Check, whether we can report an error here. */
   if (res == 0)
-    {
-      int to_pop;
-      GITypeTag tag;
-
-      /* Make sure that all unspecified returns and outputs are set as
-	 nil; during marshalling we might create temporary values on
-	 the stack, which can be confused with output values expected
-	 but not passed by caller. */
-      lua_settop(L, lua_gettop (L) + callable->has_self + callable->nargs + 1);
-
-      /* Marshal return value from Lua. */
-      tag = g_type_info_get_tag (callable->retval.ti);
-      if (tag != GI_TYPE_TAG_VOID
-	  || g_type_info_is_pointer (callable->retval.ti))
-	{
-	  if (callable->ignore_retval)
-	    /* Return value should be ignored on Lua side, so we have
-	       to synthesize the return value for C side.  We should
-	       return FALSE if next output argument is nil. */
-	    *(ffi_sarg *) ret = lua_isnoneornil (L, npos) ? FALSE : TRUE;
-	  else
-	    {
-	      to_pop = callable_param_2c (L, &callable->retval, npos,
-					  LGI_PARENT_IS_RETVAL, ret,
-					  callable_index, callable,
-					  args + callable->has_self);
-	      if (to_pop != 0)
-		{
-		  g_warning ("cbk `%s.%s': return (transfer none) %d, unsafe!",
-			     g_base_info_get_namespace (callable->info),
-			     g_base_info_get_name (callable->info), to_pop);
-		  lua_pop (L, to_pop);
-		}
-
-	      npos++;
-	    }
-	}
-
-      /* Marshal output arguments from Lua. */
-      param = callable->params;
-      for (i = 0; i < callable->nargs; ++i, ++param)
-	if (!param->internal && param->dir != GI_DIRECTION_IN)
-	  {
-	    gpointer *arg = args[i + callable->has_self];
-	    gboolean caller_alloc =
-	      callable->info && g_arg_info_is_caller_allocates (&param->ai)
-	      && g_type_info_get_tag (param->ti) == GI_TYPE_TAG_INTERFACE;
-	    to_pop = callable_param_2c (L, param, npos, caller_alloc
-					? LGI_PARENT_CALLER_ALLOC : 0, *arg,
-					callable_index, callable,
-					args + callable->has_self);
-	    if (to_pop != 0)
-	      {
-		g_warning ("cbk %s.%s: arg `%s' (transfer none) %d, unsafe!",
-			   g_base_info_get_namespace (callable->info),
-			   g_base_info_get_name (callable->info),
-			   g_base_info_get_name (&param->ai), to_pop);
-		lua_pop (L, to_pop);
-	      }
-
-	    npos++;
-	  }
-    }
+    marshal_return_values (marshal_L, ret, args, callable_index, callable, npos);
   else
-    {
-      /* If the function is expected to return errors, create proper
-	 error. */
-      GError **err = ((GIArgument *) args[callable->has_self +
-					  callable->nargs])->v_pointer;
-
-      /* Check, whether thrown error is actually GLib.Error instance. */
-      lgi_type_get_repotype (L, G_TYPE_ERROR, NULL);
-      lgi_record_2c (L, -2, err, FALSE, TRUE, TRUE, TRUE);
-      if (*err == NULL)
-	{
-	  /* Nope, so come up with something funny. */
-	  GQuark q = g_quark_from_static_string ("lgi-callback-error-quark");
-	  g_set_error_literal (err, q, 1, lua_tostring (L, -1));
-	  lua_pop (L, 1);
-	}
-
-      /* Such function should usually return FALSE, so do it. */
-      if (g_type_info_get_tag (callable->retval.ti) == GI_TYPE_TAG_BOOLEAN)
-	*(gboolean *) ret = FALSE;
-    }
+    marshal_return_error (marshal_L, ret, args, callable);
 
   /* If the closure is marked as autodestroy, destroy it now.  Note that it is
      unfortunately not possible to destroy it directly here, because we would
@@ -1363,6 +1401,8 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   /* This is NOT called by Lua, so we better leave the Lua stack we
      used pretty much tidied. */
   lua_settop (L, stacktop);
+  if (L != marshal_L)
+    lua_settop (marshal_L, 0);
 
   /* Going back to C code, release the state synchronization. */
   lgi_state_leave (block->callback.state_lock);
@@ -1501,6 +1541,12 @@ static const luaL_Reg callable_api_reg[] = {
 void
 lgi_callable_init (lua_State *L)
 {
+  /* Create a thread for marshalling arguments to yielded threads, register it
+   * so that it is not GC'd. */
+  lua_pushlightuserdata (L, &marshalling_L);
+  marshalling_L = lua_newthread (L);
+  lua_rawset (L, LUA_REGISTRYINDEX);
+
   /* Register callable metatable. */
   lua_pushlightuserdata (L, &callable_mt);
   lua_newtable (L);
