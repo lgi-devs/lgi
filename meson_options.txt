@@ -1,0 +1,9 @@
+option('lua-pc', type: 'string', value: 'auto',
+  description: 'pkg-config name of lua library to build against'
+)
+option('lua-bin', type: 'string', value: 'lua',
+  description: 'path to lua binary to test against'
+)
+option('tests', type: 'boolean', value: true,
+  description: 'build tests'
+)
