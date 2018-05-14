@@ -68,7 +68,7 @@ local function about_cb()
 	 lgi._VERSION),
       copyright = "(C) 2012 Pavel Holejsovsky",
       license_type = 'MIT_X11',
-      website = 'http://github.org/pavouk/lgi',
+      website = 'https://github.com/pavouk/lgi',
       comments = "Port of original GTK+ demo, (C) 1997-2009 The GTK+ Team",
       authors = {
 	 "Pavel Holejsovsky",
