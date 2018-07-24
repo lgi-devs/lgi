@@ -1351,7 +1351,10 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
     }
   else
     {
-#if LUA_VERSION_NUM >= 502
+#if LUA_VERSION_NUM >= 504
+      int nresults;
+      res = lua_resume (L, NULL, npos, &nresults);
+#elif LUA_VERSION_NUM >= 502
       res = lua_resume (L, NULL, npos);
 #else
       res = lua_resume (L, npos);
