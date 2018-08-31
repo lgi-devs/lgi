@@ -219,6 +219,18 @@ local function variant_get(v)
 	    local found = Variant.lookup_value(v, key)
 	    return found and variant_get(found)
 	 end
+	 -- pairs support for lua 5.2+
+	 function meta:__pairs()
+	    local idx, max, var = 0, v:n_children()
+	    local function var_iter(tbl, k)
+	       if idx == max then
+		  return nil,nil
+	       end
+	       var, idx = v:get_child_value(idx), idx+1
+	       return var and var.value[1] and var.value[1], variant_get(var.value[2])
+	    end
+	    return var_iter, self, nil
+	 end
       else
 	 -- Custom search, walk key-by-key.  Cache key positions in
 	 -- the meta table.
