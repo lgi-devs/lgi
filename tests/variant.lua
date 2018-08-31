@@ -232,3 +232,33 @@ function variant.serialize()
    v1 = nil collectgarbage()
    local _ = v2:print(true)
 end
+
+-- Does pairs() on variant-dict (sa{sv}) honor the __pairs metamethod?
+if 42 == pairs(setmetatable({}, { __pairs = function() return 42 end })) then
+    function variant.pairs_on_variant_returned_dict()
+        local V = GLib.Variant
+        local T = GLib.Variant.new_tuple
+        local seen = 0
+        local pi = GLib.Variant("d", 3.14)
+        local one = GLib.Variant("d", 1)
+        local bar = GLib.Variant("s", "bar")
+        local expected = { pi = pi, one = pi, foo = bar }
+        local tup = T{ bar, V("a{sv}", expected, 3) }
+        for k, v in pairs(tup.value[2]) do
+            check(expected[k].value == v)
+            seen = seen + 1
+        end
+        check(seen == 3)
+    end
+
+    function variant.pairs_on_variant()
+        local V = GLib.Variant
+        local seen = 0
+        local expected = { pi = 3.14, one = 1 }
+        for k, v in V("a{sd}", expected):pairs() do
+            check(expected[k] == v)
+            seen = seen + 1
+        end
+        check(seen == 2)
+    end
+end
