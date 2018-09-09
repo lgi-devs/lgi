@@ -227,7 +227,7 @@ local function variant_get(v)
 		  return nil,nil
 	       end
 	       var, idx = v:get_child_value(idx), idx+1
-	       return var and var.value[1] and var.value[1], variant_get(var.value[2])
+	       return var and var.value[1], variant_get(var.value[2])
 	    end
 	    return var_iter, self, nil
 	 end
