@@ -265,6 +265,13 @@ creation section of previous example can be simplified to:
        [PersonColumn.EMPLOYEE] = true,
     }
 
+Note that you also can use numbers or strings as indexes. Useful
+example is reading values selected from `Gtk.ComboBox`:
+
+    local index = MyComboBox:get_active() -- Index is string, but numbers is also supported
+    print("Active index: ", index)
+    print("Selected value: ", MyStore[index])
+
 Note that while the example uses `Gtk.ListStore`, similar overrides
 are provided also for `Gtk.TreeStore`.
 
