@@ -43,8 +43,12 @@ Some examples creating valid variants follow:
     local v6 = GLib.Variant('ami', { 1, nil, 2, n = 3 })
     local v7 = GLib.Variant('(is)', { 100, 'title' })
     local v8 = GLib.Variant('a{sd}', { pi = 3.14, one = 1 })
-    local v9 = GLib.Variant('aay', { 'bytetring1', 'bytestring2' })
-
+    local v9 = GLib.Variant('aay', { 'bytestring1', 'bytestring2' })
+    local v10 = GLib.Variant('(a{o(oayays)})',
+                             {{['/path/to/object1']={'/path/to/object2',
+                                                     'bytestring1',
+                                                     'bytestring2',
+                                                     'string'}}})
 ## Data access
 
 LGI implements following special properties for accessing data stored
@@ -66,6 +70,7 @@ inside variants
   returning n-th subvariant (array entry, n-th field of tuple etc).
 - `pairs() and ipairs()` Variants support these methods, which behave
   as standard Lua enumerators.
+- contents of complex data types may be accessed using `get_child_value` method call.
 
 Examples of extracting values from variants created above:
 
@@ -78,6 +83,10 @@ Examples of extracting values from variants created above:
     assert(v7.value[1] == 100 and v7[1] == 100 and #v7 == 2)
     assert(v8.value.pi == 3.14 and v8.value['one'] == 1 and #v8 == 2)
     assert(v9[1] == 'bytestring1')
+    assert(v10:get_child_value(0)
+              :get_child_value(0)
+              :get_child_value(1)
+              :get_child_value(2).value == 'bytestring2')
     for k, v in v8:pairs() do print(k, v) end
 
 ## Serialization
