@@ -54,7 +54,9 @@ all : Regress-1.0.typelib
 clean :
 	rm -f $(REGRESS) $(REGRESS_OBJS) Regress-1.0.gir Regress-1.0.typelib
 
-check : all
+check : check-lua check-c
+
+check-lua : Regress-1.0.typelib
 	cd .. && LD_LIBRARY_PATH=tests:$$LD_LIBRARY_PATH \
 	    GI_TYPELIB_PATH=tests:$$GI_TYPELIB_PATH \
 	    LUA_PATH="./?.lua;${LUA_PATH};" \
@@ -68,6 +70,19 @@ GIDATADIR = $(shell $(PKG_CONFIG) --variable=gidatadir gobject-introspection-1.0
 
 regress.o : $(GIDATADIR)/regress.c $(GIDATADIR)/regress.h $(DEPCHECK)
 	$(CC) $(ALL_CFLAGS) -c -o $@ $<
+
+test_c.o : test_c.c $(DEPCHECK)
+	$(CC) $(ALL_CFLAGS) -c -o $@ $<
+
+test_c : test_c.o
+	$(CC) $(LDFLAGS) -o $@ $< $(LIBS)
+
+check-c : test_c
+	cd .. && LD_LIBRARY_PATH=tests:$$LD_LIBRARY_PATH \
+	    GI_TYPELIB_PATH=tests:$$GI_TYPELIB_PATH \
+	    LUA_PATH="./?.lua;${LUA_PATH};" \
+	    LUA_CPATH="./?.so;${LUA_CPATH};" \
+	    tests/test_c
 
 # Build .gir and .typelib
 Regress-1.0.gir : $(REGRESS)
