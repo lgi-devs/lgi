@@ -101,8 +101,9 @@ typedef struct _Callable
 /* Address is lightuserdata of Callable metatable in Lua registry. */
 static int callable_mt;
 
-/* Lua thread that can be used for argument marshaling if needed. */
-static lua_State *marshalling_L;
+/* Lua thread that can be used for argument marshaling if needed.
+ * This address is used as a lightuserdata index in the registry. */
+static int marshalling_L_address;
 
 /* Structure containing basic callback information. */
 typedef struct _Callback
@@ -1318,7 +1319,10 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   marshal_L = L;
   if (lua_status (marshal_L) == LUA_YIELD)
     {
-      marshal_L = marshalling_L;
+      lua_pushlightuserdata (L, &marshalling_L_address);
+      lua_rawget (L, LUA_REGISTRYINDEX);
+      marshal_L = lua_tothread (L, -1);
+      lua_pop (L, 1);
       g_assert (lua_gettop (marshal_L) == 0);
     }
 
@@ -1543,8 +1547,8 @@ lgi_callable_init (lua_State *L)
 {
   /* Create a thread for marshalling arguments to yielded threads, register it
    * so that it is not GC'd. */
-  lua_pushlightuserdata (L, &marshalling_L);
-  marshalling_L = lua_newthread (L);
+  lua_pushlightuserdata (L, &marshalling_L_address);
+  lua_newthread (L);
   lua_rawset (L, LUA_REGISTRYINDEX);
 
   /* Register callable metatable. */
