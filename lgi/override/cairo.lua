@@ -660,11 +660,14 @@ for _, info in ipairs {
       local name = info[1]
       local obj = assert(cairo[name], name)
       obj._parent = info.parent
+      local cprefix = 'cairo_' .. (info.cprefix or core.uncamel(name) .. '_')
+      if not obj._parent then
+	 obj._refsink = cairo._module[cprefix .. 'reference']
+      end
       if info.methods then
 	 -- Go through description of the methods and create functions
 	 -- from them.
 	 obj._method = {}
-	 local cprefix = 'cairo_' .. (info.cprefix or core.uncamel(name) .. '_')
 	 local self_arg = { obj }
 	 for method_name, method_info in pairs(info.methods) do
 	    if cairo.version >= (method_info.since or 0) then
