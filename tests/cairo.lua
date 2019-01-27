@@ -447,3 +447,22 @@ function cairo.context_transform()
    compare(x, 10)
    compare(y, 20)
 end
+
+function cairo.pattern_reference()
+   local cairo = lgi.cairo
+
+   local img = cairo.ImageSurface(cairo.Format.RGB24, 42, 42)
+   local img2 = cairo.ImageSurface(cairo.Format.RGB24, 42, 42)
+   local cr = cairo.Context(img)
+   cr:set_source_surface(img2, 0, 0)
+
+   -- cairo_get_source() returns a pointer *without* acquiring a reference to it.
+   local source = cr.source
+
+   -- Let's make "cr" drop its reference to 'source'.
+   cr:set_source_rgb(0.2, 0.4, 0.6)
+
+   -- Now the reference count is zero and we would have a
+   -- use-after-free if custom refsink would not work correctly.
+   cr.source = source
+end
