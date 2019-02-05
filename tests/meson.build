@@ -33,3 +33,6 @@ test('regress', dbus_run,
     'LUA_CPATH=@0@/?.so;@0@/?.dll'.format(meson.build_root())
   ]
 )
+
+test_c = executable('test_c', 'test_c.c', dependencies: lua_dep)
+test('multiple states', test_c)
