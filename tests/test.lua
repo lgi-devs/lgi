@@ -147,7 +147,7 @@ else
       local group, groupmask = mask:match('^(.-):(.+)$')
       if not group or not groups[group] then
 	 io.write(("No test group for mask `%s' found.\n"):format(mask))
-	 return 2
+	 os.exit(2)
       end
       groups[group]:run(groupmask)
       failed = failed or groups[group].results.failed > 0
