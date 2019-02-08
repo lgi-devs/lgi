@@ -282,6 +282,11 @@ function gobject.subclass_prop_inherit()
 			       'LgiTestFakeMonitor1NetworkAvailable',
 			       'Whether the network is available.',
 			       false, { GObject.ParamFlags.READABLE })
+   FakeMonitor._property.network_metered =
+      GObject.ParamSpecBoolean('network-metered',
+			       'LgiTestFakeMonitor1NetworkMetered',
+			       'Whether the network is metered.',
+			       false, { GObject.ParamFlags.READABLE })
    FakeMonitor._property.connectivity =
       GObject.ParamSpecEnum('connectivity',
 			    'LgiTestFakeMonitor1Connectivity',
