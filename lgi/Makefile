@@ -16,10 +16,12 @@ GINAME = gobject-introspection-1.0
 PKGS = $(GINAME) gmodule-2.0 libffi
 VERSION_FILE = version.lua
 
+LUA_LIB = -llua
+
 ifneq ($(filter cygwin% msys% mingw%, $(HOST_OS)),)
 CORE = corelgilua51.dll
 LIBFLAG = -shared
-LIBS += -llua
+LIBS += $(LUA_LIB)
 else
 ifeq ($(HOST_OS),darwin)
 CORE = corelgilua51.so
