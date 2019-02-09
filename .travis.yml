@@ -3,13 +3,14 @@ dist: trusty
 language: c
 env:
   matrix:
-    - LUA=5.1 LUANAME=luajit-2.0
+    - LUA=5.1 LUANAME=luajit-2.0 LUA_LIB=-lluajit-5.1
     - LUA=5.1 LUANAME=lua5.1
     - LUA=5.2 LUANAME=lua5.2
-    - LUA=5.3 LUANAME=lua5.3
+    - LUA=5.3 LUANAME=lua5.3 LUA_LIB=-llua
 
 before_install:
   - if [ -z $LUAINCLUDE ]; then LUAINCLUDE=/usr/include/${LUANAME}; fi
+  - if [ -z $LUA_LIB ]; then LUA_LIB=-l${LUANAME}; fi
 
 install:
   # Travis boilerplate: the apt-get cache might be out of date.
@@ -33,7 +34,7 @@ install:
       travis_retry wget http://www.lua.org/ftp/lua-5.3.3.tar.gz -O lua.tar.gz
       tar -xvzf lua.tar.gz
       (cd lua-5.3.3/src \
-        && make SYSCFLAGS="-DLUA_USE_LINUX -ULUA_COMPAT_5_2 -DLUA_USE_APICHECK" SYSLIBS="-Wl,-E -ldl -lreadline" LUA_A=liblua.so MYCFLAGS="-fPIC" RANLIB=: AR="gcc -shared -ldl -o" liblua.so \
+        && make SYSCFLAGS="-DLUA_USE_LINUX -ULUA_COMPAT_5_2 -DLUA_USE_APICHECK" SYSLIBS="-Wl,-E -ldl -lreadline" LUA_A=liblua.so MYCFLAGS="-fPIC" RANLIB=: AR="compile() { gcc -shared -o \"\$\$@\" -ldl -lm ; } ; compile" liblua.so \
         && cd .. \
         && sudo make INSTALL_TOP=/usr/ INSTALL_INC=${LUAINCLUDE} TO_LIB=liblua.so linux install)
     elif [[ "$LUANAME" == "luajit-2.0" ]]; then
@@ -53,7 +54,7 @@ script:
   - sed -e 's/Gio.NetworkConnectivity.LOCAL/1/' -i tests/gobject.lua
 
   # Build everything and run the tests
-  - xvfb-run -a make check LUA_CFLAGS="-I$LUAINCLUDE"
+  - xvfb-run -a make check LUA_CFLAGS="-I$LUAINCLUDE" LUA_LIB="${LUA_LIB}"
 
   # Just to also check make install
   - sudo make install LUA_VERSION="$LUA"
