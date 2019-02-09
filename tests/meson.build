@@ -23,8 +23,8 @@ regress_gir = gnome.generate_gir(libregress,
 
 dbus_run = find_program('dbus-run-session')
 test('regress', dbus_run,
-  # regress_gir being here is just a hack so it gets added as a dep
-  args: [lua_prog.path(), files('test.lua'), regress_gir],
+  args: [lua_prog.path(), files('test.lua')],
+  depends: regress_gir,
   env: [
     'LD_LIBRARY_PATH=' + meson.current_build_dir(),
     'GI_TYPELIB_PATH=' + meson.current_build_dir(),
