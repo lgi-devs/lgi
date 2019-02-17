@@ -28,6 +28,10 @@ cairo._constant = {
    MIME_TYPE_JPEG = 'image/jpeg',
    MIME_TYPE_PNG = 'image/png',
    MIME_TYPE_URI = 'text/x-uri',
+   -- The following three were added in cairo 1.14
+   MIME_TYPE_JBIG2 = 'application/x-cairo.jbig2',
+   MIME_TYPE_JBIG2_GLOBAL = 'application/x-cairo.jbig2-global',
+   MIME_TYPE_JBIG2_GLOBAL_ID = 'application/x-cairo.jbig2-global-id',
 }
 
 -- Load definitions of all enums.
