@@ -448,6 +448,24 @@ function cairo.context_transform()
    compare(y, 20)
 end
 
+function cairo.device_scale()
+   local cairo = lgi.cairo
+   if cairo.version >= cairo.version_encode(1, 14, 0) then
+      local surface = cairo.ImageSurface('ARGB32', 100, 100)
+
+      local x, y, z = surface:get_device_scale()
+      check(x == 1)
+      check(y == 1)
+      check(z == nil)
+
+      surface:set_device_scale(-1, 42)
+      local x, y, z = surface:get_device_scale()
+      check(x == -1)
+      check(y == 42)
+      check(z == nil)
+   end
+end
+
 function cairo.pattern_reference()
    local cairo = lgi.cairo
 
