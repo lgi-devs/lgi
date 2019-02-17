@@ -466,6 +466,18 @@ function cairo.device_scale()
    end
 end
 
+function cairo.create_similar_image()
+   local cairo = lgi.cairo
+   if cairo.version >= cairo.version_encode(1, 12, 0) then
+      local surface = cairo.ImageSurface('ARGB32', 100, 100)
+      local similar = surface:create_similar_image('RGB24', 1, 2)
+      check(similar.type == "IMAGE")
+      check(similar.content == "COLOR")
+      check(similar.width == 1)
+      check(similar.height == 2)
+   end
+end
+
 function cairo.pattern_reference()
    local cairo = lgi.cairo
 

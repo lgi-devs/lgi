@@ -462,6 +462,9 @@ for _, info in ipairs {
       methods = {
 	 create_similar = { ret = { cairo.Surface, xfer = true },
 			    cairo.Content, ti.int, ti.int },
+	 create_similar_image = { since = cairo.version_encode(1, 12, 0),
+			    ret = { cairo.Surface, xfer = true },
+			    cairo.Format, ti.int, ti.int },
 	 create_for_rectangle = { ret = { cairo.Surface, xfer = true },
 				  ti.double, ti.double, ti.double, ti.double },
 	 status = { ret = cairo.Status },
