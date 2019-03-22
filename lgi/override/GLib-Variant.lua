@@ -122,7 +122,7 @@ function variant_new(format, pos, val)
    elseif t == 'a' then
       if format:sub(pos, pos) == 'y' then
 	 -- Bytestring is just simple Lua string.
-	 return Variant.new_bytestring(val), pos + 1
+	 return Variant.new_from_data(VariantType.BYTESTRING, val), pos + 1
       end
       local epos = read_format(format, pos)
       if not epos then return nil end
@@ -208,7 +208,7 @@ local function variant_get(v)
       end
       return array
    elseif Variant.is_of_type(v, VariantType.BYTESTRING) then
-      return tostring(Variant.get_bytestring(v))
+      return tostring(v.data)
    elseif Variant.is_of_type(v, VariantType.DICTIONARY) then
       -- Return proxy table which dynamically looks up items in the
       -- target variant.
