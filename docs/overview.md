@@ -101,7 +101,10 @@ construction can also be written like this:
     end
 
 Note that potential dashes in signal names are also translated to
-underscores to cope well with Lua identifier rules.
+underscores to cope well with Lua identifier rules. Additionally,
+note that in the API documentation of signals such as this, they
+will be named without the `on_` prefix, meaning you have to add it
+for every signal you wish to handle.
 
 Enumerations and bitflags are grouped in the enumeration name table,
 and real names are enumeration nicks uppercased.  For example,
