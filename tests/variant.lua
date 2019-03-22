@@ -59,7 +59,7 @@ function variant.newv_basic()
    local vv = V.new('s', 'inner')
    v = V.new('v', vv)
    check(v.type == 'v' and v:get_variant() == vv)
-   v = V.new('ay', 'bytestring')
+   v = V.new('ay', 'bytestring\0')
    check(v.type == 'ay' and tostring(v:get_bytestring()) == 'bytestring')
 end
 
@@ -163,7 +163,10 @@ function variant.value_simple()
    check(V('g', '(ii)').value == '(ii)')
    v = V('i', 1)
    check(V('v', v).value == v)
-   check(V('ay', 'bytestring').value == 'bytestring')
+   local value = 'bytestring'
+   v = V('ay', value)
+   check(v:get_size() == #value)
+   check(v.value == value)
 end
 
 function variant.value_container()
@@ -261,4 +264,11 @@ if 42 == pairs(setmetatable({}, { __pairs = function() return 42 end })) then
         end
         check(seen == 2)
     end
+end
+
+function variant.bytestring_embedded_null()
+    local Variant = GLib.Variant
+    local value = '\0test\0'
+    local v = Variant('ay', value)
+    assert(v.value == value)
 end
