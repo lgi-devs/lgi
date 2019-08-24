@@ -319,7 +319,7 @@ function Gtk.TreeModel:_element(model, key, origin)
       if path then
          return model:get_iter(path), '_iter'
       end
-   end        
+   end
 end
 function Gtk.TreeModel:_access_iter(model, iter, ...)
    if select('#', ...) > 0 then
