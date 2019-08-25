@@ -46,7 +46,7 @@ typedef lua_Unsigned lgi_Unsigned;
 #define lua_isinteger(L, i) 0
 #define LGI_LUAINT_FORMAT "%td"
 #else
-// For Lua 5.1 (TODO)
+// For Lua 5.1
 typedef unsigned long lgi_Unsigned;
 #define lua_isinteger(L, i) 0
 #define LGI_LUAINT_FORMAT "%td"
