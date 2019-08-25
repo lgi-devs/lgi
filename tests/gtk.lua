@@ -394,3 +394,9 @@ function gtk.actiongroup_index()
    check(ag.action.a1 == a1)
    check(ag.action.a2 == a2)
 end
+
+function gtk.treemodelsort_method()
+   local Gtk = lgi.Gtk
+   -- Shouldn't error when making TreePath, only print warning
+   local noop = lgi.Gtk.TreeModelSort().set_sort_func
+end
