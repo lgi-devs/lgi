@@ -90,8 +90,14 @@ marshal_2c_int (lua_State *L, GITypeTag tag, GIArgument *val, int narg,
       HANDLE_INT(INT32, int32, INT, gint, G_MININT32, G_MAXINT32, s);
       HANDLE_INT(UINT32, uint32, UINT, guint, 0, G_MAXUINT32, u);
       HANDLE_INT(UNICHAR, uint32, UINT, guint, 0, G_MAXUINT32, u);
+#if LUA_VERSION_NUM >= 503
       HANDLE_INT_NOPTR(INT64, int64, LUA_MININTEGER, LUA_MAXINTEGER, s);
       HANDLE_INT_NOPTR(UINT64, uint64, 0, LUA_MAXINTEGER, u);
+#else
+      HANDLE_INT_NOPTR(INT64, int64, ((lua_Number) -0x7f00000000000000LL) - 1,
+		       0x7fffffffffffffffLL, s);
+      HANDLE_INT_NOPTR(UINT64, uint64, 0, 0xffffffffffffffffULL, u);
+#endif
 #undef HANDLE_INT
 #undef HANDLE_INT_NOPTR
 
