@@ -46,19 +46,10 @@ typedef lua_Unsigned lgi_Unsigned;
 #define lua_isinteger(L, i) 0
 #define LGI_LUAINT_FORMAT "%td"
 #else
-// For Lua 5.1 (TODOы)
-#endif
-
-#ifdef LUA_INT_TYPE
-#if LUA_INT_TYPE == LUA_INT_INT
-#define LGI_LUAINT_FORMAT "%d"
-#elseif LUA_INT_TYPE == LUA_INT_LONG
-#define LGI_LUAINT_FORMAT "%ld"
-#else
-#define LGI_LUAINT_FORMAT "%lld"
-#endif
-#else
-#define LGI_LUAINT_FORMAT "%ld"
+// For Lua 5.1 (TODO)
+typedef unsigned long lgi_Unsigned;
+#define lua_isinteger(L, i) 0
+#define LGI_LUAINT_FORMAT "%td"
 #endif
 
 #include <glib.h>
