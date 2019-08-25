@@ -398,5 +398,5 @@ end
 function gtk.treemodelsort_method()
    local Gtk = lgi.Gtk
    -- Shouldn't error when making TreePath, only print warning
-   local noop = lgi.Gtk.TreeModelSort().set_sort_func
+   local noop = Gtk.TreeModelSort().set_sort_func
 end
