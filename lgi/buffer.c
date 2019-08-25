@@ -15,7 +15,7 @@ static int
 buffer_len (lua_State *L)
 {
   luaL_checkudata (L, 1, LGI_BYTES_BUFFER);
-  lua_pushnumber (L, lua_objlen (L, 1));
+  lua_pushinteger (L, lua_objlen (L, 1));
   return 1;
 }
 
@@ -30,11 +30,11 @@ buffer_tostring (lua_State *L)
 static int
 buffer_index (lua_State *L)
 {
-  int index;
+  lgi_Unsigned index;
   unsigned char *buffer = luaL_checkudata (L, 1, LGI_BYTES_BUFFER);
-  index = lua_tonumber (L, 2);
+  index = lua_tointeger (L, 2);
   if (index > 0 && (size_t) index <= lua_objlen (L, 1))
-    lua_pushnumber (L, buffer[index - 1]);
+    lua_pushinteger (L, buffer[index - 1]);
   else
     {
       luaL_argcheck (L, !lua_isnoneornil (L, 2), 2, "nil index");
@@ -46,7 +46,7 @@ buffer_index (lua_State *L)
 static int
 buffer_newindex (lua_State *L)
 {
-  int index;
+  lgi_Unsigned index;
   unsigned char *buffer = luaL_checkudata (L, 1, LGI_BYTES_BUFFER);
   index = luaL_checkint (L, 2);
   luaL_argcheck (L, index > 0 && (size_t) index <= lua_objlen (L, 1),
@@ -73,7 +73,7 @@ buffer_new (lua_State *L)
   if (lua_type (L, 1) == LUA_TSTRING)
     source = lua_tolstring (L, 1, &size);
   else
-    size = luaL_checknumber (L, 1);
+    size = luaL_checkint (L, 1);
   buffer = lua_newuserdata (L, size);
   if (source)
     memcpy (buffer, source, size);

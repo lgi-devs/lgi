@@ -29,6 +29,25 @@
 #endif
 #endif
 
+/* Lua 5.3 integers. */
+#if LUA_VERSION_NUM < 503
+// TODO: implement compatiblity
+#else
+typedef LUA_UNSIGNED lgi_Unsigned;
+#endif
+
+#ifdef LUA_INT_TYPE
+#if LUA_INT_TYPE == LUA_INT_INT
+#define LGI_LUAINT_FORMAT "%d"
+#elseif LUA_INT_TYPE == LUA_INT_LONG
+#define LGI_LUAINT_FORMAT "%ld"
+#else
+#define LGI_LUAINT_FORMAT "%lld"
+#endif
+#else
+#define LGI_LUAINT_FORMAT "%f"
+#endif
+
 #include <glib.h>
 #include <glib-object.h>
 #include <glib/gprintf.h>

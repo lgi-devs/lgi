@@ -739,7 +739,7 @@ callable_param_2c (lua_State *L, Param *param, int narg, int parent,
       else
 	{
 	  union { GIArgument arg; int i; } *u = (gpointer) arg;
-	  u->i = lua_tonumber (L, narg);
+	  u->i = lua_tointeger (L, narg);
 	}
 
       /* Stack cleanup from enum value conversion. */
@@ -774,7 +774,7 @@ callable_param_2lua (lua_State *L, Param *param, GIArgument *arg,
       else
 	{
 	  union { GIArgument arg; ffi_sarg i; } *u = (gpointer) arg;
-	  lua_pushnumber (L, u->i);
+	  lua_pushinteger (L, u->i);
 	}
     }
 
@@ -1152,7 +1152,7 @@ marshal_arguments (lua_State *L, void **args, int callable_index, Callable *call
 	    lua_createtable (L, nvals, 0);
 	    for (i = 0; i < nvals; ++i)
 	      {
-		lua_pushnumber (L, i + 1);
+		lua_pushinteger (L, i + 1);
 		lgi_type_get_repotype (L, G_TYPE_VALUE, NULL);
 		lgi_record_2lua (L, &vals[i], FALSE, 0);
 		lua_settable (L, -3);

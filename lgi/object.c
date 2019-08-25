@@ -506,7 +506,7 @@ object_env (lua_State *L)
       guard = lua_newuserdata (L, sizeof (ObjectEnvGuard));
       guard->object = obj;
       lua_rawgeti (L, -4, OBJECT_QDATA_ENV);
-      guard->id = lua_tonumber (L, -1);
+      guard->id = lua_tointeger (L, -1);
       lua_pop (L, 1);
       lua_pushvalue (L, -2);
       lua_setfenv (L, -2);
@@ -565,7 +565,7 @@ object_new (lua_State *L)
       params = g_newa (GParameter, size);
       for (i = 0; i < size; ++i)
 	{
-	  lua_pushnumber (L, i + 1);
+	  lua_pushinteger (L, i + 1);
 	  lua_gettable (L, 2);
 	  lgi_type_get_repotype (L, G_TYPE_INVALID, gparam_info);
 	  lgi_record_2c (L, -2, &params[i], TRUE, FALSE, FALSE, FALSE);
@@ -607,7 +607,7 @@ lgi_object_init (lua_State *L)
 
   /* Add OBJECT_QDATA_ENV quark to env table. */
   id = g_strdup_printf ("lgi:%p", L);
-  lua_pushnumber (L, g_quark_from_string (id));
+  lua_pushinteger (L, g_quark_from_string (id));
   g_free (id);
   lua_rawseti (L, -2, OBJECT_QDATA_ENV);
 

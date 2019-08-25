@@ -73,7 +73,7 @@ lgi_record_new (lua_State *L, int count, gboolean alloc)
 
   /* Calculate size of the record to allocate. */
   lua_getfield (L, -1, "_size");
-  size = lua_tonumber (L, -1) * count;
+  size = lua_tointeger (L, -1) * count;
   lua_pop (L, 1);
 
   /* Allocate new userdata for record object, attach proper
@@ -397,7 +397,7 @@ lgi_record_2c (lua_State *L, int narg, gpointer target, gboolean by_value,
     {
       gsize size;
       lua_getfield (L, -1, "_size");
-      size = lua_tonumber (L, -1);
+      size = lua_tointeger (L, -1);
       lua_pop (L, 1);
 
       if (record)
@@ -657,7 +657,7 @@ record_fromarray (lua_State *L)
   /* Find out the size of this record. */
   lua_getfenv (L, 1);
   lua_getfield (L, -1, "_size");
-  size = lua_tonumber (L, -1);
+  size = lua_tointeger (L, -1);
 
   if (record->store == RECORD_STORE_EMBEDDED)
     /* Parent is actually our embedded record. */
