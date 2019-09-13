@@ -20,7 +20,7 @@ local checkv = testsuite.checkv
 local gireg = testsuite.group.new('gireg')
 
 -- Do we have Lua-side support for integers?
-local nativeIntegers = (_VERSION == 'Lua 5.3' or _VERSION == 'Lua 5.4')
+local nativeIntegers = math.maxinteger and true or false
 
 function gireg.type_boolean()
    local R = lgi.Regress
@@ -182,7 +182,7 @@ function gireg.type_int64()
       checkv(R.test_int64(-0x8000000000000000), -0x8000000000000000, 'number')
    end
 
-   -- Following two lines succeed because integers wrap around in Lua 5.3 like they do in C.
+   -- Following two lines succeed in Lua 5.3 but make no sense.
 
    --check(not pcall(R.test_int64, 0x8000000000000000))
    --check(not pcall(R.test_int64, -0x8000000000000001))
