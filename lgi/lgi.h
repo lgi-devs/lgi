@@ -29,6 +29,23 @@
 #endif
 #endif
 
+/* Lua 5.3 integers. */
+#if LUA_VERSION_NUM >= 503
+// For Lua 5.3
+typedef lua_Unsigned lgi_Unsigned;
+#define LGI_LUAINT_FORMAT LUA_INTEGER_FMT
+#elif LUA_VERSION_NUM == 502
+// For Lua 5.2
+typedef lua_Unsigned lgi_Unsigned;
+#define lua_isinteger(L, i) 0
+#define LGI_LUAINT_FORMAT "%td"
+#else
+// For Lua 5.1
+typedef unsigned long lgi_Unsigned;
+#define lua_isinteger(L, i) 0
+#define LGI_LUAINT_FORMAT "%td"
+#endif
+
 #include <glib.h>
 #include <glib-object.h>
 #include <glib/gprintf.h>

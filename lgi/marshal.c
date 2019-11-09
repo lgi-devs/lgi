@@ -14,8 +14,10 @@
 
 /* Checks whether given argument contains number which fits given
    constraints. If yes, returns it, otherwise throws Lua error. */
+
+#if LUA_VERSION_NUM < 503
 static lua_Number
-check_number (lua_State *L, int narg, lua_Number val_min, lua_Number val_max)
+check_integer (lua_State *L, int narg, lua_Number val_min, lua_Number val_max)
 {
   lua_Number val = luaL_checknumber (L, narg);
   if (val < val_min || val > val_max)
@@ -25,6 +27,19 @@ check_number (lua_State *L, int narg, lua_Number val_min, lua_Number val_max)
     }
   return val;
 }
+#else
+static lua_Integer
+check_integer (lua_State *L, int narg, lua_Integer val_min, lua_Integer val_max)
+{
+  lua_Integer val = luaL_checkint (L, narg);
+  if (val < val_min || val > val_max)
+    {
+      lua_pushfstring (L, "%I is out of <%I, %I>", val, val_min, val_max);
+      luaL_argerror (L, narg, lua_tostring (L, -1));
+    }
+  return val;
+}
+#endif
 
 typedef union {
   GIArgument arg;
@@ -44,7 +59,7 @@ marshal_2c_int (lua_State *L, GITypeTag tag, GIArgument *val, int narg,
     {
 #define HANDLE_INT(nameup, namelow, ptrconv, pct, val_min, val_max, ut) \
       case GI_TYPE_TAG_ ## nameup:					\
-	val->v_ ## namelow = check_number (L, narg, val_min, val_max);	\
+	val->v_ ## namelow = check_integer (L, narg, val_min, val_max);	\
 	if (parent == LGI_PARENT_FORCE_POINTER)				\
 	  val->v_pointer =						\
 	    G ## ptrconv ## _TO_POINTER ((pct) val->v_ ## namelow);     \
@@ -58,7 +73,7 @@ marshal_2c_int (lua_State *L, GITypeTag tag, GIArgument *val, int narg,
 
 #define HANDLE_INT_NOPTR(nameup, namelow, val_min, val_max, ut)		\
       case GI_TYPE_TAG_ ## nameup:					\
-	val->v_ ## namelow = check_number (L, narg, val_min, val_max);	\
+	val->v_ ## namelow = check_integer (L, narg, val_min, val_max);	\
 	g_assert (parent != LGI_PARENT_FORCE_POINTER);			\
 	if (sizeof (g ## namelow) <= sizeof (long)			\
 		 && parent == LGI_PARENT_IS_RETVAL)			\
@@ -68,16 +83,21 @@ marshal_2c_int (lua_State *L, GITypeTag tag, GIArgument *val, int narg,
 	  }								\
 	break
 
-      HANDLE_INT(INT8, int8, INT, gint, -0x80, 0x7f, s);
-      HANDLE_INT(UINT8, uint8, UINT, guint, 0, 0xff, u);
-      HANDLE_INT(INT16, int16, INT, gint, -0x8000, 0x7fff, s);
-      HANDLE_INT(UINT16, uint16, UINT, guint, 0, 0xffff, u);
-      HANDLE_INT(INT32, int32, INT, gint, -0x80000000LL, 0x7fffffffLL, s);
-      HANDLE_INT(UINT32, uint32, UINT, guint, 0, 0xffffffffUL, u);
-      HANDLE_INT(UNICHAR, uint32, UINT, guint, 0, 0x7fffffffLL, u);
+      HANDLE_INT(INT8, int8, INT, gint, G_MININT8, G_MAXINT8, s);
+      HANDLE_INT(UINT8, uint8, UINT, guint, 0, G_MAXUINT8, u);
+      HANDLE_INT(INT16, int16, INT, gint, G_MININT16, G_MAXINT16, s);
+      HANDLE_INT(UINT16, uint16, UINT, guint, 0, G_MAXUINT16, u);
+      HANDLE_INT(INT32, int32, INT, gint, G_MININT32, G_MAXINT32, s);
+      HANDLE_INT(UINT32, uint32, UINT, guint, 0, G_MAXUINT32, u);
+      HANDLE_INT(UNICHAR, uint32, UINT, guint, 0, G_MAXUINT32, u);
+#if LUA_VERSION_NUM >= 503
+      HANDLE_INT_NOPTR(INT64, int64, LUA_MININTEGER, LUA_MAXINTEGER, s);
+      HANDLE_INT_NOPTR(UINT64, uint64, 0, LUA_MAXINTEGER, u);
+#else
       HANDLE_INT_NOPTR(INT64, int64, ((lua_Number) -0x7f00000000000000LL) - 1,
 		       0x7fffffffffffffffLL, s);
       HANDLE_INT_NOPTR(UINT64, uint64, 0, 0xffffffffffffffffULL, u);
+#endif
 #undef HANDLE_INT
 #undef HANDLE_INT_NOPTR
 
@@ -112,7 +132,7 @@ marshal_2lua_int (lua_State *L, GITypeTag tag, GIArgument *val,
 	    ReturnUnion *ru = (ReturnUnion *) val;			\
 	    ru->arg.v_ ## namelower = (g ## namelower) ru->ut;		\
 	  }								\
-	lua_pushnumber (L, parent == LGI_PARENT_FORCE_POINTER		\
+	lua_pushinteger (L, parent == LGI_PARENT_FORCE_POINTER		\
 			?  GPOINTER_TO_ ## ptrconv (val->v_pointer)	\
 			: val->v_ ## namelower);			\
 	break;
@@ -386,7 +406,7 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 	  /* Iterate through Lua array and fill GArray accordingly. */
 	  for (index = 0; index < objlen; index++)
 	    {
-	      lua_pushnumber (L, index + 1);
+	      lua_pushinteger (L, index + 1);
 	      lua_gettable (L, narg);
 
 	      /* Marshal element retrieved from the table into target
@@ -598,7 +618,7 @@ marshal_2c_list (lua_State *L, GITypeInfo *ti, GITypeTag list_tag,
       /* Retrieve index-th element from the source table and marshall
 	 it as pointer to arg. */
       GIArgument eval;
-      lua_pushnumber (L, index--);
+      lua_pushinteger (L, index--);
       lua_gettable (L, narg);
       to_pop = lgi_marshal_2c (L, eti, NULL, exfer, &eval, -1,
 			       LGI_PARENT_FORCE_POINTER, NULL, NULL);
@@ -1437,7 +1457,7 @@ lgi_marshal_field (lua_State *L, gpointer object, gboolean getmode,
       lua_rawgeti (L, field_arg, 1);
       field_addr = (char *) object + lua_tointeger (L, -1);
       lua_rawgeti (L, field_arg, 2);
-      kind = lua_tonumber (L, -1);
+      kind = lua_tointeger (L, -1);
       lua_pop (L, 2);
 
       /* Load type information from the table and decide how to handle
@@ -1608,7 +1628,7 @@ marshal_container_marshaller (lua_State *L)
 				     transfer);
 	    if (lua_type (L, 2) == LUA_TTABLE)
 	      {
-		lua_pushnumber (L, size);
+		lua_pushinteger (L, size);
 		lua_setfield (L, 2, "length");
 	      }
 	  }
@@ -1652,7 +1672,7 @@ marshal_container_marshaller (lua_State *L)
       if (!lua_isnil (L, -1))
 	for (lua_insert (L, -nret - 1); nret > 0; nret--)
 	  {
-	    lua_pushnumber (L, lua_objlen (L, -nret - 1));
+	    lua_pushinteger (L, lua_objlen (L, -nret - 1));
 	    lua_insert (L, -2);
 	    lua_settable (L, -nret - 3);
 	    lua_pop (L, 1);
@@ -1682,7 +1702,7 @@ marshal_container (lua_State *L)
       tag == GI_TYPE_TAG_GSLIST || tag == GI_TYPE_TAG_GLIST)
     {
       lua_pushvalue (L, 1);
-      lua_pushnumber (L, transfer);
+      lua_pushinteger (L, transfer);
       lua_pushcclosure (L, marshal_container_marshaller, 2);
     }
   else
@@ -1843,7 +1863,7 @@ marshal_closure_invoke (lua_State *L)
   memset (params, 0, sizeof (GValue) * n_params);
   for (i = 0; i < n_params; i++)
     {
-      lua_pushnumber (L, i + 1);
+      lua_pushinteger (L, i + 1);
       lua_gettable (L, 3);
       lua_pushvalue (L, -2);
       lgi_record_2c (L, -2, &params[i], TRUE, FALSE, FALSE, FALSE);
@@ -1895,8 +1915,8 @@ marshal_typeinfo (lua_State *L)
       case GI_TYPE_TAG_ ## upper:					\
 	{								\
 	  struct Test { char offender; type examined; };		\
-	  lua_pushnumber (L, sizeof (type));				\
-	  lua_pushnumber (L, G_STRUCT_OFFSET (struct Test, examined));	\
+	  lua_pushinteger (L, sizeof (type));				\
+	  lua_pushinteger (L, G_STRUCT_OFFSET (struct Test, examined));	\
 	}								\
 	break
 

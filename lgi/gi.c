@@ -72,7 +72,7 @@ static int
 infos_len (lua_State *L)
 {
   Infos* infos = luaL_checkudata (L, 1, LGI_GI_INFOS);
-  lua_pushnumber (L, infos->count);
+  lua_pushinteger (L, infos->count);
   return 1;
 }
 
@@ -83,7 +83,7 @@ infos_index (lua_State *L)
   gint n;
   if (lua_type (L, 2) == LUA_TNUMBER)
     {
-      n = lua_tonumber (L, 2) - 1;
+      n = lua_tointeger (L, 2) - 1;
       luaL_argcheck (L, n >= 0 && n < infos->count, 2, "out of bounds");
       return lgi_gi_info_new (L, infos->item_get (infos->info, n));
     }
@@ -296,7 +296,7 @@ info_index (lua_State *L)
 	    }
 	  else if (strcmp (prop, "size") == 0)
 	    {
-	      lua_pushnumber (L, g_struct_info_get_size (*info));
+	      lua_pushinteger (L, g_struct_info_get_size (*info));
 	      return 1;
 	    }
 	  INFOS (struct, field)
@@ -306,7 +306,7 @@ info_index (lua_State *L)
 	{
 	  if (strcmp (prop, "size") == 0)
 	    {
-	      lua_pushnumber (L, g_struct_info_get_size (*info));
+	      lua_pushinteger (L, g_struct_info_get_size (*info));
 	      return 1;
 	    }
 	  INFOS (union, field)
@@ -413,7 +413,7 @@ info_index (lua_State *L)
 	{
 	  const gchar *domain = g_enum_info_get_error_domain (*info);
 	  if (domain != NULL)
-	    lua_pushnumber (L, g_quark_from_string (domain));
+	    lua_pushinteger (L, g_quark_from_string (domain));
 	  else
 	    lua_pushnil (L);
 
@@ -425,7 +425,7 @@ info_index (lua_State *L)
     {
       if (strcmp (prop, "value") == 0)
 	{
-	  lua_pushnumber (L, g_value_info_get_value (*info));
+	  lua_pushinteger (L, g_value_info_get_value (*info));
 	  return 1;
 	}
     }
@@ -457,7 +457,7 @@ info_index (lua_State *L)
     {
       if (strcmp (prop, "flags") == 0)
 	{
-	  lua_pushnumber (L, g_property_info_get_flags (*info));
+	  lua_pushinteger (L, g_property_info_get_flags (*info));
 	  return 1;
 	}
       else if (strcmp (prop, "transfer") == 0)
@@ -486,12 +486,12 @@ info_index (lua_State *L)
 	}
       else if (strcmp (prop, "size") == 0)
 	{
-	  lua_pushnumber (L, g_field_info_get_size (*info));
+	  lua_pushinteger (L, g_field_info_get_size (*info));
 	  return 1;
 	}
       else if (strcmp (prop, "offset") == 0)
 	{
-	  lua_pushnumber (L, g_field_info_get_offset (*info));
+	  lua_pushinteger (L, g_field_info_get_offset (*info));
 	  return 1;
 	}
     }
@@ -559,7 +559,7 @@ info_index (lua_State *L)
 	  int len = g_type_info_get_array_length (*info);
 	  if (len >= 0)
 	    {
-	      lua_pushnumber (L, len);
+	      lua_pushinteger (L, len);
 	      return 1;
 	    }
 	}
@@ -568,7 +568,7 @@ info_index (lua_State *L)
 	  int size = g_type_info_get_array_fixed_size (*info);
 	  if (size >= 0)
 	    {
-	      lua_pushnumber (L, size);
+	      lua_pushinteger (L, size);
 	      return 1;
 	    }
 	}
@@ -639,7 +639,7 @@ static int
 namespace_len (lua_State *L)
 {
   const gchar *ns = luaL_checkudata (L, 1, LGI_GI_NAMESPACE);
-  lua_pushnumber (L, g_irepository_get_n_infos (NULL, ns));
+  lua_pushinteger (L, g_irepository_get_n_infos (NULL, ns));
   return 1;
 }
 
@@ -735,7 +735,7 @@ gi_require (lua_State *L)
     {
       lua_pushboolean (L, 0);
       lua_pushstring (L, err->message);
-      lua_pushnumber (L, err->code);
+      lua_pushinteger (L, err->code);
       g_error_free (err);
       return 3;
     }
@@ -769,7 +769,7 @@ gi_index (lua_State *L)
     }
   else if (lua_type (L, 2) == LUA_TNUMBER)
     {
-      GQuark domain = (GQuark) lua_tonumber (L, 2);
+      GQuark domain = (GQuark) lua_tointeger (L, 2);
       GIBaseInfo *info = g_irepository_find_by_error_domain (NULL, domain);
       return lgi_gi_info_new (L, info);
     }

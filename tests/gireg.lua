@@ -8,6 +8,9 @@
 
 --]]--------------------------------------------------------------------------
 
+-- Note: changed during Lua 5.3 integer support conversion.
+-- Now 64bit integers work, but floats without representation are no longer auto-converted.
+
 local lgi = require 'lgi'
 local bytes = require 'bytes'
 
@@ -15,6 +18,9 @@ local fail = testsuite.fail
 local check = testsuite.check
 local checkv = testsuite.checkv
 local gireg = testsuite.group.new('gireg')
+
+-- Do we have Lua-side support for integers?
+local nativeIntegers = math.maxinteger and true or false
 
 function gireg.type_boolean()
    local R = lgi.Regress
@@ -36,8 +42,10 @@ function gireg.type_int8()
    checkv(R.test_int8(0), 0, 'number')
    checkv(R.test_int8(1), 1, 'number')
    checkv(R.test_int8(-1), -1, 'number')
-   checkv(R.test_int8(1.1), 1, 'number')
-   checkv(R.test_int8(-1.1), -1, 'number')
+   if not nativeIntegers then
+      checkv(R.test_int8(1.1), 1, 'number')
+      checkv(R.test_int8(-1.1), -1, 'number')
+   end
    checkv(R.test_int8(0x7f), 0x7f, 'number')
    checkv(R.test_int8(-0x80), -0x80, 'number')
    check(not pcall(R.test_int8, 0x80))
@@ -54,7 +62,9 @@ function gireg.type_uint8()
    local R = lgi.Regress
    checkv(R.test_uint8(0), 0, 'number')
    checkv(R.test_uint8(1), 1, 'number')
-   checkv(R.test_uint8(1.1), 1, 'number')
+   if not nativeIntegers then
+      checkv(R.test_uint8(1.1), 1, 'number')
+   end
    checkv(R.test_uint8(0xff), 0xff, 'number')
    check(not pcall(R.test_uint8, 0x100))
    check(not pcall(R.test_uint8, -1))
@@ -71,8 +81,10 @@ function gireg.type_int16()
    checkv(R.test_int16(0), 0, 'number')
    checkv(R.test_int16(1), 1, 'number')
    checkv(R.test_int16(-1), -1, 'number')
-   checkv(R.test_int16(1.1), 1, 'number')
-   checkv(R.test_int16(-1.1), -1, 'number')
+   if not nativeIntegers then
+      checkv(R.test_int16(1.1), 1, 'number')
+      checkv(R.test_int16(-1.1), -1, 'number')
+   end
    checkv(R.test_int16(0x7fff), 0x7fff, 'number')
    checkv(R.test_int16(-0x8000), -0x8000, 'number')
    check(not pcall(R.test_int16, 0x8000))
@@ -89,7 +101,9 @@ function gireg.type_uint16()
    local R = lgi.Regress
    checkv(R.test_uint16(0), 0, 'number')
    checkv(R.test_uint16(1), 1, 'number')
-   checkv(R.test_uint16(1.1), 1, 'number')
+   if not nativeIntegers then
+      checkv(R.test_uint16(1.1), 1, 'number')
+   end
    checkv(R.test_uint16(0xffff), 0xffff, 'number')
    check(not pcall(R.test_uint16, 0x10000))
    check(not pcall(R.test_uint16, -1))
@@ -106,8 +120,10 @@ function gireg.type_int32()
    checkv(R.test_int32(0), 0, 'number')
    checkv(R.test_int32(1), 1, 'number')
    checkv(R.test_int32(-1), -1, 'number')
-   checkv(R.test_int32(1.1), 1, 'number')
-   checkv(R.test_int32(-1.1), -1, 'number')
+   if not nativeIntegers then
+      checkv(R.test_int32(1.1), 1, 'number')
+      checkv(R.test_int32(-1.1), -1, 'number')
+   end
    checkv(R.test_int32(0x7fffffff), 0x7fffffff, 'number')
    checkv(R.test_int32(-0x80000000), -0x80000000, 'number')
    check(not pcall(R.test_int32, 0x80000000))
@@ -124,7 +140,9 @@ function gireg.type_uint32()
    local R = lgi.Regress
    checkv(R.test_uint32(0), 0, 'number')
    checkv(R.test_uint32(1), 1, 'number')
-   checkv(R.test_uint32(1.1), 1, 'number')
+   if not nativeIntegers then
+      checkv(R.test_uint32(1.1), 1, 'number')
+   end
    checkv(R.test_uint32(0xffffffff), 0xffffffff, 'number')
    check(not pcall(R.test_uint32, 0x100000000))
    check(not pcall(R.test_uint32, -1))
@@ -141,8 +159,10 @@ function gireg.type_int64()
    checkv(R.test_int64(0), 0, 'number')
    checkv(R.test_int64(1), 1, 'number')
    checkv(R.test_int64(-1), -1, 'number')
-   checkv(R.test_int64(1.1), 1, 'number')
-   checkv(R.test_int64(-1.1), -1, 'number')
+   if not nativeIntegers then
+      checkv(R.test_int64(1.1), 1, 'number')
+      checkv(R.test_int64(-1.1), -1, 'number')
+   end
    check(not pcall(R.test_int64))
    check(not pcall(R.test_int64, nil))
    check(not pcall(R.test_int64, 'string'))
@@ -154,10 +174,18 @@ function gireg.type_int64()
 -- is always 'double', and conversion between double and int64 big
 -- constants is always lossy.  Not sure if it can be solved somehow.
 
---   checkv(R.test_int64(0x7fffffffffffffff), 0x7fffffffffffffff, 'number')
---   checkv(R.test_int64(-0x8000000000000000), -0x8000000000000000, 'number')
---   check(not pcall(R.test_int64, 0x8000000000000000))
---   check(not pcall(R.test_int64, -0x8000000000000001))
+-- UPDATE: It IS working in Lua 5.3 because of its integer support,
+-- so tests are enabled there.
+
+   if nativeIntegers then
+      checkv(R.test_int64(0x7fffffffffffffff), 0x7fffffffffffffff, 'number')
+      checkv(R.test_int64(-0x8000000000000000), -0x8000000000000000, 'number')
+   end
+
+   -- Following two lines succeed in Lua 5.3 but make no sense.
+
+   --check(not pcall(R.test_int64, 0x8000000000000000))
+   --check(not pcall(R.test_int64, -0x8000000000000001))
 
 end
 
@@ -165,7 +193,9 @@ function gireg.type_uint64()
    local R = lgi.Regress
    checkv(R.test_uint64(0), 0, 'number')
    checkv(R.test_uint64(1), 1, 'number')
-   checkv(R.test_uint64(1.1), 1, 'number')
+   if not nativeIntegers then
+      checkv(R.test_uint64(1.1), 1, 'number')
+   end
    check(not pcall(R.test_uint64, -1))
    check(not pcall(R.test_uint64))
    check(not pcall(R.test_uint64, nil))
@@ -176,6 +206,9 @@ function gireg.type_uint64()
 
 -- See comment above about lossy conversions.
 
+-- UPDATE: fail in Lua 5.3 too because it don't have unsigned integers.
+-- 0xffffffffffffffff == -1
+
 --   checkv(R.test_uint64(0xffffffffffffffff), 0xffffffffffffffff, 'number')
 --   check(not pcall(R.test_uint64, 0x10000000000000000))
 end
@@ -185,15 +218,19 @@ function gireg.type_short()
    checkv(R.test_short(0), 0, 'number')
    checkv(R.test_short(1), 1, 'number')
    checkv(R.test_short(-1), -1, 'number')
-   checkv(R.test_short(1.1), 1, 'number')
-   checkv(R.test_short(-1.1), -1, 'number')
+   if not nativeIntegers then
+      checkv(R.test_short(1.1), 1, 'number')
+      checkv(R.test_short(-1.1), -1, 'number')
+   end
 end
 
 function gireg.type_ushort()
    local R = lgi.Regress
    checkv(R.test_ushort(0), 0, 'number')
    checkv(R.test_ushort(1), 1, 'number')
-   checkv(R.test_ushort(1.1), 1, 'number')
+   if not nativeIntegers then
+      checkv(R.test_ushort(1.1), 1, 'number')
+   end
    check(not pcall(R.test_ushort, -1))
 end
 
@@ -202,15 +239,19 @@ function gireg.type_int()
    checkv(R.test_int(0), 0, 'number')
    checkv(R.test_int(1), 1, 'number')
    checkv(R.test_int(-1), -1, 'number')
-   checkv(R.test_int(1.1), 1, 'number')
-   checkv(R.test_int(-1.1), -1, 'number')
+   if not nativeIntegers then
+      checkv(R.test_int(1.1), 1, 'number')
+      checkv(R.test_int(-1.1), -1, 'number')
+   end
 end
 
 function gireg.type_uint()
    local R = lgi.Regress
    checkv(R.test_uint(0), 0, 'number')
    checkv(R.test_uint(1), 1, 'number')
-   checkv(R.test_uint(1.1), 1, 'number')
+   if not nativeIntegers then
+      checkv(R.test_uint(1.1), 1, 'number')
+   end
    check(not pcall(R.test_uint, -1))
 end
 
@@ -219,15 +260,19 @@ function gireg.type_ssize()
    checkv(R.test_ssize(0), 0, 'number')
    checkv(R.test_ssize(1), 1, 'number')
    checkv(R.test_ssize(-1), -1, 'number')
-   checkv(R.test_ssize(1.1), 1, 'number')
-   checkv(R.test_ssize(-1.1), -1, 'number')
+   if not nativeIntegers then
+      checkv(R.test_ssize(1.1), 1, 'number')
+      checkv(R.test_ssize(-1.1), -1, 'number')
+   end
 end
 
 function gireg.type_size()
    local R = lgi.Regress
    checkv(R.test_size(0), 0, 'number')
    checkv(R.test_size(1), 1, 'number')
-   checkv(R.test_size(1.1), 1, 'number')
+   if not nativeIntegers then
+      checkv(R.test_size(1.1), 1, 'number')
+   end
    check(not pcall(R.test_size, -1))
 end
 
@@ -391,7 +436,9 @@ end
 function gireg.array_int_in()
    local R = lgi.Regress
    check(R.test_array_int_in{1,2,3} == 6)
-   check(R.test_array_int_in{1.1,2,3} == 6)
+   if not nativeIntegers then
+      check(R.test_array_int_in{1.1,2,3} == 6)
+   end
    check(R.test_array_int_in{} == 0)
    check(not pcall(R.test_array_int_in, nil))
    check(not pcall(R.test_array_int_in, 'help'))
@@ -420,7 +467,9 @@ end
 function gireg.array_gint8_in()
    local R = lgi.Regress
    check(R.test_array_gint8_in{1,2,3} == 6)
-   check(R.test_array_gint8_in{1.1,2,3} == 6)
+   if not nativeIntegers then
+      check(R.test_array_gint8_in{1.1,2,3} == 6)
+   end
    check(R.test_array_gint8_in('0123') == 48 + 49 + 50 + 51)
    check(R.test_array_gint8_in(bytes.new('0123')) == 48 + 49 + 50 + 51)
    check(R.test_array_gint8_in{} == 0)
@@ -431,7 +480,9 @@ end
 function gireg.array_gint16_in()
    local R = lgi.Regress
    check(R.test_array_gint16_in{1,2,3} == 6)
-   check(R.test_array_gint16_in{1.1,2,3} == 6)
+   if not nativeIntegers then
+      check(R.test_array_gint16_in{1.1,2,3} == 6)
+   end
    check(R.test_array_gint16_in{} == 0)
    check(not pcall(R.test_array_gint16_in, nil))
    check(not pcall(R.test_array_gint16_in, 'help'))
@@ -441,7 +492,9 @@ end
 function gireg.array_gint32_in()
    local R = lgi.Regress
    check(R.test_array_gint32_in{1,2,3} == 6)
-   check(R.test_array_gint32_in{1.1,2,3} == 6)
+   if not nativeIntegers then
+      check(R.test_array_gint32_in{1.1,2,3} == 6)
+   end
    check(R.test_array_gint32_in{} == 0)
    check(not pcall(R.test_array_gint32_in, nil))
    check(not pcall(R.test_array_gint32_in, 'help'))
@@ -451,7 +504,9 @@ end
 function gireg.array_gint64_in()
    local R = lgi.Regress
    check(R.test_array_gint64_in{1,2,3} == 6)
-   check(R.test_array_gint64_in{1.1,2,3} == 6)
+   if not nativeIntegers then
+      check(R.test_array_gint64_in{1.1,2,3} == 6)
+   end
    check(R.test_array_gint64_in{} == 0)
    check(not pcall(R.test_array_gint64_in, nil))
    check(not pcall(R.test_array_gint64_in, 'help'))
