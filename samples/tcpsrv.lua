@@ -7,8 +7,9 @@
 
 local lgi = require 'lgi'
 local Gio = lgi.Gio
+local assert = lgi.assert
 
-local app = Gio.Application{application_id = 'org.test.tcptest',
+local app = Gio.Application{application_id = 'org.lgi.samples.tcptest',
                             flags = Gio.ApplicationFlags.NON_UNIQUE}
 
 local service = Gio.SocketService.new()
@@ -17,35 +18,31 @@ service:add_address(
    Gio.SocketType.STREAM,
    Gio.SocketProtocol.TCP)
 
-local function get_message(conn, istream, ostream)
-   ostream:async_write("> ")
-   local bytes = istream:async_read_bytes(4096)
-   while bytes:get_size() > 0 do
-      print(string.format("Data: %s",
-			  bytes.data:sub(1, bytes:get_size()-1)))
-      ostream:async_write(bytes.data)
-      ostream:async_write("> ")
-      bytes = istream:async_read_bytes(4096)
+local function do_echo_connection(conn, istream, ostream)
+   local wrote, err = ostream:async_write_all("Connected\n")
+   assert(wrote >= 0, err)
+   while true do
+      local bytes = assert(istream:async_read_bytes(4096))
+      if bytes:get_size() == 0 then break end
+      local data = bytes.data:gsub("\n", "")
+      print(string.format("Data: %s", data))
+      wrote, err = ostream:async_write_all(bytes.data)
+      assert(wrote >= 0, err)
    end
    print("Closing connection")
-   conn:close()
+   conn:async_close()
 end
 
 function service:on_incoming(conn)
-   local istream = conn:get_input_stream()
-   local ostream = conn:get_output_stream()
+   local istream = assert(conn:get_input_stream())
+   local ostream = assert(conn:get_output_stream())
    local rc = conn:get_remote_address()
    print(string.format("Incoming connection from %s:%s",
 		       rc:get_address():to_string(),
 		       rc:get_port()))
-   Gio.Async.call(function(ostream)
-	 ostream:async_write("Connected\n")
-   end)(ostream)
-   Gio.Async.start(get_message)(conn, istream, ostream)
+   Gio.Async.start(do_echo_connection)(conn, istream, ostream)
    return false
 end
-
-service:start()
 
 function app:on_activate()
    app:hold()

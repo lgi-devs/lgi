@@ -6,39 +6,38 @@
 --
 
 local lgi = require 'lgi'
+local core = require 'lgi.core'
 local GLib = lgi.GLib
 local Gio = lgi.Gio
+local assert = lgi.assert
 
-local app = Gio.Application{application_id = 'org.v1993.udptest',
+local app = Gio.Application{application_id = 'org.lgi.samples.udptest',
 			    flags = Gio.ApplicationFlags.NON_UNIQUE}
 
-local socket = lgi.Gio.Socket.new(Gio.SocketFamily.IPV4,
-				  Gio.SocketType.DATAGRAM,
-				  Gio.SocketProtocol.UDP)
-local sa = lgi.Gio.InetSocketAddress.new(
-   Gio.InetAddress.new_loopback(Gio.SocketFamily.IPV4),
-   3333)
+local socket = Gio.Socket.new(Gio.SocketFamily.IPV4,
+			      Gio.SocketType.DATAGRAM,
+			      Gio.SocketProtocol.UDP)
+local sa = Gio.InetSocketAddress.new_from_string("127.0.0.1", 3333)
 assert(socket:bind(sa, true))
 
-do
-   -- To avoid extra allocations
-   local buf = require("lgi.core").bytes.new(4096)
-   local source = socket:create_source(GLib.IOCondition.IN)
-   source:set_callback(function()
-	 print('Data incoming')
-	 local len, src = socket:receive_from(buf)
-	 if len > 0 then
-	    print(('%s:%d %s'):format(src:get_address():to_string(),
-				      src:get_port(),
-				      tostring(buf):sub(1, len)))
-	 else
-	    print('Failed to read data')
-	 end
-	 return true
-   end)
+local buf = core.bytes.new(4096)
+local source = assert(socket:create_source(GLib.IOCondition.IN))
 
-   source:attach(lgi.GLib.MainContext.default())
-end
+source:set_callback(function()
+      local len, src = assert(socket:receive_from(buf))
+      if len > 0 then
+	 local data = tostring(buf):sub(1, len):gsub("\n", "")
+	 print(string.format("%s:%d %s",
+			     src:get_address():to_string(),
+			     src:get_port(),
+			     data))
+      else
+	 print('Failed to read data')
+      end
+      return true
+end)
+
+source:attach(GLib.MainContext.default())
 
 function app:on_activate()
    app:hold()
