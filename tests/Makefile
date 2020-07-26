@@ -70,10 +70,10 @@ $(REGRESS) : regress.o
 GIDATADIR = $(shell $(PKG_CONFIG) --variable=gidatadir gobject-introspection-1.0)/tests
 
 regress.o : $(GIDATADIR)/regress.c $(GIDATADIR)/regress.h $(DEPCHECK)
-	$(CC) $(ALL_CFLAGS) -c -o $@ $<
+	$(CC) $(CPPFLAGS) $(ALL_CFLAGS) -c -o $@ $<
 
 test_c.o : test_c.c $(DEPCHECK)
-	$(CC) $(ALL_CFLAGS) -c -o $@ $<
+	$(CC) $(CPPFLAGS) $(ALL_CFLAGS) -c -o $@ $<
 
 test_c : test_c.o
 	$(CC) $(LDFLAGS) -o $@ $< $(LIBS)

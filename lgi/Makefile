@@ -62,7 +62,7 @@ clean :
 	rm -f $(CORE) $(OBJS)
 
 %.o : %.c
-	$(CC) $(ALL_CFLAGS) -c -o $@ $<
+	$(CC) $(CPPFLAGS) $(ALL_CFLAGS) -c -o $@ $<
 
 $(CORE) : $(OBJS)
 	$(CC) $(ALL_LDFLAGS) -o $@ $(OBJS) $(LIBS)
