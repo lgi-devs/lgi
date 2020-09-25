@@ -61,7 +61,7 @@ inside variants
   varaints are expanded for `v`-typed variants.  Dictionaries return
   proxy table which can be indexed by dictionary keys to retrieve
   dictionary values.  Generic arrays are __not__ automatically
-  expanded, the source variants are returned are returned instead.
+  expanded, the source variants are returned instead.
 - `# operator` Length operator is overriden for GLib.Variants,
   returning number of child elements.  Non-compound variants always
   return 0, maybe-s return 0 or 1, arrays, tuples and dictionary
