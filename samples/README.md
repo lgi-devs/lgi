@@ -1,7 +1,7 @@
 ## Samples
 
 This folder contains some examples of how to use **LGI**.
-Also check out these **Examples** made by third parties that can be very useful:
+Also check out these **other examples** made by third parties that can be very useful:
 
 By [@M1que4s](https://github.com/M1que4s/).
 * Subprocess - [Gist](https://gist.github.com/M1que4s/212e1a75122c166c2e3a13b4a0d1f03c)
