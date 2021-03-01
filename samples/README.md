@@ -33,4 +33,4 @@ You can also access this link for more. https://gist.github.com/search?l=Lua&q=l
 
 ## Note
 
-This file will be modified over time to update your information.
+This file will be modified over time to update this information.
