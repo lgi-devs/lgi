@@ -45,7 +45,7 @@ See examples in `samples/` directory.  Documentation is available in
 `doc/` directory in markdown format.  Process it with your favorite
 Markdown processor if you want to read it in HTML. You can also check
 the [moonsteal/lua-gtk-examples repository](https://github.com/moonsteal/lua-gtk-examples), where you can find a variety
-of Lua Gtk examples. User @M1que4s also has some [Gists](https://gist.github.com/M1que4s) that may be helpful.
+of Lua Gtk examples.
 
 ## Credits
 
