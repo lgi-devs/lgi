@@ -3,13 +3,13 @@
 This folder contains some examples of how to use **LGI**.
 Also check out these **other examples** made by third parties that can be very useful:
 
-By [@M1que4s](https://github.com/M1que4s/).
-* Subprocess - [Gist](https://gist.github.com/M1que4s/212e1a75122c166c2e3a13b4a0d1f03c)
-* User directories - [Gist](https://gist.github.com/M1que4s/e300178d36fb2e80050cc060387826e5)
-* Canonical GObject properties names - [Gist](https://gist.github.com/M1que4s/3eccc37d84c327eb1a25842c49ba48e7)
-* Reads directory content recursively - [Gist](https://gist.github.com/M1que4s/6b75b25731f9a785678951cfcef8c002)
-* Subclassing - [Gist](https://gist.github.com/M1que4s/9f1eec873f87cb02238bd6de2d435705)
-* Switches between enabling/disabling the CSD - [Gist](https://gist.github.com/M1que4s/486921cfb6e7bdf82a7da3b3d3bf05fe)
+By [@Miqueas](https://github.com/Miqueas/).
+* Subprocess - [Gist](https://gist.github.com/Miqueas/212e1a75122c166c2e3a13b4a0d1f03c)
+* User directories - [Gist](https://gist.github.com/Miqueas/e300178d36fb2e80050cc060387826e5)
+* Canonical GObject properties names - [Gist](https://gist.github.com/Miqueas/3eccc37d84c327eb1a25842c49ba48e7)
+* Reads directory content recursively - [Gist](https://gist.github.com/Miqueas/6b75b25731f9a785678951cfcef8c002)
+* Subclassing - [Gist](https://gist.github.com/Miqueas/9f1eec873f87cb02238bd6de2d435705)
+* Switches between enabling/disabling the CSD - [Gist](https://gist.github.com/Miqueas/486921cfb6e7bdf82a7da3b3d3bf05fe)
 
 By [@diazvictor](https://github.com/diazvictor/).
 
