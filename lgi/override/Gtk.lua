@@ -432,19 +432,21 @@ Gtk.TreeSortable.UNSORTED_SORT_COLUMN_ID = -2
 Gtk.TreeView._container_add = Gtk.TreeView.append_column
 
 -- Allow looking up tree column as child of the tree.
-Gtk.TreeView._attribute = {
-   child = { set = Gtk.TreeView._parent._attribute.child.set }
-}
-local treeview_child_mt = {}
-function treeview_child_mt:__index(id)
-   if self._view.id == id then return self._view end
-   for _, column in ipairs(self._view:get_columns()) do
-      local child = column.child[id]
-      if child then return child end
-   end
-end
-function Gtk.TreeView._attribute.child:get()
-   return setmetatable({ _view = self }, treeview_child_mt)
+if Gtk.TreeView._parent._attribute.child then
+  Gtk.TreeView._attribute = {
+     child = { set = Gtk.TreeView._parent._attribute.child.set }
+  }
+  local treeview_child_mt = {}
+  function treeview_child_mt:__index(id)
+     if self._view.id == id then return self._view end
+     for _, column in ipairs(self._view:get_columns()) do
+        local child = column.child[id]
+        if child then return child end
+     end
+  end
+  function Gtk.TreeView._attribute.child:get()
+     return setmetatable({ _view = self }, treeview_child_mt)
+  end
 end
 
 -- Sets attributes for specified cell.
@@ -497,46 +499,48 @@ end
 Gtk.TreeViewColumn._container_add = Gtk.TreeViewColumn.add
 
 -------------------------------- Gtk.Action and relatives
-function Gtk.ActionGroup:add(action)
-   if type(action) == 'table' then
-      if action.accelerator then
-	 -- Add with an accelerator.
-	 self:add_action_with_accel(action[1], action.accelerator)
-	 return action[1]
-      end
+if Gtk.ActionGroup then
+  function Gtk.ActionGroup:add(action)
+     if type(action) == 'table' then
+        if action.accelerator then
+           -- Add with an accelerator.
+           self:add_action_with_accel(action[1], action.accelerator)
+           return action[1]
+        end
 
-      -- Go through all actions in the table and add them.
-      local first_radio
-      for i = 1, #action do
-	 local added = self:add(action[i])
-	 if Gtk.RadioAction:is_type_of(added) then
-	    if not first_radio then
-	       first_radio = added
-	    else
-	       added:join_group(first_radio)
-	    end
-	 end
-      end
-      -- Install callback for on_activate.
-      if first_radio and action.on_change then
-	 local on_change = action.on_change
-	 function first_radio:on_changed(current) on_change(current) end
-      end
-   else
-      -- Add plain action.
-      self:add_action(action)
-      return action
-   end
-end
-Gtk.ActionGroup._container_add = Gtk.ActionGroup.add
+        -- Go through all actions in the table and add them.
+        local first_radio
+        for i = 1, #action do
+           local added = self:add(action[i])
+           if Gtk.RadioAction:is_type_of(added) then
+              if not first_radio then
+                 first_radio = added
+              else
+                 added:join_group(first_radio)
+              end
+           end
+        end
+        -- Install callback for on_activate.
+        if first_radio and action.on_change then
+           local on_change = action.on_change
+           function first_radio:on_changed(current) on_change(current) end
+        end
+     else
+        -- Add plain action.
+        self:add_action(action)
+        return action
+     end
+  end
+  Gtk.ActionGroup._container_add = Gtk.ActionGroup.add
 
-Gtk.ActionGroup._attribute = { action = {} }
-local action_group_mt = {}
-function action_group_mt:__index(name)
-   return self._group:get_action(name)
-end
-function Gtk.ActionGroup._attribute.action:get()
-   return setmetatable({ _group = self }, action_group_mt)
+  Gtk.ActionGroup._attribute = { action = {} }
+  local action_group_mt = {}
+  function action_group_mt:__index(name)
+     return self._group:get_action(name)
+  end
+  function Gtk.ActionGroup._attribute.action:get()
+     return setmetatable({ _group = self }, action_group_mt)
+  end
 end
 
 -------------------------------- Gtk.Assistant
@@ -589,20 +593,24 @@ end
 Gtk.InfoBar._attribute = { buttons = Gtk.Dialog._attribute.buttons }
 
 -------------------------------- Gtk.Menu
-function Gtk.Menu:popup(a1, a2, a3, a4, a5, ...)
-   if select('#', ...) > 0 then
-      Gtk.Menu.popup_for_device(self, a1, a2, a3, a4, a5, ...)
-   else
-      Gtk.Menu.popup_for_device(self, nil, a1, a2, a3, a4, a5)
-   end
+if Gtk.Menu then
+  function Gtk.Menu:popup(a1, a2, a3, a4, a5, ...)
+     if select('#', ...) > 0 then
+        Gtk.Menu.popup_for_device(self, a1, a2, a3, a4, a5, ...)
+     else
+        Gtk.Menu.popup_for_device(self, nil, a1, a2, a3, a4, a5)
+     end
+  end
 end
 
 -------------------------------- Gtk.MenuItem
-Gtk.MenuItem._attribute = { child = {} }
-function Gtk.MenuItem._attribute.child:get()
-   local children = Gtk.Container._attribute.child.get(self)
-   children[#children + 1] = Gtk.MenuItem.get_submenu(self)
-   return children
+if Gtk.MenuItem then
+  Gtk.MenuItem._attribute = { child = {} }
+  function Gtk.MenuItem._attribute.child:get()
+     local children = Gtk.Container._attribute.child.get(self)
+     children[#children + 1] = Gtk.MenuItem.get_submenu(self)
+     return children
+  end
 end
 
 -------------------------------- Gtk.EntryCompletion

@@ -25,16 +25,18 @@ function gobject.env_base()
    check(next(core.object.env(obj)) == nil)
 end
 
-function gobject.env_persist()
-   local Gtk = lgi.Gtk
-   local window = Gtk.Window()
-   local label = Gtk.Label()
-   local env = core.object.env(label)
-   window:_method_add(label)
-   label = nil
-   collectgarbage()
-   label = window:get_child()
-   check(env == core.object.env(label))
+if lgi.Gtk.Window._method.add then
+  function gobject.env_persist()
+     local Gtk = lgi.Gtk
+     local window = Gtk.Window()
+     local label = Gtk.Label()
+     local env = core.object.env(label)
+     window:_method_add(label)
+     label = nil
+     collectgarbage()
+     label = window:get_child()
+     check(env == core.object.env(label))
+  end
 end
 
 function gobject.object_new()
