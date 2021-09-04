@@ -59,7 +59,8 @@ function Gtk.Widget._attribute.height:set(height)
 end
 
 -- gtk_widget_intersect is missing an (out caller-allocates) annotation
-if core.gi.Gtk.Widget.methods.intersect.args[2].direction == 'in' then
+if core.gi.Gtk.Widget.methods.intersect and
+   core.gi.Gtk.Widget.methods.intersect.args[2].direction == 'in' then
    local real_intersect = Gtk.Widget.intersect
    function Gtk.Widget:intersect(area)
       local intersection = Gdk.Rectangle()
@@ -96,19 +97,21 @@ function Gtk.Widget._attribute.style:get()
 end
 
 -- Get/Set widget from Gdk.Window
-function Gdk.Window:get_widget()
-   return core.object.new(self:get_user_data(), false)
+if Gdk.Window then
+   function Gdk.Window:get_widget()
+      return core.object.new(self:get_user_data(), false)
+   end
+   function Gdk.Window:set_widget(widget)
+      self:set_user_data(widget)
+   end
+   Gdk.Window._attribute = rawget(Gdk.Window, '_attribute') or {}
+   Gdk.Window._attribute.widget = {
+      set = Gdk.Window.set_widget,
+      get = Gdk.Window.get_widget,
+   }
 end
-function Gdk.Window:set_widget(widget)
-   self:set_user_data(widget)
-end
-Gdk.Window._attribute = rawget(Gdk.Window, '_attribute') or {}
-Gdk.Window._attribute.widget = {
-   set = Gdk.Window.set_widget,
-   get = Gdk.Window.get_widget,
-}
 
--------------------------------- Gtk.Buildable overrides.
+   -------------------------------- Gtk.Buildable overrides.
 Gtk.Buildable._attribute = { id = {}, child = {} }
 
 -- Create custom 'id' property, mapped to buildable name.
@@ -130,88 +133,90 @@ function Gtk.Buildable._attribute.child:get()
 end
 
 -------------------------------- Gtk.Container overrides.
-Gtk.Container._attribute = {}
+if Gtk.Container then
+   Gtk.Container._attribute = {}
 
--- Extand add() functionality to allow adding child properties.
-function Gtk.Container:add(widget, props)
-   if type(widget) == 'table' then
-      props = widget
-      widget = widget[1]
-   end
-   Gtk.Container._method.add(self, widget)
-   if props then
-      local properties = self.property[widget]
-      for name, value in pairs(props) do
-	 if type(name) == 'string' then
-	    properties[name] = value
-	 end
+   -- Extand add() functionality to allow adding child properties.
+   function Gtk.Container:add(widget, props)
+      if type(widget) == 'table' then
+         props = widget
+         widget = widget[1]
+      end
+      Gtk.Container._method.add(self, widget)
+      if props then
+         local properties = self.property[widget]
+         for name, value in pairs(props) do
+      if type(name) == 'string' then
+         properties[name] = value
+      end
+         end
       end
    end
-end
 
--- Map 'add' method also to '_container_add', so that ctor can use it
--- for adding widgets from the array part.
-Gtk.Container._container_add = Gtk.Container.add
+   -- Map 'add' method also to '_container_add', so that ctor can use it
+   -- for adding widgets from the array part.
+   Gtk.Container._container_add = Gtk.Container.add
 
--- Accessing child properties is preferrably done by accessing
--- 'property' attribute.
-Gtk.Container._attribute.property = {}
-local container_property_item_mt = {}
-function container_property_item_mt:__index(name)
-   name = name:gsub('_', '-')
-   local pspec = self._container._class:find_child_property(name)
-   if not pspec then
-      error(("%s: no child property `%s'"):format(
-	       self._container.type._name, name:gsub('%-', '_')), 2)
-   end
-   local value = GObject.Value(pspec.value_type)
-   self._container:child_get_property(self._child, name, value)
-   return value.value
-end
-function container_property_item_mt:__newindex(name, val)
-   name = name:gsub('_', '-')
-   local pspec = self._container._class:find_child_property(name)
-   if not pspec then
-      error(("%s: no child property `%s'"):format(
-	       self._container.type._name, name:gsub('%-', '_')), 2)
-   end
-   local value = GObject.Value(pspec.value_type, val)
-   self._container:child_set_property(self._child, name, value)
-end
-local container_property_mt = {}
-function container_property_mt:__index(child)
-   if type(child) == 'string' then child = self._container.child[child] end
-   return setmetatable({ _container = self._container, _child = child },
-		       container_property_item_mt)
-end
-function Gtk.Container._attribute.property:get()
-   return setmetatable({ _container = self }, container_property_mt)
-end
-
--- Override 'child' attribute; writing allows adding child with
--- children properties (similarly as add() override), reading provides
--- table which can lookup subchildren by Gtk.Buildable.id.
-Gtk.Container._attribute.child = {}
-local container_child_mt = {}
-function container_child_mt:__index(id)
-   if type(id) ~= 'string' then return nil end
-   local found = (core.object.env(self._container).id == id
-	       and self._container)
-   if not found then
-      for _, child in ipairs(self) do
-	 found = child.child[id]
-	 if found then break end
+   -- Accessing child properties is preferrably done by accessing
+   -- 'property' attribute.
+   Gtk.Container._attribute.property = {}
+   local container_property_item_mt = {}
+   function container_property_item_mt:__index(name)
+      name = name:gsub('_', '-')
+      local pspec = self._container._class:find_child_property(name)
+      if not pspec then
+         error(("%s: no child property `%s'"):format(
+            self._container.type._name, name:gsub('%-', '_')), 2)
       end
+      local value = GObject.Value(pspec.value_type)
+      self._container:child_get_property(self._child, name, value)
+      return value.value
    end
-   return found or nil
-end
-function Gtk.Container._attribute.child:get()
-   local children = self:get_children()
-   children._container = self
-   return setmetatable(children, container_child_mt)
-end
-function Gtk.Container._attribute.child:set(widget)
-   self:add(widget)
+   function container_property_item_mt:__newindex(name, val)
+      name = name:gsub('_', '-')
+      local pspec = self._container._class:find_child_property(name)
+      if not pspec then
+         error(("%s: no child property `%s'"):format(
+            self._container.type._name, name:gsub('%-', '_')), 2)
+      end
+      local value = GObject.Value(pspec.value_type, val)
+      self._container:child_set_property(self._child, name, value)
+   end
+   local container_property_mt = {}
+   function container_property_mt:__index(child)
+      if type(child) == 'string' then child = self._container.child[child] end
+      return setmetatable({ _container = self._container, _child = child },
+               container_property_item_mt)
+   end
+   function Gtk.Container._attribute.property:get()
+      return setmetatable({ _container = self }, container_property_mt)
+   end
+
+   -- Override 'child' attribute; writing allows adding child with
+   -- children properties (similarly as add() override), reading provides
+   -- table which can lookup subchildren by Gtk.Buildable.id.
+   Gtk.Container._attribute.child = {}
+   local container_child_mt = {}
+   function container_child_mt:__index(id)
+      if type(id) ~= 'string' then return nil end
+      local found = (core.object.env(self._container).id == id
+            and self._container)
+      if not found then
+         for _, child in ipairs(self) do
+      found = child.child[id]
+      if found then break end
+         end
+      end
+      return found or nil
+   end
+   function Gtk.Container._attribute.child:get()
+      local children = self:get_children()
+      children._container = self
+      return setmetatable(children, container_child_mt)
+   end
+   function Gtk.Container._attribute.child:set(widget)
+      self:add(widget)
+   end
 end
 
 -------------------------------- Gtk.Builder overrides.
@@ -427,19 +432,21 @@ Gtk.TreeSortable.UNSORTED_SORT_COLUMN_ID = -2
 Gtk.TreeView._container_add = Gtk.TreeView.append_column
 
 -- Allow looking up tree column as child of the tree.
-Gtk.TreeView._attribute = {
-   child = { set = Gtk.TreeView._parent._attribute.child.set }
-}
-local treeview_child_mt = {}
-function treeview_child_mt:__index(id)
-   if self._view.id == id then return self._view end
-   for _, column in ipairs(self._view:get_columns()) do
-      local child = column.child[id]
-      if child then return child end
-   end
-end
-function Gtk.TreeView._attribute.child:get()
-   return setmetatable({ _view = self }, treeview_child_mt)
+if Gtk.TreeView._parent._attribute.child then
+  Gtk.TreeView._attribute = {
+     child = { set = Gtk.TreeView._parent._attribute.child.set }
+  }
+  local treeview_child_mt = {}
+  function treeview_child_mt:__index(id)
+     if self._view.id == id then return self._view end
+     for _, column in ipairs(self._view:get_columns()) do
+        local child = column.child[id]
+        if child then return child end
+     end
+  end
+  function Gtk.TreeView._attribute.child:get()
+     return setmetatable({ _view = self }, treeview_child_mt)
+  end
 end
 
 -- Sets attributes for specified cell.
@@ -492,46 +499,48 @@ end
 Gtk.TreeViewColumn._container_add = Gtk.TreeViewColumn.add
 
 -------------------------------- Gtk.Action and relatives
-function Gtk.ActionGroup:add(action)
-   if type(action) == 'table' then
-      if action.accelerator then
-	 -- Add with an accelerator.
-	 self:add_action_with_accel(action[1], action.accelerator)
-	 return action[1]
-      end
+if Gtk.ActionGroup then
+  function Gtk.ActionGroup:add(action)
+     if type(action) == 'table' then
+        if action.accelerator then
+           -- Add with an accelerator.
+           self:add_action_with_accel(action[1], action.accelerator)
+           return action[1]
+        end
 
-      -- Go through all actions in the table and add them.
-      local first_radio
-      for i = 1, #action do
-	 local added = self:add(action[i])
-	 if Gtk.RadioAction:is_type_of(added) then
-	    if not first_radio then
-	       first_radio = added
-	    else
-	       added:join_group(first_radio)
-	    end
-	 end
-      end
-      -- Install callback for on_activate.
-      if first_radio and action.on_change then
-	 local on_change = action.on_change
-	 function first_radio:on_changed(current) on_change(current) end
-      end
-   else
-      -- Add plain action.
-      self:add_action(action)
-      return action
-   end
-end
-Gtk.ActionGroup._container_add = Gtk.ActionGroup.add
+        -- Go through all actions in the table and add them.
+        local first_radio
+        for i = 1, #action do
+           local added = self:add(action[i])
+           if Gtk.RadioAction:is_type_of(added) then
+              if not first_radio then
+                 first_radio = added
+              else
+                 added:join_group(first_radio)
+              end
+           end
+        end
+        -- Install callback for on_activate.
+        if first_radio and action.on_change then
+           local on_change = action.on_change
+           function first_radio:on_changed(current) on_change(current) end
+        end
+     else
+        -- Add plain action.
+        self:add_action(action)
+        return action
+     end
+  end
+  Gtk.ActionGroup._container_add = Gtk.ActionGroup.add
 
-Gtk.ActionGroup._attribute = { action = {} }
-local action_group_mt = {}
-function action_group_mt:__index(name)
-   return self._group:get_action(name)
-end
-function Gtk.ActionGroup._attribute.action:get()
-   return setmetatable({ _group = self }, action_group_mt)
+  Gtk.ActionGroup._attribute = { action = {} }
+  local action_group_mt = {}
+  function action_group_mt:__index(name)
+     return self._group:get_action(name)
+  end
+  function Gtk.ActionGroup._attribute.action:get()
+     return setmetatable({ _group = self }, action_group_mt)
+  end
 end
 
 -------------------------------- Gtk.Assistant
@@ -584,20 +593,24 @@ end
 Gtk.InfoBar._attribute = { buttons = Gtk.Dialog._attribute.buttons }
 
 -------------------------------- Gtk.Menu
-function Gtk.Menu:popup(a1, a2, a3, a4, a5, ...)
-   if select('#', ...) > 0 then
-      Gtk.Menu.popup_for_device(self, a1, a2, a3, a4, a5, ...)
-   else
-      Gtk.Menu.popup_for_device(self, nil, a1, a2, a3, a4, a5)
-   end
+if Gtk.Menu then
+  function Gtk.Menu:popup(a1, a2, a3, a4, a5, ...)
+     if select('#', ...) > 0 then
+        Gtk.Menu.popup_for_device(self, a1, a2, a3, a4, a5, ...)
+     else
+        Gtk.Menu.popup_for_device(self, nil, a1, a2, a3, a4, a5)
+     end
+  end
 end
 
 -------------------------------- Gtk.MenuItem
-Gtk.MenuItem._attribute = { child = {} }
-function Gtk.MenuItem._attribute.child:get()
-   local children = Gtk.Container._attribute.child.get(self)
-   children[#children + 1] = Gtk.MenuItem.get_submenu(self)
-   return children
+if Gtk.MenuItem then
+  Gtk.MenuItem._attribute = { child = {} }
+  function Gtk.MenuItem._attribute.child:get()
+     local children = Gtk.Container._attribute.child.get(self)
+     children[#children + 1] = Gtk.MenuItem.get_submenu(self)
+     return children
+  end
 end
 
 -------------------------------- Gtk.EntryCompletion
