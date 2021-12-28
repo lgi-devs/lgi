@@ -9,7 +9,7 @@ description = {
 	 directly from Lua.
    ]],
    license = 'MIT/X11',
-   homepage = 'http://github.com/pavouk/lgi'
+   homepage = 'https://github.com/pavouk/lgi'
 }
 
 supported_platforms = { 'unix' }
