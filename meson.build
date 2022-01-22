@@ -9,6 +9,7 @@ project('lgi', 'c',
 
 lua_possible_names = [
   'lua',
+  'lua5.4', 'lua54',
   'lua5.3', 'lua53',
   'lua5.2', 'lua52',
   'lua5.1', 'lua51',

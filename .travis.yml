@@ -7,6 +7,7 @@ env:
     - LUA=5.1 LUANAME=lua5.1
     - LUA=5.2 LUANAME=lua5.2
     - LUA=5.3 LUANAME=lua5.3 LUA_LIB=-llua
+    - LUA=5.4 LUANAME=lua5.4
 
 before_install:
   - if [ -z $LUAINCLUDE ]; then LUAINCLUDE=/usr/include/${LUANAME}; fi
