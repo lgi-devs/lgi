@@ -29,18 +29,21 @@ regress_gir = gnome.generate_gir(libregress,
   includes: ['Gio-2.0', 'cairo-1.0'],
 )
 
-dbus_run = find_program('dbus-run-session')
-test('regress', dbus_run,
-  args: [lua_prog.path(), files('test.lua')],
-  depends: regress_gir,
-  env: [
-    'LD_LIBRARY_PATH=' + meson.current_build_dir(),
-    'GI_TYPELIB_PATH=' + meson.current_build_dir(),
-    # Build dir is added for generated version.lua
-    'LUA_PATH=@0@/?.lua;@1@/?.lua'.format(meson.source_root(), meson.build_root()),
-    'LUA_CPATH=@0@/?.so;@0@/?.dll'.format(meson.build_root())
-  ]
-)
+dbus_run = find_program('dbus-run-session', required: host_machine.system() != 'windows')
+
+if dbus_run.found()
+  test('regress', dbus_run,
+    args: [lua_prog.path(), files('test.lua')],
+    depends: regress_gir,
+    env: [
+      'LD_LIBRARY_PATH=' + meson.current_build_dir(),
+      'GI_TYPELIB_PATH=' + meson.current_build_dir(),
+      # Build dir is added for generated version.lua
+      'LUA_PATH=@0@/?.lua;@1@/?.lua'.format(meson.source_root(), meson.build_root()),
+      'LUA_CPATH=@0@/?.so;@0@/?.dll'.format(meson.build_root())
+    ]
+  )
+endif
 
 test_c = executable('test_c', 'test_c.c', dependencies: lua_dep)
 test('multiple states', test_c)
