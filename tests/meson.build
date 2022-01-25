@@ -5,9 +5,17 @@ regress_sources = [
   join_paths(gi_datadir, 'tests', 'regress.h'),
 ]
 
+test_c_args = []
+if cc.get_argument_syntax() == 'msvc'
+  test_c_args += '-D_GI_EXTERN=__declspec(dllexport)'
+endif
+if cc.get_id() != 'msvc'
+  test_c_args += '-w' # Not our warnings, ignore them
+endif
+
 libregress = shared_library('regress',
   sources: regress_sources,
-  c_args: '-w', # Not our warnings, ignore them
+  c_args: test_c_args,
   dependencies: [
     dependency('gio-2.0'),
     dependency('cairo-gobject'),
