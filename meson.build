@@ -7,6 +7,15 @@ project('lgi', 'c',
   ],
 )
 
+cc = meson.get_compiler('c')
+test_c_args = []
+
+if cc.get_id() == 'msvc'
+  test_c_args += '-FImsvc_recommended_pragmas.h'
+endif
+
+add_project_arguments(cc.get_supported_arguments(test_c_args), language: 'c')
+
 lua_possible_names = [
   'lua',
   'lua5.3', 'lua53',
