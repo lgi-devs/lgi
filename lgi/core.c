@@ -517,8 +517,13 @@ static const struct luaL_Reg module_reg[] = {
 #define MODULE_NAME_FORMAT_VERSION "cyg%s-%d.dll"
 #define MODULE_NAME_FORMAT_PLAIN "cyg%s.dll"
 #elif defined(G_OS_WIN32)
+#ifdef _MSC_VER
+#define MODULE_NAME_FORMAT_VERSION "%s-%d.dll"
+#define MODULE_NAME_FORMAT_PLAIN "%s.dll"
+#else
 #define MODULE_NAME_FORMAT_VERSION "lib%s-%d.dll"
 #define MODULE_NAME_FORMAT_PLAIN "lib%s.dll"
+#endif
 #elif defined(__APPLE__)
 #define MODULE_NAME_FORMAT_VERSION "lib%s.%d.dylib"
 #define MODULE_NAME_FORMAT_PLAIN "lib%s.dylib"
