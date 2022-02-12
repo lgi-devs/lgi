@@ -15,7 +15,7 @@ description = {
 supported_platforms = { 'unix' }
 
 source = {
-   url = 'git://github.com/pavouk/lgi.git',
+   url = 'git://github.com/lgi-devs/lgi.git',
    tag = '%VERSION%'
 }
 
