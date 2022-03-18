@@ -8,14 +8,11 @@ Licensed under
 [MIT-style](http://www.opensource.org/licenses/mit-license.php)
 license, see LICENSE file for full text.
 
-Home of the project is on [GitHub](http://github.com/pavouk/lgi).
+Home of the project is on [GitHub](http://github.com/lgi-devs/lgi).
 
 LGI is tested and compatible with standard Lua 5.1, Lua 5.2, Lua 5.3 and
 LuaJIT2.  Compatibility with other Lua implementations is not tested
-yet.
-
-Lua 5.4 is only supported experimentally. It builds, but does not pass the
-test suite. See [#247](https://github.com/pavouk/lgi/issues/247) for details.
+yet. Lua 5.4 is only supported experimentally.
 
 If you need to support pre-gobject-introspection GTK (ancient GTK+ 2.x
 releases), use [Lua-Gnome](http://sourceforge.net/projects/lua-gnome/).
