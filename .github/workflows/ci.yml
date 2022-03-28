@@ -35,8 +35,8 @@ jobs:
         run: source .github/install_deps.bash
       - name: Build lgi and the test suite
         run: |
-          make CC='gcc -g -fsanitize=address -fsanitize=undefined'
-          make -C tests CC='gcc -g -fsanitize=address -fsanitize=undefined' LUA_LIB='-llua -ldl -lm'
+          make CC='gcc -g -fsanitize=address -fsanitize=undefined -ftest-coverage -fprofile-arcs'
+          make -C tests CC='gcc -g -fsanitize=address -fsanitize=undefined -ftest-coverage -fprofile-arcs' LUA_LIB='-llua -ldl -lm'
       - name: Run tests
         env:
           LSAN_OPTIONS: suppressions=${{ github.workspace }}/.github/lsan.supp
@@ -52,6 +52,8 @@ jobs:
         run: |
           source .github/find_asan_ubsan.bash "lgi/corelgilua51.so"
           source .github/test_make_install.bash
+      - name: Upload coverage report to codecov.io
+        uses: codecov/codecov-action@v1
 
   build_luajit:
     name: Test on LuaJIT
@@ -85,8 +87,8 @@ jobs:
         run: source .github/install_deps.bash
       - name: Build lgi and the test suite
         run: |
-          make CC='gcc -g -fsanitize=address -fsanitize=undefined'
-          make -C tests CC='gcc -g -fsanitize=address -fsanitize=undefined' LUA_LIB='-llua -ldl -lm'
+          make CC='gcc -g -fsanitize=address -fsanitize=undefined -ftest-coverage -fprofile-arcs'
+          make -C tests CC='gcc -g -fsanitize=address -fsanitize=undefined -ftest-coverage -fprofile-arcs' LUA_LIB='-llua -ldl -lm'
       - name: Run tests
         env:
           LSAN_OPTIONS: suppressions=${{ github.workspace }}/.github/lsan.supp
@@ -102,3 +104,5 @@ jobs:
         run: |
           source .github/find_asan_ubsan.bash "lgi/corelgilua51.so"
           source .github/test_make_install.bash
+      - name: Upload coverage report to codecov.io
+        uses: codecov/codecov-action@v1
