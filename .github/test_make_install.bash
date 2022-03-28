@@ -1,6 +1,6 @@
 set -x
 sudo make install LUA_VERSION="${LUA_VERSION}"
-xvfb-run -a lua -e '
+xvfb-run -a sh -c 'LD_PRELOAD="${sanitizers}" "$@"' - lua -e '
   Gtk = require("lgi").Gtk
   c = Gtk.Grid()
   w = Gtk.Label()

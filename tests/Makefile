@@ -50,7 +50,7 @@ REGRESS_OBJS = regress.o
 
 .PHONY : all clean check
 
-all : Regress-1.0.typelib
+all : Regress-1.0.typelib test_c
 
 clean :
 	rm -f $(REGRESS) $(REGRESS_OBJS) Regress-1.0.gir Regress-1.0.typelib

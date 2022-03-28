@@ -23,7 +23,7 @@ jobs:
           wget "https://www.lua.org/ftp/lua-${LUA_VERSION}.tar.gz"
           tar xzvf "lua-${LUA_VERSION}.tar.gz"
           cd "lua-${LUA_VERSION}"
-          make linux SYSLIBS="-Wl,-E -ldl -lreadline" SYSCFLAGS="-DLUA_USE_LINUX -ULUA_COMPAT_5_2 -DLUA_USE_APICHECK"
+          make linux SYSLIBS="-Wl,-E -ldl -lreadline" SYSCFLAGS="-DLUA_USE_LINUX -ULUA_COMPAT_5_2 -DLUA_USE_APICHECK" CC='gcc -g'
       - name: Install PUC-Rio Lua ${{ matrix.version }}
         env:
           LUA_VERSION: ${{ matrix.version }}
@@ -33,16 +33,25 @@ jobs:
       - uses: actions/checkout@v2
       - name: Install build dependencies
         run: source .github/install_deps.bash
-      - name: Build lgi
+      - name: Build lgi and the test suite
         run: |
-          make
+          make CC='gcc -g -fsanitize=address -fsanitize=undefined'
+          make -C tests CC='gcc -g -fsanitize=address -fsanitize=undefined' LUA_LIB='-llua -ldl -lm'
       - name: Run tests
+        env:
+          LSAN_OPTIONS: suppressions=${{ github.workspace }}/.github/lsan.supp
+          UBSAN_OPTIONS: print_stacktrace=1:report_error_type=1:halt_on_error=1:suppressions=${{ github.workspace }}/.github/ubsan.supp
         run: |
-          xvfb-run -a make check LUA_LIB='-llua -ldl -lm'
+          source .github/find_asan_ubsan.bash "lgi/corelgilua51.so"
+          xvfb-run -a sh -c 'LD_PRELOAD="${sanitizers}" make check'
       - name: Check that make install works
         env:
           LUA_VERSION: ${{ matrix.version }}
-        run: source .github/test_make_install.bash
+          LSAN_OPTIONS: suppressions=${{ github.workspace }}/.github/lsan.supp
+          UBSAN_OPTIONS: print_stacktrace=1:report_error_type=1:halt_on_error=1:suppressions=${{ github.workspace }}/.github/ubsan.supp
+        run: |
+          source .github/find_asan_ubsan.bash "lgi/corelgilua51.so"
+          source .github/test_make_install.bash
 
   build_luajit:
     name: Test on LuaJIT
@@ -56,11 +65,12 @@ jobs:
       - name: Build LuaJIT ${{ matrix.version }}
         env:
           LUAJIT_VERSION: ${{ matrix.version }}
+          LSAN_OPTIONS: exitcode=0
         run: |
           wget "https://luajit.org/download/LuaJIT-${LUAJIT_VERSION}.tar.gz"
           tar xzvf "LuaJIT-${LUAJIT_VERSION}.tar.gz"
           cd "LuaJIT-${LUAJIT_VERSION}"
-          make
+          make CC='gcc -g'
       - name: Install LuaJIT ${{ matrix.version }}
         env:
           LUAJIT_VERSION: ${{ matrix.version }}
@@ -73,13 +83,22 @@ jobs:
       - uses: actions/checkout@v2
       - name: Install build dependencies
         run: source .github/install_deps.bash
-      - name: Build lgi
+      - name: Build lgi and the test suite
         run: |
-          make
+          make CC='gcc -g -fsanitize=address -fsanitize=undefined'
+          make -C tests CC='gcc -g -fsanitize=address -fsanitize=undefined' LUA_LIB='-llua -ldl -lm'
       - name: Run tests
+        env:
+          LSAN_OPTIONS: suppressions=${{ github.workspace }}/.github/lsan.supp
+          UBSAN_OPTIONS: print_stacktrace=1:report_error_type=1:halt_on_error=1:suppressions=${{ github.workspace }}/.github/ubsan.supp
         run: |
-          xvfb-run -a make check LUA_LIB='-llua -ldl -lm'
+          source .github/find_asan_ubsan.bash "lgi/corelgilua51.so"
+          xvfb-run -a sh -c 'LD_PRELOAD="${sanitizers}" make check'
       - name: Check that make install works
         env:
+          LSAN_OPTIONS: suppressions=${{ github.workspace }}/.github/lsan.supp
+          UBSAN_OPTIONS: print_stacktrace=1:report_error_type=1:halt_on_error=1:suppressions=${{ github.workspace }}/.github/ubsan.supp
           LUA_VERSION: ${{ matrix.version }}
-        run: source .github/test_make_install.bash
+        run: |
+          source .github/find_asan_ubsan.bash "lgi/corelgilua51.so"
+          source .github/test_make_install.bash
