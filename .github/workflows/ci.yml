@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build_puc:
+    name: Test on PUC-Rio Lua
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        version: [5.1.5, 5.2.4, 5.3.6, 5.4.3]
+
+    steps:
+      - name: Build PUC-Rio Lua ${{ matrix.version }}
+        env:
+          LUA_VERSION: ${{ matrix.version }}
+        run: |
+          wget "https://www.lua.org/ftp/lua-${LUA_VERSION}.tar.gz"
+          tar xzvf "lua-${LUA_VERSION}.tar.gz"
+          cd "lua-${LUA_VERSION}"
+          make linux SYSLIBS="-Wl,-E -ldl -lreadline" SYSCFLAGS="-DLUA_USE_LINUX -ULUA_COMPAT_5_2 -DLUA_USE_APICHECK" CC='gcc -g'
+      - name: Install PUC-Rio Lua ${{ matrix.version }}
+        env:
+          LUA_VERSION: ${{ matrix.version }}
+        run: |
+          cd "lua-${LUA_VERSION}"
+          sudo make install
+      - uses: actions/checkout@v2
+      - name: Install build dependencies
+        run: source .github/install_deps.bash
+      - name: Build lgi and the test suite
+        run: |
+          make CC='gcc -g -fsanitize=address -fsanitize=undefined -ftest-coverage -fprofile-arcs'
+          make -C tests CC='gcc -g -fsanitize=address -fsanitize=undefined -ftest-coverage -fprofile-arcs' LUA_LIB='-llua -ldl -lm'
+      - name: Run tests
+        env:
+          LSAN_OPTIONS: suppressions=${{ github.workspace }}/.github/lsan.supp
+          UBSAN_OPTIONS: print_stacktrace=1:report_error_type=1:halt_on_error=1:suppressions=${{ github.workspace }}/.github/ubsan.supp
+        run: |
+          source .github/find_asan_ubsan.bash "lgi/corelgilua51.so"
+          xvfb-run -a sh -c 'LD_PRELOAD="${sanitizers}" make check'
+      - name: Check that make install works
+        env:
+          LUA_VERSION: ${{ matrix.version }}
+          LSAN_OPTIONS: suppressions=${{ github.workspace }}/.github/lsan.supp
+          UBSAN_OPTIONS: print_stacktrace=1:report_error_type=1:halt_on_error=1:suppressions=${{ github.workspace }}/.github/ubsan.supp
+        run: |
+          source .github/find_asan_ubsan.bash "lgi/corelgilua51.so"
+          source .github/test_make_install.bash
+      - name: Upload coverage report to codecov.io
+        uses: codecov/codecov-action@v1
+
+  build_luajit:
+    name: Test on LuaJIT
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        version: [2.0.5]
+
+    steps:
+      - name: Build LuaJIT ${{ matrix.version }}
+        env:
+          LUAJIT_VERSION: ${{ matrix.version }}
+          LSAN_OPTIONS: exitcode=0
+        run: |
+          wget "https://luajit.org/download/LuaJIT-${LUAJIT_VERSION}.tar.gz"
+          tar xzvf "LuaJIT-${LUAJIT_VERSION}.tar.gz"
+          cd "LuaJIT-${LUAJIT_VERSION}"
+          make CC='gcc -g'
+      - name: Install LuaJIT ${{ matrix.version }}
+        env:
+          LUAJIT_VERSION: ${{ matrix.version }}
+        run: |
+          cd "LuaJIT-${LUAJIT_VERSION}"
+          sudo make install
+          sudo ln -frs /usr/local/bin/luajit-* /usr/local/bin/lua
+          sudo ln -frs /usr/local/lib/libluajit-*.a /usr/local/lib/liblua.a
+          sudo ln -frs /usr/local/include/luajit-*/* /usr/local/include/
+      - uses: actions/checkout@v2
+      - name: Install build dependencies
+        run: source .github/install_deps.bash
+      - name: Build lgi and the test suite
+        run: |
+          make CC='gcc -g -fsanitize=address -fsanitize=undefined -ftest-coverage -fprofile-arcs'
+          make -C tests CC='gcc -g -fsanitize=address -fsanitize=undefined -ftest-coverage -fprofile-arcs' LUA_LIB='-llua -ldl -lm'
+      - name: Run tests
+        env:
+          LSAN_OPTIONS: suppressions=${{ github.workspace }}/.github/lsan.supp
+          UBSAN_OPTIONS: print_stacktrace=1:report_error_type=1:halt_on_error=1:suppressions=${{ github.workspace }}/.github/ubsan.supp
+        run: |
+          source .github/find_asan_ubsan.bash "lgi/corelgilua51.so"
+          xvfb-run -a sh -c 'LD_PRELOAD="${sanitizers}" make check'
+      - name: Check that make install works
+        env:
+          LSAN_OPTIONS: suppressions=${{ github.workspace }}/.github/lsan.supp
+          UBSAN_OPTIONS: print_stacktrace=1:report_error_type=1:halt_on_error=1:suppressions=${{ github.workspace }}/.github/ubsan.supp
+          LUA_VERSION: ${{ matrix.version }}
+        run: |
+          source .github/find_asan_ubsan.bash "lgi/corelgilua51.so"
+          source .github/test_make_install.bash
+      - name: Upload coverage report to codecov.io
+        uses: codecov/codecov-action@v1
