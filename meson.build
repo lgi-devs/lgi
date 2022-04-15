@@ -7,6 +7,15 @@ project('lgi', 'c',
   ],
 )
 
+cc = meson.get_compiler('c')
+test_c_args = []
+
+if cc.get_id() == 'msvc'
+  test_c_args += '-FImsvc_recommended_pragmas.h'
+endif
+
+add_project_arguments(cc.get_supported_arguments(test_c_args), language: 'c')
+
 lua_possible_names = [
   'lua',
   'lua5.3', 'lua53',
@@ -51,14 +60,19 @@ lua_version_split = lua_dep.version().split('.')
 lua_abi_version = '@0@.@1@'.format(lua_version_split[0], lua_version_split[1])
 
 # These are defined by the luajit.pc and some distros lua.pc
-lua_cpath = lua_dep.get_pkgconfig_variable('INSTALL_CMOD',
-  define_variable: ['prefix', get_option('prefix')],
-  default: join_paths(get_option('libdir'), 'lua', lua_abi_version),
-)
-lua_path = lua_dep.get_pkgconfig_variable('INSTALL_LMOD',
-  define_variable: ['prefix', get_option('prefix')],
-  default: join_paths(get_option('datadir'), 'lua', lua_abi_version)
-)
+if lua_dep.type_name() == 'pkgconfig'
+  lua_cpath = lua_dep.get_pkgconfig_variable('INSTALL_CMOD',
+    define_variable: ['prefix', get_option('prefix')],
+    default: join_paths(get_option('libdir'), 'lua', lua_abi_version),
+  )
+  lua_path = lua_dep.get_pkgconfig_variable('INSTALL_LMOD',
+    define_variable: ['prefix', get_option('prefix')],
+    default: join_paths(get_option('datadir'), 'lua', lua_abi_version)
+  )
+else
+  lua_cpath = join_paths(get_option('libdir'), 'lua', lua_abi_version)
+  lua_path = join_paths(get_option('datadir'), 'lua', lua_abi_version)
+endif
 
 gi_dep = dependency('gobject-introspection-1.0')
 gi_datadir = gi_dep.get_pkgconfig_variable('gidatadir')
