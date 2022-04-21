@@ -36,6 +36,27 @@ Alternatively, use make-based installation:
 
 Please note that on BSD-systems you may need to use 'gmake'.
 
+Building via Meson is also supported, with the same requirements, plus
+a Meson installation along with the Ninja build tool, in an empty build
+directory:
+
+    cd $(builddir)
+    meson $(lgi_srcroot) [--prefix=<prefix>] [--buildtype=<buildtype>] [--pkg-config-path=<pkgconfigpath>] [-Dlua-pc=...] [-Dlua-bin=...]
+    ninja
+	ninja test
+    [sudo] ninja install
+
+Building lgi with Visual Studio 2013 and later is also supported via
+Meson. It is recommended in this case that CMake is also installed to
+make finding Lua or LuaJIT easier, since Lua and LuaJIT support Visual
+Studio builds via batch files or manual compilation of sources. Ensure
+that `%INCLUDE%` includes the path to the Lua or LuaJIT headers, and
+`%LIB%` includes the path where the `lua5x.lib` from Lua or LuaJIT can be
+found, and ensure that `lua5x.dll` and `lua.exe` or `luajit.exe` can be
+found in `%PATH%` and run correctly. For building with LuaJIT, please do
+not pass in `-Dlua-pc=luajit`, but do pass in `-Dlua-bin=luajit` in the
+Meson command line so that the LuaJIT interpreter can be found correctly.
+
 ## Usage
 
 See examples in `samples/` directory.  Documentation is available in
