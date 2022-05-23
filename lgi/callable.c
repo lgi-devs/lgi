@@ -393,12 +393,13 @@ lgi_callable_create (lua_State *L, GICallableInfo *info, gpointer addr)
       arg = g_arg_info_get_closure (&param->ai);
       if (arg >= 0 && arg < nargs)
 	{
-	  callable->params[arg].internal = TRUE;
+	  Param *data_param = &callable->params[arg];
+	  data_param->internal = TRUE;
 	  if (arg == argi)
-	    callable->params[arg].internal_user_data = TRUE;
-	  callable->params[arg].n_closures++;
+	    data_param->internal_user_data = TRUE;
+	  data_param->n_closures++;
 	  if (g_arg_info_get_scope (&param->ai) == GI_SCOPE_TYPE_CALL)
-	    callable->params[arg].call_scoped_user_data = TRUE;
+	    data_param->call_scoped_user_data = TRUE;
 	}
       arg = g_arg_info_get_destroy (&param->ai);
       if (arg > 0 && arg < nargs)
