@@ -12,6 +12,13 @@
 #include <ffi.h>
 #include "lgi.h"
 
+/* Use g_memdup2 when available */
+#if GLIB_CHECK_VERSION(2, 68, 0)
+#define lgi_memdup  g_memdup2
+#else
+#define lgi_memdup  g_memdup
+#endif
+
 /* Checks whether given argument contains number which fits given
    constraints. If yes, returns it, otherwise throws Lua error. */
 
@@ -345,7 +352,7 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 	    *out_array = (gpointer *) lua_tolstring (L, narg, &size);
 
 	  if (transfer != GI_TRANSFER_NOTHING)
-	    *out_array = g_memdup (*out_array, size);
+	    *out_array = lgi_memdup (*out_array, size);
 
 	  *out_size = size;
 	}
