@@ -324,11 +324,32 @@ callable_allocate (lua_State *L, int nargs, ffi_type ***ffi_args)
   return callable;
 }
 
+static Param *
+callable_get_param (Callable *callable, gint n)
+{
+  Param *param;
+
+  if (n < 0 || n >= callable->nargs)
+    return NULL;
+
+  param = &callable->params[n];
+  if (!param->has_arg_info)
+    {
+      /* Ensure basic fields are initialized. */
+      g_callable_info_load_arg (callable->info, n, &param->ai);
+      param->has_arg_info = TRUE;
+      param->ti = g_arg_info_get_type (&param->ai);
+      param->dir = g_arg_info_get_direction (&param->ai);
+      param->transfer = g_arg_info_get_ownership_transfer (&param->ai);
+    }
+  return param;
+}
+
 int
 lgi_callable_create (lua_State *L, GICallableInfo *info, gpointer addr)
 {
   Callable *callable;
-  Param *param;
+  Param *param, *data_param;
   ffi_type **ffi_arg, **ffi_args;
   ffi_type *ffi_retval;
   gint nargs, argi, arg;
@@ -377,32 +398,32 @@ lgi_callable_create (lua_State *L, GICallableInfo *info, gpointer addr)
     *ffi_arg++ = &ffi_type_pointer;
 
   /* Process the rest of the arguments. */
-  param = &callable->params[0];
-  for (argi = 0; argi < nargs; argi++, param++, ffi_arg++)
+  for (argi = 0; argi < nargs; argi++, ffi_arg++)
     {
-      g_callable_info_load_arg (callable->info, argi, &param->ai);
-      param->has_arg_info = TRUE;
-      param->ti = g_arg_info_get_type (&param->ai);
-      param->dir = g_arg_info_get_direction (&param->ai);
-      param->transfer = g_arg_info_get_ownership_transfer (&param->ai);
+      param = callable_get_param (callable, argi);
       *ffi_arg = (param->dir == GI_DIRECTION_IN)
 	? get_ffi_type (param) : &ffi_type_pointer;
 
-      /* Mark closure-related user_data fields and possibly destroy_notify
-	 fields as internal. */
+      /* Mark closure-related user_data fields as internal. */
       arg = g_arg_info_get_closure (&param->ai);
-      if (arg >= 0 && arg < nargs)
+      data_param = callable_get_param (callable, arg);
+      /* `arg` is defined also on callbacks, so check for invalid scope
+	 to avoid setting the internal flag on them. */
+      if (data_param != NULL && g_arg_info_get_scope (&data_param->ai) == GI_SCOPE_TYPE_INVALID)
 	{
-	  callable->params[arg].internal = TRUE;
+	  data_param->internal = TRUE;
 	  if (arg == argi)
-	    callable->params[arg].internal_user_data = TRUE;
-	  callable->params[arg].n_closures++;
+	    data_param->internal_user_data = TRUE;
+	  data_param->n_closures++;
 	  if (g_arg_info_get_scope (&param->ai) == GI_SCOPE_TYPE_CALL)
-	    callable->params[arg].call_scoped_user_data = TRUE;
+	    data_param->call_scoped_user_data = TRUE;
 	}
+
+      /* Mark destroy_notify fields as internal. */
       arg = g_arg_info_get_destroy (&param->ai);
-      if (arg > 0 && arg < nargs)
-	callable->params[arg].internal = TRUE;
+      data_param = callable_get_param (callable, arg);
+      if (data_param != NULL)
+	data_param->internal = TRUE;
 
       /* Similarly for array length field. */
       callable_mark_array_length (callable, param->ti);
