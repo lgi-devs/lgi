@@ -1,5 +1,5 @@
 local lgi = require 'lgi'
-local Gtk = lgi.Gtk
+local Gtk = lgi.require('Gtk', '3.0')
 local Goo = lgi.GooCanvas
 
 local window = Gtk.Window {

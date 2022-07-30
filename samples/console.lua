@@ -7,7 +7,7 @@ local Gio = lgi.Gio
 local Gtk = lgi.require('Gtk', '3.0')
 local Gdk = lgi.require('Gdk', '3.0')
 local Pango = lgi.Pango
-local GtkSource = lgi.GtkSource
+local GtkSource = lgi.require('GtkSource', '3.0')
 
 -- Creates new console instance.
 local function Console()

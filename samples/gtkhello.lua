@@ -7,7 +7,7 @@
 --
 
 local lgi = require 'lgi'
-local Gtk = lgi.require('Gtk')
+local Gtk = lgi.require('Gtk', '3.0')
 
 -- Create top level window with some properties and connect its 'destroy'
 -- signal to the event loop termination.
