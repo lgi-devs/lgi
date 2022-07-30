@@ -33,7 +33,7 @@ local Gio = lgi.Gio
 local Gtk = lgi.require('Gtk', '3.0')
 local Pango = lgi.Pango
 local GdkPixbuf = lgi.GdkPixbuf
-local GtkSource = lgi.GtkSource
+local GtkSource = lgi.require('GtkSource', '3.0')
 
 -- Create package for the whole demo.
 local GtkDemo = lgi.package 'GtkDemo'

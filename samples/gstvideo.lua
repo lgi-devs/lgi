@@ -7,8 +7,8 @@
 
 local lgi  = require 'lgi'
 local GLib = lgi.GLib
-local Gtk  = lgi.Gtk
-local GdkX11 = lgi.GdkX11
+local Gtk  = lgi.require('Gtk', '3.0')
+local GdkX11 = lgi.require('GdkX11', '3.0')
 local Gst  = lgi.Gst
 if tonumber(Gst._version) >= 1.0 then
    local GstVideo = lgi.GstVideo
