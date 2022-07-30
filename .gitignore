@@ -5,3 +5,6 @@
 .depcheck
 *.rockspec
 cairodemo-*.png
+*~
+*.swo
+*.swp
