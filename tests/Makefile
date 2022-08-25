@@ -28,7 +28,7 @@ endif
 PKGS = gio-2.0 cairo cairo-gobject gobject-introspection-1.0 gmodule-2.0 libffi
 LUA = lua
 LUA_LIB = -llua
-PKG_CONFIG = pkg-config
+PKG_CONFIG ?= pkg-config
 
 ifndef CFLAGS
 ifndef COPTFLAGS
