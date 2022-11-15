@@ -53,6 +53,7 @@ function corocbk.rethrow()
       end)
    GLib.idle_add(GLib.PRIORITY_DEFAULT, coro)
    local ok, err = pcall(main_loop.run, main_loop)
+   main_loop:quit()
    checkv(ok, false, 'boolean')
    checkv(err, 'err', 'string')
 end
