@@ -1,12 +1,12 @@
 package = 'lgi'
-version = '%VERSION%-1'
+version = 'scm-1'
 
 description = {
    summary = "Lua bindings to GObject libraries",
    detailed = [[
-	 Dynamic Lua binding to any library which is introspectable
-	 using gobject-introspection.  Allows using GObject-based libraries
-	 directly from Lua.
+    Dynamic Lua binding to any library which is introspectable
+    using gobject-introspection.  Allows using GObject-based libraries
+    directly from Lua.
    ]],
    license = 'MIT/X11',
    homepage = 'https://github.com/lgi-devs/lgi'
@@ -16,7 +16,6 @@ supported_platforms = { 'unix' }
 
 source = {
    url = 'git://github.com/lgi-devs/lgi.git',
-   tag = '%VERSION%'
 }
 
 dependencies = { 'lua >= 5.1' }
