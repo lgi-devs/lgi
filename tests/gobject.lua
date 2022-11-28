@@ -181,6 +181,30 @@ function gobject.subclass_derive3()
 --   check(history[4] == 'dispose')
 end
 
+function gobject.subclass_derived4()
+   local GObject = lgi.GObject
+   local history = {}
+   local Derived = GObject.InitiallyUnowned:derive('LgiTestDerived4', nil,
+      { GObject.ParamSpecBoolean('custom-property',
+                                 'LgiTestDerived4CustomProperty',
+                                 'A custom property.',
+                                 false,
+                                 { GObject.ParamFlags.READABLE,
+                                   GObject.ParamFlags.WRITABLE }) })
+   local obj = Derived()
+   local v = GObject.Value(GObject.Type.BOOLEAN)
+   obj:get_property('custom-property', v)
+   checkv(obj.custom_property, v.value, 'boolean')
+   checkv(obj.custom_property, false, 'boolean')
+   v.value = true
+   obj:set_property('custom-property', v)
+   checkv(obj.custom_property, v.value, 'boolean')
+   checkv(obj.custom_property, true, 'boolean')
+   obj:get_property('custom-property', v)
+   checkv(obj.custom_property, v.value, 'boolean')
+   checkv(obj.custom_property, true, 'boolean')
+end
+
 function gobject.iface_virtual()
    local Gio = lgi.Gio
    local file = Gio.File.new_for_path('hey')
@@ -191,16 +215,31 @@ end
 function gobject.iface_impl()
    local GObject = lgi.GObject
    local Gio = lgi.Gio
-   local FakeFile = GObject.Object:derive('LgiTestFakeFile1', { Gio.File })
-   function FakeFile:do_get_basename()
-      return self.priv.basename
+   local FakeMonitor = GObject.Object:derive('LgiTestFakeMonitor1',
+      { Gio.Initable, Gio.NetworkMonitor },
+      { GObject.ParamSpecBoolean('network-available',
+                                 'LgiTestFakeMonitor1NetworkAvailable',
+                                 'Whether the network is available.',
+                                 false, { GObject.ParamFlags.READABLE }) })
+
+   function FakeMonitor:do_get_property(pspec)
+      if pspec.name == 'network-available' then
+         return self.priv.network_available
+      else
+         error(("unknown property `%s"):format(pspec.name))
+      end
    end
-   function FakeFile:set_basename(basename)
-      self.priv.basename = basename
+   function FakeMonitor:do_init(cancellable)
+      return true
    end
-   local fakefile = FakeFile()
-   fakefile:set_basename('fakename')
-   check(fakefile:get_basename() == 'fakename')
+   function FakeMonitor:set_network_available(network_available)
+      self.priv.network_available = network_available
+   end
+   local fakemonitor = FakeMonitor()
+   check(fakemonitor:init(nil) == true)
+   check(fakemonitor:get_network_available() == false)
+   fakemonitor:set_network_available(true)
+   check(fakemonitor:get_network_available() == true)
 end
 
 function gobject.treemodel_impl()
