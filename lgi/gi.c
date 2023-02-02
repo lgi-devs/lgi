@@ -758,6 +758,22 @@ gi_isinfo (lua_State *L)
 }
 
 static int
+gi_add_ldpath (lua_State *L)
+{
+  const gchar *path = luaL_checkstring (L, 1);
+  g_irepository_prepend_library_path(path);
+  return 0;
+}
+
+static int
+gi_add_searchpath (lua_State *L)
+{
+  const gchar *path = luaL_checkstring (L, 1);
+  g_irepository_prepend_search_path(path);
+  return 0;
+}
+
+static int
 gi_index (lua_State *L)
 {
   if (lua_type (L, 2) == LUA_TLIGHTUSERDATA)
@@ -800,6 +816,8 @@ static const Reg gi_reg[] = {
 static const luaL_Reg gi_api_reg[] = {
   { "require", gi_require },
   { "isinfo", gi_isinfo },
+  { "add_ldpath", gi_add_ldpath },
+  { "add_searchpath", gi_add_searchpath },
   { NULL, NULL }
 };
 

@@ -50,6 +50,9 @@ lgi.require = namespace.require
 -- Install 'lgi.package' method.
 lgi.package = require('lgi.package').ensure
 
+lgi.add_ldpath = core.gi.add_ldpath
+lgi.add_searchpath = core.gi.add_searchpath
+
 -- Add assert override, which accepts not only text message but any
 -- kind of error object.
 function lgi.assert(cond, ...)
