@@ -32,6 +32,7 @@ else
 CORE = corelgilua51.so
 LIBFLAG = -shared
 CCSHARED = -fPIC
+LIBS += $(LUA_LIB)
 endif
 endif
 
