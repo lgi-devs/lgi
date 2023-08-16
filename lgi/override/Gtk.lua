@@ -219,6 +219,9 @@ if Gtk.Container then
    end
 end
 
+-------------------------------- Gtk.Box overrides.
+Gtk.Box._container_add = Gtk.Box.append
+
 -------------------------------- Gtk.Builder overrides.
 Gtk.Builder._attribute = {}
 
