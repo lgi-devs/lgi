@@ -219,8 +219,6 @@ if Gtk.Container then
    end
 end
 
--------------------------------- Gtk.Box overrides.
-Gtk.Box._container_add = Gtk.Box.append
 
 -------------------------------- Gtk.Builder overrides.
 Gtk.Builder._attribute = {}
@@ -633,6 +631,25 @@ Gtk._constant.PRINT_OUTPUT_URI = 'output-uri'
 
 -- Gtk-cairo integration helpers.
 cairo.Context._method.should_draw_window = Gtk.cairo_should_draw_window
+
+-------------------------------- Gtk-4 overrides
+
+
+if Gtk._version == '4.0' then
+
+   --- CONTAINER CLASSES
+   --- GTK4 Has removed the Container abstract class.
+   --- This means Boxes, Grids and other layout widgets 
+   --- Must now add children using their own specific methods.
+
+   --- Gtk.Box overrides
+
+   --- widgets on a the array part of the constructor of a Box
+   --- will be `append()`-ed
+   --- in order of appearance.
+   Gtk.Box._container_add = Gtk.Box.append
+
+end
 
 --------------------------------- Gtk-2 workarounds
 if Gtk._version == '2.0' then
