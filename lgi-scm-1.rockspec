@@ -12,7 +12,7 @@ description = {
    homepage = 'https://github.com/lgi-devs/lgi'
 }
 
-supported_platforms = { 'unix' }
+supported_platforms = { 'unix', 'mingw' }
 
 source = {
    url = 'git://github.com/lgi-devs/lgi.git',
