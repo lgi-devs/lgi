@@ -1,12 +1,20 @@
 sudo: required
 dist: trusty
 language: c
+arch:
+ - amd64
+ - ppc64le
+
 env:
   matrix:
     - LUA=5.1 LUANAME=luajit-2.0 LUA_LIB=-lluajit-5.1
     - LUA=5.1 LUANAME=lua5.1
     - LUA=5.2 LUANAME=lua5.2
     - LUA=5.3 LUANAME=lua5.3 LUA_LIB=-llua
+jobs:
+  exclude:
+    - arch: ppc64le
+      env: LUA=5.1 LUANAME=luajit-2.0 LUA_LIB=-lluajit-5.1
 
 before_install:
   - if [ -z $LUAINCLUDE ]; then LUAINCLUDE=/usr/include/${LUANAME}; fi
