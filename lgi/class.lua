@@ -20,7 +20,7 @@ local component = require 'lgi.component'
 local record = require 'lgi.record'
 local ffi = require 'lgi.ffi'
 local ti = ffi.types
-local GObject = gi.require 'GObject'
+local GObject = assert(gi.require('GObject'))
 
 -- Implementation of class and interface component loading.
 local class = {
