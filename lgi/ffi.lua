@@ -21,8 +21,8 @@ local record = require 'lgi.record'
 
 local ffi = {}
 
-local gobject = gi.require('GObject')
-local glib = gi.require('GLib')
+local gobject = assert(gi.require('GObject'))
+local glib = assert(gi.require('GLib'))
 
 -- Gather all basic types.  We have to 'steal' them from well-known
 -- declarations, because girepository API does not allow synthesizing
