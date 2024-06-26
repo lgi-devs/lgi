@@ -60,8 +60,9 @@ jobs:
     runs-on: ubuntu-latest
 
     strategy:
+      fail-fast: false
       matrix:
-        version: [2.0.5]
+        version: [tags/v2.0.5, tags/v2.1.0-beta3, heads/v2.1]
 
     steps:
       - name: Build LuaJIT ${{ matrix.version }}
@@ -69,15 +70,16 @@ jobs:
           LUAJIT_VERSION: ${{ matrix.version }}
           LSAN_OPTIONS: exitcode=0
         run: |
-          wget "https://luajit.org/download/LuaJIT-${LUAJIT_VERSION}.tar.gz"
-          tar xzvf "LuaJIT-${LUAJIT_VERSION}.tar.gz"
-          cd "LuaJIT-${LUAJIT_VERSION}"
+          wget "https://github.com/LuaJIT/LuaJIT/archive/refs/${LUAJIT_VERSION}.tar.gz" -O luajit.tar.gz
+          mkdir -p LuaJIT
+          tar xzvf luajit.tar.gz -C ./LuaJIT --strip-components=1
+          cd LuaJIT
           make CC='gcc -g'
       - name: Install LuaJIT ${{ matrix.version }}
         env:
           LUAJIT_VERSION: ${{ matrix.version }}
         run: |
-          cd "LuaJIT-${LUAJIT_VERSION}"
+          cd LuaJIT
           sudo make install
           sudo ln -frs /usr/local/bin/luajit-* /usr/local/bin/lua
           sudo ln -frs /usr/local/lib/libluajit-*.a /usr/local/lib/liblua.a
