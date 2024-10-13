@@ -1,0 +1,153 @@
+name: MSVC CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build-msvc-puc:
+    name: Test on PUC-Rio Lua (MSVC)
+    runs-on: windows-latest
+
+    strategy:
+      matrix:
+
+        version:
+          - 5.1.5
+          - 5.2.4
+          - 5.3.6
+          - 5.4.7
+
+        gtk-major-version:
+          - 3
+          - 4
+    
+    env:
+      WINGTK_URL: https://github.com/wingtk/gvsbuild/releases/download/2024.10.0/GTK${{ matrix.gtk-major-version }}_Gvsbuild_2024.10.0_x64.zip
+      LUAINSTALLER_URL: https://github.com/luau-project/LuaInstaller/releases/download/v0.2.0.0/LuaInstaller.Console-v0.2.0.0-x64.zip
+
+    steps:
+
+      - name: Download and extract GTK ${{ matrix.gtk-major-version }} prebuilt binaries (MSVC toolset) provided by wingtk
+        run: |
+          $gtk_zip_file = Join-Path -Path "${{ runner.temp }}" -ChildPath "gtk.zip";
+          
+          # Download
+          Invoke-WebRequest -Uri "${{ env.WINGTK_URL }}" -OutFile $gtk_zip_file;
+          
+          # Unzip
+          $gtk_dir = Join-Path -Path "${{ runner.temp }}" -ChildPath "gtk";
+          Expand-Archive -Path $gtk_zip_file -DestinationPath "${gtk_dir}";
+
+          # Some helper variables
+          $gtk_bin_dir = Join-Path -Path $gtk_dir -ChildPath "bin";
+          $gtk_pkg_config_dir = Join-Path -Path $gtk_dir -ChildPath "lib" |
+            Join-Path -ChildPath "pkgconfig";
+
+          # Set environment variable GTK_DIR pointing to GTK's directory
+          Add-Content "${{ github.env }}" "GTK_DIR=${gtk_dir}";
+                    
+          # Set environment variable GTK_BIN_DIR pointing to GTK's bin directory
+          Add-Content "${{ github.env }}" "GTK_BIN_DIR=${gtk_bin_dir}";
+
+          # Set environment variable GTK_PKG_CONFIG_PATH pointing to GTK's pkg-config directory
+          Add-Content "${{ github.env }}" "GTK_PKG_CONFIG_PATH=${gtk_pkg_config_dir}";
+          
+          # Place GTK bin directory on system PATH environment variable
+          Add-Content "${{ github.path }}" "${gtk_bin_dir}";
+      
+      - name: Download and extract LuaInstaller, and set an environment variable for it
+        run: |
+          $luainstaller_zip_file = Join-Path -Path "${{ runner.temp }}" -ChildPath "luainstaller.zip";
+
+          # Download
+          Invoke-WebRequest -Uri "${{ env.LUAINSTALLER_URL }}" -OutFile $luainstaller_zip_file;
+
+          # Unzip
+          Expand-Archive -Path $luainstaller_zip_file -DestinationPath "${{ runner.temp }}";
+
+          $luainstaller = Join-Path -Path "${{ runner.temp }}" -ChildPath "LuaInstaller.Console" |
+            Join-Path -ChildPath "LuaInstaller.Console.exe";
+
+          # Set LUA_INSTALLER environment variable pointing to the app
+          Add-Content "${{ github.env }}" "LUA_INSTALLER=${luainstaller}";
+      
+      - name: Install Lua ${{ matrix.version }} on GTK's directory and set environment variables for it
+        run: |
+          & "${{ env.LUA_INSTALLER }}" install "dest-dir=${{ env.GTK_DIR }}" "version=${{ matrix.version }}";
+
+          # Test Lua
+          & lua -v;
+
+          # Find Lua's pkgconfig (.pc) file
+          $lua_pc = Get-ChildItem "${{ env.GTK_PKG_CONFIG_PATH }}" -File |
+            Where-Object Name -Like "lua*.pc" |
+            Select-Object -ExpandProperty BaseName -First 1;
+
+          # Set LUA_PC environment variable pointing to Lua's (.pc) file
+          Add-Content "${{ github.env }}" "LUA_PC=${lua_pc}";
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install meson
+        run: pip install meson
+
+      - name: Setup MSVC dev-prompt
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure lgi through meson
+        run: meson setup lgi-build . --prefix "${{ env.GTK_DIR }}" "-Dlua-pc=${{ env.LUA_PC }}" -Dtests=false
+      
+      - name: Build lgi
+        run: meson compile -C lgi-build
+      
+      - name: Install lgi
+        run: meson install -C lgi-build
+
+      - name: Create a simple test script using lgi
+        run: |
+          $test_script = @'
+          local lgi = assert(require("lgi"))
+          local Gtk = assert(lgi.require("Gtk", "${{ matrix.gtk-major-version }}.0"))
+
+          local app = Gtk.Application({ application_id = "org.lgi-devs.lgi" })
+
+          function app:on_activate()
+              local w = Gtk.ApplicationWindow()
+              w:set_default_size(900, 600)
+              w:set_title("My great title")
+
+              w.application = self
+
+              if ("${{ matrix.gtk-major-version }}" == "3") then
+                  w:show_all()
+              elseif ("${{ matrix.gtk-major-version }}" == "4") then
+                  w:present()
+              else
+                  error("Unknown GTK version")
+              end
+
+              w:close()
+          end
+
+          app:run()
+          '@;
+          
+          $test_file = Join-Path -Path "${{ runner.temp }}" -ChildPath "small-lgi-test.lua";
+
+          # Write the script above to file
+          Set-Content $test_file $test_script -NoNewLine;
+
+          # Set the test file name on LGI_TEST_FILE environment variable
+          Add-Content "${{ github.env }}" "LGI_TEST_FILE=${test_file}";
+
+      - name: Test lgi
+        run: lua "${{ env.LGI_TEST_FILE }}"
