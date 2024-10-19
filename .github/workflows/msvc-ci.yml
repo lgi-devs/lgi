@@ -112,45 +112,8 @@ jobs:
       - name: Install lgi
         run: meson install -C lgi-build
 
-      - name: Create a simple test script using lgi
-        run: |
-          $test_script = @'
-          local lgi = assert(require("lgi"))
-          local Gtk = assert(lgi.require("Gtk", "${{ matrix.gtk-major-version }}.0"))
-
-          local app = Gtk.Application({ application_id = "org.lgi-devs.lgi" })
-
-          function app:on_activate()
-              local w = Gtk.ApplicationWindow()
-              w:set_default_size(900, 600)
-              w:set_title("My great title")
-
-              w.application = self
-
-              if ("${{ matrix.gtk-major-version }}" == "3") then
-                  w:show_all()
-              elseif ("${{ matrix.gtk-major-version }}" == "4") then
-                  w:present()
-              else
-                  error("Unknown GTK version")
-              end
-
-              w:close()
-          end
-
-          app:run()
-          '@;
-          
-          $test_file = Join-Path -Path "${{ runner.temp }}" -ChildPath "small-lgi-test.lua";
-
-          # Write the script above to file
-          Set-Content $test_file $test_script -NoNewLine;
-
-          # Set the test file name on LGI_TEST_FILE environment variable
-          Add-Content "${{ github.env }}" "LGI_TEST_FILE=${test_file}";
-
       - name: Test lgi
-        run: lua "${{ env.LGI_TEST_FILE }}"
+        run: lua ".github\\test-for-msvc-ci.lua" ${{ matrix.gtk-major-version }};
   
   build-msvc-luajit:
     name: Test on LuaJIT (MSVC)
@@ -379,42 +342,5 @@ jobs:
       - name: Install lgi
         run: meson install -C lgi-build
 
-      - name: Create a simple test script using lgi
-        run: |
-          $test_script = @'
-          local lgi = assert(require("lgi"))
-          local Gtk = assert(lgi.require("Gtk", "${{ matrix.gtk-major-version }}.0"))
-
-          local app = Gtk.Application({ application_id = "org.lgi-devs.lgi" })
-
-          function app:on_activate()
-              local w = Gtk.ApplicationWindow()
-              w:set_default_size(900, 600)
-              w:set_title("My great title")
-
-              w.application = self
-
-              if ("${{ matrix.gtk-major-version }}" == "3") then
-                  w:show_all()
-              elseif ("${{ matrix.gtk-major-version }}" == "4") then
-                  w:present()
-              else
-                  error("Unknown GTK version")
-              end
-
-              w:close()
-          end
-
-          app:run()
-          '@;
-          
-          $test_file = Join-Path -Path "${{ runner.temp }}" -ChildPath "small-lgi-test.lua";
-
-          # Write the script above to file
-          Set-Content $test_file $test_script -NoNewLine;
-
-          # Set the test file name on LGI_TEST_FILE environment variable
-          Add-Content "${{ github.env }}" "LGI_TEST_FILE=${test_file}";
-
       - name: Test lgi
-        run: luajit "${{ env.LGI_TEST_FILE }}"
+        run: luajit ".github\\test-for-msvc-ci.lua" ${{ matrix.gtk-major-version }};
