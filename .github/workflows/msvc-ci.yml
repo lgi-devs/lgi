@@ -1,0 +1,346 @@
+name: MSVC CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build-msvc-puc:
+    name: Test on PUC-Rio Lua (MSVC)
+    runs-on: windows-latest
+
+    strategy:
+      matrix:
+
+        version:
+          - 5.1.5
+          - 5.2.4
+          - 5.3.6
+          - 5.4.7
+
+        gtk-major-version:
+          - 3
+          - 4
+    
+    env:
+      WINGTK_URL: https://github.com/wingtk/gvsbuild/releases/download/2024.10.0/GTK${{ matrix.gtk-major-version }}_Gvsbuild_2024.10.0_x64.zip
+      LUAINSTALLER_URL: https://github.com/luau-project/LuaInstaller/releases/download/v0.2.0.0/LuaInstaller.Console-v0.2.0.0-x64.zip
+
+    steps:
+
+      - name: Download and extract GTK ${{ matrix.gtk-major-version }} prebuilt binaries (MSVC toolset) provided by wingtk
+        run: |
+          $gtk_zip_file = Join-Path -Path "${{ runner.temp }}" -ChildPath "gtk.zip";
+          
+          # Download
+          Invoke-WebRequest -Uri "${{ env.WINGTK_URL }}" -OutFile $gtk_zip_file;
+          
+          # Unzip
+          $gtk_dir = Join-Path -Path "${{ runner.temp }}" -ChildPath "gtk";
+          Expand-Archive -Path $gtk_zip_file -DestinationPath "${gtk_dir}";
+
+          # Some helper variables
+          $gtk_bin_dir = Join-Path -Path $gtk_dir -ChildPath "bin";
+          $gtk_pkg_config_dir = Join-Path -Path $gtk_dir -ChildPath "lib" |
+            Join-Path -ChildPath "pkgconfig";
+
+          # Set environment variable GTK_DIR pointing to GTK's directory
+          Add-Content "${{ github.env }}" "GTK_DIR=${gtk_dir}";
+                    
+          # Set environment variable GTK_BIN_DIR pointing to GTK's bin directory
+          Add-Content "${{ github.env }}" "GTK_BIN_DIR=${gtk_bin_dir}";
+
+          # Set environment variable GTK_PKG_CONFIG_PATH pointing to GTK's pkg-config directory
+          Add-Content "${{ github.env }}" "GTK_PKG_CONFIG_PATH=${gtk_pkg_config_dir}";
+          
+          # Place GTK bin directory on system PATH environment variable
+          Add-Content "${{ github.path }}" "${gtk_bin_dir}";
+      
+      - name: Download and extract LuaInstaller, and set an environment variable for it
+        run: |
+          $luainstaller_zip_file = Join-Path -Path "${{ runner.temp }}" -ChildPath "luainstaller.zip";
+
+          # Download
+          Invoke-WebRequest -Uri "${{ env.LUAINSTALLER_URL }}" -OutFile $luainstaller_zip_file;
+
+          # Unzip
+          Expand-Archive -Path $luainstaller_zip_file -DestinationPath "${{ runner.temp }}";
+
+          $luainstaller = Join-Path -Path "${{ runner.temp }}" -ChildPath "LuaInstaller.Console" |
+            Join-Path -ChildPath "LuaInstaller.Console.exe";
+
+          # Set LUA_INSTALLER environment variable pointing to the app
+          Add-Content "${{ github.env }}" "LUA_INSTALLER=${luainstaller}";
+      
+      - name: Install Lua ${{ matrix.version }} on GTK's directory and set environment variables for it
+        run: |
+          & "${{ env.LUA_INSTALLER }}" install "dest-dir=${{ env.GTK_DIR }}" "version=${{ matrix.version }}";
+
+          # Test Lua
+          & lua -v;
+
+          # Find Lua's pkgconfig (.pc) file
+          $lua_pc = Get-ChildItem "${{ env.GTK_PKG_CONFIG_PATH }}" -File |
+            Where-Object Name -Like "lua*.pc" |
+            Select-Object -ExpandProperty BaseName -First 1;
+
+          # Set LUA_PC environment variable pointing to Lua's (.pc) file
+          Add-Content "${{ github.env }}" "LUA_PC=${lua_pc}";
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install meson
+        run: pip install meson
+
+      - name: Setup MSVC dev-prompt
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure lgi through meson
+        run: meson setup lgi-build . --prefix "${{ env.GTK_DIR }}" "-Dlua-pc=${{ env.LUA_PC }}" -Dtests=false
+      
+      - name: Build lgi
+        run: meson compile -C lgi-build
+      
+      - name: Install lgi
+        run: meson install -C lgi-build
+
+      - name: Test lgi
+        run: lua ".github\\test-for-msvc-ci.lua" ${{ matrix.gtk-major-version }};
+  
+  build-msvc-luajit:
+    name: Test on LuaJIT (MSVC)
+    runs-on: windows-latest
+
+    strategy:
+      matrix:
+
+        gtk-major-version:
+          - 3
+          - 4
+    
+    env:
+      WINGTK_URL: https://github.com/wingtk/gvsbuild/releases/download/2024.10.0/GTK${{ matrix.gtk-major-version }}_Gvsbuild_2024.10.0_x64.zip
+
+    steps:
+      
+      - name: Download and extract GTK ${{ matrix.gtk-major-version }} prebuilt binaries (MSVC toolset) provided by wingtk
+        run: |
+          $gtk_zip_file = Join-Path -Path "${{ runner.temp }}" -ChildPath "gtk.zip";
+          
+          # Download
+          Invoke-WebRequest -Uri "${{ env.WINGTK_URL }}" -OutFile $gtk_zip_file;
+          
+          # Unzip
+          $gtk_dir = Join-Path -Path "${{ runner.temp }}" -ChildPath "gtk";
+          Expand-Archive -Path $gtk_zip_file -DestinationPath "${gtk_dir}";
+
+          # Some helper variables
+          $gtk_bin_dir = Join-Path -Path $gtk_dir -ChildPath "bin";
+          $gtk_pkg_config_dir = Join-Path -Path $gtk_dir -ChildPath "lib" |
+            Join-Path -ChildPath "pkgconfig";
+
+          # Set environment variable GTK_DIR pointing to GTK's directory
+          Add-Content "${{ github.env }}" "GTK_DIR=${gtk_dir}";
+                    
+          # Set environment variable GTK_BIN_DIR pointing to GTK's bin directory
+          Add-Content "${{ github.env }}" "GTK_BIN_DIR=${gtk_bin_dir}";
+
+          # Set environment variable GTK_PKG_CONFIG_PATH pointing to GTK's pkg-config directory
+          Add-Content "${{ github.env }}" "GTK_PKG_CONFIG_PATH=${gtk_pkg_config_dir}";
+          
+          # Place GTK bin directory on system PATH environment variable
+          Add-Content "${{ github.path }}" "${gtk_bin_dir}";
+      
+      - name: Save environment variable for LuaJIT checkout directory
+        run: |
+          $guid_string = [System.Guid]::NewGuid() | Select-Object -ExpandProperty Guid;
+          Add-Content "${{ github.env }}" "LUAJIT_CHECKOUT=${guid_string}";
+      
+      - name: Checkout LuaJIT
+        uses: actions/checkout@v4
+        with:
+          repository: LuaJIT/LuaJIT
+          path: "${{ env.LUAJIT_CHECKOUT }}"
+      
+      - name: Find LuaJIT msvcbuild.bat and src directory
+        run: |
+          $build_bat = "msvcbuild.bat";
+          $msvcbuild = Get-ChildItem -Path "${{ env.LUAJIT_CHECKOUT }}" -Recurse -File |
+            Where-Object Name -EQ $build_bat |
+            Select-Object -ExpandProperty FullName -First 1;
+          
+          if ($msvcbuild -eq $null -or -not (Test-Path -Path $msvcbuild))
+          {
+            Write-Host "Unable to find LuaJIT's $build_bat";
+            exit 1;
+          }
+
+          Write-Host "Found $build_bat at $msvcbuild";
+
+          $src_dir = Split-Path $msvcbuild;
+
+          Add-Content "${{ github.env }}" "LUAJIT_MSVCBUILD_BAT=${build_bat}";
+          Add-Content "${{ github.env }}" "LUAJIT_SRC_DIR=${src_dir}";
+      
+      - name: Setup MSVC dev prompt
+        uses: ilammy/msvc-dev-cmd@v1
+      
+      - name: Build LuaJIT
+        run: |
+          cd "${{ env.LUAJIT_SRC_DIR }}";
+          & ".\${{ env.LUAJIT_MSVCBUILD_BAT }}"
+
+          $luajit_output = & .\luajit -v;
+
+          if ($luajit_output -match "^\s*LuaJIT\s*(\d+(\.\d+)*)")
+          {
+            $luajit_version = $Matches.1;
+            Add-Content "${{ github.env }}" "LUAJIT_VERSION=${luajit_version}";
+          }
+          else
+          {
+            Write-Host "Unable to get LuaJIT version";
+            exit 1;
+          }
+      
+      - name: Create LuaJIT tar gz containing the build artifacts
+        run: |
+          $luajit_target_dir = Join-Path -Path "${{ runner.temp }}" -ChildPath "luajit";
+
+          if (Test-Path -Path $luajit_target_dir)
+          {
+            Remove-Item -Path $luajit_target_dir -Recurse -Force;
+          }
+
+          mkdir $luajit_target_dir;
+
+          $luajit_bin_dir = Join-Path -Path $luajit_target_dir -ChildPath "bin";
+          $luajit_include_dir = Join-Path -Path $luajit_target_dir -ChildPath "include";
+          $luajit_lib_dir = Join-Path -Path $luajit_target_dir -ChildPath "lib";
+
+          foreach ($luajit_target_subdir in $luajit_bin_dir, $luajit_include_dir, $luajit_lib_dir)
+          {
+            if (-not (Test-Path -Path $luajit_target_subdir))
+            {
+              mkdir $luajit_target_subdir;
+            }
+          }
+
+          $luajit_lmod_dir = Join-Path -Path $luajit_bin_dir -ChildPath "lua";
+          if (-not (Test-Path -Path $luajit_lmod_dir))
+          {
+            mkdir $luajit_lmod_dir;
+          }
+
+          $luajit_pkgconfig_dir = Join-Path -Path $luajit_lib_dir -ChildPath "pkgconfig";
+          if (-not (Test-Path -Path $luajit_pkgconfig_dir))
+          {
+            mkdir $luajit_pkgconfig_dir;
+          }
+
+          foreach ($to_bin in "luajit.exe", "lua51.dll")
+          {
+            $artifact = Join-Path -Path "${{ env.LUAJIT_SRC_DIR }}" -ChildPath $to_bin;
+            
+            Copy-Item -Path $artifact -Destination $luajit_bin_dir;
+          }
+
+          foreach ($to_include in "lua.h", "lualib.h", "lauxlib.h", "luaconf.h", "lua.hpp", "luajit.h")
+          {
+            $artifact = Join-Path -Path "${{ env.LUAJIT_SRC_DIR }}" -ChildPath $to_include;
+            
+            Copy-Item -Path $artifact -Destination $luajit_include_dir;
+          }
+
+          foreach ($to_lib in "luajit.lib", "luajit.exp", "lua51.lib", "lua51.exp")
+          {
+            $artifact = Join-Path -Path "${{ env.LUAJIT_SRC_DIR }}" -ChildPath $to_lib;
+            
+            Copy-Item -Path $artifact -Destination $luajit_lib_dir;
+          }
+          
+          $luajit_jit_dir = Join-Path -Path "${{ env.LUAJIT_SRC_DIR }}" -ChildPath "jit";
+
+          Copy-Item -Path $luajit_jit_dir -Destination $luajit_lmod_dir -Filter "*.lua" -Recurse;
+
+          # pkgconfig variables
+          $pkgconfig_luajit_target_dir = $luajit_target_dir.Replace("\", "/")
+          $pkgconfig_luajit_include_dir = $luajit_include_dir.Replace("\", "/")
+          $pkgconfig_luajit_lib_dir = $luajit_lib_dir.Replace("\", "/")
+          $pkgconfig_luajit_lmod_dir = $luajit_lmod_dir.Replace("\", "/")
+          $pkgconfig_luajit_bin_dir = $luajit_bin_dir.Replace("\", "/")
+
+          # Writing pkgconfig files
+
+          foreach ($pkgconfig_filename in "lua51", "luajit")
+          {
+            $pkgconfig_content = "prefix=${pkgconfig_luajit_target_dir}",
+            "exec_prefix=`${prefix}",
+            "libname=${pkgconfig_filename}",
+            "includedir=${pkgconfig_luajit_include_dir}",
+            "libdir=${pkgconfig_luajit_lib_dir}",
+            "INSTALL_LMOD=${pkgconfig_luajit_lmod_dir}",
+            "INSTALL_CMOD=${pkgconfig_luajit_bin_dir}",
+            "",
+            "Name: LuaJIT",
+            "Description: Just-in-time compiler for Lua",
+            "URL: https://luajit.org",
+            "Version: ${{ env.LUAJIT_VERSION }}",
+            "Requires: ",
+            "Libs: -L`${libdir} -l`${libname}",
+            "Cflags: -I`${includedir}";
+
+            $pkgconfig_content = $pkgconfig_content |
+              Join-String -Separator ([System.Environment]::NewLine);
+
+            $pkgconfig_file = Join-Path -Path $luajit_pkgconfig_dir -ChildPath "${pkgconfig_filename}.pc";
+            Set-Content $pkgconfig_file $pkgconfig_content -NoNewLine;
+          }
+
+          $luajit_target_dir_unix = & C:\msys64\usr\bin\cygpath -u "$luajit_target_dir";
+          $luajit_tar_gz = Join-Path -Path "${{ runner.temp }}" -ChildPath "luajit.tar.gz";
+          $luajit_tar_gz_unix = & C:\msys64\usr\bin\cygpath -u "$luajit_tar_gz";
+
+          & C:\msys64\usr\bin\bash -lc "tar -C ""$luajit_target_dir_unix"" -czvf ""$luajit_tar_gz_unix"" .";
+
+          Remove-Item -Path $luajit_target_dir -Recurse;
+
+          Add-Content "${{ github.env }}" "LUAJIT_TAR_GZ=${luajit_tar_gz}";
+          Add-Content "${{ github.env }}" "LUAJIT_TAR_GZ_UNIX=${luajit_tar_gz_unix}";
+      
+      - name: Extract LuaJIT tar gz on GTK's directory
+        run: |
+          $gtk_dir_unix = & C:\msys64\usr\bin\cygpath -u "${{ env.GTK_DIR }}";
+
+          & C:\msys64\usr\bin\bash -lc "tar -C ""$gtk_dir_unix"" -xzvf ""${{ env.LUAJIT_TAR_GZ_UNIX }}""";
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install meson
+        run: pip install meson
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure lgi through meson
+        run: meson setup lgi-build . --prefix "${{ env.GTK_DIR }}" "-Dlua-bin=luajit" -Dtests=false
+      
+      - name: Build lgi
+        run: meson compile -C lgi-build
+      
+      - name: Install lgi
+        run: meson install -C lgi-build
+
+      - name: Test lgi
+        run: luajit ".github\\test-for-msvc-ci.lua" ${{ matrix.gtk-major-version }};
