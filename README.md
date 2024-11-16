@@ -57,6 +57,11 @@ found in `%PATH%` and run correctly. For building with LuaJIT, please do
 not pass in `-Dlua-pc=luajit`, but do pass in `-Dlua-bin=luajit` in the
 Meson command line so that the LuaJIT interpreter can be found correctly.
 
+Additionally, a Makefile for building with Visual Studio is provided at
+`lgi/Makefile.msvc`. This requires GNU Make (i.e. `mingw32-make`), and
+has been tested against the MSVC GTK binary builds provided by the
+[`gvsbuild`](https://github.com/wingtk/gvsbuild) project.
+
 ## Usage
 
 See examples in `samples/` directory.  Documentation is available in
