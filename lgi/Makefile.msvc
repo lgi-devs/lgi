@@ -1,0 +1,105 @@
+# This requires GNU Make, as, for instance, mingw32-make.exe from MSYS2
+#
+# Edit this Makefile, or override variables on the command-line, to suit your
+# installation. The variables to particularly note are:
+#
+# INSTALL_PREFIX  (where 'make install' will place files)
+# LUA_LIB, LUA_LIBDIR, LUA_INCDIR (to build against Lua)
+# GI_ROOT (where to find the necessary GObject includes and libs)
+#
+# This Makefile has been tested successfully against the MSVC-built GTK stack
+# found at https://github.com/wingtk/gvsbuild
+
+###### GNU Make configuration and utility variables #####
+SHELL := cmd.exe
+.SHELLFLAGS := /E:ON
+.ONESHELL:
+MAKEFLAGS += --no-builtin-rules --no-builtin-variables
+.PHONY := clean rebuild dll
+
+comma := ,
+empty :=
+space := $(empty) $(empty)
+
+define newline
+
+
+endef
+#########################################################
+
+LUA_VERSION := 5.1
+
+VERSION := 0.9.2
+VERSION_FILE := version.lua
+
+INSTALL_PREFIX = ..\msvc-install-dir
+INSTALL_LUA_LIBDIR = $(INSTALL_PREFIX)\lib\lua\$(LUA_VERSION)
+INSTALL_LUA_SHAREDIR = $(INSTALL_PREFIX)\share\lua\$(LUA_VERSION)
+
+DLLNAME := corelgilua51.dll
+dll: $(DLLNAME)
+.DEFAULT_GOAL := $(DLLNAME)
+
+LUA_LIB     := lua51.lib
+LUA_LIBDIR  := C:\Code\Tools\Lua\LuaJIT\lib
+LUA_INCDIR  := C:\Code\Tools\Lua\LuaJIT\include
+
+GI_ROOT    := C:\Code\Tools\gtk3
+GI_LIBDIR  := $(GI_ROOT)\lib
+GI_INCDIRS := $(GI_ROOT)\include \
+			  $(GI_ROOT)\include\glib-2.0 \
+			  $(GI_ROOT)\include\gobject-introspection-1.0 \
+			  $(GI_ROOT)\lib\glib-2.0\include
+GI_LIBS    := gmodule-2.0.lib \
+		      girepository-1.0.lib \
+		      gobject-2.0.lib \
+		      glib-2.0.lib \
+		      intl.lib \
+		      ffi.lib
+
+SRC := buffer.c callable.c core.c gi.c marshal.c object.c record.c
+OBJS := $(SRC:%.c=%.obj)
+
+CC := cl.exe
+
+LIBPATHS := $(addprefix /LIBPATH:,$(LUA_LIBDIR) $(GI_LIBDIR))
+LIBS := $(LUA_LIB) $(GI_LIBS)
+
+INCDIRS := $(addprefix /I,. $(LUA_INCDIR) $(GI_INCDIRS))
+
+# /MD = dynamically link to RTL, /MT = statically link to RTL
+RTLOPT := /MD
+
+CCFLAGS := /nologo /c /O2 /std:c11 /LD $(RTLOPT) /Zc:preprocessor $(INCDIRS)
+LINKFLAGS := /nologo $(RTLOPT) /LD /Fe:$(DLLNAME:%.dll=%) \
+			 /link /MACHINE:X64 /OPT:NOREF $(LIBPATHS)
+
+%.obj: %.c lgi.h
+	$(CC) $(CCFLAGS) $<
+
+$(DLLNAME): $(OBJS)
+	$(CC) $^ $(LIBS) $(LINKFLAGS)
+
+clean: FILES_TO_DEL := $(wildcard *.obj $(DLLNAME) $(DLLNAME:%.dll=%.exp) $(DLLNAME:%.dll=%.lib))
+clean:
+	$(if $(FILES_TO_DEL),del /Q $(FILES_TO_DEL),@echo Already clean)
+
+rebuild: clean
+	$(CC) $(CCFLAGS) $(SRC)
+	$(CC) *.obj $(LIBS) $(LINKFLAGS)
+
+OVERRIDES = $(subst /,\,$(wildcard override/*.lua))
+CORESOURCES = $(wildcard *.lua)
+
+$(VERSION_FILE): Makefile.msvc
+	echo return '$(VERSION)' > $@
+
+install: $(DLLNAME) $(VERSION_FILE)
+	-mkdir $(INSTALL_LUA_LIBDIR)\lgi 2>NUL
+	copy /Y $(DLLNAME) $(INSTALL_LUA_LIBDIR)\lgi >NUL
+	-mkdir $(INSTALL_LUA_SHAREDIR) 2>NUL
+	copy /Y ..\lgi.lua $(INSTALL_LUA_SHAREDIR) >NUL
+	-mkdir $(INSTALL_LUA_SHAREDIR)\lgi 2>NUL
+	$(foreach file,$(CORESOURCES),copy /Y $(file) $(INSTALL_LUA_SHAREDIR)\lgi >NUL$(newline))
+	-mkdir $(INSTALL_LUA_SHAREDIR)\lgi\override 2>NUL
+	$(foreach file,$(OVERRIDES),copy /Y $(file) $(INSTALL_LUA_SHAREDIR)\lgi\override >NUL$(newline))
