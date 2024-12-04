@@ -98,6 +98,8 @@ function enum.bitflags_mt:_new(param)
       return self[param]
    elseif type(param) == 'number' then
       return param
+   elseif not param then
+      return 0
    else
       local num = 0
       for key, value in pairs(param) do
