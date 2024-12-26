@@ -6,10 +6,17 @@ on:
   pull_request:
     branches: [ master ]
 
+env:
+  # Force software rendering on CI, because
+  # we were getting a CI error on Ubuntu 24.04 as follows:
+  #   MESA: error: ZINK: vkCreateInstance failed (VK_ERROR_INCOMPATIBLE_DRIVER))
+  # For more information, see https://github.com/lgi-devs/lgi/pull/332
+  LIBGL_ALWAYS_SOFTWARE: 1
+
 jobs:
   build_puc:
     name: Test on PUC-Rio Lua
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
 
     strategy:
       matrix:
@@ -57,7 +64,7 @@ jobs:
 
   build_luajit:
     name: Test on LuaJIT
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
 
     steps:
       - name: Set environment variable to hold LuaJIT checkout directory
