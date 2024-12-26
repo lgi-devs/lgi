@@ -9,7 +9,7 @@ on:
 jobs:
   build_puc:
     name: Test on PUC-Rio Lua
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     strategy:
       matrix:
@@ -57,7 +57,7 @@ jobs:
 
   build_luajit:
     name: Test on LuaJIT
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Set environment variable to hold LuaJIT checkout directory
