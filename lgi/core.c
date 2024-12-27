@@ -556,10 +556,15 @@ core_module (lua_State *L)
 			    luaL_checkstring (L, 1));
 
 #if defined(__APPLE__)
+/* GLib 2.76 improved g_module_open() on MacOS, see
+   https://gitlab.gnome.org/GNOME/glib/-/merge_requests/2950.  For
+   older GLib versions, use the previous workaround. */
+#if !GLIB_CHECK_VERSION(2, 76, 0)
   char *path = g_module_build_path (GOBJECT_INTROSPECTION_LIBDIR,
                                     name);
   g_free(name);
   name = path;
+#endif
 #endif
 
   /* Try to load the module. */
