@@ -259,7 +259,7 @@ local function marshal_property(obj, name, flags, gtype, marshaller, ...)
    local mode = select('#', ...) > 0 and 'WRITABLE' or 'READABLE'
    if not flags[mode] then
       error(("%s: `%s' not %s"):format(core.object.query(obj, 'repo')._name,
-				       name, core.downcase(mode)))
+         name, core.downcase(mode)))
    end
    local value = Value(gtype)
    if mode == 'WRITABLE' then
@@ -292,6 +292,7 @@ end
 local quark_from_string = repo.GLib.quark_from_string
 local signal_lookup = repo.GObject.signal_lookup
 local signal_connect_closure_by_id = repo.GObject.signal_connect_closure_by_id
+local signal_handler_disconnect = repo.GObject.signal_handler_disconnect
 local signal_emitv = repo.GObject.signal_emitv
 -- Connects signal to specified object instance.
 local function connect_signal(obj, gtype, name, closure, detail, after)
@@ -319,9 +320,19 @@ end
 -- Signal accessor.
 function Object:_access_signal(object, info, ...)
    local gtype = self._gtype
+   
+   -- faster, as every branch indexes info.name more than once
+   local name = info.name
+
    if select('#', ...) > 0 then
+      local existing_handler = self._signal_handler[name]
+      
+      if existing_handler then
+         signal_handler_disconnect(object, existing_handler)
+      end
+
       -- Assignment means 'connect signal without detail'.
-      connect_signal(object, gtype, info.name, Closure((...), info))
+      self._signal_handler[name] = connect_signal(object, gtype, name, Closure((...), info))
    else
       -- Reading yields table with signal operations.
       local mt = {}
@@ -330,6 +341,11 @@ function Object:_access_signal(object, info, ...)
 	 return connect_signal(object, gtype, info.name,
 			       Closure(target, info), detail, after)
       end
+
+      function pad:disconnect(handler_id)
+         return signal_handler_disconnect(object, handler_id)
+      end
+
       function pad:emit(...)
 	 return emit_signal(object, gtype, info, nil, ...)
       end
@@ -345,8 +361,27 @@ function Object:_access_signal(object, info, ...)
 	    return emit_signal(object, gtype, info, detail, ...)
 	 end
 	 function mt:__newindex(detail, target)
-	    connect_signal(object, gtype, info.name, Closure(target, info),
-			   detail)
+       local name_with_detail = name .. "::" .. detail
+       local existing_handler = self._signal_handler[name_with_detail]
+       if existing_handler then
+          signal_handler_disconnect(object, existing_handler)
+	    end
+
+	    self._signal_handler[name_with_detail] = connect_signal(object, gtype, name, Closure(target, info),
+			   			   			   			   		detail)
+	 end
+
+	 function mt.__index(_, detail)
+       local sub_pad = {}
+       
+       function sub_pad:connect(target, after)
+          return connect_signal(object, gtype, name,
+             Closure(target, info), detail, after)
+          end
+
+          sub_pad.disconnect = pad.disconnect
+
+          return sub_pad
 	 end
       end
 
