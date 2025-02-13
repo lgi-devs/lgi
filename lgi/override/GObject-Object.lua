@@ -365,7 +365,7 @@ function Object:_access_signal(object, info, ...)
 	    return emit_signal(object, gtype, info, detail, ...)
 	 end
 	 function mt:__newindex(detail, target)
-       local name_with_detail = name .. "." .. detail
+       local name_with_detail = name .. "::" .. detail
        local existing_handler = object.signal_handlers[name_with_detail]
        if existing_handler then
 	         signal_handler_disconnect(object, existing_handler)
