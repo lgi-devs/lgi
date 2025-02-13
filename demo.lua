@@ -11,8 +11,7 @@ assert(lgi_path:match("%.[/\\]lgi.lua"), "Loaded wrong LGI!")
 
 local Gtk = lgi.require("Gtk", "3.0")
 
--- This button demonstrates that re-assigning a signal handler doesn't disconnect the previous assignment:
-local button_1 = Gtk.Button.new_with_label("I can be clicked multiple times, but I have multiple handlers")
+local button_1 = Gtk.Button.new_with_label("I can be clicked multiple times, and now handlers are overwritten")
 
 ---@diagnostic disable-next-line:duplicate-set-field
 button_1.on_clicked = function()
@@ -36,8 +35,12 @@ handler_id = button_2.on_clicked:connect(function(widget)
     button_2.on_clicked:disconnect(handler_id)
 end)
 
+button_2.on_notify["has-focus"]:connect(function (...)
+    print("has-focus", ...)
+end)
+
 local window = Gtk.Window {
-    title = "GitHub issue demo",
+    title = "GitHub PR demo",
     default_width = 400,
     default_height = 300,
     on_destroy = Gtk.main_quit,

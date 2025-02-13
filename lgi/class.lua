@@ -257,6 +257,7 @@ function class.load_class(namespace, info)
    class._method = component.get_category(info.methods, load_method)
    class._signal = component.get_category(
       info.signals, nil, load_signal_name, load_signal_name_reverse)
+   class._signal_handler = {} -- initialized empty in order to memory manage signal handlers created via assignment operator
    class._constant = component.get_category(info.constants, core.constant)
    class._field = component.get_category(info.fields)
    local type_struct = info.type_struct

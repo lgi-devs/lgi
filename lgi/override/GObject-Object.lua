@@ -259,7 +259,7 @@ local function marshal_property(obj, name, flags, gtype, marshaller, ...)
    local mode = select('#', ...) > 0 and 'WRITABLE' or 'READABLE'
    if not flags[mode] then
       error(("%s: `%s' not %s"):format(core.object.query(obj, 'repo')._name,
-				       name, core.downcase(mode)))
+         name, core.downcase(mode)))
    end
    local value = Value(gtype)
    if mode == 'WRITABLE' then
@@ -321,22 +321,18 @@ end
 function Object:_access_signal(object, info, ...)
    local gtype = self._gtype
    
-   -- TODO: someone who understands the LGI codebase much better than myself no doubt knows where to put a definition similar to this one.
-   -- create a table of signal handlers LGI automatically memory manages
-   self._signal_handlers = self._signal_handlers or {}
-
    -- faster, as every branch indexes info.name more than once
    local name = info.name
 
    if select('#', ...) > 0 then
-      local existing_handler = self._signal_handlers[name]
+      local existing_handler = self._signal_handler[name]
       
       if existing_handler then
          signal_handler_disconnect(object, existing_handler)
       end
 
       -- Assignment means 'connect signal without detail'.
-      self._signal_handlers[name] = connect_signal(object, gtype, name, Closure((...), info))
+      self._signal_handler[name] = connect_signal(object, gtype, name, Closure((...), info))
    else
       -- Reading yields table with signal operations.
       local mt = {}
@@ -366,13 +362,26 @@ function Object:_access_signal(object, info, ...)
 	 end
 	 function mt:__newindex(detail, target)
        local name_with_detail = name .. "::" .. detail
-       local existing_handler = object.signal_handlers[name_with_detail]
+       local existing_handler = self._signal_handler[name_with_detail]
        if existing_handler then
-	         signal_handler_disconnect(object, existing_handler)
+          signal_handler_disconnect(object, existing_handler)
 	    end
 
-	    object.signal_handlers[name_with_detail] = connect_signal(object, gtype, name, Closure(target, info),
+	    self._signal_handler[name_with_detail] = connect_signal(object, gtype, name, Closure(target, info),
 			   			   			   			   		detail)
+	 end
+
+	 function mt.__index(_, detail)
+       local sub_pad = {}
+       
+       function sub_pad:connect(target, after)
+          return connect_signal(object, gtype, name,
+             Closure(target, info), detail, after)
+          end
+
+          sub_pad.disconnect = pad.disconnect
+
+          return sub_pad
 	 end
       end
 
