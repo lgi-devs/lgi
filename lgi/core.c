@@ -124,23 +124,23 @@ lgi_type_get_name (lua_State *L, GIBaseInfo *info)
 {
   GSList *list = NULL, *i;
   int n = 1;
-  lua_pushstring (L, g_base_info_get_namespace (info));
+  lua_pushstring (L, gi_base_info_get_namespace (info));
 
-  if (g_base_info_get_type (info) == GI_INFO_TYPE_CALLBACK)
+  if (GI_IS_CALLBACK_INFO (info))
     /* Avoid duplicate name for callbacks. */
-    info = g_base_info_get_container (info);
+    info = gi_base_info_get_container (info);
 
   /* Add names on the whole path, but in reverse order. */
-  for (; info != NULL; info = g_base_info_get_container (info))
+  for (; info != NULL; info = gi_base_info_get_container (info))
     if (!GI_IS_TYPE_INFO (info))
       list = g_slist_prepend (list, info);
 
   for (i = list; i != NULL; i = g_slist_next (i))
     {
-      if (g_base_info_get_type (i->data) != GI_INFO_TYPE_TYPE)
+      if (GI_IS_TYPE_INFO (i->data))
 	{
 	  lua_pushstring (L, ".");
-	  lua_pushstring (L, g_base_info_get_name (i->data));
+	  lua_pushstring (L, gi_base_info_get_name (i->data));
 	  n += 2;
 	}
     }
@@ -161,7 +161,7 @@ lgi_type_get_repotype (lua_State *L, GType gtype, GIBaseInfo *info)
   /* Prepare gtype, if not given directly. */
   if (gtype == G_TYPE_INVALID && info && GI_IS_REGISTERED_TYPE_INFO (info))
     {
-      gtype = g_registered_type_info_get_g_type (info);
+      gtype = gi_registered_type_info_get_g_type (GI_REGISTERED_TYPE_INFO (info));
       if (gtype == G_TYPE_NONE)
 	gtype = G_TYPE_INVALID;
     }
@@ -182,7 +182,7 @@ lgi_type_get_repotype (lua_State *L, GType gtype, GIBaseInfo *info)
 	 lazy-loaded repo tables are not loaded yet. */
       if (!info && gtype != G_TYPE_INVALID)
 	{
-	  info = g_irepository_find_by_gtype (NULL, gtype);
+	  info = gi_repository_find_by_gtype (lgi_gi_get_repository (), gtype);
 	  lgi_gi_info_new (L, info);
 	}
       else
@@ -193,8 +193,8 @@ lgi_type_get_repotype (lua_State *L, GType gtype, GIBaseInfo *info)
 	{
 	  lua_pushlightuserdata (L, &repo);
 	  lua_rawget (L, LUA_REGISTRYINDEX);
-	  lua_getfield (L, -1, g_base_info_get_namespace (info));
-	  lua_getfield (L, -1, g_base_info_get_name (info));
+	  lua_getfield (L, -1, gi_base_info_get_namespace (info));
+	  lua_getfield (L, -1, gi_base_info_get_name (info));
 	  lua_replace (L, -5);
 	  lua_pop (L, 3);
 	}
@@ -296,9 +296,9 @@ core_constant (lua_State *L)
   /* Get typeinfo of the constant. */
   GIArgument val;
   GIConstantInfo *ci = *(GIConstantInfo **) luaL_checkudata (L, 1, LGI_GI_INFO);
-  GITypeInfo *ti = g_constant_info_get_type (ci);
-  lgi_gi_info_new (L, ti);
-  g_constant_info_get_value (ci, &val);
+  GITypeInfo *ti = gi_constant_info_get_type_info (ci);
+  lgi_gi_info_new (L, GI_BASE_INFO (ti));
+  gi_constant_info_get_value (ci, &val);
   lgi_marshal_2lua (L, ti, NULL, GI_DIRECTION_IN, GI_TRANSFER_NOTHING, &val,
 		    0, NULL, NULL);
   return 1;

@@ -49,7 +49,7 @@ typedef unsigned long lgi_Unsigned;
 #include <glib.h>
 #include <glib-object.h>
 #include <glib/gprintf.h>
-#include <girepository.h>
+#include <girepository/girepository.h>
 #include <gmodule.h>
 
 /* Makes sure that Lua stack offset is absolute one, not relative. */
@@ -221,3 +221,5 @@ int lgi_field_info_get_offset (GIFieldInfo *info);
    in GI 1.32.0. (see https://bugzilla.gnome.org/show_bug.cgi?id=673282) */
 gpointer lgi_object_get_function_ptr (GIObjectInfo *info,
 				      const gchar *(*getter)(GIObjectInfo *));
+
+GIRepository *lgi_gi_get_repository (void);

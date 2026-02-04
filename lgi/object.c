@@ -127,14 +127,14 @@ object_get (lua_State *L, int narg)
 }
 
 /* This is workaround method for broken
-   g_object_info_get_*_function_pointer() in GI 1.32.0. (see
+   gi_object_info_get_*_function_pointer() in GI 1.32.0. (see
    https://bugzilla.gnome.org/show_bug.cgi?id=673282) */
 gpointer
 lgi_object_get_function_ptr (GIObjectInfo *info,
 			     const gchar *(*getter)(GIObjectInfo *))
 {
   gpointer func = NULL;
-  g_base_info_ref (info);
+  gi_base_info_ref (info);
   while (info != NULL)
     {
       GIBaseInfo *parent;
@@ -142,17 +142,17 @@ lgi_object_get_function_ptr (GIObjectInfo *info,
 
       /* Try to get the name and the symbol. */
       func_name = getter (info);
-      if (func_name && g_typelib_symbol (g_base_info_get_typelib (info),
-					 func_name, &func))
+      if (func_name && gi_typelib_symbol (gi_base_info_get_typelib (GI_BASE_INFO (info)),
+					  func_name, &func))
 	{
-	  g_base_info_unref (info);
+	  gi_base_info_unref (info);
 	  break;
 	}
 
       /* Iterate to the parent info. */
-      parent = g_object_info_get_parent (info);
-      g_base_info_unref (info);
-      info = parent;
+      parent = GI_BASE_INFO (gi_object_info_get_parent (info));
+      gi_base_info_unref (info);
+      info = GI_OBJECT_INFO (parent);
     }
 
   return func;
@@ -187,14 +187,14 @@ object_refsink (lua_State *L, gpointer obj, gboolean no_sink)
 
   /* Check whether object has registered fundamental 'ref'
      function. */
-  GIObjectInfo *info = g_irepository_find_by_gtype (NULL, gtype);
+  GIObjectInfo *info = GI_OBJECT_INFO (gi_repository_find_by_gtype (lgi_gi_get_repository (), gtype));
   if (info == NULL)
-    info = g_irepository_find_by_gtype (NULL, G_TYPE_FUNDAMENTAL (gtype));
-  if (info != NULL && g_object_info_get_fundamental (info))
+    info = GI_OBJECT_INFO (gi_repository_find_by_gtype (lgi_gi_get_repository (), G_TYPE_FUNDAMENTAL (gtype)));
+  if (info != NULL && gi_object_info_get_fundamental (info))
     {
       GIObjectInfoRefFunction ref =
-	lgi_object_get_function_ptr (info, g_object_info_get_ref_function);
-      g_base_info_unref (info);
+	lgi_object_get_function_ptr (info, gi_object_info_get_ref_function_name);
+      gi_base_info_unref (info);
       if (ref != NULL)
 	{
 	  ref (obj);
@@ -235,14 +235,14 @@ object_unref (lua_State *L, gpointer obj)
 
   /* Some other fundamental type, check, whether it has registered
      custom unref method. */
-  GIObjectInfo *info = g_irepository_find_by_gtype (NULL, gtype);
+  GIObjectInfo *info = GI_OBJECT_INFO (gi_repository_find_by_gtype (lgi_gi_get_repository (), gtype));
   if (info == NULL)
-    info = g_irepository_find_by_gtype (NULL, G_TYPE_FUNDAMENTAL (gtype));
-  if (info != NULL && g_object_info_get_fundamental (info))
+    info = GI_OBJECT_INFO (gi_repository_find_by_gtype (lgi_gi_get_repository (), G_TYPE_FUNDAMENTAL (gtype)));
+  if (info != NULL && gi_object_info_get_fundamental (info))
     {
       GIObjectInfoUnrefFunction unref =
-	lgi_object_get_function_ptr (info, g_object_info_get_unref_function);
-      g_base_info_unref (info);
+	lgi_object_get_function_ptr (info, gi_object_info_get_unref_function_name);
+      gi_base_info_unref (info);
       if (unref != NULL)
 	{
 	  unref (obj);
@@ -545,6 +545,7 @@ object_new (lua_State *L)
 			    lua_toboolean (L, 3));
   else
     {
+      G_GNUC_BEGIN_IGNORE_DEPRECATIONS
       /* Normally Lua code uses GObject.Object.new(), which maps
 	 directly to g_object_newv(), but for some reason GOI < 1.0 does
 	 not export this method in the typelib. */
@@ -557,8 +558,8 @@ object_new (lua_State *L)
       luaL_checktype (L, 2, LUA_TTABLE);
 
       /* Find BaseInfo of GParameter. */
-      gparam_info = g_irepository_find_by_name (NULL, "GObject", "Parameter");
-      *lgi_guard_create (L, (GDestroyNotify) g_base_info_unref) = gparam_info;
+      gparam_info = gi_repository_find_by_name (lgi_gi_get_repository (), "GObject", "Parameter");
+      *lgi_guard_create (L, (GDestroyNotify) gi_base_info_unref) = gparam_info;
 
       /* Prepare array of GParameter structures. */
       size = lua_objlen (L, 2);
@@ -575,6 +576,8 @@ object_new (lua_State *L)
       /* Create the object and return it. */
       return lgi_object_2lua (L, g_object_newv (gtype, size, params),
 			      TRUE, FALSE);
+
+      G_GNUC_END_IGNORE_DEPRECATIONS
     }
 }
 

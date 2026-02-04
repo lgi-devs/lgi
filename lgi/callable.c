@@ -228,7 +228,7 @@ get_ffi_type(Param *param)
       return &ffi_type_pointer;
 
     case PARAM_KIND_ENUM:
-      return param->ti ? get_simple_ffi_type (g_type_info_get_tag (param->ti))
+      return param->ti ? get_simple_ffi_type (gi_type_info_get_tag (param->ti))
 	: &ffi_type_sint;
 
     case PARAM_KIND_TI:
@@ -236,26 +236,18 @@ get_ffi_type(Param *param)
     }
 
   /* In case of inout or out parameters, the type is always pointer. */
-  GITypeTag tag = g_type_info_get_tag (param->ti);
-  ffi_type* ffi = g_type_info_is_pointer(param->ti)
+  GITypeTag tag = gi_type_info_get_tag (param->ti);
+  ffi_type* ffi = gi_type_info_is_pointer(param->ti)
     ? &ffi_type_pointer : get_simple_ffi_type (tag);
   if (ffi == NULL)
     {
       /* Something more complex. */
       if (tag == GI_TYPE_TAG_INTERFACE)
 	{
-	  GIBaseInfo *ii = g_type_info_get_interface (param->ti);
-	  switch (g_base_info_get_type (ii))
-	    {
-	    case GI_INFO_TYPE_ENUM:
-	    case GI_INFO_TYPE_FLAGS:
-	      ffi = get_simple_ffi_type (g_enum_info_get_storage_type (ii));
-	      break;
-
-	    default:
-	      break;
-	    }
-	  g_base_info_unref (ii);
+          GIBaseInfo *ii = gi_type_info_get_interface (param->ti);
+          if (GI_IS_ENUM_INFO (ii) || GI_IS_FLAGS_INFO (ii))
+            ffi = get_simple_ffi_type (gi_enum_info_get_storage_type (GI_ENUM_INFO (ii)));
+          gi_base_info_unref (ii);
 	}
     }
 
@@ -267,12 +259,11 @@ get_ffi_type(Param *param)
 static void
 callable_mark_array_length (Callable *callable, GITypeInfo *ti)
 {
-  gint arg;
-  if (g_type_info_get_tag (ti) == GI_TYPE_TAG_ARRAY &&
-      g_type_info_get_array_type (ti) == GI_ARRAY_TYPE_C)
+  if (gi_type_info_get_tag (ti) == GI_TYPE_TAG_ARRAY &&
+      gi_type_info_get_array_type (ti) == GI_ARRAY_TYPE_C)
     {
-      arg = g_type_info_get_array_length (ti);
-      if (arg >= 0 && arg < callable->nargs)
+      guint arg;
+      if (gi_type_info_get_array_length_index (ti, &arg) && arg < callable->nargs)
 	callable->params[arg].internal = TRUE;
     }
 }
@@ -280,14 +271,8 @@ callable_mark_array_length (Callable *callable, GITypeInfo *ti)
 static void
 callable_param_init (Param *param)
 {
-  param->ti = NULL;
-  param->has_arg_info =FALSE;
-  param->internal = FALSE;
-  param->internal_user_data = FALSE;
-  param->n_closures = 0;
-  param->call_scoped_user_data = FALSE;
+  memset (param, 0, sizeof *param);
   param->kind = PARAM_KIND_TI;
-  param->repotype_index = 0;
 }
 
 static Callable *
@@ -300,6 +285,7 @@ callable_allocate (lua_State *L, int nargs, ffi_type ***ffi_args)
   Callable *callable = lua_newuserdata (L, sizeof (Callable) +
 					sizeof (ffi_type) * (nargs + 2) +
 					sizeof (Param) * nargs);
+  memset (callable, 0, sizeof *callable);
   lua_pushlightuserdata (L, &callable_mt);
   lua_rawget (L, LUA_REGISTRYINDEX);
   lua_setmetatable (L, -2);
@@ -336,11 +322,11 @@ callable_get_param (Callable *callable, gint n)
   if (!param->has_arg_info)
     {
       /* Ensure basic fields are initialized. */
-      g_callable_info_load_arg (callable->info, n, &param->ai);
+      gi_callable_info_load_arg (callable->info, n, &param->ai);
       param->has_arg_info = TRUE;
-      param->ti = g_arg_info_get_type (&param->ai);
-      param->dir = g_arg_info_get_direction (&param->ai);
-      param->transfer = g_arg_info_get_ownership_transfer (&param->ai);
+      param->ti = gi_arg_info_get_type_info (&param->ai);
+      param->dir = gi_arg_info_get_direction (&param->ai);
+      param->transfer = gi_arg_info_get_ownership_transfer (&param->ai);
     }
   return param;
 }
@@ -352,28 +338,28 @@ lgi_callable_create (lua_State *L, GICallableInfo *info, gpointer addr)
   Param *param, *data_param;
   ffi_type **ffi_arg, **ffi_args;
   ffi_type *ffi_retval;
-  gint nargs, argi, arg;
+  gint nargs, argi;
 
   /* Allocate Callable userdata. */
-  nargs = g_callable_info_get_n_args (info);
+  nargs = gi_callable_info_get_n_args (info);
   callable = callable_allocate (L, nargs, &ffi_args);
-  callable->info = g_base_info_ref (info);
+  callable->info = GI_CALLABLE_INFO (gi_base_info_ref (info));
   callable->address = addr;
   if (GI_IS_FUNCTION_INFO (info))
     {
       /* Get FunctionInfo flags. */
       const gchar* symbol;
-      gint flags = g_function_info_get_flags (info);
+      gint flags = gi_function_info_get_flags (GI_FUNCTION_INFO (info));
       if ((flags & GI_FUNCTION_IS_METHOD) != 0 &&
 	  (flags & GI_FUNCTION_IS_CONSTRUCTOR) == 0)
 	callable->has_self = 1;
-      if ((flags & GI_FUNCTION_THROWS) != 0)
+      if (gi_callable_info_can_throw_gerror (GI_CALLABLE_INFO (info)))
 	callable->throws = 1;
 
       /* Resolve symbol (function address). */
-      symbol = g_function_info_get_symbol (info);
-      if (!g_typelib_symbol (g_base_info_get_typelib (info), symbol,
-			     &callable->address))
+      symbol = gi_function_info_get_symbol (GI_FUNCTION_INFO (info));
+      if (!gi_typelib_symbol (gi_base_info_get_typelib (GI_BASE_INFO (info)), symbol,
+			      &callable->address))
 	/* Fail with the error message. */
 	return luaL_error (L, "could not locate %s(%s): %s",
 			   lua_tostring (L, -3), symbol, g_module_error ());
@@ -384,9 +370,9 @@ lgi_callable_create (lua_State *L, GICallableInfo *info, gpointer addr)
     callable->has_self = 1;
 
   /* Process return value. */
-  callable->retval.ti = g_callable_info_get_return_type (callable->info);
+  callable->retval.ti = gi_callable_info_get_return_type (callable->info);
   callable->retval.dir = GI_DIRECTION_OUT;
-  callable->retval.transfer = g_callable_info_get_caller_owns (callable->info);
+  callable->retval.transfer = gi_callable_info_get_caller_owns (callable->info);
   callable->retval.internal = FALSE;
   callable->retval.repotype_index = 0;
   ffi_retval = get_ffi_type (&callable->retval);
@@ -400,30 +386,36 @@ lgi_callable_create (lua_State *L, GICallableInfo *info, gpointer addr)
   /* Process the rest of the arguments. */
   for (argi = 0; argi < nargs; argi++, ffi_arg++)
     {
+      guint arg;
+
       param = callable_get_param (callable, argi);
       *ffi_arg = (param->dir == GI_DIRECTION_IN)
 	? get_ffi_type (param) : &ffi_type_pointer;
 
       /* Mark closure-related user_data fields as internal. */
-      arg = g_arg_info_get_closure (&param->ai);
-      data_param = callable_get_param (callable, arg);
-      /* `arg` is defined also on callbacks, so check for invalid scope
-	 to avoid setting the internal flag on them. */
-      if (data_param != NULL && g_arg_info_get_scope (&data_param->ai) == GI_SCOPE_TYPE_INVALID)
-	{
-	  data_param->internal = TRUE;
-	  if (arg == argi)
-	    data_param->internal_user_data = TRUE;
-	  data_param->n_closures++;
-	  if (g_arg_info_get_scope (&param->ai) == GI_SCOPE_TYPE_CALL)
-	    data_param->call_scoped_user_data = TRUE;
-	}
+      if (gi_arg_info_get_closure_index (&param->ai, &arg))
+        {
+          data_param = callable_get_param (callable, arg);
+          /* `arg` is defined also on callbacks, so check for invalid scope
+	     to avoid setting the internal flag on them. */
+          if (data_param != NULL && gi_arg_info_get_scope (&data_param->ai) == GI_SCOPE_TYPE_INVALID)
+	    {
+	      data_param->internal = TRUE;
+	      if (arg == (guint)argi)
+	        data_param->internal_user_data = TRUE;
+	      data_param->n_closures++;
+	      if (gi_arg_info_get_scope (&param->ai) == GI_SCOPE_TYPE_CALL)
+	        data_param->call_scoped_user_data = TRUE;
+	    }
+        }
 
       /* Mark destroy_notify fields as internal. */
-      arg = g_arg_info_get_destroy (&param->ai);
-      data_param = callable_get_param (callable, arg);
-      if (data_param != NULL)
-	data_param->internal = TRUE;
+      if (gi_arg_info_get_destroy_index (&param->ai, &arg))
+        {
+          data_param = callable_get_param (callable, arg);
+          if (data_param != NULL)
+	    data_param->internal = TRUE;
+        }
 
       /* Similarly for array length field. */
       callable_mark_array_length (callable, param->ti);
@@ -433,7 +425,7 @@ lgi_callable_create (lua_State *L, GICallableInfo *info, gpointer addr)
 	 signalize failure by returning nil instead of extra
 	 value). */
       if (param->dir != GI_DIRECTION_IN
-	  && g_type_info_get_tag (callable->retval.ti) == GI_TYPE_TAG_BOOLEAN)
+	  && gi_type_info_get_tag (callable->retval.ti) == GI_TYPE_TAG_BOOLEAN)
 	callable->ignore_retval = 1;
     }
 
@@ -441,8 +433,8 @@ lgi_callable_create (lua_State *L, GICallableInfo *info, gpointer addr)
      crucial for lgi but is missing an array annotation in
      glib/gobject-introspection < 1.30. */
   if (!GLIB_CHECK_VERSION (2, 30, 0)
-      && !strcmp (g_base_info_get_namespace (info), "GObject")
-      && !strcmp (g_base_info_get_name (info), "ClosureMarshal"))
+      && !strcmp (gi_base_info_get_namespace (GI_BASE_INFO (info)), "GObject")
+      && !strcmp (gi_base_info_get_name (GI_BASE_INFO (info)), "ClosureMarshal"))
     {
       callable->is_closure_marshal = 1;
       callable->params[2].internal = 1;
@@ -457,7 +449,7 @@ lgi_callable_create (lua_State *L, GICallableInfo *info, gpointer addr)
 		    callable->has_self + nargs + callable->throws,
 		    ffi_retval, ffi_args) != FFI_OK)
     {
-      lua_concat (L, lgi_type_get_name (L, callable->info));
+      lua_concat (L, lgi_type_get_name (L, GI_BASE_INFO (callable->info)));
       return luaL_error (L, "ffi_prep_cif for `%s' failed",
 			 lua_tostring (L, -1));
     }
@@ -529,7 +521,7 @@ callable_param_parse (lua_State *L, Param *param)
 	  /* This is actually an enum, and 'type' field contains
 	     numeric type for this enum.  Store it into the ti. */
 	  GITypeInfo **ti = luaL_checkudata (L, -1, LGI_GI_INFO);
-	  param->ti = g_base_info_ref (*ti);
+	  param->ti = GI_TYPE_INFO (gi_base_info_ref (*ti));
 	}
       lua_pop (L, 1);
 
@@ -546,7 +538,7 @@ callable_param_parse (lua_State *L, Param *param)
     {
       /* Expect typeinfo. */
       GITypeInfo **pti = lua_touserdata (L, -1);
-      param->ti = g_base_info_ref (*pti);
+      param->ti = GI_TYPE_INFO (gi_base_info_ref (*pti));
       param->kind = kind;
       lua_pop (L, 1);
     }
@@ -657,8 +649,8 @@ callable_get (lua_State *L, int narg)
 static void
 callable_param_destroy (Param *param)
 {
-  if (param->ti)
-    g_base_info_unref (param->ti);
+  g_clear_pointer (&param->ti, gi_base_info_unref);
+  gi_base_info_clear (&param->ai);
 }
 
 static int
@@ -669,13 +661,13 @@ callable_gc (lua_State *L)
   /* Unref embedded 'info' field. */
   Callable *callable = callable_get (L, 1);
   if (callable->info)
-    g_base_info_unref (callable->info);
+    gi_base_info_unref (callable->info);
 
   /* Destroy all params. */
   for (i = 0; i < callable->nargs; i++)
     callable_param_destroy (&callable->params[i]);
 
-  callable_param_destroy (&callable->retval );
+  callable_param_destroy (&callable->retval);
 
   /* Unset the metatable / make the callable unusable */
   lua_pushnil (L);
@@ -710,7 +702,7 @@ callable_describe (lua_State *L, Callable *callable, FfiClosure *closure)
 			(GI_IS_SIGNAL_INFO (callable->info) ? "sig" :
 			 (GI_IS_VFUNC_INFO (callable->info) ? "vfn" : "cbk"))),
 		       lua_tostring (L, -1));
-      lua_concat (L, lgi_type_get_name (L, callable->info) + 1);
+      lua_concat (L, lgi_type_get_name (L, GI_BASE_INFO (callable->info)) + 1);
     }
   else
     {
@@ -852,12 +844,11 @@ callable_call (lua_State *L)
   nret = 0;
   if (callable->has_self)
     {
-      GIBaseInfo *parent = g_base_info_get_container (callable->info);
-      GIInfoType type = g_base_info_get_type (parent);
-      if (type == GI_INFO_TYPE_OBJECT || type == GI_INFO_TYPE_INTERFACE)
+      GIBaseInfo *parent = gi_base_info_get_container (GI_BASE_INFO (callable->info));
+      if (GI_IS_OBJECT_INFO (parent) || GI_IS_INTERFACE_INFO (parent))
 	{
 	  args[0].v_pointer =
-	    lgi_object_2c (L, 2, g_registered_type_info_get_g_type (parent),
+	    lgi_object_2c (L, 2, gi_registered_type_info_get_g_type (GI_REGISTERED_TYPE_INFO (parent)),
 			   FALSE, FALSE, FALSE);
 	  nret++;
 	}
@@ -912,7 +903,7 @@ callable_call (lua_State *L)
 				     1, callable, ffi_args);
 	/* Special handling for out/caller-alloc structures; we have to
 	   manually pre-create them and store them on the stack. */
-	else if (callable->info && g_arg_info_is_caller_allocates (&param->ai)
+	else if (callable->info && gi_arg_info_is_caller_allocates (&param->ai)
 		 && lgi_marshal_2c_caller_alloc (L, param->ti, &args[argi], 0))
 	  {
 	    /* Even when marked as OUT, caller-allocates arguments
@@ -957,8 +948,8 @@ callable_call (lua_State *L)
   nret = 0;
   if (!callable->ignore_retval
       && (callable->retval.ti == NULL
-	  || (g_type_info_get_tag (callable->retval.ti) != GI_TYPE_TAG_VOID
-	      || g_type_info_is_pointer (callable->retval.ti))))
+	  || (gi_type_info_get_tag (callable->retval.ti) != GI_TYPE_TAG_VOID
+	      || gi_type_info_is_pointer (callable->retval.ti))))
     {
       callable_param_2lua (L, &callable->retval, &retval, LGI_PARENT_IS_RETVAL,
 			   1, callable, ffi_args);
@@ -996,7 +987,7 @@ callable_call (lua_State *L)
   for (i = 0; i < callable->nargs; i++, param++)
     if (!param->internal && param->dir != GI_DIRECTION_IN)
       {
-	if (callable->info && g_arg_info_is_caller_allocates (&param->ai)
+	if (callable->info && gi_arg_info_is_caller_allocates (&param->ai)
 	    && lgi_marshal_2c_caller_alloc (L, param->ti, NULL,
 					    -caller_allocated  - nret))
 	  /* Caller allocated parameter is already marshalled and
@@ -1041,7 +1032,7 @@ callable_index (lua_State *L)
   Callable *callable = callable_get (L, 1);
   const gchar *verb = lua_tostring (L, 2);
   if (g_strcmp0 (verb, "info") == 0)
-    return lgi_gi_info_new (L, g_base_info_ref (callable->info));
+    return lgi_gi_info_new (L, gi_base_info_ref (callable->info));
   else if (g_strcmp0 (verb, "params") == 0)
     {
       int index = 1, i;
@@ -1062,14 +1053,14 @@ callable_index (lua_State *L)
 	    /* Add name. */
 	    if (param->has_arg_info)
 	      {
-		lua_pushstring (L, g_base_info_get_name (&param->ai));
+		lua_pushstring (L, gi_base_info_get_name (GI_BASE_INFO (&param->ai)));
 		lua_setfield (L, -2, "name");
 	      }
 
 	    /* Add typeinfo. */
 	    if (param->ti)
 	      {
-		lgi_gi_info_new (L, g_base_info_ref (param->ti));
+		lgi_gi_info_new (L, gi_base_info_ref (param->ti));
 		lua_setfield (L, -2, "typeinfo");
 	      }
 
@@ -1127,13 +1118,12 @@ marshal_arguments (lua_State *L, void **args, int callable_index, Callable *call
   /* Marshall 'self' argument, if it is present. */
   if (callable->has_self)
     {
-      GIBaseInfo *parent = g_base_info_get_container (callable->info);
-      GIInfoType type = g_base_info_get_type (parent);
+      GIBaseInfo *parent = gi_base_info_get_container (GI_BASE_INFO (callable->info));
       gpointer addr = ((GIArgument*) args[0])->v_pointer;
       npos++;
-      if (type == GI_INFO_TYPE_OBJECT || type == GI_INFO_TYPE_INTERFACE)
+      if (GI_IS_OBJECT_INFO (parent) || GI_IS_INTERFACE_INFO (parent))
 	lgi_object_2lua (L, addr, FALSE, FALSE);
-      else if (type == GI_INFO_TYPE_STRUCT || type == GI_INFO_TYPE_UNION)
+      else if (GI_IS_STRUCT_INFO (parent) || GI_IS_UNION_INFO (parent))
 	{
 	  lgi_type_get_repotype (L, G_TYPE_INVALID, parent);
 	  lgi_record_2lua (L, addr, FALSE, 0);
@@ -1199,9 +1189,9 @@ marshal_return_values (lua_State *L, void *ret, void **args, int callable_index,
   lua_settop(L, lua_gettop (L) + callable->has_self + callable->nargs + 1);
 
   /* Marshal return value from Lua. */
-  tag = g_type_info_get_tag (callable->retval.ti);
+  tag = gi_type_info_get_tag (callable->retval.ti);
   if (tag != GI_TYPE_TAG_VOID
-      || g_type_info_is_pointer (callable->retval.ti))
+      || gi_type_info_is_pointer (callable->retval.ti))
     {
       if (callable->ignore_retval)
 	/* Return value should be ignored on Lua side, so we have
@@ -1217,8 +1207,8 @@ marshal_return_values (lua_State *L, void *ret, void **args, int callable_index,
 	  if (to_pop != 0)
 	    {
 	      g_warning ("cbk `%s.%s': return (transfer none) %d, unsafe!",
-			 g_base_info_get_namespace (callable->info),
-			 g_base_info_get_name (callable->info), to_pop);
+			 gi_base_info_get_namespace (GI_BASE_INFO (callable->info)),
+			 gi_base_info_get_name (GI_BASE_INFO (callable->info)), to_pop);
 	      lua_pop (L, to_pop);
 	    }
 
@@ -1233,8 +1223,8 @@ marshal_return_values (lua_State *L, void *ret, void **args, int callable_index,
       {
 	gpointer *arg = args[i + callable->has_self];
 	gboolean caller_alloc =
-	  callable->info && g_arg_info_is_caller_allocates (&param->ai)
-	  && g_type_info_get_tag (param->ti) == GI_TYPE_TAG_INTERFACE;
+	  callable->info && gi_arg_info_is_caller_allocates (&param->ai)
+	  && gi_type_info_get_tag (param->ti) == GI_TYPE_TAG_INTERFACE;
 	to_pop = callable_param_2c (L, param, npos, caller_alloc
 				    ? LGI_PARENT_CALLER_ALLOC : 0, *arg,
 				    callable_index, callable,
@@ -1242,9 +1232,9 @@ marshal_return_values (lua_State *L, void *ret, void **args, int callable_index,
 	if (to_pop != 0)
 	  {
 	    g_warning ("cbk %s.%s: arg `%s' (transfer none) %d, unsafe!",
-		       g_base_info_get_namespace (callable->info),
-		       g_base_info_get_name (callable->info),
-		       g_base_info_get_name (&param->ai), to_pop);
+		       gi_base_info_get_namespace (GI_BASE_INFO (callable->info)),
+		       gi_base_info_get_name (GI_BASE_INFO (callable->info)),
+		       gi_base_info_get_name (GI_BASE_INFO (&param->ai)), to_pop);
 	    lua_pop (L, to_pop);
 	  }
 
@@ -1272,7 +1262,7 @@ marshal_return_error (lua_State *L, void *ret, void **args, Callable *callable)
       }
 
     /* Such function should usually return FALSE, so do it. */
-    if (g_type_info_get_tag (callable->retval.ti) == GI_TYPE_TAG_BOOLEAN)
+    if (gi_type_info_get_tag (callable->retval.ti) == GI_TYPE_TAG_BOOLEAN)
       *(gboolean *) ret = FALSE;
 }
 
@@ -1537,7 +1527,7 @@ lgi_closure_create (lua_State *L, gpointer user_data,
   if (ffi_prep_closure_loc (&closure->ffi_closure, &callable->cif,
 			    closure_callback, closure, call_addr) != FFI_OK)
     {
-      lua_concat (L, lgi_type_get_name (L, callable->info));
+      lua_concat (L, lgi_type_get_name (L, GI_BASE_INFO (callable->info)));
       luaL_error (L, "failed to prepare closure for `%'", lua_tostring (L, -1));
       return NULL;
     }
@@ -1589,3 +1579,4 @@ lgi_callable_init (lua_State *L)
   luaL_register (L, NULL, callable_api_reg);
   lua_setfield (L, -2, "callable");
 }
+

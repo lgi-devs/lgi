@@ -175,22 +175,22 @@ static void
 array_get_or_set_length (GITypeInfo *ti, gssize *get_length, gssize set_length,
 			 GIBaseInfo *ci, void *args)
 {
-  gint param = g_type_info_get_array_length (ti);
-  if (param >= 0 && ci != NULL)
+  guint param;
+
+  if (gi_type_info_get_array_length_index (ti, &param) && ci != NULL)
     {
       GIArgument *val;
       GITypeInfo *eti;
-      GIInfoType itype = g_base_info_get_type (ci);
 
-      if (itype == GI_INFO_TYPE_FUNCTION || itype == GI_INFO_TYPE_CALLBACK)
+      if (GI_IS_FUNCTION_INFO (ci) || GI_IS_CALLBACK_INFO (ci))
 	{
 	  GIArgInfo ai;
 
-	  if (param >= g_callable_info_get_n_args (ci))
+	  if (param >= gi_callable_info_get_n_args (GI_CALLABLE_INFO (ci)))
 	    return;
-	  g_callable_info_load_arg (ci, param, &ai);
-	  eti = g_arg_info_get_type (&ai);
-	  if (g_arg_info_get_direction (&ai) == GI_DIRECTION_IN)
+	  gi_callable_info_load_arg (GI_CALLABLE_INFO (ci), param, &ai);
+	  eti = gi_arg_info_get_type_info (&ai);
+	  if (gi_arg_info_get_direction (&ai) == GI_DIRECTION_IN)
 	    /* For input parameters, value is directly pointed to by args
 	       table element. */
 	    val = (GIArgument *) ((void **) args)[param];
@@ -198,22 +198,24 @@ array_get_or_set_length (GITypeInfo *ti, gssize *get_length, gssize set_length,
 	    /* For output arguments, args table element points to pointer
 	       to value. */
 	    val = *(GIArgument **) ((void **) args)[param];
+
+          gi_base_info_clear (&ai);
 	}
-      else if (itype == GI_INFO_TYPE_STRUCT || itype == GI_INFO_TYPE_UNION)
+      else if (GI_IS_STRUCT_INFO (ci) || GI_IS_UNION_INFO (ci))
 	{
 	  GIFieldInfo *fi;
 
-	  if (param >= g_struct_info_get_n_fields (ci))
+	  if (param >= gi_struct_info_get_n_fields (GI_STRUCT_INFO (ci)))
 	    return;
-	  fi = g_struct_info_get_field (ci, param);
-	  eti = g_field_info_get_type (fi);
-	  val = (GIArgument *) ((char *) args + g_field_info_get_offset (fi));
-	  g_base_info_unref (fi);
+	  fi = gi_struct_info_get_field (GI_STRUCT_INFO (ci), param);
+	  eti = gi_field_info_get_type_info (fi);
+	  val = (GIArgument *) ((char *) args + gi_field_info_get_offset (fi));
+	  gi_base_info_unref (fi);
 	}
       else
 	return;
 
-      switch (g_type_info_get_tag (eti))
+      switch (gi_type_info_get_tag (eti))
 	{
 #define HANDLE_ELT(tag, field)			\
 	  case GI_TYPE_TAG_ ## tag:		\
@@ -237,7 +239,7 @@ array_get_or_set_length (GITypeInfo *ti, gssize *get_length, gssize set_length,
 	  g_assert_not_reached ();
 	}
 
-      g_base_info_unref (eti);
+      gi_base_info_unref (eti);
     }
 }
 
@@ -247,9 +249,9 @@ static gssize
 array_get_elt_size (GITypeInfo *ti, gboolean force_ptr)
 {
   gssize size = sizeof (gpointer);
-  if (!g_type_info_is_pointer (ti) && !force_ptr)
+  if (!gi_type_info_is_pointer (ti) && !force_ptr)
     {
-      switch (g_type_info_get_tag (ti))
+      switch (gi_type_info_get_tag (ti))
 	{
 #define HANDLE_ELT(nameupper, nametype)		\
 	  case GI_TYPE_TAG_ ## nameupper:	\
@@ -272,13 +274,12 @@ array_get_elt_size (GITypeInfo *ti, gboolean force_ptr)
 
 	case GI_TYPE_TAG_INTERFACE:
 	  {
-	    GIBaseInfo *info = g_type_info_get_interface (ti);
-	    GIInfoType type = g_base_info_get_type (info);
-	    if (type == GI_INFO_TYPE_STRUCT)
-	      size = g_struct_info_get_size (info);
-	    else if (type == GI_INFO_TYPE_UNION)
-	      size = g_union_info_get_size (info);
-	    g_base_info_unref (info);
+	    GIBaseInfo *info = gi_type_info_get_interface (ti);
+            if (GI_IS_STRUCT_INFO (info))
+	      size = gi_struct_info_get_size (GI_STRUCT_INFO (info));
+	    else if (GI_IS_UNION_INFO (info))
+	      size = gi_union_info_get_size (GI_UNION_INFO (info));
+	    gi_base_info_unref (info);
 	    break;
 	  }
 
@@ -333,8 +334,8 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
   else
     {
       /* Get element type info, create guard for it. */
-      eti = g_type_info_get_param_type (ti, 0);
-      lgi_gi_info_new (L, eti);
+      eti = gi_type_info_get_param_type (ti, 0);
+      lgi_gi_info_new (L, GI_BASE_INFO (eti));
       eti_guard = lua_gettop (L);
       esize = array_get_elt_size (eti, atype == GI_ARRAY_TYPE_PTR_ARRAY);
 
@@ -363,10 +364,9 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 	  luaL_checktype (L, narg, LUA_TTABLE);
 
 	  /* Find out how long array should we allocate. */
-	  zero_terminated = g_type_info_is_zero_terminated (ti);
+	  zero_terminated = gi_type_info_is_zero_terminated (ti);
 	  objlen = lua_objlen (L, narg);
-	  *out_size = g_type_info_get_array_fixed_size (ti);
-	  if (atype != GI_ARRAY_TYPE_C || *out_size < 0)
+          if (atype != GI_ARRAY_TYPE_C || !gi_type_info_get_array_fixed_size (ti, (gsize *)out_size))
 	    *out_size = objlen;
 	  else if (*out_size < objlen)
 	    objlen = *out_size;
@@ -434,7 +434,7 @@ marshal_2c_array (lua_State *L, GITypeInfo *ti, GIArrayType atype,
 	     according to the array type. */
 	  if (array == NULL)
 	    *out_array = NULL;
-	  else 
+	  else
 	    switch (atype)
 	      {
 	      case GI_ARRAY_TYPE_C:
@@ -498,12 +498,11 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIDirection dir,
   else
     {
       data = array;
-      if (g_type_info_is_zero_terminated (ti))
+      if (gi_type_info_is_zero_terminated (ti))
 	len = -1;
       else
 	{
-	  len = g_type_info_get_array_fixed_size (ti);
-	  if (len == -1)
+          if (!gi_type_info_get_array_fixed_size (ti, (gsize *)&len))
 	    /* Length of the array is dynamic, get it from other
 	       argument. */
 	    len = size;
@@ -512,8 +511,8 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIDirection dir,
 
   /* Get array element type info, wrap it in the guard so that we
      don't leak it. */
-  eti = g_type_info_get_param_type (ti, 0);
-  lgi_gi_info_new (L, eti);
+  eti = gi_type_info_get_param_type (ti, 0);
+  lgi_gi_info_new (L, GI_BASE_INFO (eti));
   eti_guard = lua_gettop (L);
   esize = array_get_elt_size (eti, atype == GI_ARRAY_TYPE_PTR_ARRAY);
 
@@ -523,7 +522,7 @@ marshal_2lua_array (lua_State *L, GITypeInfo *ti, GIDirection dir,
      is workaround for g-ir-scanner bug which might mark elements of
      uint8 arrays as gconstpointer, thus setting is_pointer=true on
      it.  See https://github.com/pavouk/lgi/issues/57 */
-  if (g_type_info_get_tag (eti) == GI_TYPE_TAG_UINT8)
+  if (gi_type_info_get_tag (eti) == GI_TYPE_TAG_UINT8)
     {
       /* UINT8 arrays are marshalled as Lua strings. */
       if (len < 0)
@@ -611,8 +610,8 @@ marshal_2c_list (lua_State *L, GITypeInfo *ti, GITypeTag list_tag,
 
   /* Get list element type info, create guard for it so that we don't
      leak it. */
-  eti = g_type_info_get_param_type (ti, 0);
-  lgi_gi_info_new (L, eti);
+  eti = gi_type_info_get_param_type (ti, 0);
+  lgi_gi_info_new (L, GI_BASE_INFO (eti));
   eti_guard = lua_gettop (L);
 
   /* Go from back and prepend to the list, which is cheaper than
@@ -655,8 +654,8 @@ marshal_2lua_list (lua_State *L, GITypeInfo *ti, GIDirection dir,
   gint index, eti_guard;
 
   /* Get element type info, guard it so that we don't leak it. */
-  eti = g_type_info_get_param_type (ti, 0);
-  lgi_gi_info_new (L, eti);
+  eti = gi_type_info_get_param_type (ti, 0);
+  lgi_gi_info_new (L, GI_BASE_INFO (eti));
   eti_guard = lua_gettop (L);
 
   /* Create table to which we will deserialize the list. */
@@ -714,8 +713,8 @@ marshal_2c_hash (lua_State *L, GITypeInfo *ti, GHashTable **table, int narg,
       guard = lua_gettop (L) + 1;
       for (i = 0; i < 2; i++)
 	{
-	  eti[i] = g_type_info_get_param_type (ti, i);
-	  lgi_gi_info_new (L, eti[i]);
+	  eti[i] = gi_type_info_get_param_type (ti, i);
+	  lgi_gi_info_new (L, GI_BASE_INFO (eti[i]));
 	}
 
       /* Create the hashtable and guard it so that it is destroyed in
@@ -726,7 +725,7 @@ marshal_2c_hash (lua_State *L, GITypeInfo *ti, GHashTable **table, int narg,
 
       /* Find out which hash_func and equal_func should be used,
 	 according to the type of the key. */
-      switch (g_type_info_get_tag (eti[0]))
+      switch (gi_type_info_get_tag (eti[0]))
 	{
 	case GI_TYPE_TAG_UTF8:
 	case GI_TYPE_TAG_FILENAME:
@@ -801,8 +800,8 @@ marshal_2lua_hash (lua_State *L, GITypeInfo *ti, GIDirection dir,
       guard = lua_gettop (L) + 1;
       for (i = 0; i < 2; i++)
 	{
-	  eti[i] = g_type_info_get_param_type (ti, i);
-	  lgi_gi_info_new (L, eti[i]);
+	  eti[i] = gi_type_info_get_param_type (ti, i);
+	  lgi_gi_info_new (L, GI_BASE_INFO (eti[i]));
 	}
 
       /* Create table to which we will deserialize the hashtable. */
@@ -856,7 +855,7 @@ marshal_2c_callable (lua_State *L, GICallableInfo *ci, GIArgInfo *ai,
   gint nargs = 0;
 
   if (argci != NULL)
-    nargs = g_callable_info_get_n_args (argci);
+    nargs = gi_callable_info_get_n_args (argci);
 
   /* Check 'nil' in optional case.  In this case, return NULL as
      callback. */
@@ -872,8 +871,8 @@ marshal_2c_callable (lua_State *L, GICallableInfo *ci, GIArgInfo *ai,
 	     case). */
 	  if (ai != NULL)
 	    {
-	      gint arg = g_arg_info_get_destroy (ai);
-	      if (arg >= 0 && arg < nargs)
+	      guint arg;
+              if (gi_arg_info_get_destroy_index (ai, &arg) && arg < (guint)nargs)
 		((GIArgument *) args[arg])->v_pointer = NULL;
 	    }
 	  return 0;
@@ -891,20 +890,19 @@ marshal_2c_callable (lua_State *L, GICallableInfo *ci, GIArgInfo *ai,
 
   if (argci != NULL)
     {
-      gint arg = g_arg_info_get_closure (ai);
+      guint arg;
 
       /* user_data block is already preallocated from function call. */
       g_assert (args != NULL);
-      if (arg >= 0 && arg < nargs)
+      if (gi_arg_info_get_closure_index (ai, &arg) && arg < (guint)nargs)
 	{
 	  user_data = ((GIArgument *) args[arg])->v_pointer;
-	  arg = g_arg_info_get_destroy (ai);
-	  if (arg >= 0 && arg < nargs)
+	  if (gi_arg_info_get_destroy_index (ai, &arg) && arg < (guint)nargs)
 	    ((GIArgument *) args[arg])->v_pointer = lgi_closure_destroy;
 	}
     }
 
-  scope = g_arg_info_get_scope (ai);
+  scope = gi_arg_info_get_scope (ai);
   if (user_data == NULL)
     {
       /* Closure without user_data block.  Create new data block,
@@ -934,9 +932,9 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 {
   int nret = 0;
   gboolean optional = (parent == LGI_PARENT_CALLER_ALLOC) ||
-    (ai == NULL || (g_arg_info_is_optional (ai) ||
-		       g_arg_info_may_be_null (ai)));
-  GITypeTag tag = g_type_info_get_tag (ti);
+    (ai == NULL || (gi_arg_info_is_optional (ai) ||
+		        gi_arg_info_may_be_null (ai)));
+  GITypeTag tag = gi_type_info_get_tag (ti);
   GIArgument *arg = target;
 
   /* Convert narg stack position to absolute one, because during
@@ -1021,15 +1019,13 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 
     case GI_TYPE_TAG_INTERFACE:
       {
-	GIBaseInfo *info = g_type_info_get_interface (ti);
-	GIInfoType type = g_base_info_get_type (info);
+	GIBaseInfo *info = gi_type_info_get_interface (ti);
 	int info_guard;
 	lgi_gi_info_new (L, info);
 	info_guard = lua_gettop (L);
-	switch (type)
-	  {
-	  case GI_INFO_TYPE_ENUM:
-	  case GI_INFO_TYPE_FLAGS:
+
+        if (GI_IS_ENUM_INFO (info) || GI_IS_FLAGS_INFO (info))
+          {
 	    /* If the argument is not numeric, convert to number
 	       first.  Use enum/flags 'constructor' to do this. */
 	    if (lua_type (L, narg) != LUA_TNUMBER)
@@ -1041,56 +1037,51 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
 	      }
 
 	    /* Directly store underlying value. */
-	    marshal_2c_int (L, g_enum_info_get_storage_type (info), arg, narg,
+	    marshal_2c_int (L, gi_enum_info_get_storage_type (GI_ENUM_INFO (info)), arg, narg,
 			    optional, parent);
 
 	    /* Remove the temporary value, to keep stack balanced. */
 	    if (narg == -1)
 	      lua_pop (L, 1);
-	    break;
+          }
+        else if (GI_IS_STRUCT_INFO (info) || GI_IS_UNION_INFO (info))
+          {
+            /* Ideally the gi_type_info_is_pointer() should be
+               sufficient here, but there is some
+               gobject-introspection quirk that some struct
+               arguments might not be marked as pointers
+               (e.g. g_variant_equals(), which has ctype of
+               gconstpointer, and thus logic in girparser.c which
+               sets is_pointer attribute fails).  Workaround it by
+               checking also argument type - structs as C function
+               arguments are always passed as pointers. */
+            gboolean by_value =
+              parent != LGI_PARENT_FORCE_POINTER &&
+              ((!gi_type_info_is_pointer (ti) && ai == NULL) ||
+               parent == LGI_PARENT_CALLER_ALLOC);
 
-	  case GI_INFO_TYPE_STRUCT:
-	  case GI_INFO_TYPE_UNION:
-	    {
-	      /* Ideally the g_type_info_is_pointer() should be
-		 sufficient here, but there is some
-		 gobject-introspection quirk that some struct
-		 arguments might not be marked as pointers
-		 (e.g. g_variant_equals(), which has ctype of
-		 gconstpointer, and thus logic in girparser.c which
-		 sets is_pointer attribute fails).  Workaround it by
-		 checking also argument type - structs as C function
-		 arguments are always passed as pointers. */
-	      gboolean by_value =
-		parent != LGI_PARENT_FORCE_POINTER &&
-		((!g_type_info_is_pointer (ti) && ai == NULL) ||
-		 parent == LGI_PARENT_CALLER_ALLOC);
-
-	      lgi_type_get_repotype (L, G_TYPE_INVALID, info);
-	      lgi_record_2c (L, narg, target, by_value,
-			     transfer != GI_TRANSFER_NOTHING, optional, FALSE);
-	      break;
-	    }
-
-	  case GI_INFO_TYPE_OBJECT:
-	  case GI_INFO_TYPE_INTERFACE:
-	    {
-	      arg->v_pointer =
-		lgi_object_2c (L, narg,
-			       g_registered_type_info_get_g_type (info),
-			       optional, FALSE,
-			       transfer != GI_TRANSFER_NOTHING);
-	      break;
-	    }
-
-	  case GI_INFO_TYPE_CALLBACK:
-	    nret = marshal_2c_callable (L, info, ai, &arg->v_pointer, narg,
-					optional, ci, args);
-	    break;
-
-	  default:
-	    g_assert_not_reached ();
+	    lgi_type_get_repotype (L, G_TYPE_INVALID, info);
+	    lgi_record_2c (L, narg, target, by_value,
+	      transfer != GI_TRANSFER_NOTHING, optional, FALSE);
 	  }
+        else if (GI_IS_OBJECT_INFO (info) || GI_IS_INTERFACE_INFO (info))
+	  {
+	    arg->v_pointer =
+	      lgi_object_2c (L, narg,
+	                     gi_registered_type_info_get_g_type (GI_REGISTERED_TYPE_INFO (info)),
+	                     optional, FALSE,
+	                     transfer != GI_TRANSFER_NOTHING);
+	  }
+        else if (GI_IS_CALLBACK_INFO (info))
+          {
+	    nret = marshal_2c_callable (L, GI_CALLABLE_INFO (info), ai, &arg->v_pointer, narg,
+					optional, ci, args);
+          }
+        else
+          {
+	    g_assert_not_reached ();
+          }
+
 	lua_remove (L, info_guard);
       }
       break;
@@ -1098,13 +1089,13 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
     case GI_TYPE_TAG_ARRAY:
       {
 	gssize size;
-	GIArrayType atype = g_type_info_get_array_type (ti);
+	GIArrayType atype = gi_type_info_get_array_type (ti);
 	nret = marshal_2c_array (L, ti, atype, &arg->v_pointer, &size,
 				 narg, optional, transfer);
 
 	/* Fill in array length argument, if it is specified. */
 	if (atype == GI_ARRAY_TYPE_C)
-	  array_get_or_set_length (ti, NULL, size, ci, args);
+	  array_get_or_set_length (ti, NULL, size, GI_BASE_INFO (ci), args);
 	break;
       }
 
@@ -1119,7 +1110,7 @@ lgi_marshal_2c (lua_State *L, GITypeInfo *ti, GIArgInfo *ai,
       break;
 
     case GI_TYPE_TAG_VOID:
-      if (g_type_info_is_pointer (ti))
+      if (gi_type_info_is_pointer (ti))
 	{
 	  /* Check and marshal according to real Lua type. */
 	  if (lua_isnoneornil (L, narg))
@@ -1168,13 +1159,12 @@ lgi_marshal_2c_caller_alloc (lua_State *L, GITypeInfo *ti, GIArgument *val,
 			     int pos)
 {
   gboolean handled = FALSE;
-  switch (g_type_info_get_tag (ti))
+  switch (gi_type_info_get_tag (ti))
     {
     case GI_TYPE_TAG_INTERFACE:
       {
-	GIBaseInfo *ii = g_type_info_get_interface (ti);
-	GIInfoType type = g_base_info_get_type (ii);
-	if (type == GI_INFO_TYPE_STRUCT || type == GI_INFO_TYPE_UNION)
+	GIBaseInfo *ii = gi_type_info_get_interface (ti);
+        if (GI_IS_STRUCT_INFO (ii) || GI_IS_UNION_INFO (ii))
 	  {
 	    if (pos == 0)
 	      {
@@ -1184,23 +1174,25 @@ lgi_marshal_2c_caller_alloc (lua_State *L, GITypeInfo *ti, GIArgument *val,
 	    handled = TRUE;
 	  }
 
-	g_base_info_unref (ii);
+	gi_base_info_unref (ii);
 	break;
       }
 
     case GI_TYPE_TAG_ARRAY:
       {
-	if (g_type_info_get_array_type (ti) == GI_ARRAY_TYPE_C)
+	if (gi_type_info_get_array_type (ti) == GI_ARRAY_TYPE_C)
 	  {
 	    gpointer *array_guard;
 	    if (pos == 0)
 	      {
-		gssize elt_size, size;
+		gssize elt_size;
+                gsize size;
 
 		/* Currently only fixed-size arrays are supported. */
 		elt_size =
-		  array_get_elt_size (g_type_info_get_param_type (ti, 0), FALSE);
-		size = g_type_info_get_array_fixed_size (ti);
+		  array_get_elt_size (gi_type_info_get_param_type (ti, 0), FALSE);
+                if (!gi_type_info_get_array_fixed_size (ti, &size))
+                  g_assert_not_reached ();
 		g_assert (size > 0);
 
 		/* Allocate underlying array.  It is temporary,
@@ -1257,7 +1249,7 @@ lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIArgInfo *ai, GIDirection dir,
 		  GICallableInfo *ci, void *args)
 {
   gboolean own = (transfer != GI_TRANSFER_NOTHING);
-  GITypeTag tag = g_type_info_get_tag (ti);
+  GITypeTag tag = gi_type_info_get_tag (ti);
   GIArgument *arg = source;
 
   /* Make sure that parent is absolute index so that it is fixed even
@@ -1267,7 +1259,7 @@ lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIArgInfo *ai, GIDirection dir,
   switch (tag)
     {
     case GI_TYPE_TAG_VOID:
-      if (g_type_info_is_pointer (ti))
+      if (gi_type_info_is_pointer (ti))
 	/* Marshal pointer to simple lightuserdata. */
 	lua_pushlightuserdata (L, arg->v_pointer);
       else
@@ -1310,20 +1302,17 @@ lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIArgInfo *ai, GIDirection dir,
 
     case GI_TYPE_TAG_INTERFACE:
       {
-	GIBaseInfo *info = g_type_info_get_interface (ti);
-	GIInfoType type = g_base_info_get_type (info);
+	GIBaseInfo *info = gi_type_info_get_interface (ti);
 	int info_guard;
 	lgi_gi_info_new (L, info);
 	info_guard = lua_gettop (L);
-	switch (type)
-	  {
-	  case GI_INFO_TYPE_ENUM:
-	  case GI_INFO_TYPE_FLAGS:
+        if (GI_IS_ENUM_INFO (info) || GI_IS_FLAGS_INFO (info))
+          {
 	    /* Prepare repotable of enum/flags on the stack. */
 	    lgi_type_get_repotype (L, G_TYPE_INVALID, info);
 
 	    /* Unmarshal the numeric value. */
-	    marshal_2lua_int (L, g_enum_info_get_storage_type (info),
+	    marshal_2lua_int (L, gi_enum_info_get_storage_type (GI_ENUM_INFO (info)),
 			      arg, parent);
 
 	    /* Get symbolic value from the table. */
@@ -1331,39 +1320,35 @@ lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIArgInfo *ai, GIDirection dir,
 
 	    /* Remove the table from the stack. */
 	    lua_remove (L, -2);
-	    break;
-
-	  case GI_INFO_TYPE_STRUCT:
-	  case GI_INFO_TYPE_UNION:
-	    {
-	      gboolean by_ref = parent == LGI_PARENT_FORCE_POINTER ||
-		g_type_info_is_pointer (ti);
-	      if (parent < LGI_PARENT_CALLER_ALLOC && by_ref)
-		parent = 0;
-	      lgi_type_get_repotype (L, G_TYPE_INVALID, info);
-	      lgi_record_2lua (L, by_ref ? arg->v_pointer : source,
-			       own, parent);
-	      break;
-	    }
-
-	  case GI_INFO_TYPE_OBJECT:
-	  case GI_INFO_TYPE_INTERFACE:
+          }
+        else if (GI_IS_STRUCT_INFO (info) || GI_IS_UNION_INFO (info))
+          {
+	    gboolean by_ref = parent == LGI_PARENT_FORCE_POINTER ||
+                gi_type_info_is_pointer (ti);
+            if (parent < LGI_PARENT_CALLER_ALLOC && by_ref)
+              parent = 0;
+            lgi_type_get_repotype (L, G_TYPE_INVALID, info);
+            lgi_record_2lua (L, by_ref ? arg->v_pointer : source,
+                             own, parent);
+	  }
+        else if (GI_IS_OBJECT_INFO (info) || GI_IS_INTERFACE_INFO (info))
+          {
 	    /* Avoid sinking for input arguments, because it wreaks
 	       havoc to input arguments of vfunc callbacks during
 	       InitiallyUnowned construction phase. */
 	    lgi_object_2lua (L, arg->v_pointer, own, dir == GI_DIRECTION_IN);
-	    break;
-
-	  case GI_INFO_TYPE_CALLBACK:
+          }
+        else if (GI_IS_CALLBACK_INFO (info))
+          {
 	    if (arg->v_pointer == NULL)
 	      lua_pushnil (L);
 	    else
 	      {
-		lgi_callable_create (L, info, arg->v_pointer);
+		lgi_callable_create (L, GI_CALLABLE_INFO (info), arg->v_pointer);
 		if (ai != NULL && args != NULL)
 		  {
-		    gint closure = g_arg_info_get_closure (ai);
-		    if (closure >= 0)
+                    guint closure;
+		    if (gi_arg_info_get_closure_index (ai, &closure))
 		      {
 			/* Store context associated with the callback
 			   to the callback object. */
@@ -1373,21 +1358,22 @@ lgi_marshal_2lua (lua_State *L, GITypeInfo *ti, GIArgInfo *ai, GIDirection dir,
 		      }
 		  }
 	      }
-	    break;
+          }
+        else
+          {
+            g_assert_not_reached ();
+          }
 
-	  default:
-	    g_assert_not_reached ();
-	  }
 	lua_remove (L, info_guard);
       }
       break;
 
     case GI_TYPE_TAG_ARRAY:
       {
-	GIArrayType atype = g_type_info_get_array_type (ti);
+	GIArrayType atype = gi_type_info_get_array_type (ti);
 	gssize size = -1;
-	gpointer ptr = g_type_info_is_pointer (ti) ? arg->v_pointer : arg;
-	array_get_or_set_length (ti, &size, 0, ci, args);
+	gpointer ptr = gi_type_info_is_pointer (ti) ? arg->v_pointer : arg;
+	array_get_or_set_length (ti, &size, 0, GI_BASE_INFO (ci), args);
 	marshal_2lua_array (L, ti, dir, atype, transfer, ptr, size, parent);
       }
       break;
@@ -1424,10 +1410,10 @@ lgi_marshal_field (lua_State *L, gpointer object, gboolean getmode,
     {
       GIFieldInfoFlags flags;
       GIFieldInfo **fi = lua_touserdata (L, field_arg);
-      pi = g_base_info_get_container (*fi);
+      pi = gi_base_info_get_container (GI_BASE_INFO (*fi));
 
       /* Check, whether field is readable/writable. */
-      flags = g_field_info_get_flags (*fi);
+      flags = gi_field_info_get_flags (*fi);
       if ((flags & (getmode ? GI_FIELD_IS_READABLE
 		    : GI_FIELD_IS_WRITABLE)) == 0)
 	{
@@ -1439,10 +1425,10 @@ lgi_marshal_field (lua_State *L, gpointer object, gboolean getmode,
 	      /* Prepare proper error message. */
 	      lua_concat (L,
 			  lgi_type_get_name (L,
-					     g_base_info_get_container (*fi)));
+					     gi_base_info_get_container (GI_BASE_INFO (*fi))));
 	      return luaL_error (L, "%s: field `%s' is not %s",
 				 lua_tostring (L, -1),
-				 g_base_info_get_name (*fi),
+				 gi_base_info_get_name (GI_BASE_INFO (*fi)),
 				 getmode ? "readable" : "writable");
 	    }
 	  lua_pop (L, 1);
@@ -1450,9 +1436,9 @@ lgi_marshal_field (lua_State *L, gpointer object, gboolean getmode,
 
       /* Map GIArgument to proper memory location, get typeinfo of the
 	 field and perform actual marshalling. */
-      field_addr = (char *) object + g_field_info_get_offset (*fi);
-      ti = g_field_info_get_type (*fi);
-      lgi_gi_info_new (L, ti);
+      field_addr = (char *) object + gi_field_info_get_offset (*fi);
+      ti = gi_field_info_get_type_info (*fi);
+      lgi_gi_info_new (L, GI_BASE_INFO (ti));
       to_remove = lua_gettop (L);
     }
   else
@@ -1547,7 +1533,7 @@ lgi_marshal_field (lua_State *L, gpointer object, gboolean getmode,
   if (getmode)
     {
       lgi_marshal_2lua (L, ti, NULL, GI_DIRECTION_OUT, GI_TRANSFER_NOTHING,
-			field_addr, parent_arg, pi, object);
+			field_addr, parent_arg, GI_CALLABLE_INFO (pi), object);
       nret = 1;
     }
   else
@@ -1609,14 +1595,14 @@ marshal_container_marshaller (lua_State *L)
 
   /* Get info and transfer from upvalue. */
   ti = lua_touserdata (L, lua_upvalueindex (1));
-  tag = g_type_info_get_tag (*ti);
+  tag = gi_type_info_get_tag (*ti);
   transfer = lua_tointeger (L, lua_upvalueindex (2));
 
   switch (tag)
     {
     case GI_TYPE_TAG_ARRAY:
       {
-	GIArrayType atype = g_type_info_get_array_type (*ti);
+	GIArrayType atype = gi_type_info_get_array_type (*ti);
 	gssize size = -1;
 	if (get_mode)
 	  {
@@ -1703,7 +1689,7 @@ static int
 marshal_container (lua_State *L)
 {
   GIBaseInfo **info = luaL_checkudata (L, 1, LGI_GI_INFO);
-  GITypeTag tag = g_type_info_get_tag (*info);
+  GITypeTag tag = gi_type_info_get_tag (GI_TYPE_INFO (*info));
   GITransfer transfer = luaL_checkoption (L, 2, transfers[0], transfers);
   if (tag == GI_TYPE_TAG_ARRAY || tag == GI_TYPE_TAG_GHASH ||
       tag == GI_TYPE_TAG_GSLIST || tag == GI_TYPE_TAG_GLIST)
@@ -1754,19 +1740,19 @@ static int
 marshal_fundamental (lua_State *L)
 {
   /* Find associated baseinfo. */
-  GIBaseInfo *info = g_irepository_find_by_gtype (NULL,
+  GIBaseInfo *info = gi_repository_find_by_gtype (lgi_gi_get_repository (),
 						  lgi_type_get_gtype (L, 1));
   if (info)
     {
       lgi_gi_info_new (L, info);
-      if (GI_IS_OBJECT_INFO (info) && g_object_info_get_fundamental (info))
+      if (GI_IS_OBJECT_INFO (info) && gi_object_info_get_fundamental (GI_OBJECT_INFO (info)))
 	{
 	  GIObjectInfoGetValueFunction get_value =
-	    lgi_object_get_function_ptr (info,
-					 g_object_info_get_get_value_function);
+	    lgi_object_get_function_ptr (GI_OBJECT_INFO (info),
+					 gi_object_info_get_get_value_function_name);
 	  GIObjectInfoSetValueFunction set_value =
-	    lgi_object_get_function_ptr (info,
-					 g_object_info_get_set_value_function);
+	    lgi_object_get_function_ptr (GI_OBJECT_INFO (info),
+					 gi_object_info_get_set_value_function_name);
 	  if (get_value && set_value)
 	    {
 	      lua_pushlightuserdata (L, get_value);
@@ -1855,7 +1841,7 @@ marshal_closure_invoke (lua_State *L)
   GClosure *closure;
   GValue *result, *params;
   gint n_params, i;
-  
+
   lgi_type_get_repotype (L, G_TYPE_CLOSURE, NULL);
   lgi_record_2c (L, 1, &closure, FALSE, FALSE, FALSE, FALSE);
 
@@ -1899,11 +1885,11 @@ marshal_closure_set_marshal (lua_State *L)
   GClosureMarshal marshal;
   GIBaseInfo *ci;
 
-  ci = g_irepository_find_by_name (NULL, "GObject", "ClosureMarshal");
+  ci = gi_repository_find_by_name (lgi_gi_get_repository (), "GObject", "ClosureMarshal");
   lgi_type_get_repotype (L, G_TYPE_CLOSURE, NULL);
   lgi_record_2c (L, 1, &closure, FALSE, FALSE, FALSE, FALSE);
   user_data = lgi_closure_allocate (L, 1);
-  lgi_callable_create (L, ci, NULL);
+  lgi_callable_create (L, GI_CALLABLE_INFO (ci), NULL);
   marshal = lgi_closure_create (L, user_data, 2, FALSE);
   g_closure_set_marshal (closure, marshal);
   g_closure_add_invalidate_notifier (closure, user_data, gclosure_destroy);
@@ -1916,7 +1902,7 @@ static int
 marshal_typeinfo (lua_State *L)
 {
   GIBaseInfo **info = luaL_checkudata (L, 1, LGI_GI_INFO);
-  switch (g_type_info_get_tag (*info))
+  switch (gi_type_info_get_tag (GI_TYPE_INFO (*info)))
     {
 #define HANDLE_INT(upper, type)						\
       case GI_TYPE_TAG_ ## upper:					\

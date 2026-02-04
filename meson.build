@@ -74,7 +74,7 @@ else
   lua_path = join_paths(get_option('datadir'), 'lua', lua_abi_version)
 endif
 
-gi_dep = dependency('gobject-introspection-1.0')
+gi_dep = dependency('girepository-2.0', version: '>= 2.80')
 gi_datadir = gi_dep.get_pkgconfig_variable('gidatadir')
 
 install_data('lgi.lua', install_dir: lua_path)
