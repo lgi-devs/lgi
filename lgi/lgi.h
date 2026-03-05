@@ -44,6 +44,17 @@ typedef lua_Unsigned lgi_Unsigned;
 typedef unsigned long lgi_Unsigned;
 #define lua_isinteger(L, i) 0
 #define LGI_LUAINT_FORMAT "%td"
+
+// From Lua5.2.
+#ifndef luaL_newlibtable
+#define luaL_newlibtable(L, l) \
+    lua_createtable(L, 0, sizeof(l) / sizeof(l[0]) - 1)
+#endif
+#ifndef luaL_newlib
+#define luaL_newlib(L, l) \
+    (luaL_newlibtable(L, l), luaL_register(L, NULL, l))
+#endif
+
 #endif
 
 #include <glib.h>

@@ -817,8 +817,7 @@ lgi_gi_init (lua_State *L)
     }
 
   /* Register global API. */
-  lua_newtable (L);
-  luaL_register (L, NULL, gi_api_reg);
+  luaL_newlib(L, gi_api_reg);
   lua_newtable (L);
   lua_pushcfunction (L, gi_index);
   lua_setfield (L, -2, "__index");

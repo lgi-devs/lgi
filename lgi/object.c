@@ -594,8 +594,7 @@ lgi_object_init (lua_State *L)
 
   /* Register metatable. */
   lua_pushlightuserdata (L, &object_mt);
-  lua_newtable (L);
-  luaL_register (L, NULL, object_mt_reg);
+  luaL_newlib(L, object_mt_reg);
   lua_rawset (L, LUA_REGISTRYINDEX);
 
   /* Initialize object cache. */
@@ -626,7 +625,6 @@ lgi_object_init (lua_State *L)
   lua_rawset (L, LUA_REGISTRYINDEX);
 
   /* Create object API table and set it to the parent. */
-  lua_newtable (L);
-  luaL_register (L, NULL, object_api_reg);
+  luaL_newlib (L, object_api_reg);
   lua_setfield (L, -2, "object");
 }

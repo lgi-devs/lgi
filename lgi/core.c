@@ -757,8 +757,7 @@ luaopen_lgi_corelgilua51 (lua_State* L)
   lua_rawset (L, LUA_REGISTRYINDEX);
 
   /* Register 'lgi.core' interface. */
-  lua_newtable (L);
-  luaL_register (L, NULL, lgi_reg);
+  luaL_newlib(L, lgi_reg);
 
   /* Add the state ID */
   state_id = g_atomic_int_add (&global_state_id, 1);
