@@ -177,9 +177,6 @@ struct _FfiClosureBlock
   FfiClosure *ffi_closures[1];
 };
 
-/* lightuserdata key to callable cache table. */
-static int callable_cache;
-
 /* Gets ffi_type for given tag, returns NULL if it cannot be handled. */
 static ffi_type *
 get_simple_ffi_type (GITypeTag tag)
@@ -1580,9 +1577,6 @@ lgi_callable_init (lua_State *L)
   lua_newtable (L);
   luaL_register (L, NULL, callable_reg);
   lua_rawset (L, LUA_REGISTRYINDEX);
-
-  /* Create cache for callables. */
-  lgi_cache_create (L, &callable_cache, NULL);
 
   /* Create public api for callable module. */
   lua_newtable (L);
