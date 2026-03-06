@@ -28,7 +28,7 @@ lgi_gi_info_new (lua_State *L, GIBaseInfo *info)
 	}
       else
 	{
-	  ud_info = lua_newuserdata (L, sizeof (info));
+	  ud_info = lua_newuserdata (L, sizeof (GIBaseInfo *));
 	  *ud_info = info;
 	  luaL_getmetatable (L, LGI_GI_INFO);
 	  lua_setmetatable (L, -2);

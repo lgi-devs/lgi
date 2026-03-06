@@ -576,7 +576,7 @@ core_module (lua_State *L)
     }
 
   /* Embed the module in the userdata for the module. */
-  *(GModule **) lua_newuserdata (L, sizeof (module)) = module;
+  *(GModule **) lua_newuserdata (L, sizeof (GModule *)) = module;
   luaL_getmetatable (L, UD_MODULE);
   lua_setmetatable (L, -2);
 
