@@ -18,9 +18,11 @@ add_project_arguments(cc.get_supported_arguments(test_c_args), language: 'c')
 
 lua_possible_names = [
   'lua',
-  'lua5.3', 'lua53',
-  'lua5.2', 'lua52',
-  'lua5.1', 'lua51',
+  'lua5.5', 'lua-5.5', 'lua55', 'lua-55',
+  'lua5.4', 'lua-5.4', 'lua54', 'lua-54',
+  'lua5.3', 'lua-5.3', 'lua53', 'lua-53',
+  'lua5.2', 'lua-5.2', 'lua52', 'lua-52',
+  'lua5.1', 'lua-5.1', 'lua51', 'lua-51',
   'luajit'
 ]
 
