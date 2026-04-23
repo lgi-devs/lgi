@@ -46,16 +46,6 @@ function progress.file_copy()
 	check_gerror(Gio.File, 'copy_finish', self, result)
 	loop:quit()
     end
-    --
-    -- Fixes https://github.com/lgi-devs/lgi/issues/348
-    --
-    -- Implementation for the fix was a combination
-    -- of ideas from:
-    --
-    -- 1) my own trial-error to find the transition version for GLib (2.82.0)
-    -- 2) Implementation was also partially mirrored from the LGI fork:
-    --      https://github.com/vtrlx/LuaGObject/blob/cd261460f275ea07a4b47cc0c9d0113e17f98b11/tests/progress.lua#L49-L51
-    --
     if core.repo.GLib.check_version(2, 82, 0) then
         src:copy_async(dst, flags, priority, cancellable,
             progress_callback, finish_callback)

@@ -74,18 +74,12 @@ function ffi.load_gtype(resolver, get_type_name)
 end
 
 -- Creates new enum/flags table with all values from specified gtype.
---
--- Fixes https://github.com/lgi-devs/lgi/issues/358
---
--- Implementation for the fix was mirrored from the LGI fork:
---   https://github.com/vtrlx/LuaGObject/blob/0.10.5/LuaGObject/ffi.lua#L74-L104
 function ffi.load_enum(gtype, name)
    local GLib, GObject = core.repo.GLib, core.repo.GObject
    local is_flags = GObject.Type.is_a(gtype, GObject.Type.FLAGS)
    local enum_component = component.create(
       gtype, is_flags and enum.bitflags_mt or enum.enum_mt, name)
    local type_class
-   -- GLib >= 2.86 deprecates GObject.TypeClass.ref() in favour of .get()
    if GLib.check_version(2, 86, 0) then
       type_class = GObject.TypeClass.ref(gtype)
    else
@@ -103,7 +97,6 @@ function ffi.load_enum(gtype, name)
          enum_component[core.upcase(val.value_nick):gsub('%-', '_')] = val.value
       end
    end
-   -- For GLib versions below 2.86, type_class was ref'd and needs to be unref'd
    if GLib.check_version(2, 86, 0) then
       type_class:unref()
    end
