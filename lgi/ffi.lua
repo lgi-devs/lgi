@@ -80,6 +80,7 @@ function ffi.load_enum(gtype, name)
    local enum_component = component.create(
       gtype, is_flags and enum.bitflags_mt or enum.enum_mt, name)
    local type_class
+   -- GLib >= 2.86 deprecates GObject.TypeClass.ref() in favour of .get()
    if GLib.check_version(2, 86, 0) then
       type_class = GObject.TypeClass.ref(gtype)
    else
@@ -97,6 +98,7 @@ function ffi.load_enum(gtype, name)
          enum_component[core.upcase(val.value_nick):gsub('%-', '_')] = val.value
       end
    end
+   -- For GLib versions below 2.86, type_class was ref'd and needs to be unref'd
    if GLib.check_version(2, 86, 0) then
       type_class:unref()
    end
