@@ -75,18 +75,33 @@ end
 
 -- Creates new enum/flags table with all values from specified gtype.
 function ffi.load_enum(gtype, name)
-   local GObject = core.repo.GObject
+   local GLib, GObject = core.repo.GLib, core.repo.GObject
    local is_flags = GObject.Type.is_a(gtype, GObject.Type.FLAGS)
    local enum_component = component.create(
       gtype, is_flags and enum.bitflags_mt or enum.enum_mt, name)
-   local type_class = GObject.TypeClass.ref(gtype)
+   local type_class
+   -- GLib >= 2.86 deprecates GObject.TypeClass.ref() in favour of .get()
+   if GLib.check_version(2, 86, 0) then
+      type_class = GObject.TypeClass.ref(gtype)
+   else
+      type_class = GObject.TypeClass.get(gtype)
+   end
    local enum_class = core.record.cast(
       type_class, is_flags and GObject.FlagsClass or GObject.EnumClass)
-   for i = 0, enum_class.n_values - 1 do
-      local val = core.record.fromarray(enum_class.values, i)
-      enum_component[core.upcase(val.value_nick):gsub('%-', '_')] = val.value
+   if GLib.check_version(2, 87, 0) then
+      for i = 0, enum_class.n_values - 1 do
+         local val = core.record.fromarray(enum_class.values, i)
+         enum_component[core.upcase(val.value_nick):gsub('%-', '_')] = val.value
+      end
+   else
+      for _, val in ipairs(enum_class.values) do
+         enum_component[core.upcase(val.value_nick):gsub('%-', '_')] = val.value
+      end
    end
-   type_class:unref()
+   -- For GLib versions below 2.86, type_class was ref'd and needs to be unref'd
+   if GLib.check_version(2, 86, 0) then
+      type_class:unref()
+   end
    return enum_component
 end
 

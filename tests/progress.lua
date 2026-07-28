@@ -9,6 +9,8 @@
 --]]--------------------------------------------------------------------------
 
 local lgi = require 'lgi'
+local core = require 'lgi.core'
+local GObject = lgi.GObject
 local Gio = lgi.Gio
 local GLib = lgi.GLib
 
@@ -44,8 +46,12 @@ function progress.file_copy()
 	check_gerror(Gio.File, 'copy_finish', self, result)
 	loop:quit()
     end
-
-    src:copy_async(dst, flags, priority, cancellable,
-		   progress_callback, finish_callback)
+    if core.repo.GLib.check_version(2, 82, 0) then
+        src:copy_async(dst, flags, priority, cancellable,
+            progress_callback, finish_callback)
+    else
+        src:copy_async(dst, flags, priority, cancellable,
+            GObject.Closure(progress_callback), GObject.Closure(finish_callback))
+    end
     loop:run()
 end
