@@ -1577,15 +1577,13 @@ lgi_callable_init (lua_State *L)
 
   /* Register callable metatable. */
   lua_pushlightuserdata (L, &callable_mt);
-  lua_newtable (L);
-  luaL_register (L, NULL, callable_reg);
+  luaL_newlib(L, callable_reg);
   lua_rawset (L, LUA_REGISTRYINDEX);
 
   /* Create cache for callables. */
   lgi_cache_create (L, &callable_cache, NULL);
 
   /* Create public api for callable module. */
-  lua_newtable (L);
-  luaL_register (L, NULL, callable_api_reg);
+  luaL_newlib(L, callable_api_reg);
   lua_setfield (L, -2, "callable");
 }

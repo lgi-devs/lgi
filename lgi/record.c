@@ -746,8 +746,7 @@ lgi_record_init (lua_State *L)
 {
   /* Register record metatable. */
   lua_pushlightuserdata (L, &record_mt);
-  lua_newtable (L);
-  luaL_register (L, NULL, record_meta_reg);
+  luaL_newlib(L, record_meta_reg);
   lua_rawset (L, LUA_REGISTRYINDEX);
 
   /* Create caches. */
@@ -755,8 +754,7 @@ lgi_record_init (lua_State *L)
   lgi_cache_create (L, &parent_cache, "k");
 
   /* Create 'record' API table in main core API table. */
-  lua_newtable (L);
-  luaL_register (L, NULL, record_api_reg);
+  luaL_newlib(L, record_api_reg);
   lua_pushlightuserdata (L, record_value_unset);
   lua_setfield (L, -2, "value_unset");
   lua_pushlightuserdata (L, record_value_copy);

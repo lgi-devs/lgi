@@ -1968,7 +1968,6 @@ void
 lgi_marshal_init (lua_State *L)
 {
   /* Create 'marshal' API table in main core API table. */
-  lua_newtable (L);
-  luaL_register (L, NULL, marshal_api_reg);
+  luaL_newlib(L, marshal_api_reg);
   lua_setfield (L, -2, "marshal");
 }
