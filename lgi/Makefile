@@ -7,7 +7,7 @@
 
 PREFIX = /usr/local
 HOST_OS = $(shell uname -s | tr A-Z a-z)
-LUA_VERSION=5.1
+LUA_VERSION = 5.1
 LUA_LIBDIR = $(PREFIX)/lib/lua/$(LUA_VERSION)
 LUA_SHAREDIR = $(PREFIX)/share/lua/$(LUA_VERSION)
 
