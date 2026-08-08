@@ -915,8 +915,22 @@ marshal_2c_callable (lua_State *L, GICallableInfo *ci, GIArgInfo *ai,
 	  *lgi_guard_create (L, lgi_closure_destroy) = user_data;
 	  nret++;
 	}
+      else if (scope == GI_SCOPE_TYPE_ASYNC || scope == GI_SCOPE_TYPE_NOTIFIED)
+        {
+          /* ASYNC: callback fired once, autodestroy cleans up.
+             NOTIFIED without destroy param: no destroy will come; treat as
+             autodestroy and warn since this is unusual. */
+          if (scope == GI_SCOPE_TYPE_NOTIFIED)
+            g_warning ("lgi: NOTIFIED-scope callback without destroy parameter;"
+                       " treating as autodestroy");
+        }
+      else if (scope == GI_SCOPE_TYPE_FOREVER)
+        {
+          /* Intentionally no cleanup: callback lives until process exit. */
+        }
       else
-	g_assert (scope == GI_SCOPE_TYPE_ASYNC);
+        g_warning ("lgi: unexpected scope type %d for callback without "
+                   "user_data; closure may leak", (int) scope);
     }
 
   /* Create the closure. */

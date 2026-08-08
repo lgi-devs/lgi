@@ -1429,6 +1429,15 @@ closure_callback (ffi_cif *cif, void *ret, void **args, void *closure_arg)
   /* This is NOT called by Lua, so we better leave the Lua stack we
      used pretty much tidied. */
   lua_settop (L, stacktop);
+
+  /* For autodestroy closures, nudge Lua's GC after resetting the stack.
+     ffi_closure_alloc() memory is invisible to Lua's allocator, so GC
+     does not naturally respond to ffi memory pressure.  A single step
+     here ensures the guard created above is finalized promptly, which in
+     turn allows the callback's Lua closure chain to be freed. */
+  if (closure->autodestroy)
+    lua_gc (block->callback.L, LUA_GCSTEP, 10);
+
   if (L != marshal_L)
     lua_settop (marshal_L, 0);
 
