@@ -639,7 +639,7 @@ if Gtk._version == '4.0' then
 
    --- CONTAINER CLASSES
    --- GTK4 Has removed the Container abstract class.
-   --- This means Boxes, Grids and other layout widgets 
+   --- This means Boxes, Grids and other layout widgets
    --- Must now add children using their own specific methods.
 
    --- Gtk.Box overrides
@@ -648,7 +648,14 @@ if Gtk._version == '4.0' then
    --- will be `append()`-ed
    --- in order of appearance.
    Gtk.Box._container_add = Gtk.Box.append
+	Gtk.Grid._container_add = function (grid, twidget)
+		grid:attach(twidget[1], twidget.column - 1, twidget.row - 1,
+			twidget.width or 1, twidget.height or 1)
+	end
 
+	Gtk.ApplicationWindow._container_add = function (window, child)
+		window:set_child(child)
+	end
 end
 
 --------------------------------- Gtk-2 workarounds
