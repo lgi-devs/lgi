@@ -1,6 +1,9 @@
 *.o
 *.so
 *.dll
+*.obj
+*.exp
+*.lib
 *.stackdump
 .depcheck
 *.rockspec
